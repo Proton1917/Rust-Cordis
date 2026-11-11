@@ -52,21 +52,21 @@ M0 使用原有清单核对 16 个 spec 文件的 177 条用例；用例实现�
 
 | ID | 上游位置 | 上游用例 | 里程碑 | 状态 | Rust 测试 / 理由 |
 |---|---|---|---|---|---|
-| DSP-01 | `dispose.spec.ts:7` | dispose by component | M3 | 未开始 | |
+| DSP-01 | `dispose.spec.ts:7` | dispose by component | M3 | 已改写 | `crates/cordis/tests/component.rs::component_disposes_its_effect_once`；显式效应作用域表达释放函数，检验 S-EFF-4。 |
 | DSP-02 | `dispose.spec.ts:23` | dispose manually | M1 | 已移植 | `crates/cordis/tests/dispose.rs::dispose_manually` |
 | DSP-03 | `dispose.spec.ts:37` | yield dispose | M1 | 已改写 | `crates/cordis/tests/dispose.rs::yield_dispose`；生成器交回释放函数改为 defer/adopt，检验 S-EFF-3、S-EFF-6、S-EFF-7 的归属、元信息与逆序组合；使用类型化事件登记监听器。 |
-| DSP-04 | `dispose.spec.ts:76` | async return 1 | M3 | 未开始 | |
-| DSP-05 | `dispose.spec.ts:90` | async return 2 | M3 | 未开始 | |
-| DSP-06 | `dispose.spec.ts:103` | async yield 1 | M3 | 未开始 | |
-| DSP-07 | `dispose.spec.ts:123` | async yield 2 (aborted) | M3 | 未开始 | |
-| DSP-08 | `dispose.spec.ts:143` | async yield 3 (aborted) | M3 | 未开始 | |
-| DSP-09 | `dispose.spec.ts:165` | async yield (aborted, finally) | M3 | 未开始 | |
-| DSP-10 | `dispose.spec.ts:185` | async yield 4 (await dispose) | M3 | 未开始 | |
+| DSP-04 | `dispose.spec.ts:76` | async return 1 | M3 | 已改写 | `crates/cordis/tests/dispose_async.rs::async_return`；Future 与 defer 表达异步返回释放函数，检验 S-EFF-1、S-EFF-4。 |
+| DSP-05 | `dispose.spec.ts:90` | async return 2 | M3 | 已改写 | `crates/cordis/tests/dispose_async.rs::async_return`；在途 Future 持续至完成，释放等待逆变换登记，检验 T-EFF-5。 |
+| DSP-06 | `dispose.spec.ts:103` | async yield 1 | M3 | 已改写 | `crates/cordis/tests/dispose_async.rs::async_yield_and_wait_for_execution`；显式 defer 步骤替代异步生成器，检验 T-EFF-3。 |
+| DSP-07 | `dispose.spec.ts:123` | async yield 2 (aborted) | M3 | 已改写 | `crates/cordis/tests/dispose_async.rs::async_yield_cooperative_stop`；is_current 在步骤边界协作退出，检验 T-EFF-4。 |
+| DSP-08 | `dispose.spec.ts:143` | async yield 3 (aborted) | M3 | 已改写 | `crates/cordis/tests/dispose_async.rs::async_yield_cooperative_stop`；保留停止前在途步骤交回的逆变换，检验 S-EFF-5。 |
+| DSP-09 | `dispose.spec.ts:165` | async yield (aborted, finally) | M3 | 已改写 | `crates/cordis/tests/dispose_async.rs::async_yield_finalization`；显式收束逻辑替代生成器 finally，检验 S-EFF-5 的恢复顺序。 |
+| DSP-10 | `dispose.spec.ts:185` | async yield 4 (await dispose) | M3 | 已改写 | `crates/cordis/tests/dispose_async.rs::async_yield_and_wait_for_execution`；Effect::settled 替代 Promise 同化，检验 S-EFF-8。 |
 | DSP-11 | `dispose.spec.ts:205` | return with error | M1 | 已改写 | `crates/cordis/tests/dispose.rs::return_with_error`；JS throw 改为 Result，检验 S-EFF-2 的错误传播和登记位置。 |
 | DSP-12 | `dispose.spec.ts:217` | yield with error | M1 | 已改写 | `crates/cordis/tests/dispose.rs::yield_with_error`；生成器 yield 后 throw 改为 defer 后返回 Err，检验 S-EFF-2 的部分恢复。 |
-| DSP-13 | `dispose.spec.ts:230` | async return with error | M3 | 未开始 | |
-| DSP-14 | `dispose.spec.ts:242` | async yield with error | M3 | 未开始 | |
-| DSP-15 | `dispose.spec.ts:261` | async yield invalid effect | M3 | 未开始 | |
+| DSP-13 | `dispose.spec.ts:230` | async return with error | M3 | 已改写 | `crates/cordis/tests/dispose_async.rs::async_error_recovers_registered_steps`；Result 表达异步错误，检验 S-EFF-2。 |
+| DSP-14 | `dispose.spec.ts:242` | async yield with error | M3 | 已改写 | `crates/cordis/tests/dispose_async.rs::async_error_recovers_registered_steps`；defer 与 Result 表达生成器部分失败，检验 S-EFF-2。 |
+| DSP-15 | `dispose.spec.ts:261` | async yield invalid effect | M3 | 已改写 | `crates/cordis/src/effect.rs::EffectScope::defer`；compile_fail 文档测试检查非法效应值；闭包类型约束替代运行期 Invalid effect，DOC-02 §5.2、S-EFF-1。 |
 
 ### EVT：`events.spec.ts`（31 条）
 
@@ -84,11 +84,11 @@ M0 使用原有清单核对 16 个 spec 文件的 177 条用例；用例实现�
 | EVT-10 | `events.spec.ts:149` | ctx.once() runs once across concurrent serial dispatches | M2 | 已改写 | `crates/cordis/tests/events.rs::once_across_concurrent_serial_dispatches`；Promise 屏障改为确定性 Clock 等待，检验 S-EVT-9。 |
 | EVT-11 | `events.spec.ts:163` | %s skips listeners removed during dispatch | M2 | 已改写 | `crates/cordis/tests/events.rs::all_modes_skip_removed_listeners`；四种派发分别使用同步与异步事件族，检验 S-EVT-2。 |
 | EVT-12 | `events.spec.ts:177` | %s defers added listeners until the next dispatch | M2 | 已改写 | `crates/cordis/tests/events.rs::all_modes_defer_added_listeners`；四种派发分别使用同步与异步事件族，检验 S-EVT-2。 |
-| EVT-13 | `events.spec.ts:188` | skips a listener disposed by an earlier component during dispatch | M3 | 未开始 | |
+| EVT-13 | `events.spec.ts:188` | skips a listener disposed by an earlier component during dispatch | M3 | 已改写 | `crates/cordis/tests/events_lifecycle.rs::serial_skips_listener_disposed_with_component`；ComponentDef 表达组件，检验 S-EVT-2 的释放后跳过。 |
 | EVT-14 | `events.spec.ts:200` | waterfall continues past a removed listener | M2 | 已移植 | `crates/cordis/tests/events.rs::waterfall_skips_removed_listener` |
 | EVT-15 | `events.spec.ts:219` | waterfall defers added listeners until the next dispatch | M2 | 已移植 | `crates/cordis/tests/events.rs::waterfall_defers_added_listener` |
 | EVT-16 | `events.spec.ts:233` | waterfall continues after a recursive dispatch has consumed a once listener | M2 | 已移植 | `crates/cordis/tests/events.rs::waterfall_recursion_consumes_once` |
-| EVT-17 | `events.spec.ts:251` | internal/update continues past a removed fiber listener | M3 | 未开始 | |
+| EVT-17 | `events.spec.ts:251` | internal/update continues past a removed fiber listener | M3 | 已改写 | `crates/cordis/tests/events_lifecycle.rs::update_skips_removed_fiber_listener`；RawConfig 与类型化瀑布表达更新，检验 S-EVT-11。 |
 | EVT-18 | `events.spec.ts:280` | ctx.parallel() | M2 | 已改写 | `crates/cordis/tests/events.rs::parallel_filters_and_aggregates_errors`；this 过滤改为 Context 过滤、throw 改为 Err、定时器改为 Clock，检验 S-EVT-3、S-EVT-5。 |
 | EVT-19 | `events.spec.ts:311` | ctx.parallel() labels symbol events | M2 | 已改写 | `crates/cordis/tests/events.rs::parallel_labels_typed_event`；Symbol 标签改为 Event::NAME，检验 S-EVT-5。 |
 | EVT-20 | `events.spec.ts:322` | ctx.emit() | M2 | 已改写 | `crates/cordis/tests/events.rs::synchronous_filters_and_panic_propagation`；this 过滤改为 Context 过滤，调用方接收 panic，检验 S-EVT-3、S-EVT-4、A-9。 |
@@ -99,25 +99,25 @@ M0 使用原有清单核对 16 个 spec 文件的 177 条用例；用例实现�
 | EVT-25 | `events.spec.ts:421` | ctx.waterfall() rejects continuations from outer frames | M2 | 已改写 | `crates/cordis/tests/events.rs::waterfall_rejects_outer_continuation`；共享 Next 句柄承载延续并返回 Result 错误，检验 S-EVT-8。 |
 | EVT-26 | `events.spec.ts:442` | ctx.waterfall() rejects duplicate next() after awaiting | M2 | 已改写 | `crates/cordis/tests/events.rs::waterfall_rejects_duplicate_after_await`；Task 返回值与 Result 错误表达异步延续，检验 S-EVT-8。 |
 | EVT-27 | `events.spec.ts:455` | ctx.waterfall() supports nested async calls | M2 | 已改写 | `crates/cordis/tests/events.rs::waterfall_supports_nested_async_calls`；异步瀑布返回 Task<Result>，检验 S-EVT-8。 |
-| EVT-28 | `events.spec.ts:473` | does not accumulate across reloads | M3 | 未开始 | |
-| EVT-29 | `events.spec.ts:490` | can be disposed explicitly | M3 | 未开始 | |
-| EVT-30 | `events.spec.ts:507` | runs prepended listeners first | M3 | 未开始 | |
-| EVT-31 | `events.spec.ts:534` | global listeners are not tied to a child fiber reload | M3 | 未开始 | |
+| EVT-28 | `events.spec.ts:473` | does not accumulate across reloads | M3 | 已改写 | `crates/cordis/tests/events_lifecycle.rs::update_listeners_are_replaced_on_reload`；ComponentDef 与 RawConfig 表达重载配置，检验 S-EVT-11。 |
+| EVT-29 | `events.spec.ts:490` | can be disposed explicitly | M3 | 已改写 | `crates/cordis/tests/events_lifecycle.rs::update_listener_can_be_disposed`；Effect 句柄表达显式移除，检验 S-EVT-11。 |
+| EVT-30 | `events.spec.ts:507` | runs prepended listeners first | M3 | 已改写 | `crates/cordis/tests/events_lifecycle.rs::update_prepended_listeners_run_first`；类型化瀑布表达更新，检验 S-EVT-11 的头插顺序。 |
+| EVT-31 | `events.spec.ts:534` | global listeners are not tied to a child fiber reload | M3 | 已改写 | `crates/cordis/tests/events_lifecycle.rs::global_update_listener_survives_child_reload`；ComponentDef 与 RawConfig 表达组件和配置，检验 S-EVT-11 的全局归属。 |
 
 ### CMP：`component.spec.ts`（11 条）
 
 | ID | 上游位置 | 上游用例 | 里程碑 | 状态 | Rust 测试 / 理由 |
 |---|---|---|---|---|---|
-| CMP-01 | `component.spec.ts:8` | apply functional component | M3 | 未开始 | |
-| CMP-02 | `component.spec.ts:18` | apply object component | M3 | 未开始 | |
-| CMP-03 | `component.spec.ts:29` | apply component through deprecated ctx.plugin() | M3 | 未开始 | |
-| CMP-04 | `component.spec.ts:40` | apply invalid component | M3 | 未开始 | |
-| CMP-05 | `component.spec.ts:47` | inactive context | M3 | 未开始 | |
-| CMP-06 | `component.spec.ts:61` | context inspect | M3 | 未开始 | |
-| CMP-07 | `component.spec.ts:88` | ctx.registry | M3 | 未开始 | |
-| CMP-08 | `component.spec.ts:97` | nested components | M3 | 未开始 | |
-| CMP-09 | `component.spec.ts:134` | compare snapshot | M3 | 未开始 | |
-| CMP-10 | `component.spec.ts:155` | root dispose | M3 | 未开始 | |
+| CMP-01 | `component.spec.ts:8` | apply functional component | M3 | 已改写 | `crates/cordis/tests/component.rs::functional_component_receives_configuration`；ComponentDef 闭包接收类型化配置，检验 S-REG-2。 |
+| CMP-02 | `component.spec.ts:18` | apply object component | M3 | 已改写 | `crates/cordis/tests/component.rs::typed_component_receives_configuration`；Component trait 替代对象 apply，检验 S-REG-2。 |
+| CMP-03 | `component.spec.ts:29` | apply component through deprecated ctx.plugin() | M3 | 已改写 | `crates/cordis/tests/component.rs::functional_component_receives_configuration`；废弃 plugin 别名统一映射为 DOC-02 §7 的 mount，检验 S-REG-2。 |
+| CMP-04 | `component.spec.ts:40` | apply invalid component | M3 | 已改写 | `crates/cordis/src/registry.rs::Context::mount`；compile_fail 文档测试检查非法组件类型；Component trait 替代动态对象检查，DOC-02 §7、S-REG-2。 |
+| CMP-05 | `component.spec.ts:47` | inactive context | M3 | 已改写 | `crates/cordis/tests/component.rs::disposed_context_rejects_new_registrations`；Result 表达失活访问错误，检验 S-FBR-3。 |
+| CMP-06 | `component.spec.ts:61` | context inspect | M3 | 已改写 | `crates/cordis/tests/component.rs::context_debug_uses_nearest_component_name`；Debug 替代 util.inspect，检验 S-FBR-4。 |
+| CMP-07 | `component.spec.ts:88` | ctx.registry | M3 | 已改写 | `crates/cordis/tests/component.rs::registry_tracks_runtime_instances`；运行时登记和移除的可观察行为检验 S-REG-1。 |
+| CMP-08 | `component.spec.ts:97` | nested components | M3 | 已改写 | `crates/cordis/tests/component.rs::nested_components_release_their_event_handlers`；ComponentDef 与类型化事件表达嵌套，检验 T-LIF-8。 |
+| CMP-09 | `component.spec.ts:134` | compare snapshot | M3 | 已改写 | `crates/cordis/tests/component.rs::component_disposal_restores_registration_snapshot`；比较效应、注册表与事件状态，检验 T-CTX-1。 |
+| CMP-10 | `component.spec.ts:155` | root dispose | M3 | 已改写 | `crates/cordis/tests/component.rs::root_disposal_releases_children_and_remains_active`；显式等待根释放任务，检验 S-FBR-17。 |
 | CMP-11 | `component.spec.ts:175` | Service.init | M4 | 未开始 | |
 
 ### FBR：`fiber.spec.ts`（22 条）
@@ -127,40 +127,40 @@ M0 使用原有清单核对 16 个 spec 文件的 177 条用例；用例实现�
 | FBR-01 | `fiber.spec.ts:7` | inertia lock 1 | M4 | 未开始 | |
 | FBR-02 | `fiber.spec.ts:27` | inertia lock 2 | M4 | 未开始 | |
 | FBR-03 | `fiber.spec.ts:49` | inertia lock 3 | M4 | 未开始 | |
-| FBR-04 | `fiber.spec.ts:71` | component error | M3 | 未开始 | |
+| FBR-04 | `fiber.spec.ts:71` | component error | M3 | 已改写 | `crates/cordis/tests/fiber.rs::component_failure_cleans_partial_effects`；资源序列与 Result 检验 S-FBR-11。 |
 | FBR-05 | `fiber.spec.ts:93` | failed fiber does not re-enter on dependency refresh | M4 | 未开始 | |
 | FBR-06 | `fiber.spec.ts:108` | update recovers a failed fiber | M4 | 未开始 | |
-| FBR-07 | `fiber.spec.ts:122` | update waits for asynchronous recovery | M3 | 未开始 | |
-| FBR-08 | `fiber.spec.ts:144` | update surfaces a failed recovery to its caller | M3 | 未开始 | |
-| FBR-09 | `fiber.spec.ts:156` | update surfaces a failed reload to its caller | M3 | 未开始 | |
-| FBR-10 | `fiber.spec.ts:171` | update does not leak a dropped failure | M3 | 未开始 | |
-| FBR-11 | `fiber.spec.ts:185` | dispose error | M3 | 未开始 | |
+| FBR-07 | `fiber.spec.ts:122` | update waits for asynchronous recovery | M3 | 已改写 | `crates/cordis/tests/fiber.rs::update_waits_for_asynchronous_recovery`；Clock 推进替代 Promise 定时器，检验 S-FBR-19。 |
+| FBR-08 | `fiber.spec.ts:144` | update surfaces a failed recovery to its caller | M3 | 已改写 | `crates/cordis/tests/fiber.rs::update_returns_failed_recovery`；Result 交回恢复失败，检验 S-FBR-21。 |
+| FBR-09 | `fiber.spec.ts:156` | update surfaces a failed reload to its caller | M3 | 已改写 | `crates/cordis/tests/fiber.rs::update_returns_failed_reload`；Result 交回重载失败，检验 S-FBR-21。 |
+| FBR-10 | `fiber.spec.ts:171` | update does not leak a dropped failure | M3 | 已改写 | `crates/cordis/tests/fiber.rs::dropped_update_waiter_preserves_failure_state`；释放 Future 等待句柄替代 Promise 未处理拒绝，检验 S-FBR-22。 |
+| FBR-11 | `fiber.spec.ts:185` | dispose error | M3 | 已改写 | `crates/cordis/tests/fiber.rs::disposal_records_error_and_releases_other_effects`；实际释放序列与错误记录检验 S-FBR-12。 |
 | FBR-12 | `fiber.spec.ts:204` | settles a pending fiber to DISPOSED on dispose | M4 | 未开始 | |
-| FBR-13 | `fiber.spec.ts:231` | settles a failed fiber to DISPOSED on dispose | M3 | 未开始 | |
-| FBR-14 | `fiber.spec.ts:264` | keeps the active dispose sequence stable | M3 | 未开始 | |
-| FBR-15 | `fiber.spec.ts:292` | update config on wrapped fiber | M3 | 未开始 | |
-| FBR-16 | `fiber.spec.ts:312` | restart wrapped fiber | M3 | 未开始 | |
+| FBR-13 | `fiber.spec.ts:231` | settles a failed fiber to DISPOSED on dispose | M3 | 已改写 | `crates/cordis/tests/fiber.rs::failed_fiber_disposes_with_one_status_transition`；类型化状态事件检验 S-FBR-16。 |
+| FBR-14 | `fiber.spec.ts:264` | keeps the active dispose sequence stable | M3 | 已改写 | `crates/cordis/tests/fiber.rs::active_fiber_disposal_status_sequence`；类型化状态事件检验 S-FBR-16 的状态顺序。 |
+| FBR-15 | `fiber.spec.ts:292` | update config on wrapped fiber | M3 | 已改写 | `crates/cordis/tests/fiber.rs::cloned_handle_updates_shared_configuration`；Clone 句柄替代 JS 原型包装，检验 S-FBR-19。 |
+| FBR-16 | `fiber.spec.ts:312` | restart wrapped fiber | M3 | 已改写 | `crates/cordis/tests/fiber.rs::cloned_handle_restarts_same_fiber`；Clone 句柄共享实例，检验 S-FBR-18。 |
 | FBR-17 | `fiber.spec.ts:326` | update config while injected service reloads | M4 | 未开始 | |
-| FBR-18 | `fiber.spec.ts:384` | fail on first load | M3 | 未开始 | |
-| FBR-19 | `fiber.spec.ts:396` | keep a running component on update | M3 | 未开始 | |
-| FBR-20 | `fiber.spec.ts:413` | keep the issues and their paths | M3 | 未开始 | |
-| FBR-21 | `fiber.spec.ts:426` | pass the resolved config to listeners | M3 | 未开始 | |
-| FBR-22 | `fiber.spec.ts:448` | keep the source config when a listener handles the update | M3 | 未开始 | |
+| FBR-18 | `fiber.spec.ts:384` | fail on first load | M3 | 已改写 | `crates/cordis/tests/fiber.rs::invalid_initial_configuration_fails_before_apply`；Config::resolve 替代 Standard Schema，检验 S-REG-6。 |
+| FBR-19 | `fiber.spec.ts:396` | keep a running component on update | M3 | 已改写 | `crates/cordis/tests/fiber.rs::invalid_update_preserves_active_configuration`；Config::resolve 替代 Standard Schema，检验 S-FBR-19。 |
+| FBR-20 | `fiber.spec.ts:413` | keep the issues and their paths | M3 | 已改写 | `crates/cordis/tests/fiber.rs::validation_error_preserves_issues_and_paths`；ValidationError 的类型化 issues 与 path 检验 S-REG-6。 |
+| FBR-21 | `fiber.spec.ts:426` | pass the resolved config to listeners | M3 | 已改写 | `crates/cordis/tests/fiber.rs::update_listeners_receive_resolved_configuration`；类型化 resolve 与 RawConfig 检验 S-FBR-19。 |
+| FBR-22 | `fiber.spec.ts:448` | keep the source config when a listener handles the update | M3 | 已改写 | `crates/cordis/tests/fiber.rs::handled_update_preserves_source_for_later_restart`；原始配置与解析配置分开保存，检验 S-FBR-20。 |
 
 ### UPD：`update.spec.ts`（10 条）
 
 | ID | 上游位置 | 上游用例 | 里程碑 | 状态 | Rust 测试 / 理由 |
 |---|---|---|---|---|---|
 | UPD-01 | `update.spec.ts:7` | settles concurrent updates on the latest config (inject: %s) | M4 | 未开始 | |
-| UPD-02 | `update.spec.ts:54` | skips superseded loads before executing the component | M3 | 未开始 | |
-| UPD-03 | `update.spec.ts:69` | coalesces updates during unloading | M3 | 未开始 | |
-| UPD-04 | `update.spec.ts:96` | honors %s while loading even when config is unchanged | M3 | 未开始 | |
-| UPD-05 | `update.spec.ts:121` | cleans up a superseded failure without failing the latest update | M3 | 未开始 | |
-| UPD-06 | `update.spec.ts:152` | rejects all waiting updates when the latest load fails | M3 | 未开始 | |
-| UPD-07 | `update.spec.ts:188` | stops advancing an outdated async generator and collects its final yield | M3 | 未开始 | |
+| UPD-02 | `update.spec.ts:54` | skips superseded loads before executing the component | M3 | 已改写 | `crates/cordis/tests/update.rs::superseded_loads_are_skipped_before_apply`；确定性队列替代微任务调度，检验 S-FBR-10。 |
+| UPD-03 | `update.spec.ts:69` | coalesces updates during unloading | M3 | 已改写 | `crates/cordis/tests/update.rs::updates_coalesce_during_unloading`；Clock 推进替代 Promise 门控，检验 S-FBR-21。 |
+| UPD-04 | `update.spec.ts:96` | honors %s while loading even when config is unchanged | M3 | 已改写 | `crates/cordis/tests/update.rs::restart_and_configuration_aba_supersede_loading`；Clock 推进与显式任务检验 S-FBR-18、S-FBR-21。 |
+| UPD-05 | `update.spec.ts:121` | cleans up a superseded failure without failing the latest update | M3 | 已改写 | `crates/cordis/tests/update.rs::superseded_failure_preserves_latest_target`；Result 与可推进 Clock 检验 S-FBR-11。 |
+| UPD-06 | `update.spec.ts:152` | rejects all waiting updates when the latest load fails | M3 | 已改写 | `crates/cordis/tests/update.rs::concurrent_waiters_receive_latest_failure`；多个 Future 等待者检验 S-FBR-21。 |
+| UPD-07 | `update.spec.ts:188` | stops advancing an outdated async generator and collects its final yield | M3 | 已改写 | `crates/cordis/tests/update.rs::cooperative_step_keeps_final_cleanup_and_stops_continuation`；Context::is_current 步骤替代 async generator，检验 T-LIF-7、T-EFF-4。 |
 | UPD-08 | `update.spec.ts:212` | waits for dependencies and loads only the latest config | M4 | 未开始 | |
-| UPD-09 | `update.spec.ts:234` | does not restart when a listener accepts an update during loading | M3 | 未开始 | |
-| UPD-10 | `update.spec.ts:259` | does not load a queued config after disposal | M3 | 未开始 | |
+| UPD-09 | `update.spec.ts:234` | does not restart when a listener accepts an update during loading | M3 | 已改写 | `crates/cordis/tests/update.rs::accepted_update_during_loading_preserves_current_load`；类型化更新瀑布接管配置，检验 S-FBR-20。 |
+| UPD-10 | `update.spec.ts:259` | does not load a queued config after disposal | M3 | 已改写 | `crates/cordis/tests/update.rs::disposal_prevents_queued_configuration_load`；Clock 推进替代 Promise 门控，检验 S-FBR-16。 |
 
 ### SVC：`service.spec.ts`（8 条）
 

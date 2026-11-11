@@ -20,6 +20,13 @@ pub use events::{
     InternalDispatch, InternalListener, ListenerRegistration, Next, SyncEvent, SyncKind,
     SyncListener, WaterfallEvent, WaterfallKind, WaterfallListener,
 };
-pub use fiber::{Fiber, FiberState};
+pub use fiber::{
+    Epoch, Fiber, FiberState, InternalCommit, InternalConfig, InternalPlugin, InternalStatus,
+    InternalUpdate,
+};
 pub use kernel::{Clock, Spawn, Task};
+pub use registry::{
+    Component, ComponentDef, ComponentId, Config, Inject, RawConfig, Registry, ValidationError,
+    ValidationIssue,
+};
 pub use service::{Merge, ServiceKey};

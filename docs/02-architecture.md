@@ -92,6 +92,7 @@ struct Scope {
     parent: Option<Arc<Scope>>,
     fiber:  FiberId,                     // 最近的所属纤程
     layer:  Layer,
+    lease: Option<Weak<Kernel>>,         // 纤程层持有记录回收租约，见 ADR-0008
 }
 
 enum Layer {
@@ -103,6 +104,8 @@ enum Layer {
 ```
 
 解析 `ρ(k)`：从当前节点向根查找第一个 `Isolate { key: k, .. }`，找不到时取默认域 `RealmId::DEFAULT`（`S-CTX-5`）。解析 `ι(k)`：自根向当前节点收集全部 `Intercept { key: k, .. }` 层（`S-SVC-11`）。
+
+`Fiber` 持有所属纤程层的 `Arc<Scope>`。活跃记录保留该层；释放稳定后取出记录中的强引用，相关上下文与句柄释放完毕时由租约回收 arena 记录。任务、依赖释放及失活上下文的访问共用这一生命周期（ADR-0008）。
 
 ### 3.3 纪元
 
@@ -259,6 +262,10 @@ ctx.emit::<Message>(&msg);
 `use` 是 Rust 关键字，`UPSTREAM` 的 `ctx.use()` 在 Rust 中命名为 `ctx.mount()`。
 
 同步效应体、释放回调分别返回 `Result<()>`；`EffectScope::defer` 与 `adopt` 返回登记结果。`Context::extend<T>(value)` 以类型标识扩展字段，`extension::<T>()` 沿视图链读取最近值。宿主通过 `Spawn::spawn(Task)`、`Clock::now()` 与 `Clock::sleep(Duration)` 接入。
+
+`effect_async(label, callback)` 立即登记效应并提交宿主任务。`Effect::settled()` 等待效应体及失败恢复，返回释放句柄；`defer_async` 接收返回 `Future<Output = Result<()>>` 的闭包。组件在 `Context::is_current()`、效应体在 `EffectScope::is_current()` 查询当前步骤对应的纪元。
+
+`Component::Config: Config` 通过关联类型 `Raw` 声明原始配置，`resolve(&Raw)` 返回解析配置或 `ValidationError`；错误中的 `issues` 保留路径。动态组合使用可复用的 `ComponentDef::new/validated` 与 `mount_with`，配置在内部以 `RawConfig = Arc<dyn Any + Send + Sync>` 保存。`Fiber::settled()`、`update`、`restart`、`dispose` 返回 `Task<Result<()>>`。
 
 事件通过 `Event::Kind` 选定 `SyncKind`、`AsyncKind` 或 `WaterfallKind`。同步登记使用 `on/once`，异步登记使用 `on_async/once_async`，瀑布登记使用 `on_waterfall/once_waterfall`；后两组同时接收 `EventOptions`。`Next::run` 返回 `Result`，异步瀑布的 `Output` 为 `Task<Result<T>>`。派发签名与过滤参数见 ADR-0006。
 

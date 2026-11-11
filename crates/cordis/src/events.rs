@@ -1,7 +1,7 @@
 //! 类型化事件、可回退监听器与快照派发。
 
 use crate::{
-    Context, Effect, Error, FiberState, Result, Task,
+    Context, Effect, Error, Result, Task,
     context::Scope,
     kernel::{EffectId, Kernel},
 };
@@ -279,7 +279,7 @@ impl Context {
         options: EventOptions,
         once: bool,
     ) -> Result<Effect> {
-        if self.kernel.state.lock().fibers[self.scope.fiber].state == FiberState::Disposed {
+        if !self.kernel.state.lock().fibers[self.scope.fiber].alive {
             return Err(Error::inactive().at(std::panic::Location::caller()));
         }
         let request = ListenerRegistration {

@@ -8,7 +8,7 @@ use std::{
     any::{Any, TypeId},
     fmt,
     sync::{
-        Arc,
+        Arc, Weak,
         atomic::{AtomicU64, Ordering},
     },
     time::Duration,
@@ -41,10 +41,32 @@ pub(crate) struct Scope {
     pub parent: Option<Arc<Scope>>,
     pub fiber: FiberId,
     pub layer: Layer,
+    pub lease: Option<Weak<Kernel>>,
+}
+
+impl Drop for Scope {
+    fn drop(&mut self) {
+        if let Some(kernel) = self.lease.as_ref().and_then(Weak::upgrade) {
+            let removed = {
+                let mut state = kernel.state.lock();
+                if state
+                    .fibers
+                    .get(self.fiber)
+                    .is_some_and(|fiber| !fiber.alive && !fiber.inertia)
+                {
+                    state.fibers.remove(self.fiber)
+                } else {
+                    None
+                }
+            };
+            drop(removed);
+        }
+    }
 }
 
 pub(crate) enum Layer {
     Root,
+    Fiber,
     Extend(TypeId, Arc<dyn Any + Send + Sync>),
     Isolate(TypeId, Realm),
     Intercept(TypeId, Arc<dyn Any + Send + Sync>),
@@ -54,14 +76,14 @@ impl Context {
     /// S-CTX-1、T-CTX-1：创建根纤程及其统一上下文。
     pub fn new<H: Spawn + Clock>(host: Arc<H>) -> Self {
         let (kernel, fiber) = Kernel::new(host);
-        Self {
-            kernel,
-            scope: Arc::new(Scope {
-                parent: None,
-                fiber,
-                layer: Layer::Root,
-            }),
-        }
+        let scope = Arc::new(Scope {
+            parent: None,
+            fiber,
+            layer: Layer::Root,
+            lease: None,
+        });
+        kernel.state.lock().fibers[fiber].scope = Some(scope.clone());
+        Self { kernel, scope }
     }
 
     pub(crate) fn derive(&self, layer: Layer) -> Self {
@@ -71,6 +93,7 @@ impl Context {
                 parent: Some(self.scope.clone()),
                 fiber: self.scope.fiber,
                 layer,
+                lease: None,
             }),
         }
     }
@@ -147,13 +170,32 @@ impl Context {
     }
 
     pub fn fiber(&self) -> Fiber {
+        let mut scope = &self.scope;
+        while !matches!(scope.layer, Layer::Root | Layer::Fiber) {
+            scope = scope.parent.as_ref().expect("derived context has a parent");
+        }
         Fiber {
             kernel: self.kernel.clone(),
             id: self.scope.fiber,
+            scope: scope.clone(),
         }
     }
     pub fn now(&self) -> Duration {
         self.kernel.clock.now()
+    }
+
+    pub fn sleep(&self, duration: Duration) -> crate::Task {
+        self.kernel.clock.sleep(duration)
+    }
+
+    pub fn errors(&self) -> Vec<crate::Error> {
+        self.kernel
+            .state
+            .lock()
+            .errors
+            .iter()
+            .map(|(_, error)| error.clone())
+            .collect()
     }
 }
 

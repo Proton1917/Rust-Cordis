@@ -19,6 +19,7 @@ use std::{
 #[derive(Default)]
 pub struct TestExecutor {
     queue: Arc<Mutex<VecDeque<Arc<Scheduled>>>>,
+    tasks: Mutex<Vec<Arc<Scheduled>>>,
     time: Arc<Mutex<Time>>,
 }
 
@@ -44,11 +45,13 @@ impl ArcWake for Scheduled {
 
 impl Spawn for TestExecutor {
     fn spawn(&self, task: Task) {
-        self.queue.lock().unwrap().push_back(Arc::new(Scheduled {
+        let task = Arc::new(Scheduled {
             task: Mutex::new(Some(task)),
             queue: self.queue.clone(),
             queued: AtomicBool::new(true),
-        }));
+        });
+        self.tasks.lock().unwrap().push(task.clone());
+        self.queue.lock().unwrap().push_back(task);
     }
 }
 
@@ -98,6 +101,11 @@ impl TestExecutor {
                     .is_pending()
                 {
                     *task.task.lock().unwrap() = Some(future);
+                } else {
+                    self.tasks
+                        .lock()
+                        .unwrap()
+                        .retain(|pending| !Arc::ptr_eq(pending, &task));
                 }
             }
         }

@@ -1,9 +1,22 @@
 //! 内核状态、调和队列与宿主接口。
 
-use crate::{effect::EffectData, events::Hook, fiber::FiberData};
+use crate::{
+    Error,
+    effect::EffectData,
+    events::Hook,
+    fiber::FiberData,
+    registry::{ComponentId, RuntimeData},
+};
 use parking_lot::Mutex;
 use slotmap::{SlotMap, new_key_type};
-use std::{any::TypeId, collections::HashMap, future::Future, pin::Pin, sync::Arc, time::Duration};
+use std::{
+    any::TypeId,
+    collections::{HashMap, VecDeque},
+    future::Future,
+    pin::Pin,
+    sync::Arc,
+    time::Duration,
+};
 
 pub type Task<T = ()> = Pin<Box<dyn Future<Output = T> + Send + 'static>>;
 
@@ -32,6 +45,10 @@ pub(crate) struct State {
     pub fibers: SlotMap<FiberId, FiberData>,
     pub effects: SlotMap<EffectId, EffectData>,
     pub hooks: HashMap<TypeId, Vec<Arc<Hook>>>,
+    pub dirty: VecDeque<FiberId>,
+    pub draining: bool,
+    pub runtimes: HashMap<ComponentId, RuntimeData>,
+    pub errors: Vec<(FiberId, Error)>,
 }
 
 impl Kernel {
@@ -44,6 +61,10 @@ impl Kernel {
                     fibers,
                     effects: SlotMap::with_key(),
                     hooks: HashMap::new(),
+                    dirty: VecDeque::new(),
+                    draining: false,
+                    runtimes: HashMap::new(),
+                    errors: Vec::new(),
                 }),
                 spawner: host.clone(),
                 clock: host,

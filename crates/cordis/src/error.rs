@@ -11,6 +11,7 @@ pub struct Error {
     pub message: Arc<str>,
     pub locations: Vec<&'static Location<'static>>,
     pub causes: Vec<Error>,
+    pub validation: Option<Arc<crate::registry::ValidationError>>,
 }
 
 impl Error {
@@ -19,6 +20,7 @@ impl Error {
             message: message.into(),
             locations: Vec::new(),
             causes: Vec::new(),
+            validation: None,
         }
     }
 
@@ -38,5 +40,13 @@ impl Error {
 
     pub(crate) fn inactive() -> Self {
         Self::new("cannot create effect on inactive context")
+    }
+}
+
+impl From<crate::registry::ValidationError> for Error {
+    fn from(validation: crate::registry::ValidationError) -> Self {
+        let mut error = Self::new(validation.to_string());
+        error.validation = Some(Arc::new(validation));
+        error
     }
 }

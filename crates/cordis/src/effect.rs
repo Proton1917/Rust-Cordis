@@ -4,8 +4,9 @@ use crate::{
     Context, Error, Result, Task,
     kernel::{EffectId, FiberId, Kernel, State},
 };
-use futures_util::future::poll_fn;
+use futures_util::{FutureExt, future::poll_fn};
 use std::{
+    future::Future,
     panic::{AssertUnwindSafe, Location, catch_unwind},
     sync::{
         Arc,
@@ -22,6 +23,7 @@ pub struct EffectMeta {
 
 pub(crate) enum Cleanup {
     Sync(Box<dyn FnOnce() -> Result + Send + Sync>),
+    Async(Box<dyn FnOnce() -> Task<Result> + Send + Sync>),
     Child(Effect),
 }
 
@@ -36,6 +38,7 @@ pub(crate) struct EffectData {
     pub children: Vec<EffectId>,
     pub parent: Option<EffectId>,
     pub outcome: Option<Result>,
+    pub execution_error: Option<Error>,
     pub waiters: Vec<Waker>,
     pub location: &'static Location<'static>,
 }
@@ -92,6 +95,12 @@ impl EffectScope {
     }
 
     /// T-EFF-3：登记本步骤交回的逆变换。
+    ///
+    /// ```compile_fail
+    /// fn invalid_step(fx: cordis::EffectScope) {
+    ///     fx.defer(1);
+    /// }
+    /// ```
     pub fn defer<F>(&self, cleanup: F) -> Result
     where
         F: FnOnce() -> Result + Send + Sync + 'static,
@@ -102,6 +111,22 @@ impl EffectScope {
             return Err(Error::inactive());
         }
         data.steps.push(Cleanup::Sync(Box::new(cleanup)));
+        Ok(())
+    }
+
+    /// S-EFF-3：异步逆变换完成后继续恢复前序步骤。
+    pub fn defer_async<F, Fut>(&self, cleanup: F) -> Result
+    where
+        F: FnOnce() -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result> + Send + 'static,
+    {
+        let mut state = self.0.kernel.state.lock();
+        let data = &mut state.effects[self.0.id];
+        if !data.running {
+            return Err(Error::inactive());
+        }
+        data.steps
+            .push(Cleanup::Async(Box::new(move || Box::pin(cleanup()))));
         Ok(())
     }
 
@@ -133,7 +158,12 @@ impl EffectScope {
     }
 
     pub fn is_current(&self) -> bool {
-        self.0.armed.load(Ordering::Acquire)
+        if !self.0.armed.load(Ordering::Acquire) {
+            return false;
+        }
+        let state = self.0.kernel.state.lock();
+        let owner = &state.fibers[state.effects[self.0.id].owner];
+        owner.alive && owner.target == owner.running_epoch
     }
 }
 
@@ -149,14 +179,41 @@ impl Context {
         let result = catch_unwind(AssertUnwindSafe(|| callback(EffectScope(effect.clone()))))
             .unwrap_or_else(|payload| Err(Error::panic(payload)))
             .map_err(|error| error.at(location));
-        effect.finish_run(result.is_err());
+        effect.finish_run(result.clone());
         result.map(|()| effect)
+    }
+
+    /// T-EFF-4、T-EFF-5、A-7：任务运行至协作检查点或结束。
+    #[track_caller]
+    pub fn effect_async<F, Fut>(&self, label: impl Into<String>, callback: F) -> Result<Effect>
+    where
+        F: FnOnce(EffectScope) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result> + Send + 'static,
+    {
+        let location = Location::caller();
+        let effect = self.create_effect(label.into(), location)?;
+        let runner = effect.clone();
+        let scope = EffectScope(effect.clone());
+        self.kernel.spawner.spawn(Box::pin(async move {
+            let result = AssertUnwindSafe(async move { callback(scope).await })
+                .catch_unwind()
+                .await
+                .unwrap_or_else(|payload| Err(Error::panic(payload)))
+                .map_err(|error| error.at(location));
+            if let Err(error) = &result {
+                let mut state = runner.kernel.state.lock();
+                let owner = state.effects[runner.id].owner;
+                state.errors.push((owner, error.clone()));
+            }
+            runner.finish_run(result);
+        }));
+        Ok(effect)
     }
 
     fn create_effect(&self, label: String, location: &'static Location<'static>) -> Result<Effect> {
         let mut state = self.kernel.state.lock();
         let owner = self.scope.fiber;
-        if state.fibers[owner].state == crate::FiberState::Disposed {
+        if !state.fibers[owner].alive {
             return Err(Error::inactive().at(location));
         }
         let armed = Arc::new(AtomicBool::new(true));
@@ -171,6 +228,7 @@ impl Context {
             children: Vec::new(),
             parent: None,
             outcome: None,
+            execution_error: None,
             waiters: Vec::new(),
             location,
         });
@@ -194,12 +252,13 @@ impl Effect {
         }
     }
 
-    fn finish_run(&self, failed: bool) {
-        {
+    fn finish_run(&self, result: Result) {
+        let waiters = {
             let mut state = self.kernel.state.lock();
             let data = &mut state.effects[self.id];
             data.running = false;
-            if failed {
+            if let Err(error) = result {
+                data.execution_error = Some(error);
                 data.armed.store(false, Ordering::Release);
             }
             let owner = data.owner;
@@ -207,10 +266,33 @@ impl Effect {
                 state.fibers[owner].effects.remove(&self.id);
                 state.fibers[owner].effects.insert(self.id, false);
             }
-        }
+            std::mem::take(&mut state.effects[self.id].waiters)
+        };
         if !self.armed.load(Ordering::Acquire) {
             self.start_cleanup();
         }
+        for waiter in waiters {
+            waiter.wake();
+        }
+    }
+
+    /// S-EFF-8：等待执行及失败恢复完成，返回显式释放句柄。
+    pub fn settled(&self) -> Task<Result<Effect>> {
+        let effect = self.clone();
+        Box::pin(poll_fn(move |cx| {
+            let result = {
+                let mut state = effect.kernel.state.lock();
+                let data = &mut state.effects[effect.id];
+                if data.running || (data.execution_error.is_some() && data.outcome.is_none()) {
+                    if !data.waiters.iter().any(|w| w.will_wake(cx.waker())) {
+                        data.waiters.push(cx.waker().clone());
+                    }
+                    return Poll::Pending;
+                }
+                data.execution_error.clone().map_or(Ok(()), Err)
+            };
+            Poll::Ready(result.map(|()| effect.clone()))
+        }))
     }
 
     /// T-EFF-2、S-EFF-4：同步使守卫失效，释放进度由宿主驱动。
@@ -266,17 +348,21 @@ impl Effect {
                             result = next;
                         }
                     } else {
-                        let effect = self.clone();
-                        self.kernel.spawner.spawn(Box::pin(async move {
-                            let next = task.await;
-                            if result.is_ok() {
-                                result = next;
-                            }
-                            effect.clean_steps(steps, result);
-                        }));
+                        self.continue_cleanup(steps, result, task);
                         return;
                     }
                 }
+                Cleanup::Async(callback) => match catch_unwind(AssertUnwindSafe(callback)) {
+                    Ok(task) => {
+                        self.continue_cleanup(steps, result, task);
+                        return;
+                    }
+                    Err(payload) => {
+                        if result.is_ok() {
+                            result = Err(Error::panic(payload));
+                        }
+                    }
+                },
             }
         }
         let waiters = {
@@ -289,5 +375,19 @@ impl Effect {
         for waiter in waiters {
             waiter.wake();
         }
+    }
+
+    fn continue_cleanup(&self, steps: Vec<Cleanup>, mut result: Result, task: Task<Result>) {
+        let effect = self.clone();
+        self.kernel.spawner.spawn(Box::pin(async move {
+            let next = AssertUnwindSafe(task)
+                .catch_unwind()
+                .await
+                .unwrap_or_else(|payload| Err(Error::panic(payload)));
+            if result.is_ok() {
+                result = next;
+            }
+            effect.clean_steps(steps, result);
+        }));
     }
 }
