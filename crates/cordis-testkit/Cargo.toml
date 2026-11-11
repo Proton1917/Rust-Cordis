@@ -1,9 +1,11 @@
 [package]
 name = "cordis-testkit"
+description = "Deterministic executor and controllable clock for testing cordis components."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 publish.workspace = true
+license.workspace = true
 
 [dependencies]
 cordis.workspace = true

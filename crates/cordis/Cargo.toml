@@ -1,9 +1,11 @@
 [package]
 name = "cordis"
+description = "A small Rust kernel for spatiotemporally composable programs: reversible effects, reactive coeffects and component lifecycles."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 publish.workspace = true
+license.workspace = true
 
 [dependencies]
 slotmap.workspace = true
