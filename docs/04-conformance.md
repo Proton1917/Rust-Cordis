@@ -53,8 +53,8 @@ M0 使用原有清单核对 16 个 spec 文件的 177 条用例；用例实现�
 | ID | 上游位置 | 上游用例 | 里程碑 | 状态 | Rust 测试 / 理由 |
 |---|---|---|---|---|---|
 | DSP-01 | `dispose.spec.ts:7` | dispose by component | M3 | 未开始 | |
-| DSP-02 | `dispose.spec.ts:23` | dispose manually | M1 | 未开始 | |
-| DSP-03 | `dispose.spec.ts:37` | yield dispose | M1 | 未开始 | |
+| DSP-02 | `dispose.spec.ts:23` | dispose manually | M1 | 已移植 | `crates/cordis/tests/dispose.rs::dispose_manually` |
+| DSP-03 | `dispose.spec.ts:37` | yield dispose | M1 | 已改写 | `crates/cordis/tests/dispose.rs::yield_dispose`；生成器交回释放函数改为 defer/adopt；监听器登记改为合法空效应，检验 S-EFF-3、S-EFF-6、S-EFF-7 的归属、元信息与逆序组合；事件表行为归 M2。 |
 | DSP-04 | `dispose.spec.ts:76` | async return 1 | M3 | 未开始 | |
 | DSP-05 | `dispose.spec.ts:90` | async return 2 | M3 | 未开始 | |
 | DSP-06 | `dispose.spec.ts:103` | async yield 1 | M3 | 未开始 | |
@@ -62,8 +62,8 @@ M0 使用原有清单核对 16 个 spec 文件的 177 条用例；用例实现�
 | DSP-08 | `dispose.spec.ts:143` | async yield 3 (aborted) | M3 | 未开始 | |
 | DSP-09 | `dispose.spec.ts:165` | async yield (aborted, finally) | M3 | 未开始 | |
 | DSP-10 | `dispose.spec.ts:185` | async yield 4 (await dispose) | M3 | 未开始 | |
-| DSP-11 | `dispose.spec.ts:205` | return with error | M1 | 未开始 | |
-| DSP-12 | `dispose.spec.ts:217` | yield with error | M1 | 未开始 | |
+| DSP-11 | `dispose.spec.ts:205` | return with error | M1 | 已改写 | `crates/cordis/tests/dispose.rs::return_with_error`；JS throw 改为 Result，检验 S-EFF-2 的错误传播和登记位置。 |
+| DSP-12 | `dispose.spec.ts:217` | yield with error | M1 | 已改写 | `crates/cordis/tests/dispose.rs::yield_with_error`；生成器 yield 后 throw 改为 defer 后返回 Err，检验 S-EFF-2 的部分恢复。 |
 | DSP-13 | `dispose.spec.ts:230` | async return with error | M3 | 未开始 | |
 | DSP-14 | `dispose.spec.ts:242` | async yield with error | M3 | 未开始 | |
 | DSP-15 | `dispose.spec.ts:261` | async yield invalid effect | M3 | 未开始 | |

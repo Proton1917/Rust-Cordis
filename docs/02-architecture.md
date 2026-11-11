@@ -208,10 +208,10 @@ let root: Context = Context::new(executor.clone());
 // ── 可回退效应（T-EFF-*）────────────────────────────────────────────
 let effect: Effect = ctx.effect("open-connection", |fx| {
     let conn = open()?;
-    fx.defer(move || conn.close());
+    fx.defer(move || conn.close())?;
     Ok(())
 })?;
-effect.dispose().await;            // 幂等；第二次调用无作用
+effect.dispose().await?;           // 幂等；释放错误经 Result 返回
 
 // ── 余效应（T-COE-*）───────────────────────────────────────────────
 pub struct Database;
@@ -257,6 +257,8 @@ ctx.emit::<Message>(&msg);
 ```
 
 `use` 是 Rust 关键字，`UPSTREAM` 的 `ctx.use()` 在 Rust 中命名为 `ctx.mount()`。
+
+同步效应体、释放回调分别返回 `Result<()>`；`EffectScope::defer` 与 `adopt` 返回登记结果。`Context::extend<T>(value)` 以类型标识扩展字段，`extension::<T>()` 沿视图链读取最近值。宿主通过 `Spawn::spawn(Task)`、`Clock::now()` 与 `Clock::sleep(Duration)` 接入。
 
 ## 7 `UPSTREAM` 到 Rust 的映射
 
