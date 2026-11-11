@@ -203,9 +203,8 @@ impl Context {
                 .unwrap_or_else(|payload| Err(Error::panic(payload)))
                 .map_err(|error| error.at(location));
             if let Err(error) = &result {
-                let mut state = runner.kernel.state.lock();
-                let owner = state.effects[runner.id].owner;
-                state.errors.push((owner, error.clone()));
+                let owner = runner.kernel.state.lock().effects[runner.id].owner;
+                runner.kernel.report(owner, error.clone());
             }
             runner.finish_run(result);
         }));

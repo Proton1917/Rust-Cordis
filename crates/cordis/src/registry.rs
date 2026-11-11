@@ -209,6 +209,22 @@ pub(crate) struct RuntimeData {
     pub fibers: Vec<FiberId>,
 }
 
+pub struct InternalReplace;
+impl crate::Event for InternalReplace {
+    const NAME: &'static str = "internal/replace";
+    type Args = Fiber;
+    type Output = ();
+    type Kind = crate::SyncKind;
+}
+
+fn forward(state: &State, component: &ComponentDef) -> ComponentDef {
+    let mut target = component.clone();
+    while let Some(next) = state.aliases.get(&target.id) {
+        target = next.clone();
+    }
+    target
+}
+
 #[derive(Clone)]
 pub struct Registry {
     ctx: Context,
@@ -232,27 +248,21 @@ impl Registry {
             .collect()
     }
     pub fn contains(&self, component: &ComponentDef) -> bool {
-        self.ctx
-            .kernel
-            .state
-            .lock()
-            .runtimes
-            .contains_key(&component.id)
+        let state = self.ctx.kernel.state.lock();
+        state.runtimes.contains_key(&forward(&state, component).id)
     }
     pub fn get(&self, component: &ComponentDef) -> Option<ComponentDef> {
-        self.ctx
-            .kernel
-            .state
-            .lock()
+        let state = self.ctx.kernel.state.lock();
+        state
             .runtimes
-            .get(&component.id)
+            .get(&forward(&state, component).id)
             .map(|runtime| runtime.component.clone())
     }
     pub fn fibers(&self, component: &ComponentDef) -> Vec<Fiber> {
         let state = self.ctx.kernel.state.lock();
         state
             .runtimes
-            .get(&component.id)
+            .get(&forward(&state, component).id)
             .map(|runtime| {
                 runtime
                     .fibers
@@ -261,6 +271,77 @@ impl Registry {
                     .collect()
             })
             .unwrap_or_default()
+    }
+
+    /// S-REG-4、S-REG-5：替换实现并保留每个现有纤程的身份。
+    pub fn replace(&self, old: &ComponentDef, next: &ComponentDef) -> Vec<Fiber> {
+        let (fibers, old_runtime, old_alias, old_target_alias, previous) = {
+            let mut state = self.ctx.kernel.state.lock();
+            let source = forward(&state, old);
+            let old_target_alias = state.aliases.remove(&next.id);
+            let fibers = state
+                .runtimes
+                .get(&source.id)
+                .map(|runtime| {
+                    runtime
+                        .fibers
+                        .iter()
+                        .map(|id| Fiber::handle(&self.ctx.kernel, *id, &state))
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
+            let (old_runtime, old_alias) = if source.id != next.id {
+                (
+                    state.runtimes.remove(&source.id),
+                    state.aliases.insert(source.id, next.clone()),
+                )
+            } else {
+                (None, None)
+            };
+            if !fibers.is_empty() {
+                state
+                    .runtimes
+                    .entry(next.id)
+                    .or_insert_with(|| RuntimeData {
+                        component: next.clone(),
+                        fibers: Vec::new(),
+                    });
+            }
+            let mut previous = Vec::new();
+            for fiber in &fibers {
+                let runtime = state
+                    .runtimes
+                    .get_mut(&next.id)
+                    .expect("replacement runtime installed");
+                if !runtime.fibers.contains(&fiber.id) {
+                    runtime.fibers.push(fiber.id);
+                }
+                let data = &mut state.fibers[fiber.id];
+                data.name = next.name;
+                let component = data.component.replace(next.clone());
+                let inject = std::mem::replace(&mut data.inject, next.inject.clone());
+                previous.push((component, inject));
+            }
+            (fibers, old_runtime, old_alias, old_target_alias, previous)
+        };
+        drop((old_runtime, old_alias, old_target_alias, previous));
+        for fiber in &fibers {
+            if let Err(payload) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                fiber.context().emit::<InternalReplace>(fiber)
+            })) {
+                self.ctx.kernel.report(fiber.id, Error::panic(payload));
+            }
+            {
+                let mut state = self.ctx.kernel.state.lock();
+                let data = &mut state.fibers[fiber.id];
+                data.bindings = vec![None; data.inject.entries.len()];
+                data.error = None;
+                data.revision += 1;
+                crate::fiber::enqueue_locked(&mut state, fiber.id);
+            }
+            crate::reflect::refresh(&self.ctx.kernel, fiber.id);
+        }
+        fibers
     }
 }
 
@@ -294,6 +375,7 @@ impl Context {
             if !state.fibers[self.scope.fiber].alive {
                 return Err(Error::inactive().at(location));
             }
+            let component = forward(&state, component);
             let id = state.fibers.insert(FiberData::child(
                 self.scope.clone(),
                 component.clone(),
@@ -306,6 +388,7 @@ impl Context {
                 layer: Layer::Fiber,
                 lease: Some(Arc::downgrade(&self.kernel)),
             });
+            state.fibers[id].canonical_scope = Arc::downgrade(&scope);
             state.fibers[id].scope = Some(scope);
             state
                 .runtimes

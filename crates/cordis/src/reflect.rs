@@ -164,14 +164,14 @@ impl Context {
     pub fn get<K: ServiceKey>(&self) -> Result<Scoped<K>> {
         let context = self.clone();
         let location = Location::caller();
-        let value = self.waterfall::<InternalGet>(
+        let resolved = self.waterfall::<InternalGet>(
             ServiceAccess {
                 context: self.clone(),
                 name: K::NAME,
             },
             move || context.get_value::<K>().map_err(|error| error.at(location)),
         )?;
-        let value = value
+        let value = resolved
             .value
             .downcast_ref::<Arc<K::Value>>()
             .ok_or_else(|| Error::new("service interceptor returned a different value type"))?
@@ -179,6 +179,8 @@ impl Context {
         Ok(Scoped {
             value,
             caller: self.clone(),
+            definition: resolved.definition,
+            requester: self.clone(),
         })
     }
 
@@ -240,7 +242,34 @@ fn scoped<K: ServiceKey>(state: &State, id: ImplId, caller: Context) -> Scoped<K
         .downcast_ref::<Arc<K::Value>>()
         .expect("service value follows key")
         .clone();
-    Scoped { value, caller }
+    Scoped {
+        value,
+        definition: Context {
+            kernel: caller.kernel.clone(),
+            scope: state.impls[id].scope.clone(),
+        },
+        requester: caller.clone(),
+        caller,
+    }
+}
+
+pub(crate) fn injected_meta<K: ServiceKey>(context: &Context) -> K::Meta {
+    let metadata = {
+        let state = context.kernel.state.lock();
+        locate(&state, &context.scope, TypeId::of::<K>())
+            .and_then(|(fiber, _)| fiber)
+            .and_then(|id| {
+                state.fibers[id]
+                    .inject
+                    .entries
+                    .iter()
+                    .find(|entry| entry.key == TypeId::of::<K>())
+                    .map(|entry| entry.meta.clone())
+            })
+    };
+    metadata
+        .and_then(|value| value.downcast_ref::<K::Meta>().cloned())
+        .unwrap_or_default()
 }
 
 /// S-SVC-6、S-SVC-9：同域自供优先，隔离层截断祖先规格查找。

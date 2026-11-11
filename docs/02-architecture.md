@@ -192,6 +192,8 @@ enum Epoch {
 
 `Scoped<K>` 对 `K::Value` 实现 `Deref`。服务作者把需要调用方的方法写成 `Scoped<K>` 上的扩展 trait。
 
+`caller()` 保留原使用点，供效应登记和拦截解析；`definition()` 指向服务提供点，供其自身依赖解析；`requester()` 指向发起当前访问的代码定义点，供声明元数据解析。`dependency::<D>()` 取得定义点中的依赖并继续携带原使用点。`meta()` 合并 requester 的声明元数据与 caller 的拦截层，`logger()` 采用当前服务来源及原使用点的日志拦截。`with_value` 创建保留上述上下文的派生服务值句柄（ADR-0008）。
+
 ### 5.4 确定性执行器
 
 `cordis-testkit` 提供 `TestExecutor`，它实现 `Spawn` 与 `Clock`。
@@ -270,6 +272,8 @@ ctx.emit::<Message>(&msg);
 `Component::Config: Config` 通过关联类型 `Raw` 声明原始配置，`resolve(&Raw)` 返回解析配置或 `ValidationError`；错误中的 `issues` 保留路径。动态组合使用可复用的 `ComponentDef::new/validated` 与 `mount_with`，配置在内部以 `RawConfig = Arc<dyn Any + Send + Sync>` 保存。`Fiber::settled()`、`update`、`restart`、`dispose` 返回 `Task<Result<()>>`。
 
 事件通过 `Event::Kind` 选定 `SyncKind`、`AsyncKind` 或 `WaterfallKind`。同步登记使用 `on/once`，异步登记使用 `on_async/once_async`，瀑布登记使用 `on_waterfall/once_waterfall`；后两组同时接收 `EventOptions`。`Next::run` 返回 `Result`，异步瀑布的 `Output` 为 `Task<Result<T>>`。派发签名与过滤参数见 ADR-0006。
+
+`Registry::replace(&old, &new)` 返回原地迁移的纤程列表，调用方通过各纤程的 `settled()` 等待结果。旧组件定义继续经别名解析到新定义。日志接口为 `ctx.logger()`，支持 `named`、四级记录、`exporter` 和 `buffer`；默认缓冲容量 1000 条，`set_buffer_size` 可调整容量。错误记录与公开缓冲共用同一数据源。
 
 ## 7 `UPSTREAM` 到 Rust 的映射
 

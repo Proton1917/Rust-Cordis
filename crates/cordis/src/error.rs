@@ -11,6 +11,7 @@ pub struct Error {
     pub message: Arc<str>,
     pub locations: Vec<&'static Location<'static>>,
     pub causes: Vec<Error>,
+    pub cause: Option<Arc<Error>>,
     pub validation: Option<Arc<crate::registry::ValidationError>>,
 }
 
@@ -20,12 +21,18 @@ impl Error {
             message: message.into(),
             locations: Vec::new(),
             causes: Vec::new(),
+            cause: None,
             validation: None,
         }
     }
 
     pub(crate) fn at(mut self, location: &'static Location<'static>) -> Self {
         self.locations.push(location);
+        self
+    }
+
+    pub fn with_cause(mut self, cause: Error) -> Self {
+        self.cause = Some(Arc::new(cause));
         self
     }
 

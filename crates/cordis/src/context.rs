@@ -82,7 +82,11 @@ impl Context {
             layer: Layer::Root,
             lease: None,
         });
-        kernel.state.lock().fibers[fiber].scope = Some(scope.clone());
+        {
+            let mut state = kernel.state.lock();
+            state.fibers[fiber].canonical_scope = Arc::downgrade(&scope);
+            state.fibers[fiber].scope = Some(scope.clone());
+        }
         Self { kernel, scope }
     }
 
@@ -189,13 +193,7 @@ impl Context {
     }
 
     pub fn errors(&self) -> Vec<crate::Error> {
-        self.kernel
-            .state
-            .lock()
-            .errors
-            .iter()
-            .map(|(_, error)| error.clone())
-            .collect()
+        crate::logger::errors(&self.kernel)
     }
 }
 

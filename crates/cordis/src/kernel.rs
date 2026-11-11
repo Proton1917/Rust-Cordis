@@ -6,8 +6,9 @@ use crate::{
     effect::EffectData,
     events::Hook,
     fiber::FiberData,
+    logger::LoggerState,
     reflect::ImplData,
-    registry::{ComponentId, RuntimeData},
+    registry::{ComponentDef, ComponentId, RuntimeData},
 };
 use parking_lot::Mutex;
 use slotmap::{SlotMap, new_key_type};
@@ -56,7 +57,8 @@ pub(crate) struct State {
     pub dirty: VecDeque<Arc<Scope>>,
     pub draining: bool,
     pub runtimes: HashMap<ComponentId, RuntimeData>,
-    pub errors: Vec<(FiberId, Error)>,
+    pub logger: LoggerState,
+    pub aliases: HashMap<ComponentId, ComponentDef>,
     pub impls: SlotMap<ImplId, ImplData>,
     pub store: HashMap<(TypeId, Realm), ImplId>,
     pub names: HashMap<&'static str, TypeId>,
@@ -70,8 +72,8 @@ pub(crate) struct SubmissionFailure {
 }
 
 impl Kernel {
-    pub(crate) fn report(&self, fiber: FiberId, error: Error) {
-        self.state.lock().errors.push((fiber, error));
+    pub(crate) fn report(self: &Arc<Self>, fiber: FiberId, error: Error) {
+        crate::logger::record_error(self, fiber, error);
     }
 
     /// A-3、A-7：宿主接收调度句柄，任务在首次轮询时移出 State。
@@ -122,7 +124,8 @@ impl Kernel {
                     dirty: VecDeque::new(),
                     draining: false,
                     runtimes: HashMap::new(),
-                    errors: Vec::new(),
+                    logger: LoggerState::default(),
+                    aliases: HashMap::new(),
                     impls: SlotMap::with_key(),
                     store: HashMap::new(),
                     names: HashMap::new(),

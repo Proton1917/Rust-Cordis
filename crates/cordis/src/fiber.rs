@@ -14,7 +14,7 @@ use std::{
     any::TypeId,
     fmt,
     panic::{AssertUnwindSafe, Location, catch_unwind},
-    sync::Arc,
+    sync::{Arc, Weak},
     task::{Poll, Waker},
 };
 
@@ -40,7 +40,9 @@ pub(crate) struct FiberData {
     pub effects: DisposableList<EffectId>,
     pub parent_scope: Option<Arc<Scope>>,
     pub scope: Option<Arc<Scope>>,
+    pub canonical_scope: Weak<Scope>,
     pub component: Option<ComponentDef>,
+    pub name: &'static str,
     pub config: RawConfig,
     pub inject: Inject,
     pub bindings: Vec<Option<ImplId>>,
@@ -68,7 +70,9 @@ impl FiberData {
             effects: DisposableList::default(),
             parent_scope: None,
             scope: None,
+            canonical_scope: Weak::new(),
             component: None,
+            name: "",
             config: Arc::new(()),
             inject: Inject::new(),
             bindings: Vec::new(),
@@ -105,6 +109,7 @@ impl FiberData {
             parent_scope: Some(parent),
             bindings: vec![None; component.inject.entries.len()],
             inject: component.inject.clone(),
+            name: component.name,
             component: Some(component),
             config,
             target: Epoch::Inactive,
@@ -396,11 +401,7 @@ impl Fiber {
         if let Err(payload) = catch_unwind(AssertUnwindSafe(|| {
             self.context().emit::<InternalPlugin>(self)
         })) {
-            self.kernel
-                .state
-                .lock()
-                .errors
-                .push((self.id, Error::panic(payload)));
+            self.kernel.report(self.id, Error::panic(payload));
         }
     }
 }
@@ -559,8 +560,8 @@ async fn transition_loop(fiber: Fiber, mut loading: bool) {
                 };
                 if let Err(error) = result {
                     let error = error.at(location);
+                    kernel.report(id, error.clone());
                     let mut state = kernel.state.lock();
-                    state.errors.push((id, error.clone()));
                     let data = &mut state.fibers[id];
                     if data.target == epoch {
                         data.error = Some(error);
@@ -589,7 +590,7 @@ async fn transition_loop(fiber: Fiber, mut loading: bool) {
                 .collect::<Vec<_>>();
             for result in join_all(tasks).await {
                 if let Err(error) = result {
-                    kernel.state.lock().errors.push((id, error));
+                    kernel.report(id, error);
                 }
             }
             crate::reflect::release_committed(&kernel, id);
@@ -659,10 +660,8 @@ async fn yield_once() {
 pub(crate) fn name_locked(state: &State, mut id: FiberId) -> String {
     loop {
         let data = &state.fibers[id];
-        if let Some(component) = &data.component
-            && !component.name.is_empty()
-        {
-            return component.name.into();
+        if !data.name.is_empty() {
+            return data.name.into();
         }
         let Some(parent) = &data.parent_scope else {
             return "root".into();

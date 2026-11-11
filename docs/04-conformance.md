@@ -223,81 +223,81 @@ M0 使用原有清单核对 16 个 spec 文件的 177 条用例；用例实现�
 
 | ID | 上游位置 | 上游用例 | 里程碑 | 状态 | Rust 测试 / 理由 |
 |---|---|---|---|---|---|
-| ICP-01 | `intercept.spec.ts:34` | merge context intercepts from outer to inner | M5 | 未开始 | |
-| ICP-02 | `intercept.spec.ts:42` | merge injected config under context intercepts | M5 | 未开始 | |
-| ICP-03 | `intercept.spec.ts:52` | take injected config from the declaring fiber | M5 | 未开始 | |
-| ICP-04 | `intercept.spec.ts:69` | stop looking for injected config at an isolation boundary | M5 | 未开始 | |
-| ICP-05 | `intercept.spec.ts:83` | take no injected config for own provisions | M5 | 未开始 | |
-| ICP-06 | `intercept.spec.ts:96` | take injected config from the def site | M5 | 未开始 | |
-| ICP-07 | `intercept.spec.ts:103` | custom merge | M5 | 未开始 | |
+| ICP-01 | `intercept.spec.ts:34` | merge context intercepts from outer to inner | M5 | 已改写 | `crates/cordis/tests/intercept.rs::icp01_context_layers_merge_outer_to_inner`；以 Merge trait 表达按层合并，保留父视图与纤程纪元，检验 T-COE-9、T-COE-11、T-COE-12。 |
+| ICP-02 | `intercept.spec.ts:42` | merge injected config under context intercepts | M5 | 已改写 | `crates/cordis/tests/intercept.rs::icp02_injection_metadata_precedes_context_interception`；Inject.with_meta 和 Context.intercept 表达声明及上下文元数据，检验 T-COE-10。 |
+| ICP-03 | `intercept.spec.ts:52` | take injected config from the declaring fiber | M5 | 已改写 | `crates/cordis/tests/intercept.rs::icp03_nearest_declaration_supplies_metadata`；类型化父子规格定位最近声明，检验 S-SVC-11。 |
+| ICP-04 | `intercept.spec.ts:69` | stop looking for injected config at an isolation boundary | M5 | 已改写 | `crates/cordis/tests/intercept.rs::icp04_isolation_stops_inherited_injection_metadata`；反射 lookup 保留直接读取场景，Realm 边界截断声明元数据，检验 S-SVC-12。 |
+| ICP-05 | `intercept.spec.ts:83` | take no injected config for own provisions | M5 | 已改写 | `crates/cordis/tests/intercept.rs::icp05_own_provision_uses_its_own_intercepts`；同键自供域与注入域分别解析 Scoped.meta，检验 S-SVC-12。 |
+| ICP-06 | `intercept.spec.ts:96` | take injected config from the def site | M5 | 已改写 | `crates/cordis/tests/intercept.rs::icp06_nested_dependency_uses_definition_metadata_and_caller_intercepts`；Scoped.dependency 显式区分提供点与使用点，检验 S-SVC-11 和 ADR-0009。 |
+| ICP-07 | `intercept.spec.ts:103` | custom merge | M5 | 已改写 | `crates/cordis/tests/intercept.rs::icp07_custom_metadata_merge_concatenates_tags`；Merge trait 实现标签序列拼接，检验 T-COE-9 的键专属合并运算。 |
 
 ### SHD：`shadow.spec.ts`（8 条）
 
 | ID | 上游位置 | 上游用例 | 里程碑 | 状态 | Rust 测试 / 理由 |
 |---|---|---|---|---|---|
-| SHD-01 | `shadow.spec.ts:5` | keeps caller metadata separate from the service shadow | M5 | 未开始 | |
-| SHD-02 | `shadow.spec.ts:60` | applies the service inject when entered from root | M5 | 未开始 | |
-| SHD-03 | `shadow.spec.ts:93` | resolves dependencies through a captured shadow | M5 | 未开始 | |
-| SHD-04 | `shadow.spec.ts:157` | resolves same-name own provisions at their definition sites | M5 | 未开始 | |
-| SHD-05 | `shadow.spec.ts:195` | keeps unchecked access for services provided on the root ctx | M5 | 未开始 | |
-| SHD-06 | `shadow.spec.ts:226` | exposes the caller without preserving shadow for noShadow services | M5 | 未开始 | |
-| SHD-07 | `shadow.spec.ts:271` | exposes the caller to callable services | M5 | 未开始 | |
-| SHD-08 | `shadow.spec.ts:313` | strips service shadow before creating components | M5 | 未开始 | |
+| SHD-01 | `shadow.spec.ts:5` | keeps caller metadata separate from the service shadow | M5 | 已改写 | `crates/cordis/tests/shadow.rs::shd01_direct_caller_and_service_definition_stay_separate`；代理中的 caller/shadow 拆为 requester、definition，并保留 caller 的效应使用点，检验 DOC-02 §5.3、ADR-0009。 |
+| SHD-02 | `shadow.spec.ts:60` | applies the service inject when entered from root | M5 | 已改写 | `crates/cordis/tests/shadow.rs::shd02_root_entry_enforces_service_dependency_declaration`；服务内部通过 Scoped.dependency 按定义点强制依赖声明，检验 T-CTX-2。 |
+| SHD-03 | `shadow.spec.ts:93` | resolves dependencies through a captured shadow | M5 | 已改写 | `crates/cordis/tests/shadow.rs::shd03_captured_definition_resolves_self_and_dependencies`；捕获定义点 Context 替代代理影子链，核验自供及依赖访问，检验 S-SVC-6。 |
+| SHD-04 | `shadow.spec.ts:157` | resolves same-name own provisions at their definition sites | M5 | 已改写 | `crates/cordis/tests/shadow.rs::shd04_definition_binding_and_use_site_realm_are_independent`；definition 选择绑定，caller 保留使用点隔离视图，检验 S-SVC-6 与 ADR-0009。 |
+| SHD-05 | `shadow.spec.ts:195` | keeps unchecked access for services provided on the root ctx | M5 | 已改写 | `crates/cordis/tests/shadow.rs::shd05_root_defined_service_keeps_root_access`；根提供服务通过显式 definition 读取依赖，检验 S-SVC-8。 |
+| SHD-06 | `shadow.spec.ts:226` | exposes the caller without preserving shadow for noShadow services | M5 | 已改写 | `crates/cordis/tests/shadow.rs::shd06_plain_service_receives_explicit_caller`；普通值使用 Scoped.caller 取得使用点，替代 noShadow 代理属性处理，检验 DOC-02 §5.3。 |
+| SHD-07 | `shadow.spec.ts:271` | exposes the caller to callable services | M5 | 已改写 | `crates/cordis/tests/shadow.rs::shd07_callable_service_receives_direct_service_caller`；普通 Rust 方法读取 requester，对应可调用服务的 @@caller，检验 ADR-0009。 |
+| SHD-08 | `shadow.spec.ts:313` | strips service shadow before creating components | M5 | 已改写 | `crates/cordis/tests/shadow.rs::shd08_service_created_components_use_callers_lifecycle`；服务从 caller 显式挂载子组件，核验依赖解析和整体释放，检验 T-LIF-8、T-CTX-1。 |
 
 ### ASC：`associate.spec.ts`（6 条）
 
 | ID | 上游位置 | 上游用例 | 里程碑 | 状态 | Rust 测试 / 理由 |
 |---|---|---|---|---|---|
-| ASC-01 | `associate.spec.ts:5` | service injection | M5 | 未开始 | |
-| ASC-02 | `associate.spec.ts:30` | property injection | M5 | 未开始 | |
-| ASC-03 | `associate.spec.ts:58` | associated type - service injection | M5 | 未开始 | |
-| ASC-04 | `associate.spec.ts:114` | associated type - accessor injection | M5 | 未开始 | |
-| ASC-05 | `associate.spec.ts:176` | associated access follows the service fiber | M5 | 未开始 | |
-| ASC-06 | `associate.spec.ts:235` | inspect | M5 | 未开始 | |
+| ASC-01 | `associate.spec.ts:5` | service injection | M5 | 已改写 | `crates/cordis/tests/associate.rs::asc01_associated_service_follows_binding_lifetime`；Scoped 扩展 trait 解析类型化关联键，检验 S-SVC-1、S-SVC-2；对应 DOC-02 §7 关联访问映射。 |
+| ASC-02 | `associate.spec.ts:30` | property injection | M5 | 已改写 | `crates/cordis/tests/associate.rs::asc02_associated_property_update_uses_typed_service`；关联属性赋值改为 Provision.set 与显式关联键声明，检验 S-SVC-10、T-COE-1。 |
+| ASC-03 | `associate.spec.ts:58` | associated type - service injection | M5 | 已改写 | `crates/cordis/tests/associate.rs::asc03_associated_session_access_uses_declared_service`；Session 普通方法从保存的 Context 获取关联服务，替代动态 mixin，检验 S-SVC-6。 |
+| ASC-04 | `associate.spec.ts:114` | associated type - accessor injection | M5 | 已改写 | `crates/cordis/tests/associate.rs::asc04_session_accessor_uses_service_value_contract`；动态访问器改为 Session 的类型化读写方法，保留写入加一的业务行为与访问授权，检验 T-CTX-2。 |
+| ASC-05 | `associate.spec.ts:176` | associated access follows the service fiber | M5 | 已改写 | `crates/cordis/tests/associate.rs::asc05_associated_dependency_uses_current_service_declaration`；扩展 trait 从 Scoped.requester 解析关联键，检验 S-SVC-6 的定义点访问规则。 |
+| ASC-06 | `associate.spec.ts:235` | inspect | M5 | 不适用 | 用例检查 JavaScript 类函数的源码字符串及代理参数透传；DOC-02 §7 将可追踪代理映射为 Scoped，Rust 方法直接接收原类型参数。 |
 
 ### INV：`invoke.spec.ts`（2 条）
 
 | ID | 上游位置 | 上游用例 | 里程碑 | 状态 | Rust 测试 / 理由 |
 |---|---|---|---|---|---|
-| INV-01 | `invoke.spec.ts:5` | functional service | M5 | 未开始 | |
-| INV-02 | `invoke.spec.ts:62` | uses the service shadow for callable extensions | M5 | 未开始 | |
+| INV-01 | `invoke.spec.ts:5` | functional service | M5 | 已改写 | `crates/cordis/tests/invoke.rs::inv01_callable_extension_preserves_caller_metadata`；函数代理改为扩展 trait 的 invoke，with_value 保留上下文，检验 S-SVC-11 与 DOC-02 §7 可调用服务映射。 |
+| INV-02 | `invoke.spec.ts:62` | uses the service shadow for callable extensions | M5 | 已改写 | `crates/cordis/tests/invoke.rs::inv02_callable_extension_preserves_definition_dependencies`；派生句柄保留 definition，嵌套普通调用继续访问已声明依赖，检验 T-CTX-2、ADR-0009。 |
 
 ### LOG：`logger.spec.ts`（11 条）
 
 | ID | 上游位置 | 上游用例 | 里程碑 | 状态 | Rust 测试 / 理由 |
 |---|---|---|---|---|---|
-| LOG-01 | `logger.spec.ts:18` | keeps the bounded buffer in place and chronological | M5 | 未开始 | |
-| LOG-02 | `logger.spec.ts:37` | disposes the exporter that registered the disposer | M5 | 未开始 | |
-| LOG-03 | `logger.spec.ts:55` | uses fiber name when called from outside any service | M5 | 未开始 | |
-| LOG-04 | `logger.spec.ts:61` | honours explicit name argument | M5 | 未开始 | |
-| LOG-05 | `logger.spec.ts:67` | honours intercept name | M5 | 未开始 | |
-| LOG-06 | `logger.spec.ts:73` | uses service name when called from inside a Service method (regression) | M5 | 未开始 | |
-| LOG-07 | `logger.spec.ts:91` | still lets outer caller intercept override the service-derived name | M5 | 未开始 | |
-| LOG-08 | `logger.spec.ts:109` | uses the innermost service name and restores the outer service | M5 | 未开始 | |
-| LOG-09 | `logger.spec.ts:140` | uses service name when called from inside [Service.init] (unchanged behaviour) | M5 | 未开始 | |
-| LOG-10 | `logger.spec.ts:156` | logs an error whose errors array is empty | M5 | 未开始 | |
-| LOG-11 | `logger.spec.ts:165` | flattens an aggregate error into its members | M5 | 未开始 | |
+| LOG-01 | `logger.spec.ts:18` | keeps the bounded buffer in place and chronological | M5 | 已改写 | `crates/cordis/tests/logger.rs::log01_bounded_buffer_stays_chronological`；持久 Logger 句柄读取有界消息快照，替代 JS 可变数组引用；检验 S-LOG-1、S-LOG-2。 |
+| LOG-02 | `logger.spec.ts:37` | disposes the exporter that registered the disposer | M5 | 已改写 | `crates/cordis/tests/logger.rs::log02_exporter_disposal_removes_its_own_registration`；导出器由显式 Effect 句柄释放，检验 S-LOG-1。 |
+| LOG-03 | `logger.spec.ts:55` | uses fiber name when called from outside any service | M5 | 已改写 | `crates/cordis/tests/logger.rs::log03_logger_defaults_to_current_fiber_name`；通过 Logger 句柄及弱来源记录核验根纤程名称，检验 S-LOG-2、S-LOG-3。 |
+| LOG-04 | `logger.spec.ts:61` | honours explicit name argument | M5 | 已改写 | `crates/cordis/tests/logger.rs::log04_explicit_name_has_priority`；Logger.named 显式参数优先于拦截元数据，检验 S-LOG-3。 |
+| LOG-05 | `logger.spec.ts:67` | honours intercept name | M5 | 已改写 | `crates/cordis/tests/logger.rs::log05_intercept_supplies_logger_name`；LoggerKey 的类型化拦截元数据选择日志名称，检验 S-LOG-3。 |
+| LOG-06 | `logger.spec.ts:73` | uses service name when called from inside a Service method (regression) | M5 | 已改写 | `crates/cordis/tests/logger.rs::log06_service_method_uses_service_fiber_name`；Scoped.logger 采用服务提供点来源，检验 S-LOG-2、S-LOG-3。 |
+| LOG-07 | `logger.spec.ts:91` | still lets outer caller intercept override the service-derived name | M5 | 已改写 | `crates/cordis/tests/logger.rs::log07_outer_intercept_overrides_service_logger_name`；Scoped.logger 合并原使用点的日志元数据，检验 S-LOG-3。 |
+| LOG-08 | `logger.spec.ts:109` | uses the innermost service name and restores the outer service | M5 | 已改写 | `crates/cordis/tests/logger.rs::log08_nested_service_restores_outer_logger_name`；嵌套 Scoped.dependency 句柄各自保存服务来源，检验 S-LOG-3。 |
+| LOG-09 | `logger.spec.ts:140` | uses service name when called from inside [Service.init] (unchanged behaviour) | M5 | 已改写 | `crates/cordis/tests/logger.rs::log09_initialization_uses_component_name`；异步组件初始化中直接记录日志，并检验名称连字符转换，检验 S-LOG-3。 |
+| LOG-10 | `logger.spec.ts:156` | logs an error whose errors array is empty | M5 | 已改写 | `crates/cordis/tests/logger.rs::log10_empty_aggregate_is_logged_as_itself`；Error.causes 的空集合保留原错误记录，检验 S-LOG-5。 |
+| LOG-11 | `logger.spec.ts:165` | flattens an aggregate error into its members | M5 | 已改写 | `crates/cordis/tests/logger.rs::log11_aggregate_members_and_error_causes_keep_order`；可克隆 Error 区分聚合成员与原因，保留逐项展开及原因优先次序，检验 S-LOG-5。 |
 
 ### RPL：`replace.spec.ts`（16 条）
 
 | ID | 上游位置 | 上游用例 | 里程碑 | 状态 | Rust 测试 / 理由 |
 |---|---|---|---|---|---|
-| RPL-01 | `replace.spec.ts:7` | swaps the implementation behind a fiber in place | M5 | 未开始 | |
-| RPL-02 | `replace.spec.ts:29` | emits internal/replace for each moved fiber | M5 | 未开始 | |
-| RPL-03 | `replace.spec.ts:46` | validates the config with the new schema | M5 | 未开始 | |
-| RPL-04 | `replace.spec.ts:60` | takes the dependencies of the new component | M5 | 未开始 | |
-| RPL-05 | `replace.spec.ts:79` | starts a pending fiber when the new component drops the missing dependency | M5 | 未开始 | |
-| RPL-06 | `replace.spec.ts:92` | starts a pending fiber when the new component injects an available service | M5 | 未开始 | |
-| RPL-07 | `replace.spec.ts:106` | stops depending on a dependency that the new component drops | M5 | 未开始 | |
-| RPL-08 | `replace.spec.ts:121` | reloads a consumer of a replaced service | M5 | 未开始 | |
-| RPL-09 | `replace.spec.ts:145` | merges the fibers into a registered component | M5 | 未开始 | |
-| RPL-10 | `replace.spec.ts:162` | restarts a failed fiber | M5 | 未开始 | |
-| RPL-11 | `replace.spec.ts:176` | leaves a fiber failed when the new component fails to apply | M5 | 未开始 | |
-| RPL-12 | `replace.spec.ts:186` | forwards the old component to the new one | M5 | 未开始 | |
-| RPL-13 | `replace.spec.ts:208` | forwards a component that is not registered | M5 | 未开始 | |
-| RPL-14 | `replace.spec.ts:220` | follows a chain of replacements | M5 | 未开始 | |
-| RPL-15 | `replace.spec.ts:234` | switches back to a replaced component | M5 | 未开始 | |
-| RPL-16 | `replace.spec.ts:248` | unregisters the new component when its last fiber is disposed | M5 | 未开始 | |
+| RPL-01 | `replace.spec.ts:7` | swaps the implementation behind a fiber in place | M5 | 已改写 | `crates/cordis/tests/replace.rs::replacement_preserves_fiber_identity_and_configuration`；类型化组件身份、服务键及实际加载/清理序列表达原用例，检验 S-REG-4。 |
+| RPL-02 | `replace.spec.ts:29` | emits internal/replace for each moved fiber | M5 | 已改写 | `crates/cordis/tests/replace.rs::replace_event_observes_moved_implementation`；类型化组件身份、服务键及实际加载/清理序列表达原用例，检验 S-REG-4。 |
+| RPL-03 | `replace.spec.ts:46` | validates the config with the new schema | M5 | 已改写 | `crates/cordis/tests/replace.rs::replacement_uses_new_configuration_schema`；Config::resolve 替代 Standard Schema，检验 S-REG-6 与 S-REG-4。 |
+| RPL-04 | `replace.spec.ts:60` | takes the dependencies of the new component | M5 | 已改写 | `crates/cordis/tests/replace.rs::replacement_adopts_new_dependency_specification`；类型化组件身份、服务键及实际加载/清理序列表达原用例，检验 S-REG-4。 |
+| RPL-05 | `replace.spec.ts:79` | starts a pending fiber when the new component drops the missing dependency | M5 | 已改写 | `crates/cordis/tests/replace.rs::replacement_removing_missing_dependency_activates_fiber`；类型化组件身份、服务键及实际加载/清理序列表达原用例，检验 S-REG-4。 |
+| RPL-06 | `replace.spec.ts:92` | starts a pending fiber when the new component injects an available service | M5 | 已改写 | `crates/cordis/tests/replace.rs::replacement_to_available_dependency_activates_fiber`；类型化组件身份、服务键及实际加载/清理序列表达原用例，检验 S-REG-4。 |
+| RPL-07 | `replace.spec.ts:106` | stops depending on a dependency that the new component drops | M5 | 已改写 | `crates/cordis/tests/replace.rs::replacement_releases_dropped_dependency`；类型化组件身份、服务键及实际加载/清理序列表达原用例，检验 S-REG-4。 |
+| RPL-08 | `replace.spec.ts:121` | reloads a consumer of a replaced service | M5 | 已改写 | `crates/cordis/tests/replace.rs::replaced_provider_reloads_its_consumer`；类型化组件身份、服务键及实际加载/清理序列表达原用例，检验 S-REG-4。 |
+| RPL-09 | `replace.spec.ts:145` | merges the fibers into a registered component | M5 | 已改写 | `crates/cordis/tests/replace.rs::replacement_merges_existing_runtime_instances`；类型化组件身份、服务键及实际加载/清理序列表达原用例，检验 S-REG-4。 |
+| RPL-10 | `replace.spec.ts:162` | restarts a failed fiber | M5 | 已改写 | `crates/cordis/tests/replace.rs::replacement_recovers_failed_fiber`；类型化组件身份、服务键及实际加载/清理序列表达原用例，检验 S-REG-4。 |
+| RPL-11 | `replace.spec.ts:176` | leaves a fiber failed when the new component fails to apply | M5 | 已改写 | `crates/cordis/tests/replace.rs::replacement_failure_is_observable`；类型化组件身份、服务键及实际加载/清理序列表达原用例，检验 S-REG-4。 |
+| RPL-12 | `replace.spec.ts:186` | forwards the old component to the new one | M5 | 已改写 | `crates/cordis/tests/replace.rs::old_component_forwards_to_new_definition`；ComponentId 与类型化组件句柄表达别名转发，检验 S-REG-5。 |
+| RPL-13 | `replace.spec.ts:208` | forwards a component that is not registered | M5 | 已改写 | `crates/cordis/tests/replace.rs::unregistered_component_can_be_forwarded`；ComponentId 与类型化组件句柄表达别名转发，检验 S-REG-5。 |
+| RPL-14 | `replace.spec.ts:220` | follows a chain of replacements | M5 | 已改写 | `crates/cordis/tests/replace.rs::replacement_follows_alias_chain`；ComponentId 与类型化组件句柄表达别名转发，检验 S-REG-5。 |
+| RPL-15 | `replace.spec.ts:234` | switches back to a replaced component | M5 | 已改写 | `crates/cordis/tests/replace.rs::replacement_can_switch_back_to_previous_component`；ComponentId 与类型化组件句柄表达别名转发，检验 S-REG-5。 |
+| RPL-16 | `replace.spec.ts:248` | unregisters the new component when its last fiber is disposed | M5 | 已改写 | `crates/cordis/tests/replace.rs::disposal_unregisters_replacement_runtime`；类型化组件身份、服务键及实际加载/清理序列表达原用例，检验 S-REG-4。 |
 
 ### DEC：`decorator.spec.ts`（1 条）
 
