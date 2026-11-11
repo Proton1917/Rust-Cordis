@@ -127,7 +127,7 @@ fn yield_with_error() {
     assert!(root.fiber().effects().is_empty());
 }
 
-// A-1、A-2、A-3、A-8：跨线程释放时重入同一内核，并由根收回丢弃句柄的效应。
+// T-EFF-7、A-1、A-2、A-3、A-8：外部资源由用户逆变换恢复；跨线程清理可重入同一内核。
 #[test]
 fn reentrant_cleanup_and_root_ownership() {
     let host = TestExecutor::new();

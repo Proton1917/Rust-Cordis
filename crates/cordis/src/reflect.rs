@@ -19,41 +19,74 @@ use std::{
 pub(crate) type AnyValue = Arc<dyn Any + Send + Sync>;
 type Check = Arc<dyn Fn() -> bool + Send + Sync>;
 
+/// S-SVC-5：服务通知携带的名称与通知时的实时绑定。
 #[derive(Clone)]
 pub struct ServiceChange {
+    /// 发生通知的服务名称，与 `ServiceKey::NAME` 相同。
     pub name: &'static str,
+    /// 当前键和隔离域的实时值；绑定存在时为 `Some`，缺失时为 `None`。
+    ///
+    /// 类型擦除层保存 `Arc<K::Value>`，可用 `downcast_ref::<Arc<K::Value>>()` 读取。
     pub value: Option<Arc<dyn Any + Send + Sync>>,
 }
+/// S-SVC-5：提供、撤回及提供方可用状态变化时派发的同步服务通知。
+///
+/// 参数为 `ServiceChange`。派发按服务隔离域过滤监听器，
+/// `global` 监听器遵循 `EventOptions` 的全局接收规则。
 pub struct InternalService;
 impl Event for InternalService {
+    /// 服务变化事件的名称。
     const NAME: &'static str = "internal/service";
+    /// 通知时的名称与实时绑定值。
     type Args = ServiceChange;
+    /// 同步通知的返回值为单位值。
     type Output = ();
+    /// 该事件采用同步派发。
     type Kind = SyncKind;
 }
 
+/// 服务读取或修改瀑布的访问上下文与目标名称。
 #[derive(Clone)]
 pub struct ServiceAccess {
+    /// 读取时为请求上下文，修改时为提供该绑定的上下文。
     pub context: Context,
+    /// 目标服务的 `ServiceKey::NAME`。
     pub name: &'static str,
 }
+/// `InternalGet` 返回的类型擦除服务值及其提供点。
 #[derive(Clone)]
 pub struct ServiceValue {
+    /// 保存 `Arc<K::Value>` 的类型擦除层，读取端按键 `K` 恢复内部 `Arc`。
     pub value: Arc<dyn Any + Send + Sync>,
+    /// 提供该值的上下文，用于返回句柄的 `definition` 和后续依赖解析。
     pub definition: Context,
 }
+/// 服务读取瀑布；监听器接收 `ServiceAccess`，返回 `ServiceValue`。
+///
+/// 默认终点执行服务访问授权和绑定定位，中间件可经由 `Next` 调用该终点。
 pub struct InternalGet;
 impl Event for InternalGet {
+    /// 服务读取事件的名称。
     const NAME: &'static str = "internal/get";
+    /// 请求上下文和目标服务名称。
     type Args = ServiceAccess;
+    /// 读取成功时的值及其提供上下文。
     type Output = ServiceValue;
+    /// 该事件采用同步瀑布派发。
     type Kind = WaterfallKind;
 }
+/// 服务修改瀑布；参数为访问描述与类型擦除后的 `Arc<K::Value>`。
+///
+/// 默认终点替换当前绑定的值，成功返回 `()`；状态错误通过瀑布的 `Result` 传播。
 pub struct InternalSet;
 impl Event for InternalSet {
+    /// 服务修改事件的名称。
     const NAME: &'static str = "internal/set";
+    /// 提供方访问上下文及传入的新值。
     type Args = (ServiceAccess, Arc<dyn Any + Send + Sync>);
+    /// 修改成功的返回值。
     type Output = ();
+    /// 该事件采用同步瀑布派发。
     type Kind = WaterfallKind;
 }
 
@@ -70,13 +103,22 @@ pub(crate) struct ImplData {
 }
 
 impl Context {
-    /// T-COE-2、S-SVC-1：服务登记通过可回退效应完成。
+    /// T-COE-2、S-SVC-1：在当前隔离域提供键 `K` 的值，返回管理该绑定的句柄。
+    ///
+    /// `value` 通过 `Arc` 共享，登记效应归属于当前上下文纤程。
+    /// 同键同域已有绑定、名称冲突或上下文已经释放时返回错误。
+    /// 提供方处于 `Active` 时立即通知消费者，加载中的提供方在激活后通知。
     #[track_caller]
     pub fn provide<K: ServiceKey>(&self, value: Arc<K::Value>) -> Result<Provision<K>> {
         self.provide_checked::<K>(value, None)
     }
 
-    /// S-SVC-4：可用性谓词在依赖解析时执行。
+    /// S-SVC-4：提供带可用性谓词 `check` 的值，返回该绑定的管理句柄。
+    ///
+    /// 登记规则与 `provide` 相同；依赖解析在锁外调用 `check`。
+    /// `true` 允许消费者使用该绑定，`false` 使依赖处于待满足状态；
+    /// 谓词发生 panic 时记录提供方错误，并采用待满足状态。
+    /// 谓词捕获的状态变化后，可调用返回句柄的 `notify` 触发重新解析。
     #[track_caller]
     pub fn provide_with_check<K: ServiceKey>(
         &self,
@@ -159,7 +201,12 @@ impl Context {
         })
     }
 
-    /// T-CTX-2、T-CTX-3、S-SVC-6：从定义点追溯规格与已提交绑定。
+    /// T-CTX-2、T-CTX-3、S-SVC-6：按当前上下文的授权路径读取键 `K`。
+    ///
+    /// 组件上下文沿纤程链逐层定位，每层先查同域自供，再查该层的已提交绑定；
+    /// 该键的显式隔离层会截断祖先声明继承。根上下文直接读取当前域的实时绑定。
+    /// 成功返回 `Scoped<K>`；授权路径缺失、声明绑定为空或中间件返回类型冲突时返回错误。
+    /// 调用会同步派发 `InternalGet`，用户中间件在内核锁外执行。
     #[track_caller]
     pub fn get<K: ServiceKey>(&self) -> Result<Scoped<K>> {
         let context = self.clone();
@@ -222,7 +269,11 @@ impl Context {
         })
     }
 
-    /// S-SVC-3：反射读取按提供方状态选择当前绑定。
+    /// S-SVC-3：从任意上下文反射查询键 `K` 在当前隔离域的实时绑定。
+    ///
+    /// 提供方处于 `Active` 时返回 `Some(Scoped<K>)`，绑定缺失或其他状态返回 `None`。
+    /// 查询条件为实时绑定和提供方状态；依赖声明授权、已提交视图由 `get` 处理，
+    /// 可用性谓词由生命周期依赖解析执行。
     pub fn lookup<K: ServiceKey>(&self) -> Option<Scoped<K>> {
         let state = self.kernel.state.lock();
         let key = TypeId::of::<K>();
@@ -231,6 +282,9 @@ impl Context {
             .then(|| scoped::<K>(&state, id, self.clone()))
     }
 
+    /// 返回共享内核中全部隔离域的当前绑定总数。
+    ///
+    /// 加载中提供方已经登记的绑定计入总数，撤回时绑定随实时表移除。
     pub fn service_count(&self) -> usize {
         self.kernel.state.lock().store.len()
     }

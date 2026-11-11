@@ -1,5 +1,11 @@
-#!/usr/bin/env python3
-"""一致性矩阵工具（仅依赖 Python 标准库）。
+from __future__ import annotations
+
+import argparse
+import re
+import sys
+from pathlib import Path
+
+DESCRIPTION = """一致性矩阵工具（仅依赖 Python 标准库）。
 
 对象：
 - 上游用例清单：cordis/packages/core/tests/*.spec.ts 中的 it(...) / it.each(...)(...) 声明。
@@ -11,12 +17,6 @@
   python tools/conformance.py check                # 校验矩阵覆盖全部上游用例且字段合法
   python tools/conformance.py check --through M3   # 另要求 M0..M3 的用例均已离开“未开始”
 """
-from __future__ import annotations
-
-import argparse
-import re
-import sys
-from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 TESTS = ROOT / "cordis" / "packages" / "core" / "tests"
@@ -179,7 +179,7 @@ def cmd_check(args):
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(description=DESCRIPTION, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="cmd", required=True)
     sub.add_parser("list").set_defaults(fn=cmd_list)
     sub.add_parser("init").set_defaults(fn=cmd_init)

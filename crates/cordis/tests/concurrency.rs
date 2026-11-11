@@ -1,4 +1,6 @@
-use cordis::{Clock, ComponentDef, Context, FiberState, Inject, InternalStatus, Spawn, Task};
+use cordis::{
+    Clock, ComponentDef, Context, FiberState, Inject, InternalStatus, ServiceKey, Spawn, Task,
+};
 use cordis_testkit::TestExecutor;
 use std::{
     sync::{
@@ -275,4 +277,76 @@ fn restart_queued_behind_another_thread_must_not_settle_early() {
         !settled_early,
         "restart() 在重启发生之前就报告完成（当时 apply 次数仍为 1）"
     );
+}
+
+struct NotificationValue;
+impl ServiceKey for NotificationValue {
+    const NAME: &'static str = "notification-value";
+    type Value = usize;
+    type Meta = ();
+}
+
+// S-FBR-2、S-FBR-14：提供方的稳定结果包含同域依赖通知的提交。
+#[test]
+fn provider_settles_after_status_notification_reaches_consumer() {
+    let host = TestExecutor::new();
+    let root = Context::new(host.clone());
+    let received = Arc::new(Mutex::new(Vec::new()));
+    let values = received.clone();
+    let consumer = root
+        .inject(Inject::new().with::<NotificationValue>(), move |ctx| {
+            let values = values.clone();
+            async move {
+                values
+                    .lock()
+                    .unwrap()
+                    .push(*ctx.get::<NotificationValue>()?);
+                Ok(())
+            }
+        })
+        .unwrap();
+    let definition = ComponentDef::new(
+        "notification-provider",
+        Inject::new(),
+        |ctx, ()| async move {
+            ctx.provide::<NotificationValue>(Arc::new(17))?;
+            Ok(())
+        },
+    );
+    let provider_id = definition.id();
+    let (entered_tx, entered_rx) = mpsc::channel();
+    let (release_tx, release_rx) = mpsc::channel();
+    let release_rx = Mutex::new(release_rx);
+    let armed = AtomicBool::new(true);
+    root.on::<InternalStatus>(move |(fiber, _)| {
+        if fiber.component_id() == Some(provider_id)
+            && fiber.state() == FiberState::Active
+            && armed.swap(false, Ordering::SeqCst)
+        {
+            entered_tx.send(()).unwrap();
+            release_rx.lock().unwrap().recv().unwrap();
+        }
+        None
+    })
+    .unwrap();
+    let provider = root.mount_with(&definition, ()).unwrap();
+    let executor = host.clone();
+    let worker = thread::spawn(move || executor.run_until_stalled());
+    entered_rx.recv().unwrap();
+    let mut waiting = provider.settled();
+    let early = waiting
+        .as_mut()
+        .poll(&mut TaskContext::from_waker(Waker::noop()));
+    let stable_during_notification = provider.is_settled();
+    let consumer_before_notification = consumer.state();
+    release_tx.send(()).unwrap();
+    worker.join().unwrap();
+
+    assert!(early.is_pending());
+    assert!(!stable_during_notification);
+    assert_eq!(consumer_before_notification, FiberState::Pending);
+    host.finish(waiting).unwrap();
+    assert_eq!(consumer.state(), FiberState::Active);
+    assert_eq!(*received.lock().unwrap(), [17]);
+    host.finish(root.fiber().dispose()).unwrap();
 }

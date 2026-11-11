@@ -6,11 +6,11 @@
 
 | 项 | 值 |
 |---|---|
-| 最近完成的里程碑 | `M5` |
-| 进行中的里程碑 | `M6` |
-| 下一步 | 完成公开接口文档，运行插件与 README 示例、8 线程 1000 轮压力测试，验收全部理论条款 |
+| 最近完成的里程碑 | `M6` |
+| 进行中的里程碑 | 无 |
+| 下一步 | M0–M6 验收结束，后续变更按公开接口和语义条款维护 |
 | 阻塞项 | 无 |
-| 最后更新 | 2026-11-11（UTC−08:00），M5 验收 |
+| 最后更新 | 2026-11-11（UTC−08:00），M6 验收 |
 
 ## 环境
 
@@ -111,7 +111,7 @@
 
 ### M5 拦截、调用方句柄、日志、替换
 
-- commit：本节所在的 `M5: 完成服务调用上下文与组件替换` 提交。
+- commit：`a358e0e`。
 - X-1：`cargo fmt --all --check` 通过。
 - X-2：`cargo clippy --workspace --all-targets -- -D warnings` 通过；后续日志来源修复与 RPL-12 断言调整分别通过对应库、测试目标的 Clippy。
 - X-3：`cargo build` 通过。工作区测试完成已通过部分后，对 RPL-12 保留上游的次数及配置约束；随后 `cargo test -p cordis --test replace --test service --test service_dispose --test shadow --test update` 的 63 条测试及 `cargo test --workspace --doc` 的 2 条文档测试通过。宿主同步完成后 panic 的日志来源用例已复现错误并修复通过。当前共 179 条运行测试与 2 条文档测试，成功证据按受影响范围复用。
@@ -125,6 +125,56 @@
 - 日志：默认环形缓冲上限 1000 条；超额移除最旧消息。错误记录和公开日志缓冲使用同一数据源，导出器按名称与级别独立过滤。
 - 遗留：M6 交付示例、多线程运行证据与公开文档。继续构建，保留 `target/`。
 
+### M6 示例、多线程与公开接口
+
+- commit：本节所在的 `M6: 交付示例与多线程验收` 提交。
+- X-1：`cargo fmt --all --check` 通过。
+- X-2：`cargo clippy --workspace --all-targets -- -D warnings` 通过；通知完成条件修复后，对库、并发和压力目标的定向 Clippy 通过。
+- X-3：工作区测试首次运行在压力目标复现通知窗口；修复后原定 `eight_workers_recover_one_thousand_rounds` 以 8 个工作线程完成 1000 轮，耗时 2.82 秒。确定性通知屏障用例通过；随后 119 条受影响的生命周期、并发、服务、替换和日志测试及 DEC-01 用例通过，其余成功证据复用。当前覆盖 182 条运行测试与 2 条编译失败文档测试。
+- X-4：`conda run -n base python tools/conformance.py check --through M6` 通过：177 条中已移植 8、已改写 166、不适用 3，初始状态 0。
+- X-5：`rg -n unsafe crates/cordis/src` 输出为空。
+- X-6：内核源码 4483 行，各模块见下表，满足 6000 行上限。
+- X-7：已记录完整接口清单、执行结果和遗留状态，根 README 示例与进度同步。
+- X-8：提交主题 `M6: 交付示例与多线程验收`。
+- 示例：`cargo run -p cordis --example plugins` 按五步输出 Pending → Active → Pending → Active，绑定纪元依次为 `[1]`、`[2]`，根释放后四项快照恢复 `(0, 0, 0, 0)`；消费者清理先于提供方。`cargo run -p cordis --example readme` 输出与根 README 的六行一致。
+- 文档：`RUSTDOCFLAGS='-D warnings -W missing_docs' cargo doc --workspace --no-deps` 通过。公开类型、字段、关联项及方法具备说明；根上下文显式释放及循环引用的处理已记录。
+- 理论条款：DOC-01 的 34 条 T-* 均在测试注释中引用。
+- 资源：示例二进制保存在 `artifacts/bin/`，生成的 API 文档保存在 `artifacts/api/`。已执行 `cargo clean -p cordis -p cordis-testkit`、`cargo clean --doc` 及隔离评审目录的 `cargo clean`；原评审资料目录继续保留。
+- 偏离：通知计数补齐稳定判定，架构规则和接口语义沿用既定要求。
+- 遗留：无。
+
+| 内核模块 | 行数 |
+|---|---:|
+| context.rs | 222 |
+| effect.rs | 506 |
+| error.rs | 67 |
+| events.rs | 658 |
+| fiber.rs | 948 |
+| kernel.rs | 147 |
+| lib.rs | 38 |
+| list.rs | 57 |
+| logger.rs | 415 |
+| reflect.rs | 708 |
+| registry.rs | 539 |
+| service.rs | 178 |
+| 合计 | 4483 |
+
+## 公开接口清单
+
+| 对象 | 公开能力 |
+|---|---|
+| Context | 根创建、纤程句柄、类型化扩展、隔离域、拦截元数据、效应、服务、组件、事件、日志、宿主时间和错误缓冲 |
+| Fiber / FiberState / Epoch | 名称、存活与稳定状态、配置及规格、效应树、目标纪元、等待、更新、重启和释放 |
+| Effect / EffectScope / EffectMeta | 同步及异步逆变换、子效应归属、当前纪元检查、等待执行、显式释放和元信息 |
+| ServiceKey / Merge / Realm | 服务值与元数据类型、元数据合并、默认域及独立域 |
+| Scoped / Provision | 值访问、caller/requester/definition、依赖与元数据解析、日志来源、提供方修改、通知与撤回 |
+| Component / ComponentDef / Config / Inject | 静态和闭包组件、原始配置解析、声明依赖和元数据、组件身份 |
+| Registry | 实例登记查询、组件定义查询、纤程列表、原地替换及别名转发 |
+| Event / 三种 Kind / EventOptions / Next | 类型化参数与结果、五种派发、过滤、一次性监听、瀑布延续，以及 11 种内核事件 |
+| Logger / LogMessage / LogValue / WeakFiber | 四级日志、命名、环形缓冲、导出器、过滤、错误展开与弱来源 |
+| Error / ValidationError / ValidationIssue / Result | 可克隆错误、登记位置、错误原因、聚合成员及配置问题路径 |
+| Spawn / Clock / Task / TestExecutor | 宿主任务提交、时间与异步等待、可发送任务、确定性调度和逻辑时间推进 |
+
 ## 决策与发现
 
 实现过程中得到的、文档里没有的结论记在这里，每条写明日期、结论、依据（源码位置或用例编号）。需要改变 `DOC-01` 条款或 `DOC-02` 规则的结论另写 ADR，这里只留一行指向它。
@@ -132,3 +182,4 @@
 - 2026-11-11：`DSP-03` 包含 `root.on`，其嵌套效应归属、元信息树与逆序释放属于 M1；事件表登记与移除在 M2 接入。依据 `dispose.spec.ts:37-74`。
 - 2026-11-11（UTC−08:00）：`CMP-10` 在挂载后立即释放根，仍执行一次子组件加载；卸载调用逆变换前的调度让步决定该顺序。已按 `fiber.ts:495-499` 补正 S-FBR-12 并恢复原始测试触发。
 - 2026-11-11（UTC−08:00）：内核派发的 InternalService 监听器 panic 按 A-9 记录，绑定建立与撤回继续完成；调用方直接 emit 的 panic 传播语义沿用 M2。
+- 2026-11-11（UTC−08:00）：压力测试确认提供方状态通知完成前存在等待提前返回窗口。稳定判定现覆盖整段 InternalStatus 与服务通知，通知后重新判断目标；确定性屏障用例及原定 8 线程 1000 轮验证均通过。

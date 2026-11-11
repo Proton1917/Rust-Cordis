@@ -25,15 +25,21 @@ use std::{
     time::Duration,
 };
 
+/// 可交给宿主执行器的拥有型异步任务，完成时产生 `T`。
 pub type Task<T = ()> = Pin<Box<dyn Future<Output = T> + Send + 'static>>;
 
 /// 宿主负责持续轮询已提交的任务。
 pub trait Spawn: Send + Sync + 'static {
+    /// 接管 `task`，调度并持续轮询至完成。
+    /// 宿主派发失败的 panic 由内核转换为调度错误。
     fn spawn(&self, task: Task);
 }
 
+/// 宿主时间来源，供日志时间戳与异步等待使用。
 pub trait Clock: Send + Sync + 'static {
+    /// 返回相对于宿主时间基准的持续时间。
     fn now(&self) -> Duration;
+    /// 创建表示指定等待时长的任务。
     fn sleep(&self, duration: Duration) -> Task;
 }
 

@@ -303,4 +303,4 @@ M0 使用原有清单核对 16 个 spec 文件的 177 条用例；用例实现�
 
 | ID | 上游位置 | 上游用例 | 里程碑 | 状态 | Rust 测试 / 理由 |
 |---|---|---|---|---|---|
-| DEC-01 | `decorator.spec.ts:7` | @Inject on class method | M6 | 未开始 | |
+| DEC-01 | `decorator.spec.ts:7` | @Inject on class method | M6 | 已改写 | `crates/cordis/tests/stress.rs::declared_dependency_controls_method_effect`；方法装饰器改为 Component::inject 与方法中的显式 Context::get，检验 T-CTX-4 的声明能力与方法效应生命周期。 |

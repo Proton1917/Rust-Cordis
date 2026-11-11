@@ -15,9 +15,12 @@ use std::{
     task::{Poll, Waker},
 };
 
+/// 一个顶层效应及其采用的子效应的可读描述。
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EffectMeta {
+    /// 创建效应时给出的标签。
     pub label: String,
+    /// 通过 `EffectScope::adopt` 纳入的子效应描述。
     pub children: Vec<EffectMeta>,
 }
 
@@ -60,6 +63,7 @@ impl EffectData {
 }
 
 /// A-8：句柄控制显式释放，所属纤程保留效应的所有权。
+/// 克隆共享同一个释放状态；`dispose` 或纤程停用负责执行已登记清理。
 pub struct Effect {
     pub(crate) kernel: Arc<Kernel>,
     pub(crate) id: EffectId,
@@ -88,6 +92,7 @@ impl Drop for Effect {
     }
 }
 
+/// 效应体登记清理步骤、组合子效应和检查执行目标的作用域。
 #[derive(Clone)]
 pub struct EffectScope(Effect);
 
@@ -97,6 +102,7 @@ impl EffectScope {
     }
 
     /// T-EFF-3：登记本步骤交回的逆变换。
+    /// `cleanup` 在恢复时执行；效应体结束后的登记请求返回错误。
     ///
     /// ```compile_fail
     /// fn invalid_step(fx: cordis::EffectScope) {
@@ -117,6 +123,7 @@ impl EffectScope {
     }
 
     /// S-EFF-3：异步逆变换完成后继续恢复前序步骤。
+    /// `cleanup` 在释放时创建任务；效应体结束后的登记请求返回错误。
     pub fn defer_async<F, Fut>(&self, cleanup: F) -> Result
     where
         F: FnOnce() -> Fut + Send + Sync + 'static,
@@ -133,6 +140,7 @@ impl EffectScope {
     }
 
     /// S-EFF-6、T-EFF-6：将同一纤程的子效应移入当前效应。
+    /// 当前效应须处于执行中，子效应保持单一父级；所有权冲突或环返回错误。
     pub fn adopt(&self, child: Effect) -> Result {
         if !Arc::ptr_eq(&self.0.kernel, &child.kernel) {
             return Err(Error::new("effect belongs to another kernel"));
@@ -159,6 +167,7 @@ impl EffectScope {
         Ok(())
     }
 
+    /// 返回效应守卫有效、所属纤程存活且运行纪元符合当前目标的状态。
     pub fn is_current(&self) -> bool {
         if !self.0.armed.load(Ordering::Acquire) {
             return false;
@@ -171,6 +180,7 @@ impl EffectScope {
 
 impl Context {
     /// T-EFF-1、S-EFF-1、S-EFF-2：同步执行效应体并登记逆变换。
+    /// 成功时返回显式释放句柄；回调错误或 panic 触发已登记步骤的恢复。
     #[track_caller]
     pub fn effect<F>(&self, label: impl Into<String>, callback: F) -> Result<Effect>
     where
@@ -186,6 +196,7 @@ impl Context {
     }
 
     /// T-EFF-4、T-EFF-5、A-7：任务运行至协作检查点或结束。
+    /// 立即登记效应并把执行交给宿主；通过 `Effect::settled` 等待执行结果。
     #[track_caller]
     pub fn effect_async<F, Fut>(&self, label: impl Into<String>, callback: F) -> Result<Effect>
     where
@@ -287,6 +298,8 @@ impl Effect {
     }
 
     /// S-EFF-8：等待执行及失败恢复完成，返回显式释放句柄。
+    /// 执行失败时交回执行错误；执行成功时交回共享该效应的句柄。
+    /// 清理任务因宿主拒收而挂起时，交回调度错误。
     pub fn settled(&self) -> Task<Result<Effect>> {
         let effect = self.clone();
         Box::pin(poll_fn(move |cx| {
@@ -309,6 +322,9 @@ impl Effect {
     }
 
     /// T-EFF-2、S-EFF-4：同步使守卫失效，释放进度由宿主驱动。
+    /// 返回任务交回清理结果或调度错误；并发或重复调用共享同一次释放。
+    /// 宿主连续拒收清理任务时，内核保留待执行的 Future。
+    /// 宿主恢复接收后再次显式调用本方法，会重新提交并继续已有清理。
     pub fn dispose(&self) -> Task<Result> {
         let owner = self.kernel.state.lock().effects[self.id].owner;
         crate::fiber::resume_cleanup(&self.kernel, owner);

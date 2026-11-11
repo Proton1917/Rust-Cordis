@@ -16,14 +16,21 @@ use std::{
 
 /// 事件类型决定参数、返回值与可读名称。
 pub trait Event: 'static {
+    /// 观察记录、效应标签与错误消息中使用的事件名称。
     const NAME: &'static str;
+    /// 监听器接收的参数；异步与瀑布派发为各次调用克隆参数。
     type Args: Clone + Send + Sync + 'static;
+    /// 单个监听器产生的结果类型。
     type Output: Send + 'static;
+    /// 派发族：`SyncKind`、`AsyncKind` 或 `WaterfallKind`。
     type Kind;
 }
 
+/// 选择同步通知与首个结果派发。
 pub struct SyncKind;
+/// 选择并发等待与顺序等待派发。
 pub struct AsyncKind;
+/// 选择带 `Next` 延续的中间件派发。
 pub struct WaterfallKind;
 
 /// 同步监听器供 `emit` 与 `bail` 调用。
@@ -36,25 +43,37 @@ impl<E: Event<Kind = AsyncKind>> AsyncEvent for E {}
 pub trait WaterfallEvent: Event<Kind = WaterfallKind> {}
 impl<E: Event<Kind = WaterfallKind>> WaterfallEvent for E {}
 
+/// 监听器的登记顺序与过滤策略，两个选项初始均为 `false`。
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct EventOptions {
+    /// 把本次登记插入当前事件监听器列表头部。
     pub prepend: bool,
+    /// 使监听器直接通过派发过滤器。
     pub global: bool,
 }
 
+/// `InternalDispatch` 记录的派发方式。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DispatchMode {
+    /// 同步调用全部监听器。
     Emit,
+    /// 同步取得首个 `Some`。
     Bail,
+    /// 并发等待全部监听器。
     Parallel,
+    /// 逐个等待并取得首个 `Some`。
     Serial,
+    /// 通过各层延续嵌套调用。
     Waterfall,
 }
 
+/// 可共享的同步监听器；返回 `Some` 可结束 `bail`。
 pub type SyncListener<E> =
     Arc<dyn Fn(&<E as Event>::Args) -> Option<<E as Event>::Output> + Send + Sync>;
+/// 可共享的异步监听器；任务结果携带业务返回值或调用失败。
 pub type AsyncListener<E> =
     Arc<dyn Fn(<E as Event>::Args) -> Task<Result<Option<<E as Event>::Output>>> + Send + Sync>;
+/// 可共享的中间件监听器，通过 `Next::run` 进入下一层。
 pub type WaterfallListener<E> =
     Arc<dyn Fn(<E as Event>::Args, Next<E>) -> Result<<E as Event>::Output> + Send + Sync>;
 
@@ -96,31 +115,39 @@ impl Hook {
 /// `internal/listener` 接收的登记请求，可由监听器接管为另一个效应。
 #[derive(Clone)]
 pub struct ListenerRegistration {
+    /// 发起登记的上下文，同时决定效应归属。
     pub context: Context,
+    /// 事件声明的可读名称。
     pub name: &'static str,
+    /// 原始登记选项。
     pub options: EventOptions,
+    /// 本次请求是否在首次调用前撤销登记。
     pub once: bool,
     event: TypeId,
     callback: Arc<dyn Any + Send + Sync>,
 }
 
 impl ListenerRegistration {
+    /// 判断请求的事件身份是否为 `E`。
     pub fn is<E: Event>(&self) -> bool {
         self.event == TypeId::of::<E>()
     }
 
+    /// 类型匹配时取得同步监听器，否则返回 `None`。
     pub fn sync<E: SyncEvent>(&self) -> Option<SyncListener<E>> {
         self.callback
             .downcast_ref::<SyncCallback<E>>()
             .map(|callback| callback.0.clone())
     }
 
+    /// 类型匹配时取得异步监听器，否则返回 `None`。
     pub fn asynchronous<E: AsyncEvent>(&self) -> Option<AsyncListener<E>> {
         self.callback
             .downcast_ref::<AsyncCallback<E>>()
             .map(|callback| callback.0.clone())
     }
 
+    /// 类型匹配时取得瀑布监听器，否则返回 `None`。
     pub fn waterfall<E: WaterfallEvent>(&self) -> Option<WaterfallListener<E>> {
         self.callback
             .downcast_ref::<WaterfallCallback<E>>()
@@ -128,6 +155,7 @@ impl ListenerRegistration {
     }
 
     /// 在接管回调中按给定选项登记，返回其可回退效应。
+    /// 直接登记请求中的回调，保留原上下文和一次性属性。
     #[track_caller]
     pub fn register(&self, options: EventOptions) -> Result<Effect> {
         let mut request = self.clone();
@@ -136,6 +164,7 @@ impl ListenerRegistration {
     }
 }
 
+/// 监听器登记前的同步询问事件；首个 `Some(Effect)` 接管该次登记。
 pub struct InternalListener;
 impl Event for InternalListener {
     const NAME: &'static str = "internal/listener";
@@ -147,19 +176,26 @@ impl Event for InternalListener {
 /// 派发观察记录保留事件类型、参数与发起上下文。
 #[derive(Clone)]
 pub struct Dispatch {
+    /// 本次调用采用的派发方式。
     pub mode: DispatchMode,
+    /// 被派发事件的可读名称。
     pub name: &'static str,
+    /// 发起派发的上下文。
     pub context: Context,
+    /// 本次派发是否携带过滤器。
     pub filtered: bool,
+    /// 参数的拥有型快照，可通过 `args::<E>` 按事件类型读取。
     pub args: Arc<dyn Any + Send + Sync>,
     event: TypeId,
 }
 
 impl Dispatch {
+    /// 判断被派发的事件身份是否为 `E`。
     pub fn is<E: Event>(&self) -> bool {
         self.event == TypeId::of::<E>()
     }
 
+    /// 事件类型匹配时返回参数引用，否则返回 `None`。
     pub fn args<E: Event>(&self) -> Option<&E::Args> {
         self.is::<E>()
             .then(|| self.args.downcast_ref::<E::Args>())
@@ -167,6 +203,7 @@ impl Dispatch {
     }
 }
 
+/// 业务事件取得监听器快照前的同步观察事件。
 pub struct InternalDispatch;
 impl Event for InternalDispatch {
     const NAME: &'static str = "internal/dispatch";
@@ -177,6 +214,7 @@ impl Event for InternalDispatch {
 
 impl Context {
     /// S-EVT-1：登记同步监听器，返回归属当前纤程的效应。
+    /// 采用默认选项，回调接收参数引用并返回可选结果。
     #[track_caller]
     pub fn on<E: SyncEvent>(
         &self,
@@ -185,6 +223,7 @@ impl Context {
         self.on_with::<E>(callback, EventOptions::default())
     }
 
+    /// 按 `options` 登记同步监听器，返回可显式释放的效应。
     #[track_caller]
     pub fn on_with<E: SyncEvent>(
         &self,
@@ -198,6 +237,7 @@ impl Context {
         )
     }
 
+    /// 以默认选项登记一次性同步监听器，在调用回调前撤销登记。
     #[track_caller]
     pub fn once<E: SyncEvent>(
         &self,
@@ -206,6 +246,7 @@ impl Context {
         self.once_with::<E>(callback, EventOptions::default())
     }
 
+    /// 按 `options` 登记一次性同步监听器，递归派发共享消费状态。
     #[track_caller]
     pub fn once_with<E: SyncEvent>(
         &self,
@@ -219,6 +260,7 @@ impl Context {
         )
     }
 
+    /// 登记拥有参数的异步回调，返回监听器效应；任务由派发调用方等待。
     #[track_caller]
     pub fn on_async<E: AsyncEvent>(
         &self,
@@ -232,6 +274,7 @@ impl Context {
         )
     }
 
+    /// 登记一次性异步回调，并发派发共同消费同一个登记。
     #[track_caller]
     pub fn once_async<E: AsyncEvent>(
         &self,
@@ -245,6 +288,7 @@ impl Context {
         )
     }
 
+    /// 登记中间件回调，回调通过 `Next` 取得后继结果或直接返回自身结果。
     #[track_caller]
     pub fn on_waterfall<E: WaterfallEvent>(
         &self,
@@ -258,6 +302,7 @@ impl Context {
         )
     }
 
+    /// 登记一次性中间件，在进入回调前撤销登记。
     #[track_caller]
     pub fn once_waterfall<E: WaterfallEvent>(
         &self,
@@ -393,6 +438,7 @@ impl Context {
         self.emit_filtered::<E>(args, None);
     }
 
+    /// 按登记上下文筛选后同步派发；全局监听器直接通过过滤。
     pub fn emit_filtered<E: SyncEvent>(
         &self,
         args: &E::Args,
@@ -414,6 +460,7 @@ impl Context {
         self.bail_filtered::<E>(args, None)
     }
 
+    /// 对过滤后的同步快照取得首个 `Some`，全部返回 `None` 时返回 `None`。
     pub fn bail_filtered<E: SyncEvent>(
         &self,
         args: &E::Args,
@@ -434,10 +481,12 @@ impl Context {
     }
 
     /// S-EVT-5：监听器共同推进，全部结束后汇总错误。
+    /// 调用时取得快照，返回任务在轮询时调用监听器；错误保留全部失败成员。
     pub fn parallel<E: AsyncEvent>(&self, args: E::Args) -> Task<Result> {
         self.parallel_filtered::<E>(args, None)
     }
 
+    /// 对过滤后的快照并发等待，返回完整派发结果。
     pub fn parallel_filtered<E: AsyncEvent>(
         &self,
         args: E::Args,
@@ -482,10 +531,12 @@ impl Context {
     }
 
     /// S-EVT-7：逐个等待，首个 `Some` 结束派发。
+    /// 调用时取得快照，任务返回首个业务结果、`None` 或监听器错误。
     pub fn serial<E: AsyncEvent>(&self, args: E::Args) -> Task<Result<Option<E::Output>>> {
         self.serial_filtered::<E>(args, None)
     }
 
+    /// 按登记上下文筛选后逐个等待，返回首个 `Some` 或失败。
     pub fn serial_filtered<E: AsyncEvent>(
         &self,
         args: E::Args,
@@ -511,6 +562,7 @@ impl Context {
     }
 
     /// S-EVT-8：每层拥有独立的一次性延续。
+    /// `inner` 是最内层函数；返回值为异步任务时，由调用方继续等待该任务。
     pub fn waterfall<E: WaterfallEvent>(
         &self,
         args: E::Args,
@@ -519,6 +571,7 @@ impl Context {
         self.waterfall_filtered::<E>(args, inner, None)
     }
 
+    /// 对过滤后的快照进行嵌套调用，以 `inner` 作为最内层函数。
     pub fn waterfall_filtered<E: WaterfallEvent>(
         &self,
         args: E::Args,
@@ -539,6 +592,7 @@ impl Context {
         self.kernel.state.lock().hooks.len()
     }
 
+    /// 返回事件类型 `E` 当前登记的监听器数量。
     pub fn listener_count<E: Event>(&self) -> usize {
         self.kernel
             .state
@@ -565,6 +619,7 @@ impl<E: WaterfallEvent> Clone for Next<E> {
 }
 
 impl<E: WaterfallEvent> Next<E> {
+    /// 消费本层调用权并取得后继结果；再次调用或通过克隆重复调用返回错误。
     pub fn run(&self) -> Result<E::Output> {
         if self.called.swap(true, Ordering::AcqRel) {
             return Err(Error::new("next() called multiple times"));

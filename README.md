@@ -39,7 +39,7 @@
 
 ## 示例
 
-下面的程序展示可回退效应和组件的加载、更新、释放。它对应提交 `7b96587`（里程碑 `M3`）的接口，并在该提交上编译运行过。接口在 `M6` 冻结之前可能调整。
+下面的程序展示可回退效应和组件的加载、更新、释放。完整源码位于 [`crates/cordis/examples/readme.rs`](crates/cordis/examples/readme.rs)，在工作区根目录执行 `cargo run -p cordis --example readme`。
 
 ```rust
 use cordis::{ComponentDef, Context, Inject};
@@ -72,9 +72,10 @@ fn main() -> cordis::Result {
         Ok(())
     });
     let fiber = root.mount_with(&server, 8080u16)?;
-    host.finish(fiber.settled())?; // listen 8080
-    host.finish(fiber.update(9090u16))?; // close 8080，listen 9090
-    host.finish(fiber.dispose())?; // close 9090
+    host.finish(fiber.settled())?;
+    host.finish(fiber.update(9090u16))?;
+    host.finish(fiber.dispose())?;
+    host.finish(root.fiber().dispose())?;
     Ok(())
 }
 ```
@@ -141,7 +142,7 @@ conda run -n base python tools/conformance.py check   # 校验一致性矩阵
 | `M5` | 拦截、调用方句柄、日志、替换 |
 | `M6` | 收尾：示例、多线程压力测试、接口冻结 |
 
-`M0`–`M5` 及并发评审修复已提交，当前推进 `M6`。当前位置、各里程碑的验收结果和遗留问题记录在 `docs/PROGRESS.md`。
+`M0`–`M6` 及并发评审修复已提交，公开接口已完成 M6 验收。各里程碑的执行结果和接口清单记录在 `docs/PROGRESS.md`。
 
 ## 范围外
 

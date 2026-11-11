@@ -18,20 +18,37 @@ use std::{
     task::{Poll, Waker},
 };
 
+/// S-FBR-1：组件实例最近一次生命周期迁移记录的状态。
+///
+/// 实例的存活性由 [`Fiber::is_alive`] 查询，调和完成性由 [`Fiber::is_settled`] 查询。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FiberState {
+    /// 实例存活，等待声明的依赖全部满足。
     Pending,
+    /// 正在执行一次加载迁移。
     Loading,
+    /// 本次加载已经完成，加载纪元与目标纪元一致。
     Active,
+    /// 加载或宿主派发失败；[`Fiber::settled`] 返回相应错误。
     Failed,
+    /// 实例释放迁移已经完成，生命周期登记已撤回。
     Disposed,
+    /// 正在等待依赖方清理，并恢复本次加载登记的效应。
     Unloading,
 }
 
+/// T-LIF-2、S-FBR-5：用修订号和依赖绑定身份标识一次目标配置。
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Epoch {
+    /// 非活跃目标，对应模型中的底元素 `⊥`。
     Inactive,
-    Active { revision: u64, impls: Vec<u64> },
+    /// 依赖满足时的目标配置；相等比较覆盖全部字段。
+    Active {
+        /// 显式重启、配置重载和组件替换推进的修订号。
+        revision: u64,
+        /// 已声明依赖的绑定编号，顺序与 [`Inject`] 的声明顺序一致。
+        impls: Vec<u64>,
+    },
 }
 
 pub(crate) struct FiberData {
@@ -53,6 +70,7 @@ pub(crate) struct FiberData {
     pub running_epoch: Epoch,
     pub inertia: bool,
     pub queued: bool,
+    pub notifications: usize,
     pub suspended: Option<Task>,
     pub dispatch_error: Option<Error>,
     pub error: Option<Error>,
@@ -89,6 +107,7 @@ impl FiberData {
             },
             inertia: false,
             queued: false,
+            notifications: 0,
             suspended: None,
             dispatch_error: None,
             error: None,
@@ -132,6 +151,10 @@ impl FiberData {
     }
 }
 
+/// T-LIF-8、T-LIF-9：组件实例的共享句柄。
+///
+/// 克隆的句柄控制同一实例。挂载操作登记为父级效应，资源回收由
+/// [`Fiber::dispose`] 或父级卸载触发。句柄保留期间可以继续查询已释放实例的状态。
 #[derive(Clone)]
 pub struct Fiber {
     pub(crate) kernel: Arc<Kernel>,
@@ -154,6 +177,10 @@ impl fmt::Debug for Fiber {
     }
 }
 
+/// S-FBR-2：状态变化时发送的同步通知。
+///
+/// 参数为 `(Fiber, FiberState)`，第二项是变化前的状态；通过句柄读取当前状态。
+/// 监听器的输出类型为 `()`。
 pub struct InternalStatus;
 impl Event for InternalStatus {
     const NAME: &'static str = "internal/status";
@@ -161,6 +188,10 @@ impl Event for InternalStatus {
     type Output = ();
     type Kind = SyncKind;
 }
+/// S-FBR-15、S-FBR-16：实例挂载及开始释放时发送的同步通知。
+///
+/// 参数为相应的 [`Fiber`]，其 [`Fiber::is_alive`] 标识登记或撤回阶段。
+/// 监听器的输出类型为 `()`。
 pub struct InternalPlugin;
 impl Event for InternalPlugin {
     const NAME: &'static str = "internal/plugin";
@@ -168,6 +199,9 @@ impl Event for InternalPlugin {
     type Output = ();
     type Kind = SyncKind;
 }
+/// S-FBR-19：保存更新配置之前发送的同步通知。
+///
+/// 参数为实例句柄及新的原始配置 `(Fiber, RawConfig)`，监听器的输出类型为 `()`。
 pub struct InternalCommit;
 impl Event for InternalCommit {
     const NAME: &'static str = "internal/commit";
@@ -175,6 +209,11 @@ impl Event for InternalCommit {
     type Output = ();
     type Kind = SyncKind;
 }
+/// S-REG-7：组件配置解析的瀑布事件。
+///
+/// 输入为 `(Fiber, RawConfig)`，输出为装入 [`RawConfig`] 的解析结果。
+/// 监听器通过 `Next::run` 进入下一层，默认末端调用组件的配置解析函数。
+/// 返回值的具体类型应与当前组件的解析配置类型一致。
 pub struct InternalConfig;
 impl Event for InternalConfig {
     const NAME: &'static str = "internal/config";
@@ -182,6 +221,11 @@ impl Event for InternalConfig {
     type Output = RawConfig;
     type Kind = WaterfallKind;
 }
+/// S-FBR-19、S-FBR-20：活跃目标接收配置更新时的瀑布事件。
+///
+/// 输入为解析后的 [`RawConfig`]，输出为等待更新结果的 `Task<Result>`。
+/// 当前实例的监听器及全局监听器参与派发。`Next::run` 进入下一层，默认末端
+/// 调用 [`Fiber::restart`]；监听器也可返回自身的任务来接管更新。
 pub struct InternalUpdate;
 impl Event for InternalUpdate {
     const NAME: &'static str = "internal/update";
@@ -202,35 +246,55 @@ impl Fiber {
                 .clone(),
         }
     }
+    /// S-FBR-4：返回自身及祖先中最近一个具名组件的名称，缺省为 `root`。
     pub fn name(&self) -> String {
         name_locked(&self.kernel.state.lock(), self.id)
     }
+    /// 返回最近一次记录的生命周期状态。
     pub fn state(&self) -> FiberState {
         self.kernel.state.lock().fibers[self.id].state
     }
+    /// 返回调和器最近计算的目标纪元。
+    ///
+    /// 进行中的加载以开始时的纪元运行，目标变化驱动随后串联的迁移。
     pub fn epoch(&self) -> Epoch {
         self.kernel.state.lock().fibers[self.id].target.clone()
     }
+    /// S-FBR-3：实例的挂载效应仍然存活时返回 `true`。
+    ///
+    /// 释放开始后返回 `false`。该值独立于依赖满足状态与迁移阶段；根纤程保持存活。
     pub fn is_alive(&self) -> bool {
         self.kernel.state.lock().fibers[self.id].alive
     }
+    /// 查询本实例的调和请求和迁移是否已全部结束。
+    ///
+    /// 返回值对应 `queued == false`、`inertia == false`、`notifications == 0`
+    /// 且 `suspended.is_none()`：排队请求、迁移、状态传播及保留待重新提交的任务均已处理。
+    /// `Pending` 和清理已结束的 `Failed` 状态也可达到稳定。
     pub fn is_settled(&self) -> bool {
         let state = self.kernel.state.lock();
         let data = &state.fibers[self.id];
-        !data.inertia && !data.queued && data.suspended.is_none()
+        !data.inertia && !data.queued && data.notifications == 0 && data.suspended.is_none()
     }
+    /// T-LIF-9：返回该实例自身的上下文，效应归属于当前实例。
     pub fn context(&self) -> Context {
         Context {
             kernel: self.kernel.clone(),
             scope: self.scope.clone(),
         }
     }
+    /// 返回当前组件定义的身份。
+    ///
+    /// 根纤程及已完成释放、回收实现记录的实例返回 `None`。
     pub fn component_id(&self) -> Option<ComponentId> {
         self.kernel.state.lock().fibers[self.id]
             .component
             .as_ref()
             .map(|component| component.id)
     }
+    /// 按具体类型 `R` 读取实例保存的原始配置。
+    ///
+    /// 类型匹配时返回共享的 `Arc<R>`，类型差异返回 `None`；释放完成后保存值为 `()`。
     pub fn config<R: Send + Sync + 'static>(&self) -> Option<Arc<R>> {
         self.kernel.state.lock().fibers[self.id]
             .config
@@ -238,9 +302,13 @@ impl Fiber {
             .downcast()
             .ok()
     }
+    /// 返回当前依赖规格的快照；组件替换后反映新定义的声明。
     pub fn inject(&self) -> Inject {
         self.kernel.state.lock().fibers[self.id].inject.clone()
     }
+    /// S-EFF-7：按登记顺序返回顶层效应的元信息树。
+    ///
+    /// 经 `EffectScope::adopt` 归属到父效应的子项列在父项的 `children` 中。
     pub fn effects(&self) -> Vec<EffectMeta> {
         let state = self.kernel.state.lock();
         state.fibers[self.id]
@@ -251,6 +319,11 @@ impl Fiber {
     }
 
     /// S-FBR-14、S-FBR-21：等待当前及随后串联的迁移完成。
+    ///
+    /// 排队调和也属于等待范围。依赖欠缺而稳定于 `Pending` 时可返回 `Ok(())`。
+    /// 加载失败返回对应错误；宿主拒收造成清理任务保留时返回派发错误，
+    /// 随后的 [`Fiber::dispose`] 可恢复这些任务。
+    /// 内核通过宿主的 `Spawn` 推进迁移，返回的 Future 承担结果等待。
     pub fn settled(&self) -> Task<Result> {
         self.wait(true)
     }
@@ -270,7 +343,8 @@ impl Fiber {
                 return Poll::Ready(Err(error));
             }
             let data = &mut state.fibers[fiber.id];
-            if !data.inertia && !data.queued && data.suspended.is_none() {
+            if !data.inertia && !data.queued && data.notifications == 0 && data.suspended.is_none()
+            {
                 return Poll::Ready(if report_error {
                     data.error.clone().map_or(Ok(()), Err)
                 } else {
@@ -285,6 +359,11 @@ impl Fiber {
     }
 
     /// S-FBR-18：修订号使配置相同的重启具有新的纪元。
+    ///
+    /// 调用时同步增加修订号并提交调和请求，返回的任务等待迁移稳定。
+    /// 已加载实例先卸载再加载，依赖欠缺时保持 `Pending`。
+    /// 失活实例或保留清理的派发错误通过返回任务交回；加载失败的恢复入口为
+    /// [`Fiber::update`] 或 [`crate::Registry::replace`]。
     pub fn restart(&self) -> Task<Result> {
         {
             let mut state = self.kernel.state.lock();
@@ -304,6 +383,11 @@ impl Fiber {
     }
 
     /// S-FBR-19、S-FBR-20：保留原始配置，将解析结果交给更新监听器。
+    ///
+    /// `R` 应与当前组件接受的原始配置类型一致。目标处于活跃纪元时先解析新值，
+    /// 校验失败则保留当前配置及效应。通过 [`InternalCommit`] 通知后保存原始值，
+    /// 清除最近的加载错误，再由 [`InternalUpdate`] 监听器或默认重启流程处理更新。
+    /// 走重启流程的连续更新按最新配置调和，返回的任务交回更新结果。
     pub fn update<R: Clone + Send + Sync + 'static>(&self, config: R) -> Task<Result> {
         self.update_raw(Arc::new(config))
     }
@@ -359,6 +443,11 @@ impl Fiber {
     }
 
     /// S-FBR-16、S-FBR-17：释放实例；根纤程通过重启回收全部效应。
+    ///
+    /// 调用时立即发起操作，返回的任务等待释放结果。子实例撤回挂载效应并在清理后
+    /// 进入 `Disposed`；根纤程通过 [`Fiber::restart`] 回收自身效应后回到 `Active`。
+    /// 重复调用会恢复组件树内由宿主拒收而保留的清理任务；已结束的子实例释放保持幂等。
+    /// 清理回调错误写入日志，其余清理继续执行；派发受阻时向等待者交回错误。
     pub fn dispose(&self) -> Task<Result> {
         resume_cleanup(&self.kernel, self.id);
         let lifetime = {
@@ -408,6 +497,9 @@ impl Fiber {
 
 impl Context {
     /// T-LIF-7：组件在异步步骤边界检查其加载纪元。
+    ///
+    /// 实例存活且最近计算的目标纪元与当前加载纪元相等时返回 `true`。
+    /// 组件可在值变为 `false` 后结束当前执行，由卸载流程恢复已经登记的效应。
     pub fn is_current(&self) -> bool {
         let state = self.kernel.state.lock();
         let data = &state.fibers[self.scope.fiber];
@@ -485,17 +577,15 @@ pub(crate) fn drain(kernel: &Arc<Kernel>) {
                 Some(loading)
             };
             let new_state = data.state;
-            let waiters = if data.inertia {
-                Vec::new()
-            } else {
-                std::mem::take(&mut data.waiters)
-            };
+            if old_state != new_state {
+                data.notifications += 1;
+            }
             if transition == Some(true) {
                 crate::reflect::commit_locked(&mut state, id);
             }
-            (fiber, old_state, new_state, transition, waiters)
+            (fiber, old_state, new_state, transition)
         };
-        let (fiber, old, new, transition, waiters) = action;
+        let (fiber, old, new, transition) = action;
         status_changed(&fiber, old, new);
         if let Some(loading) = transition {
             let task_fiber = fiber.clone();
@@ -506,9 +596,7 @@ pub(crate) fn drain(kernel: &Arc<Kernel>) {
         } else if new == FiberState::Disposed {
             release_record(&fiber);
         }
-        for waiter in waiters {
-            waiter.wake();
-        }
+        wake_stable(&fiber);
     }
 }
 
@@ -526,6 +614,7 @@ fn status_changed(fiber: &Fiber, old: FiberState, new: FiberState) {
     if old == FiberState::Active || new == FiberState::Active {
         crate::reflect::status_changed(&fiber.kernel, fiber.id);
     }
+    fiber.kernel.state.lock().fibers[fiber.id].notifications -= 1;
 }
 
 /// T-LIF-4、T-LIF-5、T-LIF-6：迁移结束后串联到最新目标纪元。
@@ -595,51 +684,69 @@ async fn transition_loop(fiber: Fiber, mut loading: bool) {
             }
             crate::reflect::release_committed(&kernel, id);
         }
-        let (old, new, next, waiters) = {
-            let mut state = kernel.state.lock();
-            let data = &mut state.fibers[id];
+        let Some(next) = finish_transition(&fiber, loading) else {
+            if fiber.state() == FiberState::Disposed {
+                release_record(&fiber);
+            }
+            return;
+        };
+        loading = next;
+    }
+}
+
+/// S-FBR-2、S-FBR-14：状态传播完成后发布稳定结果，并处理通知回调改变的目标。
+fn finish_transition(fiber: &Fiber, loading: bool) -> Option<bool> {
+    loop {
+        let (old, new, next) = {
+            let mut state = fiber.kernel.state.lock();
+            let data = &mut state.fibers[fiber.id];
             let next = if loading {
                 (data.target != data.running_epoch).then_some(false)
             } else {
                 (data.target != Epoch::Inactive).then_some(true)
             };
             let old = data.state;
-            let waiters = if let Some(next_loading) = next {
-                data.state = if next_loading {
-                    FiberState::Loading
-                } else {
-                    FiberState::Unloading
-                };
-                if next_loading {
+            data.state = match next {
+                Some(true) => {
                     data.running_epoch = data.target.clone();
+                    FiberState::Loading
                 }
-                Vec::new()
-            } else {
-                data.inertia = false;
-                data.state = data.idle_state();
-                if data.queued {
-                    Vec::new()
-                } else {
-                    std::mem::take(&mut data.waiters)
-                }
+                Some(false) => FiberState::Unloading,
+                None => data.idle_state(),
             };
-            let outcome = (old, data.state, next, waiters);
+            let new = data.state;
+            if old != new {
+                data.notifications += 1;
+            } else if next.is_none() {
+                data.inertia = false;
+            }
             if next == Some(true) {
-                crate::reflect::commit_locked(&mut state, id);
+                crate::reflect::commit_locked(&mut state, fiber.id);
             }
-            outcome
+            (old, new, next)
         };
-        status_changed(&fiber, old, new);
-        for waiter in waiters {
-            waiter.wake();
+        status_changed(fiber, old, new);
+        if let Some(next) = next {
+            return Some(next);
         }
-        let Some(next) = next else {
-            if new == FiberState::Disposed {
-                release_record(&fiber);
-            }
+        if old == new {
+            wake_stable(fiber);
+            return None;
+        }
+    }
+}
+
+fn wake_stable(fiber: &Fiber) {
+    let waiters = {
+        let mut state = fiber.kernel.state.lock();
+        let data = &mut state.fibers[fiber.id];
+        if data.queued || data.inertia || data.notifications != 0 || data.suspended.is_some() {
             return;
-        };
-        loading = next;
+        }
+        std::mem::take(&mut data.waiters)
+    };
+    for waiter in waiters {
+        waiter.wake();
     }
 }
 
@@ -674,7 +781,7 @@ fn release_record(fiber: &Fiber) {
     let removed = {
         let mut state = fiber.kernel.state.lock();
         let data = &mut state.fibers[fiber.id];
-        if data.inertia || data.queued || data.suspended.is_some() {
+        if data.inertia || data.queued || data.notifications != 0 || data.suspended.is_some() {
             return;
         }
         (
@@ -707,6 +814,9 @@ fn submit_transition(fiber: &Fiber, task: Task, loading: bool) {
         data.error = Some(failure.error);
         data.target = Epoch::Inactive;
         data.state = FiberState::Unloading;
+        if old != data.state {
+            data.notifications += 1;
+        }
         old
     };
     status_changed(fiber, old, FiberState::Unloading);
@@ -733,7 +843,11 @@ fn submit_cleanup(fiber: &Fiber, task: Task) {
         data.suspended = Some(task);
         data.dispatch_error = Some(failure.error);
         data.inertia = false;
-        std::mem::replace(&mut data.state, FiberState::Failed)
+        let old = std::mem::replace(&mut data.state, FiberState::Failed);
+        if old != data.state {
+            data.notifications += 1;
+        }
+        old
     };
     status_changed(fiber, old, FiberState::Failed);
     wake_dispatch_waiters(&fiber.kernel);
@@ -805,6 +919,9 @@ pub(crate) fn resume_cleanup(kernel: &Arc<Kernel>, id: FiberId) {
                 data.dispatch_error = None;
                 data.inertia = true;
                 let old = std::mem::replace(&mut data.state, FiberState::Unloading);
+                if old != data.state {
+                    data.notifications += 1;
+                }
                 (fiber, task, old)
             })
             .collect::<Vec<_>>();

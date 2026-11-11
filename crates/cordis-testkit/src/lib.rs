@@ -17,6 +17,7 @@ use std::{
 };
 
 #[derive(Default)]
+/// 在调用线程按队列顺序推进任务，并由调用方显式推进时间。
 pub struct TestExecutor {
     queue: Arc<Mutex<VecDeque<Arc<Scheduled>>>>,
     tasks: Mutex<Vec<Arc<Scheduled>>>,
@@ -81,10 +82,12 @@ impl Clock for TestExecutor {
 }
 
 impl TestExecutor {
+    /// 创建共享执行器，供 Context 接收 Spawn 与 Clock 能力。
     pub fn new() -> Arc<Self> {
         Arc::new(Self::default())
     }
 
+    /// 轮询当前可运行任务，直到全部完成或等待外部唤醒。
     pub fn run_until_stalled(&self) {
         loop {
             let next = self.queue.lock().unwrap().pop_front();
@@ -111,6 +114,7 @@ impl TestExecutor {
         }
     }
 
+    /// 推进逻辑时间并唤醒到期等待；后续轮询由 run_until_stalled 执行。
     pub fn advance(&self, duration: Duration) {
         let ready = {
             let mut time = self.time.lock().unwrap();
