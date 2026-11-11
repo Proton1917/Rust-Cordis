@@ -69,7 +69,7 @@ struct State {
     aliases:  HashMap<ComponentId, ComponentDef>,
     hooks:    HashMap<EventId, Vec<Arc<Hook>>>,
     names:    HashMap<&'static str, KeyId>,          // 名称登记表（ADR-0004）
-    dirty:    VecDeque<FiberId>,                     // 调和队列
+    dirty:    VecDeque<Arc<Scope>>,                  // 调和队列持有所属视图，Scope 携带 FiberId
     draining: bool,
     counters: Counters,                              // fiber uid、impl uid、日志序号
 }
@@ -92,7 +92,7 @@ struct Scope {
     parent: Option<Arc<Scope>>,
     fiber:  FiberId,                     // 最近的所属纤程
     layer:  Layer,
-    lease: Option<Weak<Kernel>>,         // 纤程层持有记录回收租约，见 ADR-0008
+    lease: Option<Weak<Kernel>>,         // 纤程层持有记录回收租约，见 ADR-0007
 }
 
 enum Layer {
@@ -105,7 +105,7 @@ enum Layer {
 
 解析 `ρ(k)`：从当前节点向根查找第一个 `Isolate { key: k, .. }`，找不到时取默认域 `RealmId::DEFAULT`（`S-CTX-5`）。解析 `ι(k)`：自根向当前节点收集全部 `Intercept { key: k, .. }` 层（`S-SVC-11`）。
 
-`Fiber` 持有所属纤程层的 `Arc<Scope>`。活跃记录保留该层；释放稳定后取出记录中的强引用，相关上下文与句柄释放完毕时由租约回收 arena 记录。任务、依赖释放及失活上下文的访问共用这一生命周期（ADR-0008）。
+`Fiber` 持有所属纤程层的 `Arc<Scope>`。活跃记录保留该层；释放稳定后取出记录中的强引用，相关上下文与句柄释放完毕时由租约回收 arena 记录。任务、依赖释放及失活上下文的访问共用这一生命周期（ADR-0007）。
 
 ### 3.3 纪元
 
@@ -161,6 +161,8 @@ enum Epoch {
 4. 解锁，执行待办动作。
 5. 迁移任务结束时再次加锁，按 `S-FBR-9` 或 `S-FBR-12` 的末尾步骤判定：清除 `inertia` 并唤醒等待者，或原地串联进入反向迁移。
 6. 验证：`UPD-02`–`UPD-07`、`UPD-09`、`UPD-10`（里程碑 `M3`）；`FBR-01`–`FBR-03`（inertia lock）、`UPD-01`、`UPD-08`（里程碑 `M4`，场景含依赖变化）。
+
+纤程的 `queued` 标志与修订号、存活状态或依赖视图的变更在同一次持锁中更新；入队同步取得所属 Scope。稳定判定要求 `queued == false` 且 `inertia == false`。保持当前目标的出队分支也会唤醒等待者。队列动作及迁移任务继续持有同一个 Scope，记录回收据此遵循实际任务生命周期。
 
 状态变化跨越 `ACTIVE` 边界时（`S-FBR-2`），受影响的声明方纤程在同一把锁内入队，由同一个调和循环继续处理。这给出了 `T-COE-6` 的依赖顺序。
 

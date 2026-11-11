@@ -2,6 +2,7 @@
 
 use crate::{
     Error, Realm,
+    context::Scope,
     effect::EffectData,
     events::Hook,
     fiber::FiberData,
@@ -14,8 +15,12 @@ use std::{
     any::TypeId,
     collections::{HashMap, VecDeque},
     future::Future,
+    panic::{AssertUnwindSafe, catch_unwind},
     pin::Pin,
-    sync::Arc,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
     time::Duration,
 };
 
@@ -35,6 +40,7 @@ new_key_type! {
     pub(crate) struct FiberId;
     pub(crate) struct EffectId;
     pub(crate) struct ImplId;
+    struct SubmissionId;
 }
 
 pub(crate) struct Kernel {
@@ -47,7 +53,7 @@ pub(crate) struct State {
     pub fibers: SlotMap<FiberId, FiberData>,
     pub effects: SlotMap<EffectId, EffectData>,
     pub hooks: HashMap<TypeId, Vec<Arc<Hook>>>,
-    pub dirty: VecDeque<FiberId>,
+    pub dirty: VecDeque<Arc<Scope>>,
     pub draining: bool,
     pub runtimes: HashMap<ComponentId, RuntimeData>,
     pub errors: Vec<(FiberId, Error)>,
@@ -55,11 +61,53 @@ pub(crate) struct State {
     pub store: HashMap<(TypeId, Realm), ImplId>,
     pub names: HashMap<&'static str, TypeId>,
     pub impl_counter: u64,
+    submissions: SlotMap<SubmissionId, Task>,
+}
+
+pub(crate) struct SubmissionFailure {
+    pub error: Error,
+    pub rejected: Option<Task>,
 }
 
 impl Kernel {
     pub(crate) fn report(&self, fiber: FiberId, error: Error) {
         self.state.lock().errors.push((fiber, error));
+    }
+
+    /// A-3、A-7：宿主接收调度句柄，任务在首次轮询时移出 State。
+    /// 拒收时将任务所有权交回调用方；接收后发生的 panic 保留既有执行。
+    pub(crate) fn submit(
+        self: &Arc<Self>,
+        task: Task,
+    ) -> std::result::Result<(), SubmissionFailure> {
+        let id = self.state.lock().submissions.insert(task);
+        let started = Arc::new(AtomicBool::new(false));
+        let lease = Arc::new(());
+        let task_started = started.clone();
+        let task_lease = lease.clone();
+        let kernel = self.clone();
+        let submission = Box::pin(async move {
+            let _lease = task_lease;
+            task_started.store(true, Ordering::Release);
+            let task = kernel
+                .state
+                .lock()
+                .submissions
+                .remove(id)
+                .expect("submitted task retained");
+            task.await;
+        });
+        catch_unwind(AssertUnwindSafe(|| self.spawner.spawn(submission))).map_err(|payload| {
+            let rejected = if started.load(Ordering::Acquire) || Arc::strong_count(&lease) > 1 {
+                None
+            } else {
+                self.state.lock().submissions.remove(id)
+            };
+            SubmissionFailure {
+                error: Error::panic(payload),
+                rejected,
+            }
+        })
     }
 
     pub fn new<H: Spawn + Clock>(host: Arc<H>) -> (Arc<Self>, FiberId) {
@@ -79,6 +127,7 @@ impl Kernel {
                     store: HashMap::new(),
                     names: HashMap::new(),
                     impl_counter: 0,
+                    submissions: SlotMap::with_key(),
                 }),
                 spawner: host.clone(),
                 clock: host,

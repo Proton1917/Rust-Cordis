@@ -1,6 +1,9 @@
 use cordis::{Context, Event, FiberState, Inject, Realm, ServiceKey, SyncKind};
 use cordis_testkit::TestExecutor;
-use std::sync::{Arc, Mutex};
+use std::sync::{
+    Arc, Mutex,
+    atomic::{AtomicUsize, Ordering},
+};
 
 struct Foo;
 impl ServiceKey for Foo {
@@ -94,12 +97,31 @@ fn iso03_iso04_independent_and_shared_realms() {
         let realm = Realm::new();
         let first = root.isolate::<Foo>(realm);
         let second = root.isolate::<Foo>(if shared { realm } else { Realm::new() });
+        let loads = Arc::new(AtomicUsize::new(0));
+        let disposals = Arc::new(AtomicUsize::new(0));
         let consumers = [&root, &first, &second].map(|ctx| {
-            ctx.inject(Inject::new().with::<Foo>(), |_| async { Ok(()) })
-                .unwrap()
+            let (loads, disposals) = (loads.clone(), disposals.clone());
+            ctx.inject(Inject::new().with::<Foo>(), move |ctx| {
+                let (loads, disposals) = (loads.clone(), disposals.clone());
+                async move {
+                    loads.fetch_add(1, Ordering::SeqCst);
+                    ctx.effect("consumer cleanup", move |fx| {
+                        fx.defer(move || {
+                            disposals.fetch_add(1, Ordering::SeqCst);
+                            Ok(())
+                        })
+                    })?;
+                    Ok(())
+                }
+            })
+            .unwrap()
         });
+        host.run_until_stalled();
+        assert_eq!(loads.load(Ordering::SeqCst), 0);
         let outer = root.provide::<Foo>(Arc::new("outer")).unwrap();
         host.run_until_stalled();
+        assert_eq!(loads.load(Ordering::SeqCst), 1);
+        assert_eq!(disposals.load(Ordering::SeqCst), 0);
         assert_eq!(
             consumers
                 .iter()
@@ -109,6 +131,8 @@ fn iso03_iso04_independent_and_shared_realms() {
         );
         let inner = first.provide::<Foo>(Arc::new("inner")).unwrap();
         host.run_until_stalled();
+        assert_eq!(loads.load(Ordering::SeqCst), if shared { 3 } else { 2 });
+        assert_eq!(disposals.load(Ordering::SeqCst), 0);
         assert_eq!(*root.get::<Foo>().unwrap(), "outer");
         assert_eq!(*first.get::<Foo>().unwrap(), "inner");
         assert_eq!(
@@ -119,12 +143,25 @@ fn iso03_iso04_independent_and_shared_realms() {
                 FiberState::Pending
             }
         );
-        host.finish(inner.dispose()).unwrap();
-        assert_eq!(consumers[1].state(), FiberState::Pending);
-        assert_eq!(consumers[2].state(), FiberState::Pending);
-        assert_eq!(consumers[0].state(), FiberState::Active);
-        host.finish(outer.dispose()).unwrap();
-        assert_eq!(consumers[0].state(), FiberState::Pending);
+        if shared {
+            host.finish(inner.dispose()).unwrap();
+            assert_eq!(loads.load(Ordering::SeqCst), 3);
+            assert_eq!(disposals.load(Ordering::SeqCst), 2);
+            assert_eq!(consumers[1].state(), FiberState::Pending);
+            assert_eq!(consumers[2].state(), FiberState::Pending);
+            assert_eq!(consumers[0].state(), FiberState::Active);
+        } else {
+            host.finish(outer.dispose()).unwrap();
+            assert_eq!(loads.load(Ordering::SeqCst), 2);
+            assert_eq!(disposals.load(Ordering::SeqCst), 1);
+            assert_eq!(consumers[0].state(), FiberState::Pending);
+            assert_eq!(consumers[1].state(), FiberState::Active);
+            second.provide::<Foo>(Arc::new("second")).unwrap();
+            host.run_until_stalled();
+            assert_eq!(loads.load(Ordering::SeqCst), 3);
+            assert_eq!(disposals.load(Ordering::SeqCst), 1);
+            assert_eq!(consumers[2].state(), FiberState::Active);
+        }
         host.finish(root.fiber().dispose()).unwrap();
     }
 }

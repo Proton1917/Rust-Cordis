@@ -4,7 +4,7 @@ use futures_util::{FutureExt, future::poll_fn};
 use std::{
     sync::{
         Arc, Mutex,
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
     },
     task::{Poll, Waker},
 };
@@ -409,12 +409,12 @@ impl Event for FinalEvent {
 #[test]
 fn svd08_provider_listener_receives_final_consumer_event() {
     let (host, root, provider, _, _) = fixture();
-    let received = Arc::new(AtomicBool::new(false));
+    let received = Arc::new(AtomicUsize::new(0));
     let flag = received.clone();
     provider
         .context()
         .on::<FinalEvent>(move |_| {
-            flag.store(true, Ordering::SeqCst);
+            flag.fetch_add(1, Ordering::SeqCst);
             None
         })
         .unwrap();
@@ -432,13 +432,13 @@ fn svd08_provider_listener_receives_final_consumer_event() {
         .unwrap();
     host.finish(child.settled()).unwrap();
     host.finish(root.fiber().dispose()).unwrap();
-    assert!(received.load(Ordering::SeqCst));
+    assert_eq!(received.load(Ordering::SeqCst), 1);
 }
 
 #[test]
 fn svd09_independent_providers_and_sibling_effects_drain_concurrently() {
     let (host, root, _, resource, _) = fixture();
-    let independent = Arc::new(AtomicBool::new(false));
+    let independent = Arc::new(AtomicUsize::new(0));
     let flag = independent.clone();
     root.inject(Inject::new(), move |ctx| {
         let flag = flag.clone();
@@ -446,7 +446,7 @@ fn svd09_independent_providers_and_sibling_effects_drain_concurrently() {
             ctx.provide::<Bar>(Arc::new(0))?;
             ctx.effect("independent", move |fx| {
                 fx.defer(move || {
-                    flag.store(true, Ordering::SeqCst);
+                    flag.fetch_add(1, Ordering::SeqCst);
                     Ok(())
                 })
             })?;
@@ -457,13 +457,13 @@ fn svd09_independent_providers_and_sibling_effects_drain_concurrently() {
     let gate = Gate::default();
     let child = consumer(&root, gate.clone());
     host.finish(child.settled()).unwrap();
-    let sibling = Arc::new(AtomicBool::new(false));
+    let sibling = Arc::new(AtomicUsize::new(0));
     let flag = sibling.clone();
     child
         .context()
         .effect("sibling", move |fx| {
             fx.defer(move || {
-                flag.store(true, Ordering::SeqCst);
+                flag.fetch_add(1, Ordering::SeqCst);
                 Ok(())
             })
         })
@@ -471,8 +471,8 @@ fn svd09_independent_providers_and_sibling_effects_drain_concurrently() {
     let task = root.fiber().dispose();
     host.run_until_stalled();
     assert!(!resource.closed.load(Ordering::SeqCst));
-    assert!(independent.load(Ordering::SeqCst));
-    assert!(sibling.load(Ordering::SeqCst));
+    assert_eq!(independent.load(Ordering::SeqCst), 1);
+    assert_eq!(sibling.load(Ordering::SeqCst), 1);
     gate.open();
     host.finish(task).unwrap();
 }

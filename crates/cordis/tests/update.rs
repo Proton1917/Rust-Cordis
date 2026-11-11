@@ -131,10 +131,9 @@ fn superseded_failure_preserves_latest_target() {
     host.finish(update).unwrap();
     assert_eq!(*applied.lock().unwrap(), [1, 2]);
     assert_eq!(*disposed.lock().unwrap(), [1]);
-    assert_eq!(
-        root.errors().last().unwrap().message.as_ref(),
-        "superseded load"
-    );
+    let errors = root.errors();
+    assert_eq!(errors.len(), 1);
+    assert_eq!(errors[0].message.as_ref(), "superseded load");
     assert_eq!(fiber.state(), FiberState::Active);
     host.finish(fiber.dispose()).unwrap();
     assert_eq!(*disposed.lock().unwrap(), [1, 2]);

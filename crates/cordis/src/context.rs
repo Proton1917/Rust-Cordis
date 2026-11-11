@@ -52,7 +52,7 @@ impl Drop for Scope {
                 if state
                     .fibers
                     .get(self.fiber)
-                    .is_some_and(|fiber| !fiber.alive && !fiber.inertia)
+                    .is_some_and(|fiber| !fiber.alive && !fiber.inertia && !fiber.queued)
                 {
                     state.fibers.remove(self.fiber)
                 } else {

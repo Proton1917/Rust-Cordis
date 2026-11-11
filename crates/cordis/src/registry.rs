@@ -323,7 +323,7 @@ impl Context {
         let effect = self.effect("ctx.use()", move |fx| {
             fx.defer_async(move || {
                 child.begin_dispose();
-                async move { child.wait(false).await }
+                async move { child.wait_completion().await }
             })
         });
         let effect = match effect {

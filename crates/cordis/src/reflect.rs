@@ -527,8 +527,9 @@ fn refresh_keys(kernel: &Arc<Kernel>, id: FiberId, key: Option<TypeId>) {
                 state.fibers[id].bindings[index] = binding.filter(|_| available);
             }
         }
+        crate::fiber::enqueue_locked(&mut state, id);
     }
-    crate::fiber::refresh(kernel, id);
+    crate::fiber::drain(kernel);
 }
 
 pub(crate) fn epoch_ids(state: &State, id: FiberId) -> Option<Vec<u64>> {

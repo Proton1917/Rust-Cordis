@@ -39,6 +39,8 @@ pub(crate) struct EffectData {
     pub parent: Option<EffectId>,
     pub outcome: Option<Result>,
     pub execution_error: Option<Error>,
+    pub suspended: Option<Task>,
+    pub dispatch_error: Option<Error>,
     pub waiters: Vec<Waker>,
     pub location: &'static Location<'static>,
 }
@@ -194,7 +196,7 @@ impl Context {
         let effect = self.create_effect(label.into(), location)?;
         let runner = effect.clone();
         let scope = EffectScope(effect.clone());
-        self.kernel.spawner.spawn(Box::pin(async move {
+        let submission = self.kernel.submit(Box::pin(async move {
             let result = AssertUnwindSafe(async move { callback(scope).await })
                 .catch_unwind()
                 .await
@@ -207,6 +209,13 @@ impl Context {
             }
             runner.finish_run(result);
         }));
+        if let Err(failure) = submission {
+            self.kernel.report(self.scope.fiber, failure.error.clone());
+            if let Some(task) = failure.rejected {
+                drop(task);
+                effect.finish_run(Err(failure.error));
+            }
+        }
         Ok(effect)
     }
 
@@ -229,6 +238,8 @@ impl Context {
             parent: None,
             outcome: None,
             execution_error: None,
+            suspended: None,
+            dispatch_error: None,
             waiters: Vec::new(),
             location,
         });
@@ -282,6 +293,9 @@ impl Effect {
         Box::pin(poll_fn(move |cx| {
             let result = {
                 let mut state = effect.kernel.state.lock();
+                if let Some(error) = effect.dispatch_error(&state) {
+                    return Poll::Ready(Err(error));
+                }
                 let data = &mut state.effects[effect.id];
                 if data.running || (data.execution_error.is_some() && data.outcome.is_none()) {
                     if !data.waiters.iter().any(|w| w.will_wake(cx.waker())) {
@@ -297,11 +311,32 @@ impl Effect {
 
     /// T-EFF-2、S-EFF-4：同步使守卫失效，释放进度由宿主驱动。
     pub fn dispose(&self) -> Task<Result> {
+        let owner = self.kernel.state.lock().effects[self.id].owner;
+        crate::fiber::resume_cleanup(&self.kernel, owner);
+        self.begin_dispose();
+        self.disposal_result()
+    }
+
+    pub(crate) fn begin_dispose(&self) {
         self.armed.store(false, Ordering::Release);
         self.start_cleanup();
+    }
+
+    pub(crate) fn disposal_result(&self) -> Task<Result> {
+        self.wait_outcome(true)
+    }
+
+    pub(crate) fn completion(&self) -> Task<Result> {
+        self.wait_outcome(false)
+    }
+
+    fn wait_outcome(&self, report_dispatch: bool) -> Task<Result> {
         let effect = self.clone();
         Box::pin(poll_fn(move |cx| {
             let mut state = effect.kernel.state.lock();
+            if report_dispatch && let Some(error) = effect.dispatch_error(&state) {
+                return Poll::Ready(Err(error));
+            }
             let data = &mut state.effects[effect.id];
             if let Some(result) = &data.outcome {
                 return Poll::Ready(result.clone());
@@ -311,6 +346,19 @@ impl Effect {
             }
             Poll::Pending
         }))
+    }
+
+    fn dispatch_error(&self, state: &State) -> Option<Error> {
+        let mut pending = vec![self.id];
+        while let Some(id) = pending.pop() {
+            if let Some(data) = state.effects.get(id) {
+                if let Some(error) = &data.dispatch_error {
+                    return Some(error.clone());
+                }
+                pending.extend(&data.children);
+            }
+        }
+        None
     }
 
     fn start_cleanup(&self) {
@@ -341,7 +389,8 @@ impl Effect {
                     }
                 }
                 Cleanup::Child(child) => {
-                    let task = child.dispose();
+                    child.begin_dispose();
+                    let task = child.completion();
                     let done = child.kernel.state.lock().effects[child.id].outcome.clone();
                     if let Some(next) = done {
                         if result.is_ok() {
@@ -379,7 +428,7 @@ impl Effect {
 
     fn continue_cleanup(&self, steps: Vec<Cleanup>, mut result: Result, task: Task<Result>) {
         let effect = self.clone();
-        self.kernel.spawner.spawn(Box::pin(async move {
+        self.submit_cleanup(Box::pin(async move {
             let next = AssertUnwindSafe(task)
                 .catch_unwind()
                 .await
@@ -389,5 +438,54 @@ impl Effect {
             }
             effect.clean_steps(steps, result);
         }));
+    }
+
+    /// 清理任务由 State 持有；宿主拒收后重新提交一次，随后保留 Future 供显式释放恢复。
+    fn submit_cleanup(&self, task: Task) {
+        let owner = self.kernel.state.lock().effects[self.id].owner;
+        let Err(failure) = self.kernel.submit(task) else {
+            return;
+        };
+        self.kernel.report(owner, failure.error.clone());
+        let Some(task) = failure.rejected else {
+            return;
+        };
+        let Err(failure) = self.kernel.submit(task) else {
+            return;
+        };
+        self.kernel.report(owner, failure.error.clone());
+        let Some(task) = failure.rejected else {
+            return;
+        };
+        let waiters = {
+            let mut state = self.kernel.state.lock();
+            let data = &mut state.effects[self.id];
+            data.suspended = Some(task);
+            data.dispatch_error = Some(failure.error);
+            let mut current = Some(self.id);
+            let mut waiters = Vec::new();
+            while let Some(id) = current {
+                let data = &mut state.effects[id];
+                waiters.append(&mut data.waiters);
+                current = data.parent;
+            }
+            waiters
+        };
+        for waiter in waiters {
+            waiter.wake();
+        }
+        crate::fiber::wake_dispatch_waiters(&self.kernel);
+    }
+
+    pub(crate) fn resume_cleanup(&self) {
+        let task = {
+            let mut state = self.kernel.state.lock();
+            let data = &mut state.effects[self.id];
+            data.dispatch_error = None;
+            data.suspended.take()
+        };
+        if let Some(task) = task {
+            self.submit_cleanup(task);
+        }
     }
 }

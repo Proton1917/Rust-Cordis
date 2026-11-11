@@ -1,4 +1,4 @@
-use cordis::{Clock, ComponentDef, Context, Error, FiberState, Inject, ServiceKey};
+use cordis::{Clock, ComponentDef, Context, Error, FiberState, Inject, ServiceKey, Spawn};
 use cordis_testkit::TestExecutor;
 use std::{
     sync::{
@@ -186,10 +186,19 @@ fn svc05_multiple_dependencies_and_cycles() {
         (foo.state(), bar.state()),
         (FiberState::Pending, FiberState::Pending)
     );
-    root.provide::<Qux>(Arc::new(3)).unwrap();
+    let provided = events.clone();
+    root.inject(Inject::new(), move |ctx| {
+        let provided = provided.clone();
+        async move {
+            provided.lock().unwrap().push("qux");
+            ctx.provide::<Qux>(Arc::new(3))?;
+            Ok(())
+        }
+    })
+    .unwrap();
     host.run_until_stalled();
     host.finish(bar.settled()).unwrap();
-    assert_eq!(*events.lock().unwrap(), ["foo", "bar"]);
+    assert_eq!(*events.lock().unwrap(), ["qux", "foo", "bar"]);
     host.finish(root.fiber().dispose()).unwrap();
     let foo = root
         .inject(Inject::new().with::<Bar>(), |ctx| async move {
@@ -240,11 +249,13 @@ fn svc06_svc07_svc08_dependency_cleanup_precedes_provider() {
                 }
             })
             .unwrap();
-        let (clock, stopped) = (host.clone(), events.clone());
+        let loads = Arc::new(AtomicUsize::new(0));
+        let (clock, stopped, started) = (host.clone(), events.clone(), loads.clone());
         let consumer = base
             .inject(Inject::new().with::<Foo>(), move |ctx| {
-                let (clock, stopped) = (clock.clone(), stopped.clone());
+                let (clock, stopped, started) = (clock.clone(), stopped.clone(), started.clone());
                 async move {
+                    started.fetch_add(1, Ordering::SeqCst);
                     let read = ctx.clone();
                     ctx.effect("consumer", move |fx| {
                         fx.defer_async(move || async move {
@@ -260,6 +271,7 @@ fn svc06_svc07_svc08_dependency_cleanup_precedes_provider() {
             .unwrap();
         host.run_until_stalled();
         host.finish(consumer.settled()).unwrap();
+        assert_eq!(loads.load(Ordering::SeqCst), 1);
         let task = if action == "restart" {
             provider.restart()
         } else {
@@ -270,6 +282,10 @@ fn svc06_svc07_svc08_dependency_cleanup_precedes_provider() {
         host.advance(Duration::from_millis(10));
         host.finish(task).unwrap();
         assert_eq!(*events.lock().unwrap(), ["consumer", "provider"]);
+        assert_eq!(
+            loads.load(Ordering::SeqCst),
+            if action == "restart" { 2 } else { 1 }
+        );
         let task = root.fiber().dispose();
         host.run_until_stalled();
         host.advance(Duration::from_millis(10));
@@ -491,19 +507,27 @@ fn upd01_concurrent_updates_with_dependency_coalesce() {
         });
         let child = root.mount_with(&component, 0usize).unwrap();
         host.finish(child.settled()).unwrap();
-        let first = child.update(1usize);
+        let settled = Arc::new(AtomicUsize::new(0));
+        let watch = |task: cordis::Task<cordis::Result>| {
+            let settled = settled.clone();
+            host.spawn(Box::pin(async move {
+                task.await.unwrap();
+                settled.fetch_add(1, Ordering::SeqCst);
+            }));
+        };
+        watch(child.update(1usize));
         host.run_until_stalled();
-        let second = child.update(2usize);
-        let third = child.update(3usize);
+        watch(child.update(2usize));
+        watch(child.update(3usize));
         host.advance(Duration::from_millis(10));
         host.run_until_stalled();
         assert_eq!(*applied.lock().unwrap(), [0, 1, 3]);
         assert_eq!(*disposed.lock().unwrap(), [0, 1]);
         assert!(!child.is_settled());
+        assert_eq!(settled.load(Ordering::SeqCst), 0);
         host.advance(Duration::from_millis(10));
-        for task in [first, second, third] {
-            host.finish(task).unwrap();
-        }
+        host.run_until_stalled();
+        assert_eq!(settled.load(Ordering::SeqCst), 3);
         assert_eq!(*child.config::<usize>().unwrap(), 3);
         host.finish(root.fiber().dispose()).unwrap();
         assert_eq!(*disposed.lock().unwrap(), [0, 1, 3]);
