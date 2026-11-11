@@ -25,8 +25,11 @@ pub use fiber::{
     InternalUpdate,
 };
 pub use kernel::{Clock, Spawn, Task};
+pub use reflect::{
+    InternalGet, InternalService, InternalSet, ServiceAccess, ServiceChange, ServiceValue,
+};
 pub use registry::{
     Component, ComponentDef, ComponentId, Config, Inject, RawConfig, Registry, ValidationError,
     ValidationIssue,
 };
-pub use service::{Merge, ServiceKey};
+pub use service::{Merge, Provision, Scoped, ServiceKey};

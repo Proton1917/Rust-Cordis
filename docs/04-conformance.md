@@ -118,29 +118,29 @@ M0 使用原有清单核对 16 个 spec 文件的 177 条用例；用例实现�
 | CMP-08 | `component.spec.ts:97` | nested components | M3 | 已改写 | `crates/cordis/tests/component.rs::nested_components_release_their_event_handlers`；ComponentDef 与类型化事件表达嵌套，检验 T-LIF-8。 |
 | CMP-09 | `component.spec.ts:134` | compare snapshot | M3 | 已改写 | `crates/cordis/tests/component.rs::component_disposal_restores_registration_snapshot`；比较效应、注册表与事件状态，检验 T-CTX-1。 |
 | CMP-10 | `component.spec.ts:155` | root dispose | M3 | 已改写 | `crates/cordis/tests/component.rs::root_disposal_releases_children_and_remains_active`；显式等待根释放任务，检验 S-FBR-17。 |
-| CMP-11 | `component.spec.ts:175` | Service.init | M4 | 未开始 | |
+| CMP-11 | `component.spec.ts:175` | Service.init | M4 | 已改写 | `crates/cordis/tests/service.rs::cmp11_component_initialization_registers_release`；Service.init 方法映射为组件初始化与显式 defer，检验 S-SVC-13、S-EFF-4。 |
 
 ### FBR：`fiber.spec.ts`（22 条）
 
 | ID | 上游位置 | 上游用例 | 里程碑 | 状态 | Rust 测试 / 理由 |
 |---|---|---|---|---|---|
-| FBR-01 | `fiber.spec.ts:7` | inertia lock 1 | M4 | 未开始 | |
-| FBR-02 | `fiber.spec.ts:27` | inertia lock 2 | M4 | 未开始 | |
-| FBR-03 | `fiber.spec.ts:49` | inertia lock 3 | M4 | 未开始 | |
+| FBR-01 | `fiber.spec.ts:7` | inertia lock 1 | M4 | 已改写 | `crates/cordis/tests/service.rs::fbr01_fbr02_inertial_loading_and_unloading`；生成器释放改为 defer_async，保留 400/800/1200/2200/3200 毫秒阶段，检验 T-LIF-6、S-FBR-8。 |
+| FBR-02 | `fiber.spec.ts:27` | inertia lock 2 | M4 | 已改写 | `crates/cordis/tests/service.rs::fbr01_fbr02_inertial_loading_and_unloading`；以类型化绑定替换表达同提供方新身份，检验 T-LIF-2、T-LIF-6。 |
+| FBR-03 | `fiber.spec.ts:49` | inertia lock 3 | M4 | 已改写 | `crates/cordis/tests/service.rs::fbr03_active_consumer_returns_to_pending`；Service 类改为提供服务的组件，确定性时钟驱动加载和清理，检验 S-FBR-12、T-COE-6。 |
 | FBR-04 | `fiber.spec.ts:71` | component error | M3 | 已改写 | `crates/cordis/tests/fiber.rs::component_failure_cleans_partial_effects`；资源序列与 Result 检验 S-FBR-11。 |
-| FBR-05 | `fiber.spec.ts:93` | failed fiber does not re-enter on dependency refresh | M4 | 未开始 | |
-| FBR-06 | `fiber.spec.ts:108` | update recovers a failed fiber | M4 | 未开始 | |
+| FBR-05 | `fiber.spec.ts:93` | failed fiber does not re-enter on dependency refresh | M4 | 已改写 | `crates/cordis/tests/service.rs::fbr05_fbr06_failed_fiber_recovers_through_update`；真实配置控制加载结果，使用实际计数记录加载，检验 S-FBR-7。 |
+| FBR-06 | `fiber.spec.ts:108` | update recovers a failed fiber | M4 | 已改写 | `crates/cordis/tests/service.rs::fbr05_fbr06_failed_fiber_recovers_through_update`；通过新配置恢复失败组件，替代 JavaScript 运行时改写函数行为，检验 S-FBR-19。 |
 | FBR-07 | `fiber.spec.ts:122` | update waits for asynchronous recovery | M3 | 已改写 | `crates/cordis/tests/fiber.rs::update_waits_for_asynchronous_recovery`；Clock 推进替代 Promise 定时器，检验 S-FBR-19。 |
 | FBR-08 | `fiber.spec.ts:144` | update surfaces a failed recovery to its caller | M3 | 已改写 | `crates/cordis/tests/fiber.rs::update_returns_failed_recovery`；Result 交回恢复失败，检验 S-FBR-21。 |
 | FBR-09 | `fiber.spec.ts:156` | update surfaces a failed reload to its caller | M3 | 已改写 | `crates/cordis/tests/fiber.rs::update_returns_failed_reload`；Result 交回重载失败，检验 S-FBR-21。 |
 | FBR-10 | `fiber.spec.ts:171` | update does not leak a dropped failure | M3 | 已改写 | `crates/cordis/tests/fiber.rs::dropped_update_waiter_preserves_failure_state`；释放 Future 等待句柄替代 Promise 未处理拒绝，检验 S-FBR-22。 |
 | FBR-11 | `fiber.spec.ts:185` | dispose error | M3 | 已改写 | `crates/cordis/tests/fiber.rs::disposal_records_error_and_releases_other_effects`；实际释放序列与错误记录检验 S-FBR-12。 |
-| FBR-12 | `fiber.spec.ts:204` | settles a pending fiber to DISPOSED on dispose | M4 | 未开始 | |
+| FBR-12 | `fiber.spec.ts:204` | settles a pending fiber to DISPOSED on dispose | M4 | 已改写 | `crates/cordis/tests/service.rs::fbr12_pending_fiber_disposal_reaches_disposed`；类型化依赖声明与 Fiber 句柄表达 Pending 释放，检验 S-FBR-16。 |
 | FBR-13 | `fiber.spec.ts:231` | settles a failed fiber to DISPOSED on dispose | M3 | 已改写 | `crates/cordis/tests/fiber.rs::failed_fiber_disposes_with_one_status_transition`；类型化状态事件检验 S-FBR-16。 |
 | FBR-14 | `fiber.spec.ts:264` | keeps the active dispose sequence stable | M3 | 已改写 | `crates/cordis/tests/fiber.rs::active_fiber_disposal_status_sequence`；类型化状态事件检验 S-FBR-16 的状态顺序。 |
 | FBR-15 | `fiber.spec.ts:292` | update config on wrapped fiber | M3 | 已改写 | `crates/cordis/tests/fiber.rs::cloned_handle_updates_shared_configuration`；Clone 句柄替代 JS 原型包装，检验 S-FBR-19。 |
 | FBR-16 | `fiber.spec.ts:312` | restart wrapped fiber | M3 | 已改写 | `crates/cordis/tests/fiber.rs::cloned_handle_restarts_same_fiber`；Clone 句柄共享实例，检验 S-FBR-18。 |
-| FBR-17 | `fiber.spec.ts:326` | update config while injected service reloads | M4 | 未开始 | |
+| FBR-17 | `fiber.spec.ts:326` | update config while injected service reloads | M4 | 已改写 | `crates/cordis/tests/service.rs::fbr17_update_during_provider_reload_uses_latest_pair`；组件配置与服务值均类型化，保留新服务和最新配置的组合观测，检验 S-FBR-19、S-SVC-9。 |
 | FBR-18 | `fiber.spec.ts:384` | fail on first load | M3 | 已改写 | `crates/cordis/tests/fiber.rs::invalid_initial_configuration_fails_before_apply`；Config::resolve 替代 Standard Schema，检验 S-REG-6。 |
 | FBR-19 | `fiber.spec.ts:396` | keep a running component on update | M3 | 已改写 | `crates/cordis/tests/fiber.rs::invalid_update_preserves_active_configuration`；Config::resolve 替代 Standard Schema，检验 S-FBR-19。 |
 | FBR-20 | `fiber.spec.ts:413` | keep the issues and their paths | M3 | 已改写 | `crates/cordis/tests/fiber.rs::validation_error_preserves_issues_and_paths`；ValidationError 的类型化 issues 与 path 检验 S-REG-6。 |
@@ -151,14 +151,14 @@ M0 使用原有清单核对 16 个 spec 文件的 177 条用例；用例实现�
 
 | ID | 上游位置 | 上游用例 | 里程碑 | 状态 | Rust 测试 / 理由 |
 |---|---|---|---|---|---|
-| UPD-01 | `update.spec.ts:7` | settles concurrent updates on the latest config (inject: %s) | M4 | 未开始 | |
+| UPD-01 | `update.spec.ts:7` | settles concurrent updates on the latest config (inject: %s) | M4 | 已改写 | `crates/cordis/tests/service.rs::upd01_concurrent_updates_with_dependency_coalesce`；以宿主时钟和真实配置记录替代 Promise 门闩与 spy，覆盖带依赖和空依赖，检验 S-FBR-21。 |
 | UPD-02 | `update.spec.ts:54` | skips superseded loads before executing the component | M3 | 已改写 | `crates/cordis/tests/update.rs::superseded_loads_are_skipped_before_apply`；确定性队列替代微任务调度，检验 S-FBR-10。 |
 | UPD-03 | `update.spec.ts:69` | coalesces updates during unloading | M3 | 已改写 | `crates/cordis/tests/update.rs::updates_coalesce_during_unloading`；Clock 推进替代 Promise 门控，检验 S-FBR-21。 |
 | UPD-04 | `update.spec.ts:96` | honors %s while loading even when config is unchanged | M3 | 已改写 | `crates/cordis/tests/update.rs::restart_and_configuration_aba_supersede_loading`；Clock 推进与显式任务检验 S-FBR-18、S-FBR-21。 |
 | UPD-05 | `update.spec.ts:121` | cleans up a superseded failure without failing the latest update | M3 | 已改写 | `crates/cordis/tests/update.rs::superseded_failure_preserves_latest_target`；Result 与可推进 Clock 检验 S-FBR-11。 |
 | UPD-06 | `update.spec.ts:152` | rejects all waiting updates when the latest load fails | M3 | 已改写 | `crates/cordis/tests/update.rs::concurrent_waiters_receive_latest_failure`；多个 Future 等待者检验 S-FBR-21。 |
 | UPD-07 | `update.spec.ts:188` | stops advancing an outdated async generator and collects its final yield | M3 | 已改写 | `crates/cordis/tests/update.rs::cooperative_step_keeps_final_cleanup_and_stops_continuation`；Context::is_current 步骤替代 async generator，检验 T-LIF-7、T-EFF-4。 |
-| UPD-08 | `update.spec.ts:212` | waits for dependencies and loads only the latest config | M4 | 未开始 | |
+| UPD-08 | `update.spec.ts:212` | waits for dependencies and loads only the latest config | M4 | 已改写 | `crates/cordis/tests/service.rs::upd08_pending_dependency_loads_latest_config`；类型化 ComponentDef 保存最新配置，检验 S-FBR-21、T-COE-4。 |
 | UPD-09 | `update.spec.ts:234` | does not restart when a listener accepts an update during loading | M3 | 已改写 | `crates/cordis/tests/update.rs::accepted_update_during_loading_preserves_current_load`；类型化更新瀑布接管配置，检验 S-FBR-20。 |
 | UPD-10 | `update.spec.ts:259` | does not load a queued config after disposal | M3 | 已改写 | `crates/cordis/tests/update.rs::disposal_prevents_queued_configuration_load`；Clock 推进替代 Promise 门控，检验 S-FBR-16。 |
 
@@ -166,58 +166,58 @@ M0 使用原有清单核对 16 个 spec 文件的 177 条用例；用例实现�
 
 | ID | 上游位置 | 上游用例 | 里程碑 | 状态 | Rust 测试 / 理由 |
 |---|---|---|---|---|---|
-| SVC-01 | `service.spec.ts:7` | pending inject | M4 | 未开始 | |
-| SVC-02 | `service.spec.ts:36` | traceable effect (with inject) | M4 | 未开始 | |
-| SVC-03 | `service.spec.ts:76` | traceable effect (without inject) | M4 | 未开始 | |
-| SVC-04 | `service.spec.ts:109` | compare snapshot | M4 | 未开始 | |
-| SVC-05 | `service.spec.ts:127` | multiple injects | M4 | 未开始 | |
-| SVC-06 | `service.spec.ts:190` | dispose dependents before provider | M4 | 未开始 | |
-| SVC-07 | `service.spec.ts:202` | dispose dependents before provider restarts | M4 | 未开始 | |
-| SVC-08 | `service.spec.ts:216` | dispose dependents before isolated provider | M4 | 未开始 | |
+| SVC-01 | `service.spec.ts:7` | pending inject | M4 | 已改写 | `crates/cordis/tests/service.rs::svc01_provider_initialization_gates_consumers`；Service.init 改为异步组件初始化，检验 S-SVC-3。 |
+| SVC-02 | `service.spec.ts:36` | traceable effect (with inject) | M4 | 已改写 | `crates/cordis/tests/service.rs::svc02_scoped_counter_effect_belongs_to_declaring_consumer`；可追踪代理改为 Scoped.caller 登记真实计数效应，检验 T-CTX-1、DOC-02 §5.3。 |
+| SVC-03 | `service.spec.ts:76` | traceable effect (without inject) | M4 | 已改写 | `crates/cordis/tests/service.rs::svc03_root_access_retains_root_effect_ownership`；显式捕获根 Context 表达根访问与效应归属，检验 S-SVC-8、T-CTX-1。 |
+| SVC-04 | `service.spec.ts:109` | compare snapshot | M4 | 已改写 | `crates/cordis/tests/service.rs::svc04_service_lifecycle_restores_registration_snapshot`；服务组件与自依赖子组件使用类型化登记，比较服务和组件记录数，检验 S-SVC-1、S-SVC-2。 |
+| SVC-05 | `service.spec.ts:127` | multiple injects | M4 | 已改写 | `crates/cordis/tests/service.rs::svc05_multiple_dependencies_and_cycles`；Service 类改为类型化依赖组件，记录实际激活顺序并覆盖依赖环，检验 T-COE-4、T-LIF-10。 |
+| SVC-06 | `service.spec.ts:190` | dispose dependents before provider | M4 | 已改写 | `crates/cordis/tests/service.rs::svc06_svc07_svc08_dependency_cleanup_precedes_provider`；defer_async 表达消费者清理，真实读取已提交服务值，检验 T-COE-6、S-FBR-12。 |
+| SVC-07 | `service.spec.ts:202` | dispose dependents before provider restarts | M4 | 已改写 | `crates/cordis/tests/service.rs::svc06_svc07_svc08_dependency_cleanup_precedes_provider`；同一用例按 restart 分支核验消费者先清理与重新加载，检验 S-FBR-12、S-FBR-18。 |
+| SVC-08 | `service.spec.ts:216` | dispose dependents before isolated provider | M4 | 已改写 | `crates/cordis/tests/service.rs::svc06_svc07_svc08_dependency_cleanup_precedes_provider`；Realm 句柄表达共享隔离标识，检验 S-SVC-5、T-COE-6。 |
 
 ### SVD：`service-dispose.spec.ts`（17 条）
 
 | ID | 上游位置 | 上游用例 | 里程碑 | 状态 | Rust 测试 / 理由 |
 |---|---|---|---|---|---|
-| SVD-01 | `service-dispose.spec.ts:31` | releases an injected binding after providing the same name in another realm (%s) | M4 | 未开始 | |
-| SVD-02 | `service-dispose.spec.ts:48` | waits for a disposing consumer that has already left the registry | M4 | 未开始 | |
-| SVD-03 | `service-dispose.spec.ts:73` | withdraws one binding without waiting for another binding from the same provider | M4 | 未开始 | |
-| SVD-04 | `service-dispose.spec.ts:95` | retains resources during consumer cleanup (%s) | M4 | 未开始 | |
-| SVD-05 | `service-dispose.spec.ts:131` | retains transitive dependencies while a consumer providing another service drains | M4 | 未开始 | |
-| SVD-06 | `service-dispose.spec.ts:156` | retains dependencies through in-flight setup and rollback (failure: %s) | M4 | 未开始 | |
-| SVD-07 | `service-dispose.spec.ts:184` | releases dependencies after a cleanup error | M4 | 未开始 | |
-| SVD-08 | `service-dispose.spec.ts:199` | keeps provider listeners alive through the final consumer event | M4 | 未开始 | |
-| SVD-09 | `service-dispose.spec.ts:214` | allows unrelated providers and sibling effects to clean up concurrently | M4 | 未开始 | |
-| SVD-10 | `service-dispose.spec.ts:238` | supports composed provider effects (owner shutdown: %s) | M4 | 未开始 | |
-| SVD-11 | `service-dispose.spec.ts:271` | keeps an inherited service accessible to a child in a composed effect | M4 | 未开始 | |
-| SVD-12 | `service-dispose.spec.ts:287` | retains an ancestor injection until its child finishes cleanup | M4 | 未开始 | |
-| SVD-13 | `service-dispose.spec.ts:307` | waits for a child that explicitly injects its parent service | M4 | 未开始 | |
-| SVD-14 | `service-dispose.spec.ts:323` | tracks same-name services in separate isolation realms (root shutdown: %s) | M4 | 未开始 | |
-| SVD-15 | `service-dispose.spec.ts:355` | withdraws only the old binding without waiting for the next load | M4 | 未开始 | |
-| SVD-16 | `service-dispose.spec.ts:386` | waits for current and withdrawn bindings during provider disposal (withdrawn first: %s) | M4 | 未开始 | |
-| SVD-17 | `service-dispose.spec.ts:418` | replaces a binding from the same provider during consumer initialization | M4 | 未开始 | |
+| SVD-01 | `service-dispose.spec.ts:31` | releases an injected binding after providing the same name in another realm (%s) | M4 | 已改写 | `crates/cordis/tests/service_dispose.rs::svd01_releases_dependency_after_same_name_in_another_realm`；类型化服务与 Realm 表达同名自供和已提交依赖，覆盖消费者、提供方、根三种释放，检验 S-SVC-6、S-FBR-12。 |
+| SVD-02 | `service-dispose.spec.ts:48` | waits for a disposing consumer that has already left the registry | M4 | 已改写 | `crates/cordis/tests/service_dispose.rs::svd02_withdrawal_waits_for_consumer_after_registry_removal`；真实 Gate 阻塞清理，轮询撤回 Future 核验等待，检验 S-SVC-2 的具体绑定依赖集合。 |
+| SVD-03 | `service-dispose.spec.ts:73` | withdraws one binding without waiting for another binding from the same provider | M4 | 已改写 | `crates/cordis/tests/service_dispose.rs::svd03_withdrawal_waits_for_its_own_binding`；两个键由同一组件提供，分别等待清理，检验 S-SVC-2 的逐绑定撤回。 |
+| SVD-04 | `service-dispose.spec.ts:95` | retains resources during consumer cleanup (%s) | M4 | 已改写 | `crates/cordis/tests/service_dispose.rs::svd04_retains_resources_through_all_shutdown_orders`；原子资源状态与实际读取记录替代 Service 方法 spy，保留五种释放次序，检验 T-COE-6、S-FBR-12。 |
+| SVD-05 | `service-dispose.spec.ts:131` | retains transitive dependencies while a consumer providing another service drains | M4 | 已改写 | `crates/cordis/tests/service_dispose.rs::svd05_retains_transitive_dependencies`；根上下文承载依赖链，真实 Gate 形成传递清理次序，检验 S-FBR-12。 |
+| SVD-06 | `service-dispose.spec.ts:156` | retains dependencies through in-flight setup and rollback (failure: %s) | M4 | 已改写 | `crates/cordis/tests/service_dispose.rs::svd06_retains_dependencies_during_setup_and_rollback`；显式 defer 与 Result 表达在途初始化及失败恢复，覆盖成功和失败两支，检验 S-FBR-9、S-SVC-9。 |
+| SVD-07 | `service-dispose.spec.ts:184` | releases dependencies after a cleanup error | M4 | 已改写 | `crates/cordis/tests/service_dispose.rs::svd07_releases_dependencies_after_cleanup_error`；Result 错误与内核错误记录替代 throw 和日志 spy，检验 S-FBR-12。 |
+| SVD-08 | `service-dispose.spec.ts:199` | keeps provider listeners alive through the final consumer event | M4 | 已改写 | `crates/cordis/tests/service_dispose.rs::svd08_provider_listener_receives_final_consumer_event`；类型化事件记录清理时的最终派发，检验 T-COE-6、S-FBR-12。 |
+| SVD-09 | `service-dispose.spec.ts:214` | allows unrelated providers and sibling effects to clean up concurrently | M4 | 已改写 | `crates/cordis/tests/service_dispose.rs::svd09_independent_providers_and_sibling_effects_drain_concurrently`；实际原子状态同时观测独立提供方和同级效应，检验 S-FBR-13。 |
+| SVD-10 | `service-dispose.spec.ts:238` | supports composed provider effects (owner shutdown: %s) | M4 | 已改写 | `crates/cordis/tests/service_dispose.rs::svd10_composed_provider_effect_retains_resource`；生成器组合改为 EffectScope.adopt，根作为所属上下文，覆盖局部和所属上下文释放，检验 S-EFF-6、S-SVC-2。 |
+| SVD-11 | `service-dispose.spec.ts:271` | keeps an inherited service accessible to a child in a composed effect | M4 | 已改写 | `crates/cordis/tests/service_dispose.rs::svd11_child_in_composed_effect_reads_inherited_provision`；组合效应显式等待子组件释放，检验 S-SVC-2 撤回时的调度让出与继承访问。 |
+| SVD-12 | `service-dispose.spec.ts:287` | retains an ancestor injection until its child finishes cleanup | M4 | 已改写 | `crates/cordis/tests/service_dispose.rs::svd12_ancestor_injection_lives_through_child_cleanup`；子组件通过祖先已提交依赖完成异步清理，检验 S-SVC-6、S-FBR-12。 |
+| SVD-13 | `service-dispose.spec.ts:307` | waits for a child that explicitly injects its parent service | M4 | 已改写 | `crates/cordis/tests/service_dispose.rs::svd13_parent_provider_waits_for_explicit_child_dependency`；子组件显式注入父组件服务，以真实 Gate 核验清理先后，检验 S-FBR-12。 |
+| SVD-14 | `service-dispose.spec.ts:323` | tracks same-name services in separate isolation realms (root shutdown: %s) | M4 | 已改写 | `crates/cordis/tests/service_dispose.rs::svd14_same_name_bindings_in_distinct_realms`；同键不同 Realm 记录独立绑定，覆盖根和提供方释放，检验 T-COE-8、S-FBR-12。 |
+| SVD-15 | `service-dispose.spec.ts:355` | withdraws only the old binding without waiting for the next load | M4 | 已改写 | `crates/cordis/tests/service_dispose.rs::svd15_old_withdrawal_finishes_while_new_load_waits`；两个真实 Gate 分别控制旧清理和新加载，检验 S-SVC-2 的绑定身份等待与 S-SVC-9。 |
+| SVD-16 | `service-dispose.spec.ts:386` | waits for current and withdrawn bindings during provider disposal (withdrawn first: %s) | M4 | 已改写 | `crates/cordis/tests/service_dispose.rs::svd16_provider_waits_for_current_and_retired_bindings`；两个 Gate 交换释放次序，核验当前及已撤回绑定共同保护提供方资源，检验 S-FBR-12。 |
+| SVD-17 | `service-dispose.spec.ts:418` | replaces a binding from the same provider during consumer initialization | M4 | 已改写 | `crates/cordis/tests/service_dispose.rs::svd17_binding_replacement_during_consumer_setup`；真实绑定版本和清理记录表达在途加载取代，检验 S-SVC-9、T-LIF-2。 |
 
 ### RFL：`reflect.spec.ts`（6 条）
 
 | ID | 上游位置 | 上游用例 | 里程碑 | 状态 | Rust 测试 / 理由 |
 |---|---|---|---|---|---|
-| RFL-01 | `reflect.spec.ts:7` | Context.is() | M4 | 未开始 | |
-| RFL-02 | `reflect.spec.ts:13` | access check | M4 | 未开始 | |
-| RFL-03 | `reflect.spec.ts:31` | service injection | M4 | 未开始 | |
-| RFL-04 | `reflect.spec.ts:58` | access error | M4 | 未开始 | |
-| RFL-05 | `reflect.spec.ts:99` | service inject leak | M4 | 未开始 | |
-| RFL-06 | `reflect.spec.ts:109` | does not load a fiber disposed during service notification | M4 | 未开始 | |
+| RFL-01 | `reflect.spec.ts:7` | Context.is() | M4 | 不适用 | Context.is 检验 JavaScript 子类对象的运行时识别；DOC-02 §7 将该入口映射为 Rust Context 类型及 Debug 表示。 |
+| RFL-02 | `reflect.spec.ts:13` | access check | M4 | 已改写 | `crates/cordis/tests/reflect.rs::rfl02_access_and_registration_contracts`；属性写入能力映射为 Provision.set，类型化 get 执行访问中介，检验 S-SVC-1、S-SVC-7、S-SVC-10。 |
+| RFL-03 | `reflect.spec.ts:31` | service injection | M4 | 已改写 | `crates/cordis/tests/reflect.rs::rfl03_service_injection_and_inherited_extension`；属性 mixin 映射为服务键，扩展属性映射为 Context.extend，检验 S-CTX-2、S-SVC-6。 |
+| RFL-04 | `reflect.spec.ts:58` | access error | M4 | 已改写 | `crates/cordis/tests/reflect.rs::rfl04_access_error_retains_call_location`；JavaScript 堆栈帧映射为 track_caller 位置链，检验 A-10、S-SVC-7。 |
+| RFL-05 | `reflect.spec.ts:99` | service inject leak | M4 | 已改写 | `crates/cordis/tests/reflect.rs::rfl05_disposed_injection_reports_inactive_access`；持有已释放上下文后访问类型化服务，检验 S-SVC-7、S-SVC-9。 |
+| RFL-06 | `reflect.spec.ts:109` | does not load a fiber disposed during service notification | M4 | 已改写 | `crates/cordis/tests/reflect.rs::rfl06_disposed_during_notification_keeps_component_unexecuted`；InternalStatus 类型化监听器释放另一个待激活组件，检验 S-SVC-5 与 S-FBR-16。 |
 
 ### ISO：`isolate.spec.ts`（6 条）
 
 | ID | 上游位置 | 上游用例 | 里程碑 | 状态 | Rust 测试 / 理由 |
 |---|---|---|---|---|---|
-| ISO-01 | `isolate.spec.ts:7` | does not expose own provisions across isolation boundaries | M4 | 未开始 | |
-| ISO-02 | `isolate.spec.ts:24` | does not inherit the injected view across isolation boundaries | M4 | 未开始 | |
-| ISO-03 | `isolate.spec.ts:55` | isolated context | M4 | 未开始 | |
-| ISO-04 | `isolate.spec.ts:106` | shared label | M4 | 未开始 | |
-| ISO-05 | `isolate.spec.ts:152` | isolated event | M4 | 未开始 | |
-| ISO-06 | `isolate.spec.ts:172` | keeps own provisions separate from the injected view | M4 | 未开始 | |
+| ISO-01 | `isolate.spec.ts:7` | does not expose own provisions across isolation boundaries | M4 | 已改写 | `crates/cordis/tests/isolate.rs::iso01_own_provisions_follow_their_realm`；类型化键与 Realm 句柄替代属性代理及 Symbol，检验 S-SVC-6、T-COE-7。 |
+| ISO-02 | `isolate.spec.ts:24` | does not inherit the injected view across isolation boundaries | M4 | 已改写 | `crates/cordis/tests/isolate.rs::iso02_explicit_isolation_stops_ancestor_injection`；同域重新派生仍构成隔离边界，检验 S-SVC-6。 |
+| ISO-03 | `isolate.spec.ts:55` | isolated context | M4 | 已改写 | `crates/cordis/tests/isolate.rs::iso03_iso04_independent_and_shared_realms`；独立 Realm 分支核验各域的激活和撤回，检验 T-COE-7、T-COE-8。 |
+| ISO-04 | `isolate.spec.ts:106` | shared label | M4 | 已改写 | `crates/cordis/tests/isolate.rs::iso03_iso04_independent_and_shared_realms`；共享 Realm 分支核验两个消费者共享绑定和撤回，检验 T-COE-8。 |
+| ISO-05 | `isolate.spec.ts:152` | isolated event | M4 | 已改写 | `crates/cordis/tests/isolate.rs::iso05_service_event_filter_uses_isolation_realm`；服务隐式过滤映射为带类型键域判断的 emit_filtered，检验 S-EVT-3。 |
+| ISO-06 | `isolate.spec.ts:172` | keeps own provisions separate from the injected view | M4 | 已改写 | `crates/cordis/tests/isolate.rs::iso06_own_provisions_and_committed_dependency_remain_distinct`；显式 get 区分已提交依赖与两个自供域，检验 S-SVC-6、S-SVC-9。 |
 
 ### ICP：`intercept.spec.ts`（7 条）
 

@@ -2,7 +2,7 @@
 
 use crate::context::Scope;
 use crate::effect::Effect;
-use crate::kernel::{EffectId, FiberId, Kernel, State};
+use crate::kernel::{EffectId, FiberId, ImplId, Kernel, State};
 use crate::list::DisposableList;
 use crate::registry::{self, ComponentDef, ComponentId, Inject, RawConfig};
 use crate::{Context, EffectMeta, Error, Event, Result, SyncKind, Task, WaterfallKind};
@@ -11,6 +11,7 @@ use futures_util::{
     future::{join_all, poll_fn},
 };
 use std::{
+    any::TypeId,
     fmt,
     panic::{AssertUnwindSafe, Location, catch_unwind},
     sync::Arc,
@@ -42,6 +43,9 @@ pub(crate) struct FiberData {
     pub component: Option<ComponentDef>,
     pub config: RawConfig,
     pub inject: Inject,
+    pub bindings: Vec<Option<ImplId>>,
+    pub committed: Vec<(TypeId, ImplId)>,
+    pub provisions: Vec<ImplId>,
     pub revision: u64,
     pub target: Epoch,
     pub running_epoch: Epoch,
@@ -64,6 +68,9 @@ impl FiberData {
             component: None,
             config: Arc::new(()),
             inject: Inject::new(),
+            bindings: Vec::new(),
+            committed: Vec::new(),
+            provisions: Vec::new(),
             revision: 0,
             target: Epoch::Active {
                 revision: 0,
@@ -90,6 +97,7 @@ impl FiberData {
         Self {
             state: FiberState::Pending,
             parent_scope: Some(parent),
+            bindings: vec![None; component.inject.entries.len()],
             inject: component.inject.clone(),
             component: Some(component),
             config,
@@ -391,29 +399,32 @@ pub(crate) fn refresh(kernel: &Arc<Kernel>, id: FiberId) {
                 state.draining = false;
                 return;
             };
-            let Some(data) = state.fibers.get_mut(id) else {
+            let Some(data) = state.fibers.get(id) else {
                 continue;
             };
             if !data.alive && data.scope.is_none() {
                 continue;
             }
             let target = if data.alive {
-                Epoch::Active {
-                    revision: data.revision,
-                    impls: Vec::new(),
-                }
+                crate::reflect::epoch_ids(&state, id).map_or(Epoch::Inactive, |impls| {
+                    Epoch::Active {
+                        revision: data.revision,
+                        impls,
+                    }
+                })
             } else {
                 Epoch::Inactive
             };
             if data.error.is_some() && data.alive {
                 continue;
             }
+            let data = &mut state.fibers[id];
             let old_target = std::mem::replace(&mut data.target, target);
             if data.inertia {
                 continue;
             }
             let old_state = data.state;
-            if data.target == old_target {
+            let action = if data.target == old_target {
                 data.state = data.idle_state();
                 (id, old_state, data.state, None)
             } else {
@@ -428,7 +439,11 @@ pub(crate) fn refresh(kernel: &Arc<Kernel>, id: FiberId) {
                     data.running_epoch = data.target.clone();
                 }
                 (id, old_state, data.state, Some(loading))
+            };
+            if action.3 == Some(true) {
+                crate::reflect::commit_locked(&mut state, id);
             }
+            action
         };
         let (id, old, new, transition) = action;
         status_changed(kernel, id, old, new);
@@ -457,6 +472,9 @@ fn status_changed(kernel: &Arc<Kernel>, id: FiberId, old: FiberState, new: Fiber
     })) {
         kernel.state.lock().errors.push((id, Error::panic(payload)));
     }
+    if old == FiberState::Active || new == FiberState::Active {
+        crate::reflect::status_changed(kernel, id);
+    }
 }
 
 /// T-LIF-4、T-LIF-5、T-LIF-6：迁移结束后串联到最新目标纪元。
@@ -465,17 +483,7 @@ async fn transition_loop(kernel: Arc<Kernel>, id: FiberId, mut loading: bool) {
         let fiber = Fiber::handle(&kernel, id, &kernel.state.lock());
         if loading {
             let epoch = kernel.state.lock().fibers[id].running_epoch.clone();
-            let mut yielded = false;
-            poll_fn(|cx| {
-                if yielded {
-                    Poll::Ready(())
-                } else {
-                    yielded = true;
-                    cx.waker().wake_by_ref();
-                    Poll::Pending
-                }
-            })
-            .await;
+            yield_once().await;
             if kernel.state.lock().fibers[id].target == epoch {
                 let (component, config, location) = {
                     let state = kernel.state.lock();
@@ -510,6 +518,9 @@ async fn transition_loop(kernel: Arc<Kernel>, id: FiberId, mut loading: bool) {
                 }
             }
         } else {
+            crate::reflect::wait_dependents(kernel.clone(), id).await;
+            // S-FBR-12：让已排队的加载推进，再开始顶层效应的清理调用。
+            yield_once().await;
             let effects = {
                 let mut state = kernel.state.lock();
                 let ids = state.fibers[id].effects.take();
@@ -524,6 +535,7 @@ async fn transition_loop(kernel: Arc<Kernel>, id: FiberId, mut loading: bool) {
                     kernel.state.lock().errors.push((id, error));
                 }
             }
+            crate::reflect::release_committed(&kernel, id);
         }
         let (old, new, next, waiters) = {
             let mut state = kernel.state.lock();
@@ -549,7 +561,11 @@ async fn transition_loop(kernel: Arc<Kernel>, id: FiberId, mut loading: bool) {
                 data.state = data.idle_state();
                 std::mem::take(&mut data.waiters)
             };
-            (old, data.state, next, waiters)
+            let outcome = (old, data.state, next, waiters);
+            if next == Some(true) {
+                crate::reflect::commit_locked(&mut state, id);
+            }
+            outcome
         };
         status_changed(&kernel, id, old, new);
         for waiter in waiters {
@@ -563,6 +579,20 @@ async fn transition_loop(kernel: Arc<Kernel>, id: FiberId, mut loading: bool) {
         };
         loading = next;
     }
+}
+
+async fn yield_once() {
+    let mut yielded = false;
+    poll_fn(|cx| {
+        if yielded {
+            Poll::Ready(())
+        } else {
+            yielded = true;
+            cx.waker().wake_by_ref();
+            Poll::Pending
+        }
+    })
+    .await;
 }
 
 pub(crate) fn name_locked(state: &State, mut id: FiberId) -> String {

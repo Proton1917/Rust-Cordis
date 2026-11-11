@@ -1,7 +1,7 @@
 //! 组件定义、配置解析与运行时登记。
 
 use crate::context::{Layer, Scope};
-use crate::fiber::{self, FiberData};
+use crate::fiber::FiberData;
 use crate::kernel::{FiberId, State};
 use crate::{Context, Error, Fiber, Result, ServiceKey, Task};
 use std::{
@@ -335,7 +335,7 @@ impl Context {
         };
         self.kernel.state.lock().fibers[id].lifetime = Some(effect.id);
         fiber.emit_plugin();
-        fiber::refresh(&self.kernel, id);
+        crate::reflect::refresh(&self.kernel, id);
         Ok(fiber)
     }
 

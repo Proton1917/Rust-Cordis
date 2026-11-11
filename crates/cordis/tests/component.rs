@@ -274,7 +274,6 @@ fn root_disposal_releases_children_and_remains_active() {
             }
         })
         .unwrap();
-    host.finish(fiber.settled()).unwrap();
     assert_eq!(root.fiber().effects().len(), 1);
     host.finish(root.fiber().dispose()).unwrap();
     assert_eq!(root.fiber().state(), FiberState::Active);

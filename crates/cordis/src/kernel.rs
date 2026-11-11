@@ -1,10 +1,11 @@
 //! 内核状态、调和队列与宿主接口。
 
 use crate::{
-    Error,
+    Error, Realm,
     effect::EffectData,
     events::Hook,
     fiber::FiberData,
+    reflect::ImplData,
     registry::{ComponentId, RuntimeData},
 };
 use parking_lot::Mutex;
@@ -33,6 +34,7 @@ pub trait Clock: Send + Sync + 'static {
 new_key_type! {
     pub(crate) struct FiberId;
     pub(crate) struct EffectId;
+    pub(crate) struct ImplId;
 }
 
 pub(crate) struct Kernel {
@@ -49,9 +51,17 @@ pub(crate) struct State {
     pub draining: bool,
     pub runtimes: HashMap<ComponentId, RuntimeData>,
     pub errors: Vec<(FiberId, Error)>,
+    pub impls: SlotMap<ImplId, ImplData>,
+    pub store: HashMap<(TypeId, Realm), ImplId>,
+    pub names: HashMap<&'static str, TypeId>,
+    pub impl_counter: u64,
 }
 
 impl Kernel {
+    pub(crate) fn report(&self, fiber: FiberId, error: Error) {
+        self.state.lock().errors.push((fiber, error));
+    }
+
     pub fn new<H: Spawn + Clock>(host: Arc<H>) -> (Arc<Self>, FiberId) {
         let mut fibers = SlotMap::with_key();
         let root = fibers.insert(FiberData::root());
@@ -65,6 +75,10 @@ impl Kernel {
                     draining: false,
                     runtimes: HashMap::new(),
                     errors: Vec::new(),
+                    impls: SlotMap::with_key(),
+                    store: HashMap::new(),
+                    names: HashMap::new(),
+                    impl_counter: 0,
                 }),
                 spawner: host.clone(),
                 clock: host,
