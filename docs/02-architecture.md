@@ -236,7 +236,7 @@ impl Component for Consumer {
     }
     async fn apply(ctx: Context, config: ConsumerConfig) -> Result<()> {   // 效应函数 e
         let db = ctx.get::<Database>()?;
-        ctx.on::<Message>(move |msg| db.insert(msg))?;
+        ctx.on::<Message>(move |msg| { db.insert(msg); None })?;
         Ok(())
     }
 }
@@ -252,13 +252,15 @@ assert_eq!(fiber.state(), FiberState::Disposed);
 ctx.inject(Inject::new().with::<Database>(), |ctx| async move { /* … */ Ok(()) })?;
 
 // ── 事件（S-EVT-*）─────────────────────────────────────────────────
-ctx.on::<Message>(|msg| { /* … */ })?;              // 一次 effect
+ctx.on::<Message>(|msg| { /* … */ None })?;         // 一次 effect
 ctx.emit::<Message>(&msg);
 ```
 
 `use` 是 Rust 关键字，`UPSTREAM` 的 `ctx.use()` 在 Rust 中命名为 `ctx.mount()`。
 
 同步效应体、释放回调分别返回 `Result<()>`；`EffectScope::defer` 与 `adopt` 返回登记结果。`Context::extend<T>(value)` 以类型标识扩展字段，`extension::<T>()` 沿视图链读取最近值。宿主通过 `Spawn::spawn(Task)`、`Clock::now()` 与 `Clock::sleep(Duration)` 接入。
+
+事件通过 `Event::Kind` 选定 `SyncKind`、`AsyncKind` 或 `WaterfallKind`。同步登记使用 `on/once`，异步登记使用 `on_async/once_async`，瀑布登记使用 `on_waterfall/once_waterfall`；后两组同时接收 `EventOptions`。`Next::run` 返回 `Result`，异步瀑布的 `Output` 为 `Task<Result<T>>`。派发签名与过滤参数见 ADR-0006。
 
 ## 7 `UPSTREAM` 到 Rust 的映射
 

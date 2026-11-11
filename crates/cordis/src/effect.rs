@@ -87,6 +87,10 @@ impl Drop for Effect {
 pub struct EffectScope(Effect);
 
 impl EffectScope {
+    pub(crate) fn effect_id(&self) -> EffectId {
+        self.0.id
+    }
+
     /// T-EFF-3：登记本步骤交回的逆变换。
     pub fn defer<F>(&self, cleanup: F) -> Result
     where

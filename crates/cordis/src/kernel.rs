@@ -1,9 +1,9 @@
 //! 内核状态、调和队列与宿主接口。
 
-use crate::{effect::EffectData, fiber::FiberData};
+use crate::{effect::EffectData, events::Hook, fiber::FiberData};
 use parking_lot::Mutex;
 use slotmap::{SlotMap, new_key_type};
-use std::{future::Future, pin::Pin, sync::Arc, time::Duration};
+use std::{any::TypeId, collections::HashMap, future::Future, pin::Pin, sync::Arc, time::Duration};
 
 pub type Task<T = ()> = Pin<Box<dyn Future<Output = T> + Send + 'static>>;
 
@@ -31,6 +31,7 @@ pub(crate) struct Kernel {
 pub(crate) struct State {
     pub fibers: SlotMap<FiberId, FiberData>,
     pub effects: SlotMap<EffectId, EffectData>,
+    pub hooks: HashMap<TypeId, Vec<Arc<Hook>>>,
 }
 
 impl Kernel {
@@ -42,6 +43,7 @@ impl Kernel {
                 state: Mutex::new(State {
                     fibers,
                     effects: SlotMap::with_key(),
+                    hooks: HashMap::new(),
                 }),
                 spawner: host.clone(),
                 clock: host,

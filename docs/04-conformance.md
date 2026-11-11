@@ -54,7 +54,7 @@ M0 使用原有清单核对 16 个 spec 文件的 177 条用例；用例实现�
 |---|---|---|---|---|---|
 | DSP-01 | `dispose.spec.ts:7` | dispose by component | M3 | 未开始 | |
 | DSP-02 | `dispose.spec.ts:23` | dispose manually | M1 | 已移植 | `crates/cordis/tests/dispose.rs::dispose_manually` |
-| DSP-03 | `dispose.spec.ts:37` | yield dispose | M1 | 已改写 | `crates/cordis/tests/dispose.rs::yield_dispose`；生成器交回释放函数改为 defer/adopt；监听器登记改为合法空效应，检验 S-EFF-3、S-EFF-6、S-EFF-7 的归属、元信息与逆序组合；事件表行为归 M2。 |
+| DSP-03 | `dispose.spec.ts:37` | yield dispose | M1 | 已改写 | `crates/cordis/tests/dispose.rs::yield_dispose`；生成器交回释放函数改为 defer/adopt，检验 S-EFF-3、S-EFF-6、S-EFF-7 的归属、元信息与逆序组合；使用类型化事件登记监听器。 |
 | DSP-04 | `dispose.spec.ts:76` | async return 1 | M3 | 未开始 | |
 | DSP-05 | `dispose.spec.ts:90` | async return 2 | M3 | 未开始 | |
 | DSP-06 | `dispose.spec.ts:103` | async yield 1 | M3 | 未开始 | |
@@ -72,33 +72,33 @@ M0 使用原有清单核对 16 个 spec 文件的 177 条用例；用例实现�
 
 | ID | 上游位置 | 上游用例 | 里程碑 | 状态 | Rust 测试 / 理由 |
 |---|---|---|---|---|---|
-| EVT-01 | `events.spec.ts:18` | deprecated dispatch returns bound callbacks that respect later removal | M2 | 未开始 | |
-| EVT-02 | `events.spec.ts:35` | deprecated waterfall dispatch continues past a removed callback | M2 | 未开始 | |
-| EVT-03 | `events.spec.ts:49` | supports symbol event names across dispatch modes | M2 | 未开始 | |
-| EVT-04 | `events.spec.ts:66` | supports symbol event names with ctx.once() | M2 | 未开始 | |
-| EVT-05 | `events.spec.ts:77` | treats prototype property names as ordinary events | M2 | 未开始 | |
-| EVT-06 | `events.spec.ts:96` | removes empty event buckets after disposal | M2 | 未开始 | |
-| EVT-07 | `events.spec.ts:108` | ctx.on() | M2 | 未开始 | |
-| EVT-08 | `events.spec.ts:121` | ctx.once() | M2 | 未开始 | |
-| EVT-09 | `events.spec.ts:134` | ctx.once() runs once when an earlier listener emits recursively | M2 | 未开始 | |
-| EVT-10 | `events.spec.ts:149` | ctx.once() runs once across concurrent serial dispatches | M2 | 未开始 | |
-| EVT-11 | `events.spec.ts:163` | %s skips listeners removed during dispatch | M2 | 未开始 | |
-| EVT-12 | `events.spec.ts:177` | %s defers added listeners until the next dispatch | M2 | 未开始 | |
+| EVT-01 | `events.spec.ts:18` | deprecated dispatch returns bound callbacks that respect later removal | M2 | 已改写 | `crates/cordis/tests/events.rs::all_modes_skip_removed_listeners`；旧 dispatch 回调数组改为派发快照，检验 S-EVT-2。 |
+| EVT-02 | `events.spec.ts:35` | deprecated waterfall dispatch continues past a removed callback | M2 | 已改写 | `crates/cordis/tests/events.rs::waterfall_skips_removed_listener`；旧 dispatch 回调数组改为瀑布快照，检验 S-EVT-8。 |
+| EVT-03 | `events.spec.ts:49` | supports symbol event names across dispatch modes | M2 | 已改写 | `crates/cordis/tests/events.rs::typed_keys_across_dispatch_modes`；Symbol 改为类型键，跨派发族分别使用同步与异步键，检验 S-EVT-1、S-EVT-4–S-EVT-7。 |
+| EVT-04 | `events.spec.ts:66` | supports symbol event names with ctx.once() | M2 | 已改写 | `crates/cordis/tests/events.rs::once_and_explicit_disposal`；Symbol 改为类型键，检验 S-EVT-9。 |
+| EVT-05 | `events.spec.ts:77` | treats prototype property names as ordinary events | M2 | 不适用 | 用例检验 JavaScript 对象原型属性污染；DOC-02 §7 规定 Rust 事件由类型 E 标识。 |
+| EVT-06 | `events.spec.ts:96` | removes empty event buckets after disposal | M2 | 已改写 | `crates/cordis/tests/events.rs::empty_buckets_are_removed`；Symbol 与 Reflect.has 改为类型键与事件表计数，检验 S-EVT-1。 |
+| EVT-07 | `events.spec.ts:108` | ctx.on() | M2 | 已移植 | `crates/cordis/tests/events.rs::on_and_explicit_disposal` |
+| EVT-08 | `events.spec.ts:121` | ctx.once() | M2 | 已移植 | `crates/cordis/tests/events.rs::once_and_explicit_disposal` |
+| EVT-09 | `events.spec.ts:134` | ctx.once() runs once when an earlier listener emits recursively | M2 | 已移植 | `crates/cordis/tests/events.rs::once_is_consumed_by_recursive_dispatch` |
+| EVT-10 | `events.spec.ts:149` | ctx.once() runs once across concurrent serial dispatches | M2 | 已改写 | `crates/cordis/tests/events.rs::once_across_concurrent_serial_dispatches`；Promise 屏障改为确定性 Clock 等待，检验 S-EVT-9。 |
+| EVT-11 | `events.spec.ts:163` | %s skips listeners removed during dispatch | M2 | 已改写 | `crates/cordis/tests/events.rs::all_modes_skip_removed_listeners`；四种派发分别使用同步与异步事件族，检验 S-EVT-2。 |
+| EVT-12 | `events.spec.ts:177` | %s defers added listeners until the next dispatch | M2 | 已改写 | `crates/cordis/tests/events.rs::all_modes_defer_added_listeners`；四种派发分别使用同步与异步事件族，检验 S-EVT-2。 |
 | EVT-13 | `events.spec.ts:188` | skips a listener disposed by an earlier component during dispatch | M3 | 未开始 | |
-| EVT-14 | `events.spec.ts:200` | waterfall continues past a removed listener | M2 | 未开始 | |
-| EVT-15 | `events.spec.ts:219` | waterfall defers added listeners until the next dispatch | M2 | 未开始 | |
-| EVT-16 | `events.spec.ts:233` | waterfall continues after a recursive dispatch has consumed a once listener | M2 | 未开始 | |
+| EVT-14 | `events.spec.ts:200` | waterfall continues past a removed listener | M2 | 已移植 | `crates/cordis/tests/events.rs::waterfall_skips_removed_listener` |
+| EVT-15 | `events.spec.ts:219` | waterfall defers added listeners until the next dispatch | M2 | 已移植 | `crates/cordis/tests/events.rs::waterfall_defers_added_listener` |
+| EVT-16 | `events.spec.ts:233` | waterfall continues after a recursive dispatch has consumed a once listener | M2 | 已移植 | `crates/cordis/tests/events.rs::waterfall_recursion_consumes_once` |
 | EVT-17 | `events.spec.ts:251` | internal/update continues past a removed fiber listener | M3 | 未开始 | |
-| EVT-18 | `events.spec.ts:280` | ctx.parallel() | M2 | 未开始 | |
-| EVT-19 | `events.spec.ts:311` | ctx.parallel() labels symbol events | M2 | 未开始 | |
-| EVT-20 | `events.spec.ts:322` | ctx.emit() | M2 | 未开始 | |
-| EVT-21 | `events.spec.ts:341` | ctx.serial() | M2 | 未开始 | |
-| EVT-22 | `events.spec.ts:360` | ctx.bail() | M2 | 未开始 | |
-| EVT-23 | `events.spec.ts:379` | ctx.waterfall() | M2 | 未开始 | |
-| EVT-24 | `events.spec.ts:407` | ctx.waterfall() rejects duplicate next() | M2 | 未开始 | |
-| EVT-25 | `events.spec.ts:421` | ctx.waterfall() rejects continuations from outer frames | M2 | 未开始 | |
-| EVT-26 | `events.spec.ts:442` | ctx.waterfall() rejects duplicate next() after awaiting | M2 | 未开始 | |
-| EVT-27 | `events.spec.ts:455` | ctx.waterfall() supports nested async calls | M2 | 未开始 | |
+| EVT-18 | `events.spec.ts:280` | ctx.parallel() | M2 | 已改写 | `crates/cordis/tests/events.rs::parallel_filters_and_aggregates_errors`；this 过滤改为 Context 过滤、throw 改为 Err、定时器改为 Clock，检验 S-EVT-3、S-EVT-5。 |
+| EVT-19 | `events.spec.ts:311` | ctx.parallel() labels symbol events | M2 | 已改写 | `crates/cordis/tests/events.rs::parallel_labels_typed_event`；Symbol 标签改为 Event::NAME，检验 S-EVT-5。 |
+| EVT-20 | `events.spec.ts:322` | ctx.emit() | M2 | 已改写 | `crates/cordis/tests/events.rs::synchronous_filters_and_panic_propagation`；this 过滤改为 Context 过滤，调用方接收 panic，检验 S-EVT-3、S-EVT-4、A-9。 |
+| EVT-21 | `events.spec.ts:341` | ctx.serial() | M2 | 已改写 | `crates/cordis/tests/events.rs::serial_filtering_errors_and_bail_result`；this 过滤改为 Context 过滤、异常改为 Err，检验 S-EVT-3、S-EVT-7。 |
+| EVT-22 | `events.spec.ts:360` | ctx.bail() | M2 | 已改写 | `crates/cordis/tests/events.rs::synchronous_filters_and_panic_propagation`；this 过滤改为 Context 过滤，调用方接收 panic，检验 S-EVT-3、S-EVT-6、A-9。 |
+| EVT-23 | `events.spec.ts:379` | ctx.waterfall() | M2 | 已移植 | `crates/cordis/tests/events.rs::waterfall_nesting_and_short_circuit` |
+| EVT-24 | `events.spec.ts:407` | ctx.waterfall() rejects duplicate next() | M2 | 已改写 | `crates/cordis/tests/events.rs::waterfall_rejects_duplicate_next`；重复调用异常改为 Result 错误，检验 S-EVT-8。 |
+| EVT-25 | `events.spec.ts:421` | ctx.waterfall() rejects continuations from outer frames | M2 | 已改写 | `crates/cordis/tests/events.rs::waterfall_rejects_outer_continuation`；共享 Next 句柄承载延续并返回 Result 错误，检验 S-EVT-8。 |
+| EVT-26 | `events.spec.ts:442` | ctx.waterfall() rejects duplicate next() after awaiting | M2 | 已改写 | `crates/cordis/tests/events.rs::waterfall_rejects_duplicate_after_await`；Task 返回值与 Result 错误表达异步延续，检验 S-EVT-8。 |
+| EVT-27 | `events.spec.ts:455` | ctx.waterfall() supports nested async calls | M2 | 已改写 | `crates/cordis/tests/events.rs::waterfall_supports_nested_async_calls`；异步瀑布返回 Task<Result>，检验 S-EVT-8。 |
 | EVT-28 | `events.spec.ts:473` | does not accumulate across reloads | M3 | 未开始 | |
 | EVT-29 | `events.spec.ts:490` | can be disposed explicitly | M3 | 未开始 | |
 | EVT-30 | `events.spec.ts:507` | runs prepended listeners first | M3 | 未开始 | |

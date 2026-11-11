@@ -1,6 +1,14 @@
-use cordis::{Context, EffectMeta, Error};
+use cordis::{Context, EffectMeta, Error, Event, SyncKind};
 use cordis_testkit::TestExecutor;
 use std::sync::{Arc, Mutex};
+
+struct Subscription;
+impl Event for Subscription {
+    const NAME: &'static str = "custom-event";
+    type Args = ();
+    type Output = ();
+    type Kind = SyncKind;
+}
 
 fn meta(label: &str, children: Vec<EffectMeta>) -> EffectMeta {
     EffectMeta {
@@ -48,7 +56,7 @@ fn yield_dispose() {
                 a.lock().unwrap().push(1);
                 Ok(())
             })?;
-            fx.adopt(ctx.effect("subscription", |_| Ok(()))?)?;
+            fx.adopt(ctx.on::<Subscription>(|_| None)?)?;
             let b = seq.clone();
             fx.defer(move || {
                 b.lock().unwrap().push(2);
@@ -56,7 +64,7 @@ fn yield_dispose() {
             })?;
             let inner = ctx.clone();
             fx.adopt(ctx.effect("anonymous", move |child| {
-                child.adopt(inner.effect("subscription", |_| Ok(()))?)?;
+                child.adopt(inner.on::<Subscription>(|_| None)?)?;
                 child.defer(move || {
                     seq.lock().unwrap().push(3);
                     Ok(())
@@ -64,27 +72,30 @@ fn yield_dispose() {
             })?)
         })
         .unwrap();
-    root.effect("subscription", |_| Ok(())).unwrap();
+    root.on::<Subscription>(|_| None).unwrap();
     assert_eq!(
         root.fiber().effects(),
         [
             meta(
                 "anonymous",
                 vec![
-                    meta("subscription", vec![]),
-                    meta("anonymous", vec![meta("subscription", vec![])])
+                    meta("ctx.on(\"custom-event\")", vec![]),
+                    meta("anonymous", vec![meta("ctx.on(\"custom-event\")", vec![])])
                 ]
             ),
-            meta("subscription", vec![])
+            meta("ctx.on(\"custom-event\")", vec![])
         ]
     );
     assert!(values.lock().unwrap().is_empty());
+    assert_eq!(root.listener_count::<Subscription>(), 3);
     host.finish(effect.dispose()).unwrap();
     assert_eq!(*values.lock().unwrap(), [3, 2, 1]);
+    assert_eq!(root.listener_count::<Subscription>(), 1);
     host.finish(effect.dispose()).unwrap();
     assert_eq!(*values.lock().unwrap(), [3, 2, 1]);
     host.finish(root.fiber().dispose()).unwrap();
     assert!(root.fiber().effects().is_empty());
+    assert_eq!(root.listener_count::<Subscription>(), 0);
 }
 
 // DSP-11：失败经 Result 返回，保持登记位置和原状态。
