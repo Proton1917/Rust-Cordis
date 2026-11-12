@@ -519,84 +519,103 @@ pub(crate) fn enqueue_locked(state: &mut State, id: FiberId) {
     }
 }
 
-/// T-LIF-3、A-5：唯一调和者消费队列，动作沿用队列持有的上下文租约。
-pub(crate) fn drain(kernel: &Arc<Kernel>) {
-    {
-        let mut state = kernel.state.lock();
-        if state.draining {
-            return;
-        }
-        state.draining = true;
+struct DrainGuard<'a> {
+    kernel: &'a Kernel,
+}
+
+impl Drop for DrainGuard<'_> {
+    fn drop(&mut self) {
+        self.kernel.state.lock().draining = false;
     }
+}
+
+/// T-LIF-3、A-5：唯一调和者消费队列，动作沿用队列持有的上下文租约。
+/// 守卫在队列锁释放后交还调和权；panic 后残留请求由下一次 refresh/drain 接续。
+/// 正常路径在守卫释放后再次争取调和权，接续退出窗口内的新请求。
+pub(crate) fn drain(kernel: &Arc<Kernel>) {
     loop {
-        let action = {
+        {
             let mut state = kernel.state.lock();
-            let Some(scope) = state.dirty.pop_front() else {
-                state.draining = false;
+            if state.draining || state.dirty.is_empty() {
                 return;
-            };
-            let id = scope.fiber;
-            let fiber = Fiber {
-                kernel: kernel.clone(),
-                id,
-                scope,
-            };
-            let data = &state.fibers[id];
-            let target = if data.error.is_some() && data.alive {
-                data.target.clone()
-            } else if data.alive {
-                crate::reflect::epoch_ids(&state, id).map_or(Epoch::Inactive, |impls| {
-                    Epoch::Active {
-                        revision: data.revision,
-                        impls,
-                    }
-                })
-            } else {
-                Epoch::Inactive
-            };
-            let data = &mut state.fibers[id];
-            data.queued = false;
-            let old_target = std::mem::replace(&mut data.target, target);
-            let old_state = data.state;
-            let transition = if data.inertia || data.suspended.is_some() {
-                None
-            } else if data.target == old_target {
-                data.state = data.idle_state();
-                None
-            } else {
-                let loading = old_target == Epoch::Inactive && data.target != Epoch::Inactive;
-                data.inertia = true;
-                data.state = if loading {
-                    FiberState::Loading
-                } else {
-                    FiberState::Unloading
-                };
-                if loading {
-                    data.running_epoch = data.target.clone();
-                }
-                Some(loading)
-            };
-            let new_state = data.state;
-            if old_state != new_state {
-                data.notifications += 1;
             }
-            if transition == Some(true) {
-                crate::reflect::commit_locked(&mut state, id);
-            }
-            (fiber, old_state, new_state, transition)
-        };
-        let (fiber, old, new, transition) = action;
-        status_changed(&fiber, old, new);
-        if let Some(loading) = transition {
-            let task_fiber = fiber.clone();
-            let task = Box::pin(async move {
-                transition_loop(task_fiber, loading).await;
-            });
-            submit_transition(&fiber, task, loading);
-        } else if new == FiberState::Disposed {
-            release_record(&fiber);
+            state.draining = true;
         }
-        wake_stable(&fiber);
+        let guard = DrainGuard { kernel };
+        loop {
+            let action = {
+                let mut state = kernel.state.lock();
+                #[cfg(test)]
+                if std::mem::take(&mut state.panic_on_drain) {
+                    panic!("injected internal drain panic");
+                }
+                let Some(scope) = state.dirty.pop_front() else {
+                    break;
+                };
+                let id = scope.fiber;
+                let fiber = Fiber {
+                    kernel: kernel.clone(),
+                    id,
+                    scope,
+                };
+                let data = &state.fibers[id];
+                let target = if data.error.is_some() && data.alive {
+                    data.target.clone()
+                } else if data.alive {
+                    crate::reflect::epoch_ids(&state, id).map_or(Epoch::Inactive, |impls| {
+                        Epoch::Active {
+                            revision: data.revision,
+                            impls,
+                        }
+                    })
+                } else {
+                    Epoch::Inactive
+                };
+                let data = &mut state.fibers[id];
+                data.queued = false;
+                let old_target = std::mem::replace(&mut data.target, target);
+                let old_state = data.state;
+                let transition = if data.inertia || data.suspended.is_some() {
+                    None
+                } else if data.target == old_target {
+                    data.state = data.idle_state();
+                    None
+                } else {
+                    let loading = old_target == Epoch::Inactive && data.target != Epoch::Inactive;
+                    data.inertia = true;
+                    data.state = if loading {
+                        FiberState::Loading
+                    } else {
+                        FiberState::Unloading
+                    };
+                    if loading {
+                        data.running_epoch = data.target.clone();
+                    }
+                    Some(loading)
+                };
+                let new_state = data.state;
+                if old_state != new_state {
+                    data.notifications += 1;
+                }
+                if transition == Some(true) {
+                    crate::reflect::commit_locked(&mut state, id);
+                }
+                (fiber, old_state, new_state, transition)
+            };
+            let (fiber, old, new, transition) = action;
+            status_changed(&fiber, old, new);
+            if let Some(loading) = transition {
+                let task_fiber = fiber.clone();
+                let task = Box::pin(async move {
+                    transition_loop(task_fiber, loading).await;
+                });
+                submit_transition(&fiber, task, loading);
+            } else if new == FiberState::Disposed {
+                release_record(&fiber);
+            }
+            wake_stable(&fiber);
+        }
+        drop(guard);
     }
 }
 
@@ -944,5 +963,73 @@ pub(crate) fn resume_cleanup(kernel: &Arc<Kernel>, id: FiberId) {
     }
     for effect in effects {
         effect.resume_cleanup();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{Clock, Spawn};
+    use std::{
+        sync::atomic::{AtomicUsize, Ordering},
+        time::{Duration, Instant},
+    };
+
+    struct Host(Instant);
+
+    impl Spawn for Host {
+        fn spawn(&self, task: Task) {
+            tokio::spawn(task);
+        }
+    }
+
+    impl Clock for Host {
+        fn now(&self) -> Duration {
+            self.0.elapsed()
+        }
+
+        fn sleep(&self, duration: Duration) -> Task {
+            Box::pin(tokio::time::sleep(duration))
+        }
+    }
+
+    // A-5：内部 panic 交还调和权，后续请求接续原有队列。
+    #[tokio::test(flavor = "current_thread")]
+    async fn drain_panic_releases_ownership_and_resumes_restart() {
+        let root = Context::new(Arc::new(Host(Instant::now())));
+        let applied = Arc::new(AtomicUsize::new(0));
+        let observed = applied.clone();
+        let fiber = root
+            .inject(Inject::new(), move |_| {
+                let observed = observed.clone();
+                async move {
+                    observed.fetch_add(1, Ordering::SeqCst);
+                    Ok(())
+                }
+            })
+            .unwrap();
+        fiber.settled().await.unwrap();
+        root.kernel.state.lock().panic_on_drain = true;
+
+        let failure = catch_unwind(AssertUnwindSafe(|| drop(fiber.restart())));
+        assert!(failure.is_err());
+        {
+            let state = root.kernel.state.lock();
+            assert!(!state.draining);
+            assert!(state.fibers[fiber.id].queued);
+            assert_eq!(state.dirty.len(), 1);
+        }
+        assert_eq!(applied.load(Ordering::SeqCst), 1);
+
+        let restarted = fiber.restart();
+        let settled = fiber.settled();
+        let (restarted, settled) = tokio::join!(restarted, settled);
+        restarted.unwrap();
+        settled.unwrap();
+        assert_eq!(applied.load(Ordering::SeqCst), 2);
+        assert_eq!(fiber.state(), FiberState::Active);
+        assert!(fiber.is_settled());
+        assert!(!root.kernel.state.lock().draining);
+        root.fiber().dispose().await.unwrap();
     }
 }

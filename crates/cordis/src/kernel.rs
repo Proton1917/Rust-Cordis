@@ -62,6 +62,8 @@ pub(crate) struct State {
     pub hooks: HashMap<TypeId, Vec<Arc<Hook>>>,
     pub dirty: VecDeque<Arc<Scope>>,
     pub draining: bool,
+    #[cfg(test)]
+    pub panic_on_drain: bool,
     pub runtimes: HashMap<ComponentId, RuntimeData>,
     pub logger: LoggerState,
     pub aliases: HashMap<ComponentId, ComponentDef>,
@@ -129,6 +131,8 @@ impl Kernel {
                     hooks: HashMap::new(),
                     dirty: VecDeque::new(),
                     draining: false,
+                    #[cfg(test)]
+                    panic_on_drain: false,
                     runtimes: HashMap::new(),
                     logger: LoggerState::default(),
                     aliases: HashMap::new(),
