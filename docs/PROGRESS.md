@@ -239,7 +239,8 @@
 - Y-8：内核 5101 行、testkit 181 行、ABI 2595 行、SDK 738 行、宏 1232 行、UP/1 1508 行、supervisor 3664 行。UP/1 高于 1500 行目标 8 行；supervisor 的目标与上限按 ADR-0026 为 3500/4500，当前所有 crate 均在上限内。
 - Y-9：DOC-10–16、ADR-0009/0017 已按最新设计同步，新增 ADR-0023–0027；设计方的 AGENTS、CLAUDE 与 explainer 文件随本提交保存。
 - Y-10：提交主题 `M10: 实现 UP/1 与唯一核心的进程监管`，推送至 origin/main。
-- CP-9：up1_decoder 在 09:15:28–09:45:29 UTC 执行 1801 秒，632926 次输入，退出 0；最终 cov 2195、ft 5906、RSS 742MiB。命令、过程与退出确认见 target/up-m10/fuzz/result.md。配置、清单与状态读取的对应 fuzz 随 M12 产品路径验收。
+- CP-9 正式提交复核：从已推送的 98394f9 导出隔离源码，直接构建其中 crates/cordis-up/fuzz 工程的 up1_decoder 目标；固定 max_total_time=1800，实际执行 1801 秒、1203602 次输入，退出 0，cov 2369、ft 6838、RSS 747MiB。完整输出在 target/m10-review/fuzz.log，源文件位于 target/m10-review/source/crates/cordis-up。命令为 `RUSTUP_TOOLCHAIN=nightly TMPDIR="$PWD/target/tmp" target/tools/bin/cargo-fuzz run --fuzz-dir target/m10-review/source/crates/cordis-up/fuzz --target-dir target/m10-review/fuzz-build up1_decoder "$PWD/target/up-m10/fuzz/corpus/up1_decoder" -- -max_total_time=1800 -timeout=2 -rss_limit_mb=2048 -max_len=16777216 -artifact_prefix="$PWD/target/m10-review/fuzz-artifacts/"`。此前 632926 次/1801 秒为候选实现证据，保留在 target/up-m10/fuzz/result.md。配置、清单和状态读取的 fuzz 随 M12 产品路径验收。
+- 偶发失败复核：98394f9 隔离副本连续运行 cargo test -p cordis-supervisor 共 30 轮，全部退出 0；第 21–30 轮并发执行 cargo test -p cordis --release，共 136 次 release 运行全部成功。逐轮结果在 target/m10-review/stability/results.json，完整日志按 round 编号保留。本轮未复现评审所见的一次失败，现有证据不足以确定该次用例名及原因；既定 30 轮结束后停止追加轮次。
 - 真实行为：核心统一决定依赖与清理顺序；事件回调可通过同连接调用服务；失败替换恢复旧状态；取消等待保持事务完成；SIGKILL 后撤回服务并继承最近快照；五次指数退避后停止重启；额度释放后继续登记。前端转发与派生组合按 DOC-15 保留对应阶段范围。
 - 资源回收：ADR-0027 使用安全 waitid 的 NOWAIT 观察，单一任务在保有 PID 时发送组信号，再由 Child.wait 唯一回收。自然退出、SIGKILL 及存活后代清理均通过；僵尸组 EPERM 在回收后以只读组查询确认为空。
 - 遗留：M11 基础宿主候选及 M12 前置解析候选继续按下表接入，构建缓存保留。
