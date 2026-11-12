@@ -3,7 +3,7 @@ use std::{
     collections::HashMap,
     mem::size_of,
     sync::{
-        Mutex, OnceLock,
+        Arc, Mutex, OnceLock,
         atomic::{AtomicU64, Ordering},
     },
 };
@@ -18,6 +18,12 @@ pub struct Counts {
 static NEXT_LIBRARY: AtomicU64 = AtomicU64::new(1);
 static LIBRARIES: OnceLock<Mutex<HashMap<LibraryId, Counts>>> = OnceLock::new();
 static MESSAGES: OnceLock<Mutex<Vec<(u32, String)>>> = OnceLock::new();
+static NEXT_RESOURCE: AtomicU64 = AtomicU64::new(1);
+static RESOURCES: OnceLock<Mutex<HashMap<u64, Arc<Object>>>> = OnceLock::new();
+
+fn resources() -> &'static Mutex<HashMap<u64, Arc<Object>>> {
+    RESOURCES.get_or_init(|| Mutex::new(HashMap::new()))
+}
 
 fn libraries() -> &'static Mutex<HashMap<LibraryId, Counts>> {
     LIBRARIES.get_or_init(|| Mutex::new(HashMap::new()))
@@ -82,6 +88,9 @@ pub static HOST: HostV1 = HostV1 {
     lease_release,
     effect_settled: effect_future,
     effect_dispose: effect_future,
+    object_export,
+    object_import,
+    object_release,
 };
 
 // SAFETY: DOC-12 §9，message是调用期借用，err为可写槽。
@@ -253,6 +262,51 @@ unsafe extern "C" fn lease_release(library: LibraryId, err: *mut AbiError) -> Ab
                 .checked_sub(1)
                 .ok_or_else(|| Error::new(2, "lease already released"))?;
             entry.released += 1;
+            Ok(())
+        })
+    }
+}
+
+// SAFETY: DOC-12 §5、§9，调用转交一个拥有对象，out与err为有效输出槽。
+unsafe extern "C" fn object_export(raw: AbiObject, out: *mut u64, err: *mut AbiError) -> AbiStatus {
+    // SAFETY: DOC-12 §5、§9，资源表取得源侧对象和租约，编号由宿主分配。
+    unsafe {
+        boundary(host_environment(), out, err, || {
+            let object = Object::from_raw(raw, host_environment());
+            let id = NEXT_RESOURCE.fetch_add(1, Ordering::Relaxed);
+            resources().lock().unwrap().insert(id, Arc::new(object));
+            Ok(id)
+        })
+    }
+}
+
+// SAFETY: DOC-12 §9，out与err为有效输出槽，资源编号由宿主查表。
+unsafe extern "C" fn object_import(id: u64, out: *mut AbiObject, err: *mut AbiError) -> AbiStatus {
+    // SAFETY: DOC-12 §7、§9，锁外clone产生独立拥有对象。
+    unsafe {
+        boundary(host_environment(), out, err, || {
+            let object = resources()
+                .lock()
+                .unwrap()
+                .get(&id)
+                .cloned()
+                .ok_or_else(|| Error::new(4, "resource has been released"))?;
+            object.try_clone().map(Object::into_raw)
+        })
+    }
+}
+
+// SAFETY: DOC-12 §9，err为有效错误槽，资源表记录在锁外释放。
+unsafe extern "C" fn object_release(id: u64, err: *mut AbiError) -> AbiStatus {
+    // SAFETY: DOC-12 §5、§9，移出对象后交回资源表持有的一份引用。
+    unsafe {
+        boundary_unit(host_environment(), err, || {
+            let object = resources()
+                .lock()
+                .unwrap()
+                .remove(&id)
+                .ok_or_else(|| Error::new(4, "resource has been released"))?;
+            drop(object);
             Ok(())
         })
     }

@@ -3,15 +3,17 @@
 | 项 | 内容 |
 |---|---|
 | 文档编号 | `DOC-12` |
-| 状态 | 已冻结 v1.0（2026-11-12）；后续兼容规则见 §12 |
+| 状态 | 候选 v1.0（2026-11-12）；M11 的真实跨库测试通过后冻结，见 DOC-15 §6.2 |
 | 读者 | 实现者；为其他语言编写插件绑定的人 |
-| 输入 | `DOC-10` 公理 `Q3`、`Q4`、`Q8`；`DOC-11` 的插件模型；`ADR-0010`、`ADR-0012` |
+| 输入 | `DOC-15` 公理 `Q0`；`DOC-10` 的 `Q3`、`Q4`；`DOC-11` 的插件模型；`ADR-0010`、`ADR-0012`、`ADR-0018`、`ADR-0019` |
 | 输出 | 平台约定、入口与握手、基本类型布局、所有权规则、错误与 panic 规则、对象与虚表、异步约定、宿主虚表、插件描述符、租约、兼容规则 |
 | 不包含 | 插件作者使用的 Rust 接口（`DOC-13` §4）；装载器内部实现 |
 
 本文是规范性文档。`crates/cordis-abi` 是它的 Rust 实现，`docs/abi/v1-layout.txt` 是由测试生成的布局记录，三者必须一致（`DOC-14` 退出条件 `Y-7`）。
 
 ## 1 设计依据
+
+ABI v1 连接同一 `cordis-host` 进程中的宿主与原生插件，以及组内的原生插件。核心 `cordis` 的插件边界为 `UP/1` 消息；ABI 类型、库装载和插件函数指针均留在插件宿主进程。本文中的宿主指 `cordis-host`。
 
 | 要求 | 来源 | 本文的对应做法 |
 |---|---|---|
@@ -44,8 +46,8 @@
 
 握手顺序：
 
-1. 装载器读取 `CORDIS_PLUGIN_ABI`。值不在核心支持的主版本集合内时，关闭库并报错，不调用任何插件代码。
-2. 调用 `cordis_plugin_v1`，传入宿主虚表和装载器为该库分配的 `LibraryId`。插件保存二者（宿主虚表在核心进程生命期内有效），写出描述符指针。
+1. `cordis-host` 的装载器读取 `CORDIS_PLUGIN_ABI`，按宿主支持的 ABI 主版本集合完成版本检查，通过后调用入口。
+2. 调用 `cordis_plugin_v1`，传入宿主虚表和装载器为该库分配的 `LibraryId`。插件保存二者（宿主虚表在插件宿主进程生命期内有效），写出描述符指针。
 3. 装载器校验描述符（§10）。校验失败时调用描述符的 `release` 并报错。
 4. 描述符在装载器调用 `release` 之前保持有效。
 
@@ -60,7 +62,7 @@
 | `AbiStatus` | `u32`：`0` 成功，`1` 失败（错误写入调用方提供的 `*mut AbiError`），`2` 被调用侧发生 panic（错误同样写出） | 每个可失败函数的返回值 |
 | `AbiStr` | `ptr: *const u8, len: u64` | 借用的字符串，仅在调用期间有效 |
 | `AbiBytes` | `ptr: *const u8, len: u64` | 借用的字节串，仅在调用期间有效 |
-| `AbiBuf` | `ptr: *mut u8, len: u64, cap: u64, free: Option<extern "C" fn(ptr: *mut u8, len: u64, cap: u64, err: *mut AbiError) -> AbiStatus>, library: LibraryId` | 拥有的字节缓冲及其租约。`free` 为空时数据为静态数据或空值，调用方仍归还对应租约 |
+| `AbiBuf` | `ptr: *mut u8, len: u64, cap: u64, owner: *mut c_void, free: Option<extern "C" fn(owner: *mut c_void, ptr: *mut u8, len: u64, cap: u64, err: *mut AbiError) -> AbiStatus>, library: LibraryId` | 拥有的字节缓冲、资源守卫及租约。`free` 为空时数据为静态数据或空值，调用方归还对应租约 |
 | `AbiOption<T>` | `is_some: u8, value: MaybeUninit<T>` | 可选值 |
 | `AbiError` | `code: u32, message: AbiBuf, detail: AbiBuf` | 错误。`message` 为 UTF-8 文本；`detail` 为可选的自描述编码数据（§7.3） |
 | `AbiObject` | `data: *mut c_void, vtable: *const ObjectHeader, library: LibraryId` | 拥有的对象引用（§7）。`library` 为实现代码所在的库，由创建对象的一侧填写 |
@@ -77,32 +79,40 @@
 3. 通过 `out` 参数写出的拥有类型，所有权转给调用方。函数返回 `AbiStatus` 非 0 时，`out` 不被写入，错误的所有权转给调用方。
 4. 一个拥有值恰好被释放一次。拥有输入从进入被调函数起由被调方接管；成功、失败与 panic 均由其清理。蹦床先为全部拥有输入建立 RAII，再解码内容。`AbiOption<T>` 的标志为 0 时载荷保持未初始化，为 1 时载荷是有效的 T；接管时依此结构契约处理所有权。
 5. 拥有值在创建时取得 `library` 的租约，跨边界转交移动该租约。释放函数仅释放资源，调用方等待其返回后再调用 `lease_release`。库 0 的租约操作直接成功。
+6. 普通 Vec 缓冲的 owner 为 null，free 按 ptr、len、cap 归还分配。携带资源的缓冲以 owner 指向源侧拥有记录；该记录保持字节和资源守卫，free 在源侧释放二者。ptr、len、cap 始终描述可读字节。`Buf::with_owner` 在最终拥有存储形成后取得指针。
 
 ## 6 错误与 panic
 
 1. 每个跨边界函数的实现都在函数体外层捕获 panic，转换为 `AbiStatus = 2` 与 `code = 5` 的 `AbiError`。展开不得越过边界。
 2. 插件必须以 `panic = "unwind"` 编译（`DOC-11` `PR-8`），描述符字段 `panic_unwind` 为 `1`。
-3. 宿主收到插件 panic 时，按内核的规则处理：发生在 `apply` 中时实例进入 `Failed`；发生在服务方法中时调用方收到错误；发生在效应清理中时记录错误并继续其余清理。
+3. 宿主把 panic 错误交回调用方或 UP/1 适配层。apply 错误由核心生命周期记录为 Failed；服务方法错误向调用方返回；清理错误被记录后继续其余清理。
 4. clone、drop、free、Waker、描述符 release 与 Host 函数都遵循本节。释放阶段的 panic 错误可使用空 message/detail 和 code 5。Rust Drop 与 Wake 经 Host `log(ctx=0)` 报告错误；显式释放返回 Result。
 
 ## 7 对象与虚表
 
 ### 7.1 对象
 
-接口实现、回调、异步任务都以 `AbiObject` 跨边界传递。`vtable` 指向一个以 `ObjectHeader` 开头的虚表。虚表是实现方库中的静态常量，任何一方都不写入它；租约归属由对象的 `library` 字段给出：
+接口实现与回调以 `AbiObject` 跨边界传递。`vtable` 指向以 `ObjectHeader` 开头的只读虚表，存储由实现方库或对象的共享实现持有。租约归属由对象的 `library` 字段给出：
 
 ```c
 struct ObjectHeader {
     uint64_t  size;          // 虚表总字节数，含首部
     uint32_t  kind;          // 1 接口实现，2 同步回调，3 异步回调，4 状态导出器
+    uint32_t  flags;         // 位0表示接口具备类型化方法表
     uint32_t  reserved;      // 0
     AbiStr    interface;     // 接口标识 "kv@1.3"；回调为空串
     AbiStatus (*clone)(void *data, AbiObject *out, AbiError *err);
     AbiStatus (*drop)(void *data, AbiError *err);
+    const AbiStr *methods;   // 方法名按声明顺序排列
+    uint64_t method_count;
+    AbiStatus (*invoke)(void *data, AbiStr method, AbiBytes args, AbiBuf *out, AbiError *err);
+    AbiStatus (*invoke_async)(void *data, AbiStr method, AbiBytes args, struct AbiFuture *out, AbiError *err);
 };
 ```
 
-`clone` 产生一份新的拥有引用，`drop` 释放一份。对象内部的引用计数由实现方维护。`vtable` 原始指针从完整静态虚表对象派生，其来源覆盖 `size` 声明的全部字节；克隆保留此原始指针。Rust 的 `ObjectHeader` 引用用于读取首部，方法槽沿完整虚表原始指针访问。
+`clone` 产生一份新的拥有引用，`drop` 释放一份。对象内部的引用计数由实现方维护。vtable 原始指针从完整虚表对象派生，其来源覆盖 size 声明的全部字节；克隆保留此原始指针。Rust 的 ObjectHeader 引用用于读取首部，方法槽沿完整虚表原始指针访问。方法名表及各 UTF-8 名称与虚表具有相同的有效期。
+
+kind 为 1 时，flags 位 0 决定接口的调用形式。值为 1 的对象同时提供类型化方法表和通用入口；值为 0 的对象提供通用入口，首部之后的布局由该形式的 size 界定。`generic_object` 生成后一种对象，其共享实现持有虚表与方法名存储。kind 为 2–4 的回调遵循 §7.4 的固定尾部布局。当前实现将其 flags 设为 0，methods 设为 null，method_count 设为 0。
 
 ### 7.2 方法与追加
 
@@ -113,6 +123,8 @@ AbiStatus method(void *data, <参数...>, <返回值 out 指针>, AbiError *err)
 ```
 
 次版本追加的方法排在末尾。调用方在调用第 `i` 个方法前检查 `size >= sizeof(ObjectHeader) + (i + 1) * 8`，不满足时返回 `code = 3`，不读取越界内存。
+
+接口调用方先读取 flags。位 0 为 1 时按上述方法槽调用；位 0 为 0 时按方法名进入 invoke 或 invoke_async。方法名表反映该接口已提供的方法，类型化表与通用入口采用同一方法顺序和语义。
 
 ### 7.3 参数与返回值的编码
 
@@ -132,6 +144,28 @@ AbiStatus method(void *data, <参数...>, <返回值 out 指针>, AbiError *err)
 选用 CBOR 的理由见 `ADR-0010`：它是公开标准，自描述，字段按名称编码，追加带默认值的字段不破坏旧读取方（`DOC-11` §3.2 第 2 条）。
 
 `AbiStr` 与 `AbiBytes` 用于借用输入；字符串和字节结果分别使用 `String` 与 `Vec<u8>` 的拥有形式。异步方法在入口返回前复制借用参数，Future 持有复制结果和接口实现。
+
+### 7.3.1 通用调用编码
+
+invoke 与 invoke_async 的 args 是一个完整的 CBOR 数组，元素按参数声明顺序排列；零参数方法使用空数组。结果是单个完整的 CBOR 值，单位结果编码为 null。载荷尾随额外字节、参数个数或类型错误返回 code 2；未知方法名返回 code 3。invoke 执行同步方法，异步方法经该入口调用时返回 code 2；invoke_async 支持同步与异步方法，其 Future 的 ABI 成功值为拥有的 AbiBuf。
+
+| Rust 值 | 通用 CBOR 值 |
+|---|---|
+| 布尔、整数、浮点 | 对应的 CBOR 基本值 |
+| String、&str | 文本字符串 |
+| Vec<u8>、&[u8] | 字节字符串 |
+| () | null |
+| Option<T> | None 为 null；Some 使用下述可空值规则 |
+| Service<dyn I> | Tag 60000 包裹宿主分配的 u64 对象编号 |
+| 其他 serde 数据类型 | 自描述值，结构体字段按名称编码 |
+
+Some 的内部编码值通常直接交出；内部值为 null 或 Tag 60001 时，外包一层 Tag 60001。解码时，null 为 None，Tag 60001(payload) 为 Some(payload)，其他值为 Some(value)。递归应用此规则可保留 Option<()> 和嵌套 Option 的所有状态。Tag 60000 与 Tag 60001 是本协议的应用语义标签。
+
+### 7.3.2 通用调用中的资源寿命
+
+每次 object_export 消费一个拥有 AbiObject，宿主分配新编号并让资源表持有它；object_import 克隆表中的对象，表引用继续保留；object_release 移出并释放表引用。克隆与释放在宿主资源表锁外执行。已释放编号的 import 或 release 返回 code 4。
+
+`CborEncoder` 为输入和结果建立资源守卫。同步调用结束、异步入口交回 Future 后，调用方释放输入载荷及其导出编号；被调用侧在入口内完成全部参数 import，异步 Future 持有独立对象引用。输出 Buf 保持导出编号至 free，接收方在释放 Buf 前完成结果 import。序列化、参数解码或调用失败时，各侧的拥有包装释放已取得的引用；取消时 Future 释放其参数引用。输出缓冲的源侧 owner 负责最终资源表回收。
 
 ### 7.4 回调
 
@@ -215,8 +249,11 @@ struct WakerVTable {
 | 19 | `lease_release(library: LibraryId, err)` | 减少租约 | 装载器 |
 | 20 | `effect_settled(effect, out: *mut AbiFuture, err)` | 等待效应体完成 | `Effect::settled` |
 | 21 | `effect_dispose(effect, out: *mut AbiFuture, err)` | 释放效应并等待清理 | `Effect::dispose` |
+| 22 | `object_export(value: AbiObject, out: *mut u64, err)` | 消费对象并分配资源编号 | 宿主资源表 |
+| 23 | `object_import(id: u64, out: *mut AbiObject, err)` | 克隆资源表中的对象 | 宿主资源表 |
+| 24 | `object_release(id: u64, err)` | 移出并释放资源表引用 | 宿主资源表 |
 
-`M8` 可以在冻结前调整此表的签名与顺序，调整后同步更新本节和布局记录。冻结后只能在末尾追加，并提升 `HostV1` 的次版本（`size` 增大）。
+M11 冻结前按确认的契约调整此表，调整后同步更新本节和布局记录。冻结后的追加位于表尾，并提升 HostV1 的次版本（size 增大）。
 
 ## 10 插件描述符 `PluginV1`
 
@@ -226,7 +263,7 @@ struct PluginV1 {
     uint32_t abi_major;           // 1
     uint32_t abi_minor;           // 插件编译时使用的 cordis-abi 次版本
     uint8_t  panic_unwind;        // 必须为 1（PR-8）
-    uint8_t  format;              // 1 原生库；其他值保留给后续装载器
+    uint8_t  format;              // 1 原生库，2 通用插口进程插件，3 WebAssembly保留值
     uint8_t  reserved[6];
     AbiStr   name;                // 插件名
     AbiStr   version;             // 插件版本，semver
@@ -262,7 +299,7 @@ struct DependencyV1 {
 
 1. `abi_major` 受支持，`size` 不小于 v1.0 的结构大小。
 2. `panic_unwind == 1`。配置项 `allow_panic_abort = true` 时降级为警告。
-3. `format == 1`。
+3. `cordis-host` 的原生动态库入口采用 format 1；进程插件使用 format 2，WebAssembly 保留 format 3。
 4. `name` 与 `version` 非空且合法；组件名在库内唯一；接口标识符合 `DOC-11` §3.1。
 
 ## 11 租约
@@ -277,7 +314,7 @@ struct DependencyV1 {
 
 | 变更 | 允许的时机 | 要求 |
 |---|---|---|
-| 修改任何已有类型的布局或函数签名 | 仅 `M8` 冻结前 | 冻结后需要发布 ABI v2 |
+| 修改任何已有类型的布局或函数签名 | M11 冻结前 | 冻结后需要发布 ABI v2 |
 | 在 `HostV1`、`PluginV1`、`ComponentV1` 末尾追加字段或函数 | 冻结后 | ABI v1 次版本加一；读取方以 `size` 判断字段是否存在；写 ADR |
 | 新增 `AbiError.code` 取值 | 冻结后 | 旧插件把未知值视为 `1` |
 | 新的 ABI 主版本 | 核心年度升级 | 核心对旧主版本继续提供适配，支持期见 `ADR-0014` |

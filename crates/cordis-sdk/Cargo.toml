@@ -1,0 +1,20 @@
+[package]
+name = "cordis-sdk"
+version.workspace = true
+edition.workspace = true
+rust-version = "1.85"
+publish.workspace = true
+license.workspace = true
+
+[dependencies]
+cordis-abi.workspace = true
+cordis-sdk-macros.workspace = true
+serde.workspace = true
+
+[dev-dependencies]
+cordis-abi = { workspace = true, features = ["test-support"] }
+kv-api.workspace = true
+kv-mem = { workspace = true, features = ["rlib"] }
+counter = { workspace = true, features = ["rlib"] }
+tokio.workspace = true
+futures-util.workspace = true

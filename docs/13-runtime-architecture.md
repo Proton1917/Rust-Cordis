@@ -11,36 +11,35 @@
 
 ## 1 crate 布局
 
-```
-crates/
-  cordis/               内核（第一阶段）。M7 做 K-1–K-5 的改动
-  cordis-testkit/       确定性执行器（第一阶段）
-  cordis-abi/           ABI v1 类型、宿主侧与插件侧的安全包装、布局测试
-  cordis-sdk/           插件作者依赖的 crate：Component、Context、Service、事件、状态
-  cordis-sdk-macros/    #[interface]、#[event]、export_plugin!
-  cordis-loader/        装载器：打开库、握手、适配到内核、租约、热替换、回滚
-  cordis-runtime/       核心可执行文件 cordis：tokio 宿主、配置、目录监视、状态目录、verify 子命令
-  cordis-contract/      契约套件的编写辅助与 cordis.contract@1 接口
-plugins/                示例插件（每个都是独立的 cdylib crate）
-  kv-api/               接口 crate：kv@1
-  kv-mem/               kv@1 的内存实现
-  kv-file/              kv@1 的文件实现
-  kv-contract/          kv@1 的契约套件
-  counter/              注入 kv@1 的使用方，导出状态
-  console-log/          把日志输出到终端的插件
-fixtures/               测试用插件库（v1/v2、故障注入、ABI 违规），只供测试使用
-docs/abi/v1-layout.txt  ABI 布局记录（由测试生成）
-```
+| 路径 | 职责 |
+|---|---|
+| `crates/cordis` | 第一阶段内核及 K-1–K-5 |
+| `crates/cordis-testkit` | 确定性执行器 |
+| `crates/cordis-up` | UP/1 消息类型、受限 CBOR 编解码与帧协议 |
+| `crates/cordis-supervisor` | 核心侧进程监管、对象路由、截止时间、背压与故障回收 |
+| `crates/cordis-runtime` | 核心可执行文件 cordis：配置、目录监视、状态、检查点、命令行 |
+| `crates/cordis-host` | 原生插件宿主程序：分组装载、ABI 适配、租约、组内替换、UP/1 桥 |
+| `crates/cordis-abi` | 原生插件与宿主之间的 ABI 类型、安全包装、布局测试 |
+| `crates/cordis-sdk` | 原生插件作者接口：Component、Context、Service、事件、状态 |
+| `crates/cordis-sdk-macros` | interface、event 与 export_plugin 宏 |
+| `crates/cordis-contract` | 插件侧契约断言辅助，复用 cordis.contract@1 的 SDK 接口 |
+| `plugins/kv-api` | kv@1 接口定义 |
+| `plugins/kv-mem`、`plugins/kv-file` | kv@1 的内存和文件实现 |
+| `plugins/kv-contract`、`plugins/counter`、`plugins/console-log` | 契约套件、计数使用方、终端日志 |
+| `fixtures/` | 真实行为与故障测试插件 |
+| `docs/abi/v1-layout.txt` | ABI 布局记录，由测试生成 |
 
 依赖方向：
 
-```
-cordis-runtime ─→ cordis-loader ─→ cordis（内核）
-       │                 └──────→ cordis-abi
-       └─────────────────────────→ cordis-abi
-plugins/*、fixtures/* ─→ cordis-sdk ─→ cordis-abi
-                         cordis-sdk ─→ cordis-sdk-macros
-```
+| 使用方 | 项目内产品依赖 |
+|---|---|
+| cordis-runtime | cordis、cordis-supervisor、cordis-up |
+| cordis-supervisor | cordis、cordis-up |
+| cordis-host | cordis-up、cordis-abi、cordis-sdk |
+| 原生插件、契约辅助与原生 fixture | cordis-sdk；接口 crate |
+| cordis-sdk | cordis-abi、cordis-sdk-macros |
+
+核心与插件宿主通过 UP/1 通信。Q0 要求核心进程的依赖树与 ABI、SDK 分离，内置接口以 UP/1 数据协议提供；宿主负责转换为原生对象（ADR-0017、ADR-0018）。
 
 `cordis-sdk` 与插件不依赖内核 crate。
 
@@ -49,10 +48,12 @@ plugins/*、fixtures/* ─→ cordis-sdk ─→ cordis-abi
 | crate | 目标行数 | 上限 |
 |---|---:|---:|
 | `cordis`（内核，含 `K-*` 改动） | 4800 | 6000（第一阶段上限不变） |
-| `cordis-abi` | 1500 | 2500 |
+| `cordis-abi` | 2500 | 3000（ADR-0022） |
 | `cordis-sdk` | 2000 | 3500 |
 | `cordis-sdk-macros` | 1200 | 2000 |
-| `cordis-loader` | 2000 | 3500 |
+| `cordis-up` | 1500 | 2500 |
+| `cordis-supervisor` | 2000 | 3500 |
+| `cordis-host` | 2000 | 3500 |
 | `cordis-runtime` | 1500 | 2500 |
 | `cordis-contract` | 500 | 1000 |
 
@@ -65,12 +66,14 @@ plugins/*、fixtures/* ─→ cordis-sdk ─→ cordis-abi
 | 编号 | 改动 | 原因 | 验证 |
 |---|---|---|---|
 | `K-1` | 组件名、服务名、事件名由 `&'static str` 改为宿主拥有的字符串（`Arc<str>`）。涉及 `ComponentDef.name`、`State.names`、日志名称等 | 插件的名字位于插件库内存中。旧库静止后不得再有指向它的引用 | 测试：用运行时构造的字符串创建组件定义与服务，原字符串释放后名称仍可读取 |
-| `K-2` | 命名服务键：`ctx.provide_named(name, value)`、`ctx.get_named(name)`、`Inject::with_named(name)`，值类型为 `Arc<dyn Any + Send + Sync>`。类型化键 `ServiceKey` 以 `K::NAME` 映射到同一命名空间 | 单独编译的插件之间不能用 `TypeId` 识别服务（`ADR-0011`） | 测试：命名键与类型化键的提供、注入、替换、隔离域、拦截与第一阶段语义一致 |
+| `K-2` | 命名服务键：`ctx.provide_named(name, value)`、`ctx.get_named(name)`、`Inject::with_named(name)`，值类型为 `Arc<dyn Any + Send + Sync>`。类型化键 `ServiceKey` 以 `K::NAME` 映射到同一命名空间。M10 按 `ADR-0016` 增加依赖声明的 `required` 和可用性谓词 | 独立编译插件按名称识别服务；每个使用方分别声明可选性与最低次版本 | 测试：命名与类型化服务的提供、注入、替换、隔离、拦截；可选项纪元变化、使用方版本门槛及实际绑定清理顺序 |
 | `K-3` | 命名事件：`ctx.on_named(name, listener)`、`ctx.emit_named(name, payload)`、`ctx.parallel_named`，载荷为 `Arc<dyn Any + Send + Sync>` | 同 `K-2` | 测试：命名事件的派发、监听器回退、重入语义与类型化事件一致 |
-| `K-4` | `Registry::replace` 之后，内核不再持有旧 `ComponentDef` 的闭包。别名表只保存 `ComponentId → ComponentId` | 旧定义的闭包指向旧库代码，持有它会让旧库的租约永不归零。现状：`State.aliases: HashMap<ComponentId, ComponentDef>`（`crates/cordis/src/kernel.rs:69`），连续替换 A→B→C 后 B 的定义仍被别名表持有 | 测试：替换后用 `Weak` 观察旧定义捕获的值已释放；连续三次替换后同样成立 |
+| `K-4` | 别名表保存 `ComponentId → ComponentId`，当前终点定义支持旧别名重新挂载；替换时释放旧定义。M10 增加 `Registry::forget`，在终点实例全部释放后显式退役该终点及相关别名（`ADR-0016`） | 定义闭包持有对应库的代码租约，替换和库关闭都需要明确的释放时机 | 测试：连续替换的旧闭包 `Weak` 释放；终点重挂；活跃实例保护及显式退役后的租约释放 |
 | `K-5` | 调和循环的复位守卫 | 已在 `940650c` 完成 | 该提交附带的测试继续保留 |
 
 命名键与类型化键共用 `DOC-01` 的全部条款。`K-2`、`K-3` 是在现有键表上的另一种入口，不复制余效应逻辑。
+
+`Inject::with_named_options(name, required, predicate)` 接收命名依赖的必需标志与 `Option<DependencyPredicate>`。`DependencyPredicate` 为宿主拥有的 `Arc<dyn Fn(&AnyArc) -> bool + Send + Sync>`，由既有 `refresh` 在锁外调用。已有声明入口采用必需项和空谓词。可选项缺席的纪元槽为 `0`，存在时使用真实绑定编号并登记依赖关系；提供方等待实际使用方清理。版本不足按该项的必需标志决定 `Pending` 或可选缺席，具体语义见 `ADR-0016`。
 
 服务匹配以名称为身份，提供登记表另行保存首次登记的方式与类型。依赖、读取、隔离及通知共同解析该名称；类型化读取在值转换边界检验其 `Arc<K::Value>` 表示。命名元数据通过 `Inject::with_named_meta` 声明，`Context::intercept_named` 增加后层优先的覆盖，`named_meta` 在定位声明后按视图层次解析。类型化元数据继续采用其 `Merge` 实现。事件保留第一阶段类型身份，命名事件以名称及同步/异步派发族识别；同名的两个派发族分别保留监听快照。
 
@@ -94,23 +97,26 @@ plugins/*、fixtures/* ─→ cordis-sdk ─→ cordis-abi
 
 | 宏 | 输入 | 生成 |
 |---|---|---|
-| `#[interface(name = "kv", version = "1.0")]` | 接口 trait | 方法虚表（`DOC-12` §7.2）、提供方蹦床、使用方代理类型、`Interface` 实现（名称、版本、方法数） |
+| `#[interface(name = "kv", version = "1.0")]` | 接口 trait 与 impl | 类型化方法表、按方法名的通用入口、提供方蹦床、使用方代理、Interface 实现；代理在 flags 位 0 为 0 时通过 CBOR 通用调用（V-2） |
 | `#[event(name = "message", version = "1.0")]` | 事件结构体（serde） | `Event` 实现 |
 | `export_plugin!(name, version, components = [...])` | 组件类型列表 | `CORDIS_PLUGIN_ABI`、`cordis_plugin_v1`、静态描述符 |
 
-宏生成的 `unsafe` 使用固定模板：调用 `cordis-abi` 公开的 unsafe 函数、按接口声明调用 C 函数指针、实现 C 蹦床、导出符号属性以及持有静态 ABI 表的 Send/Sync 实现。模板的 SAFETY 依据同时保存在宏源码与生成的文档注释中（规则 `B-2`）。
+宏生成的 `unsafe` 使用固定模板：调用 `cordis-abi` 公开的 unsafe 函数、按接口声明调用 C 函数指针、实现 C 蹦床、导出符号属性以及持有静态 ABI 表的 Send/Sync 实现。模板的 SAFETY 依据同时保存在宏源码与生成的文档注释中（规则 `B-2`、`ADR-0015`）。
 
-### 3.4 `cordis-loader`
+### 3.4 `cordis-host`
 
 | 模块 | 职责 |
 |---|---|
 | `library` | 复制到唯一路径（`SW-1`）、`libloading` 打开、握手、描述符校验 |
 | `lease` | `LibraryId` 分配、租约计数、静止判定 |
-| `adapt` | 把描述符中的组件转换为内核 `ComponentDef`：配置以 CBOR 字节保存为 `RawConfig`；`apply` 调用插件函数并把返回的 `AbiFuture` 包装为内核 `Task`；宿主虚表的每个函数转发到内核的对应接口 |
-| `swap` | `DOC-11` §6 的 `SW-1`–`SW-9` 与 §7 回滚 |
-| `state` | 导出器登记表、状态块的保存与继承 |
+| `adapt` | 实现 HostV1：provide、get、effect/defer、on、emit、export_state 经 UP/1 登记到核心；now、sleep 由宿主执行器完成；log 转发到核心 |
+| 库替换资源 | 按核心的替换与回滚决策准备候选库、切换对象来源、释放旧库租约 |
+| 对象表 | 维护 UP/1 编号与本地 AbiObject、回调、Future 的对应关系，移除时归还租约 |
+| UP/1 桥 | 执行核心下发的 apply、callback、invoke、export、thaw、release、shutdown，代表分组中的原生插件与核心通信 |
 
-`cordis-loader` 本身以组件的形式挂载在内核上：它登记的库、实例、监视都是效应，释放它即卸下全部插件。
+系统的内核位于核心进程，是实例、依赖、纪元、加载、卸载、替换和回滚的唯一决策者，组内原生插件的依赖同样由核心解析并下发。cordis-host 使用普通数据结构和 RAII 管理库、租约、编号及原生引用，执行核心指令。标准输入关闭时宿主退出。
+
+取得服务、提供服务和登记效应都经核心记录。get 的应答指向同组对象时，宿主交出本地 AbiObject，后续方法通过 ABI 类型化方法表直接调用；跨进程对象由 UP/1 代理实现。M11 验证宿主依赖树与内核 crate 分离，并验证同组 A 依赖 B 时，替换 B 由核心安排 A 先清理、B 后卸载，随后 A 的直连引用指向新 B。
 
 ### 3.5 `cordis-runtime`
 
@@ -124,114 +130,71 @@ plugins/*、fixtures/* ─→ cordis-sdk ─→ cordis-abi
 
 ### 3.6 `cordis-contract`
 
-- 定义内置接口 `cordis.contract@1`：`report(name, passed, message)`、`finish()`。
+- 复用 SDK 的内置接口 `cordis.contract@1`：`report(name, passed, message)`、`finish()`、`stage()`、`request_state_roundtrip()`。
 - 提供断言辅助，套件作者用它编写套件插件。
-- `cordis verify` 的子进程由 `cordis-runtime` 实现，结果判定由本 crate 的类型描述。
+- 套件经 UP/1 报告断言与阶段结果；核心按协议数据完成验证判定。
 
-## 4 SDK 接口草图
+### 3.7 `cordis-up` 与 `cordis-supervisor`
+
+cordis-up 保存双方共用的消息类型、帧大小约束、CBOR 深度与集合长度约束。cordis-supervisor 负责进程组、握手、双向请求、对象编号与服务路由、超时、取消、背压、退出回收及有界重启。两者遵守 CP-1–CP-10，协议字段在 M10 的 DOC-16 中确定。
+
+## 4 SDK 接口
 
 ```rust
-// ── 接口 crate kv-api ──────────────────────────────────────────────
 use cordis_sdk::prelude::*;
 
 #[cordis_sdk::interface(name = "kv", version = "1.0")]
 pub trait Kv: Send + Sync {
     fn get(&self, key: &str) -> Result<Option<Vec<u8>>>;
     fn put(&self, key: &str, value: Vec<u8>) -> Result<()>;
-    fn keys(&self) -> Result<Vec<String>>;          // Vec<String> 经 CBOR 编码
+    fn keys(&self) -> Result<Vec<String>>;
     async fn flush(&self) -> Result<()>;
 }
-
-// ── 插件 crate kv-file（crate-type = ["cdylib"]）──────────────────────
-use cordis_sdk::prelude::*;
-use kv_api::Kv;
-
-#[derive(Clone, serde::Deserialize)]
-struct KvConfig { path: String }
-
-struct KvStore;
-impl Component for KvStore {
-    const NAME: &'static str = "kv-store";
-    type Config = KvConfig;
-    fn inject() -> Inject { Inject::new() }
-    fn provides() -> Provides { Provides::new().with::<dyn Kv>() }
-    async fn apply(ctx: Context, config: KvConfig) -> Result {
-        let dir = ctx.data_dir()?;                                   // cordis.data-dir@1
-        let store = Arc::new(FileStore::open(dir.join(&config.path))?);
-        ctx.provide::<dyn Kv>(store.clone())?;
-        ctx.effect("flush-on-stop", {
-            let store = store.clone();
-            move |fx| fx.defer_async(move || async move { store.flush().await })
-        })?;
-        Ok(())
-    }
-}
-
-cordis_sdk::export_plugin!(name = "kv", version = env!("CARGO_PKG_VERSION"), components = [KvStore]);
-
-// ── 使用方插件 counter ───────────────────────────────────────────────
-struct Counter;
-impl Component for Counter {
-    const NAME: &'static str = "counter";
-    type Config = CounterConfig;
-    fn inject() -> Inject { Inject::new().with::<dyn Kv>() }        // 注入 kv@1.0
-    async fn apply(ctx: Context, config: CounterConfig) -> Result {
-        let kv = ctx.get::<dyn Kv>()?;                                // Service<dyn Kv>
-        let start = match ctx.inherited_state() {
-            Some(blob) if blob.schema() == "counter.state" => blob.decode::<u64>()?,
-            _ => 0,
-        };
-        let count = Arc::new(AtomicU64::new(start));
-        let frozen = ctx.export_state("counter.state", 1, {
-            let count = count.clone();
-            move || Ok(count.load(Ordering::SeqCst))
-        })?;
-        ctx.spawn({
-            let ctx = ctx.clone();
-            async move {
-                while ctx.is_current() && !frozen.is_set() {
-                    let n = count.fetch_add(1, Ordering::SeqCst) + 1;
-                    kv.put("count", n.to_le_bytes().to_vec())?;
-                    ctx.sleep(Duration::from_millis(config.interval_ms)).await;
-                }
-                Ok(())
-            }
-        })?;
-        Ok(())
-    }
-}
 ```
+
+`#[interface]` 同时用于 trait 和实现该 trait 的 impl；异步方法转换为具有 Send 约束的 BoxFuture，代理以 `Service<dyn Kv>` 交给使用方。返回字符串使用 String，返回字节使用 Vec<u8>；其余 DTO 经 CBOR 编码。`#[event(name, version, kind = "sync" | "async")]` 声明事件派发族。
+
+| 对象 | 接口及行为 |
+|---|---|
+| `Component` | NAME、Config、inject/provides/listens/state、resolve、异步 apply；apply 返回 `Result<()>` |
+| `Context` 服务 | `provide::<dyn I>(Arc<dyn I>) -> Result<()>`；`get::<dyn I>() -> Result<Service<dyn I>>`；`data_dir() -> Result<PathBuf>`，使用方声明 DataDir 依赖 |
+| `Context` 效应 | 同步 effect 与异步 effect_async 返回 `Result<Effect>`；Effect 的 settled/dispose 都异步返回 `Result<()>`；EffectScope 支持 defer/defer_async |
+| `Context` 任务 | spawn、spawn_thread 返回 `Result<()>`；`is_current() -> Result<bool>`；sleep 异步返回 `Result<()>` |
+| `Context` 状态 | `inherited_state() -> Result<Option<StateBlob>>`；export_state 返回 Frozen；export_state_with 接收与写路径共享的 Frozen |
+| `Context` 事件 | on/emit 对应 SyncEvent；on_async/emit_async 对应 AsyncEvent；全部通过 Result 表达失败 |
+| `export_plugin!` | 导出入口、ABI 主版本和描述符；可选 rlib_feature 供回环测试链接，独立 cdylib 构建使用标准 C 符号 |
+
+完整可编译实现位于 `plugins/kv-api/src/lib.rs`、`plugins/kv-mem/src/lib.rs` 和 `plugins/counter/src/lib.rs`。kv-mem 在状态锁内检查 Frozen 后写入；导出时先设置冻结标志再取得状态锁。counter 成功写入 KV 后更新本地计数，加载时从继承状态与 KV 当前值中取较大者。`crates/cordis-sdk/tests/loopback.rs` 通过实际入口执行这些组件，并覆盖 25 个 Host 槽。
 
 ## 5 运行时结构
 
-### 5.1 进程内的组件树
+### 5.1 生命周期与资源的归属
 
-```
-根纤程
-└── cordis-loader（组件）
-    ├── 库 kv#1（效应：打开的库、租约表项）
-    ├── 实例 store   = kv/kv-store    （内核纤程）
-    └── 实例 counter = counter/counter     （内核纤程，注入 kv@1）
-```
+| 所在进程 | 核心对象 | 责任 |
+|---|---|---|
+| cordis | 根上下文、实例纤程、服务绑定、依赖纪元、效应树 | 决定加载和清理顺序、替换、回滚与崩溃回收 |
+| cordis-host | 库句柄、ABI 租约、对象与回调编号、本地原生引用 | 执行核心请求，持有资源并按请求释放；同组方法直接调用 |
 
 ### 5.2 一次服务调用的路径
 
-`counter` 调用 `kv.put(...)`：插件侧代理类型 → `kv-file` 库中虚表的 `put` 蹦床 → `FileStore::put`。调用不经过宿主，开销为一次间接调用加参数编码。宿主只参与对象的获取（`HostV1.get`）与租约管理。
+同组调用 `kv.put(...)` 时，插件侧代理通过类型化方法表进入提供方蹦床。跨组调用时，宿主提供 flags 位 0 为 0 的代理对象，SDK 将参数编码为 CBOR 数组，经 invoke 入口交给宿主，再由核心通过 UP/1 路由到提供方。服务对象在协议中使用拥有明确生命周期的编号。
 
 ### 5.3 内置接口
 
 | 接口 | 提供方 | 内容 |
 |---|---|---|
 | `cordis.data-dir@1` | 运行时 | 返回实例所属插件的数据目录（`PR-7`） |
-| `cordis.contract@1` | `cordis verify` 子进程 | 契约套件报告结果（`DOC-11` §8） |
+| `cordis.contract@1` | 验证核心，经 UP/1 | 契约结果、完成通知、阶段查询与状态往返请求（ADR-0017） |
 | `cordis.runtime@1` | 运行时 | 只读查询：已装载库、实例状态（供管理类插件使用） |
+
+运行时通过 UP/1 通知发布 `cordis.log@1`，载荷含 level、message、instance。跨进程监听器异步接收，服务调用承担需要返回值的交互（DOC-15 §6.3）。
 
 ## 6 架构规则
 
 | 编号 | 规则 |
 |---|---|
 | `B-1` | 内核 crate 继续遵守第一阶段的 `A-1`–`A-12`，不使用 `unsafe`，不依赖 tokio |
-| `B-2` | `unsafe` 位于 `cordis-abi`、`cordis-loader` 与宏生成的固定代码形态。每个 unsafe 块、函数、impl、extern 块和属性前一行有 `// SAFETY:` 注释，说明依赖的 `DOC-12` 条款；宏源码中的对应模板保存该注释并生成 SAFETY 文档注释。允许模板调用经长度检查的 C 函数指针、建立 ABI 对象、生成蹦床与导出符号。源码审计使用 syn 解析。`cordis-abi` 与 `cordis-loader` 开启 `#![deny(unsafe_op_in_unsafe_fn)]` |
+| `B-2` | 核心进程的全部 crate 使用安全 Rust，依赖树与 cordis-abi、cordis-sdk 分离。unsafe 位于 cordis-abi、cordis-host 与宏生成的固定代码形态；每个 unsafe 块、函数、impl、extern 块和属性前一行有 SAFETY 注释说明 DOC-12 契约，宏模板同时生成相应文档。源码审计使用 syn 解析。cordis-abi 与 cordis-host 开启 deny(unsafe_op_in_unsafe_fn) |
 | `B-3` | 跨插件边界只出现 `DOC-12` 的类型（`Q3`）。`cordis-sdk` 的公开接口中不出现内核类型 |
 | `B-4` | 每个跨边界函数在被调用侧捕获 panic（`DOC-12` §6） |
 | `B-5` | 宿主侧每个收到的对象都包装为持有租约的值（`DOC-12` §11） |
@@ -239,7 +202,7 @@ impl Component for Counter {
 | `B-7` | `SW-1`–`SW-4` 保持实例、纪元和绑定原状；`SW-5` 仅进入可逆冻结，导出失败时解冻；`SW-6` 开始生命周期替换（`DOC-11` §6） |
 | `B-8` | 持有内核锁或装载器内部锁时，不调用插件代码 |
 | `B-9` | 插件代码的调用都发生在宿主执行器的任务中或调用方线程上，装载器不为插件创建隐藏线程 |
-| `B-10` | `docs/abi/v1-layout.txt` 在 `M8` 冻结后只随 ADR 修改 |
+| `B-10` | `docs/abi/v1-layout.txt` 在 M11 冻结前的修改记入 PROGRESS，冻结后随 ADR 修改 |
 
 ## 7 依赖白名单
 
@@ -248,9 +211,14 @@ impl Component for Counter {
 | crate | 用途 | 使用者 |
 |---|---|---|
 | `serde` | 配置、DTO、状态块的序列化 | `cordis-abi`、`cordis-sdk`、`cordis-runtime` |
-| `ciborium` | CBOR 编解码（`ADR-0010`） | `cordis-abi`、`cordis-sdk`、`cordis-loader` |
-| `libloading` | 打开动态库 | `cordis-loader` |
-| `tokio` | 宿主执行器与计时 | `cordis-runtime` |
+| `serde_json` | JSON 验证印记、状态与报告 | `cordis-host`、`cordis-runtime`、`cordis-contract` |
+| `semver` | 插件版本解析与接口数值版本处理 | `cordis-host`、`cordis-runtime` |
+| `clap` | 命令行参数与子命令解析 | `cordis-runtime`、`cordis-host` |
+| `ciborium` | CBOR 编解码（`ADR-0010`） | `cordis-abi`、`cordis-sdk`、`cordis-host`、`cordis-up` |
+| `libloading` | 打开动态库 | `cordis-host` |
+| `tokio` | 执行器、计时与子进程 I/O | `cordis-runtime`、`cordis-supervisor`、`cordis-host` |
+| `nix` | 安全的 POSIX 进程组信号接口（ADR-0021） | `cordis-supervisor` |
+| `libfuzzer-sys` | CP-9 输入模糊测试（ADR-0021） | 独立 fuzz 工作区的开发构建 |
 | `notify` | 目录监视 | `cordis-runtime` |
 | `toml` | 解析 `cordis.toml` | `cordis-runtime` |
 | `syn`、`quote`、`proc-macro2` | 过程宏 | `cordis-sdk-macros` |

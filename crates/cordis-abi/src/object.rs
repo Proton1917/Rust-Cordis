@@ -1,6 +1,7 @@
 use crate::{
     AbiBuf, AbiBytes, AbiError, AbiObject, AbiStatus, AbiStr, AbiUnit, AsyncCall, Buf, Environment,
-    Error, ObjectHeader, RemoteFuture, Result, SyncCall, boundary, error::release_boundary,
+    Error, Invoke, InvokeAsync, InvokeFuture, OBJECT_TYPED_METHODS, ObjectHeader, RemoteFuture,
+    Result, SyncCall, boundary, error::release_boundary,
 };
 use std::{ffi::c_void, mem::size_of, sync::Arc};
 
@@ -34,18 +35,41 @@ impl ObjectHeader {
         Self {
             size: size as u64,
             kind,
+            flags: if kind == 1 { OBJECT_TYPED_METHODS } else { 0 },
             reserved: 0,
             interface: AbiStr::new(interface),
             clone: clone_object::<T>,
             drop: drop_object::<T>,
+            methods: std::ptr::null(),
+            method_count: 0,
+            invoke: missing_invoke,
+            invoke_async: missing_invoke_async,
         }
+    }
+
+    pub const fn with_dispatch(
+        mut self,
+        methods: &'static [AbiStr],
+        invoke: Invoke,
+        invoke_async: InvokeAsync,
+    ) -> Self {
+        self.methods = methods.as_ptr();
+        self.method_count = methods.len() as u64;
+        self.invoke = invoke;
+        self.invoke_async = invoke_async;
+        self
+    }
+
+    pub const fn with_flags(mut self, flags: u32) -> Self {
+        self.flags = flags;
+        self
     }
 }
 
 impl Object {
     /// # Safety
-    /// DOC-12 §7：vtable从完整静态虚表派生，覆盖首部size声明的字节；
-    /// 首部由for_type<T>构造，方法形状对应T，在env库寿命内有效。
+    /// DOC-12 §7：vtable从完整只读虚表派生，覆盖size声明的字节；首部由
+    /// for_type<T>构造，方法与T匹配，方法名表及其UTF-8文本由静态存储或T保持存活。
     // SAFETY: DOC-12 §7 的类型、完整虚表来源和库寿命由构造者保证。
     pub unsafe fn new<T: ?Sized + Send + Sync + 'static>(
         value: Arc<T>,
@@ -97,6 +121,55 @@ impl Object {
         // SAFETY: DOC-12 §7，借用受self及其库租约约束。
         unsafe { self.header().interface.as_str() }
     }
+    pub fn has_typed_methods(&self) -> bool {
+        self.header().flags & OBJECT_TYPED_METHODS != 0
+    }
+    pub fn method_names(&self) -> Result<Vec<String>> {
+        let header = self.header();
+        if header.method_count == 0 {
+            return Ok(Vec::new());
+        }
+        // SAFETY: DOC-12 §7，拥有对象保持整个方法名表及各字符串的寿命。
+        unsafe { std::slice::from_raw_parts(header.methods, header.method_count as usize) }
+            .iter()
+            .map(|name| {
+                // SAFETY: DOC-12 §7，字符串借用期受拥有对象约束。
+                unsafe { name.as_str() }.map(str::to_owned)
+            })
+            .collect()
+    }
+    pub fn invoke(&self, method: &str, args: &[u8]) -> Result<Buf> {
+        // SAFETY: DOC-12 §7，通用入口交出拥有CBOR缓冲，借用参数覆盖本次调用。
+        let raw = unsafe {
+            self.env.call(|out, err| {
+                (self.header().invoke)(
+                    self.data(),
+                    AbiStr::new(method),
+                    AbiBytes::new(args),
+                    out,
+                    err,
+                )
+            })
+        }?;
+        // SAFETY: DOC-12 §5、§7，成功调用转交结果缓冲及资源守卫。
+        Ok(unsafe { Buf::from_raw(raw, self.env) })
+    }
+    pub fn invoke_async(&self, method: &str, args: &[u8]) -> Result<InvokeFuture> {
+        // SAFETY: DOC-12 §7、§8，异步通用入口输出AbiBuf结果的Future。
+        let raw = unsafe {
+            self.env.call(|out, err| {
+                (self.header().invoke_async)(
+                    self.data(),
+                    AbiStr::new(method),
+                    AbiBytes::new(args),
+                    out,
+                    err,
+                )
+            })
+        }?;
+        // SAFETY: DOC-12 §7、§8，入口已取得参数资源，Future持有独立的拥有引用。
+        Ok(unsafe { InvokeFuture::from_raw(raw, self.env) })
+    }
     pub fn try_clone(&self) -> Result<Self> {
         // SAFETY: DOC-12 §5、§7，clone输出转交一份新拥有引用与租约。
         let raw = unsafe {
@@ -111,6 +184,9 @@ impl Object {
     /// DOC-12 §7.2：F为该槽声明的C函数指针类型，调用时遵守方法参数契约。
     // SAFETY: DOC-12 §7.2 的函数指针类型由接口宏的声明顺序保证。
     pub unsafe fn typed_slot<F: Copy>(&self, index: usize) -> Result<F> {
+        if self.header().kind == 1 && !self.has_typed_methods() {
+            return Err(Error::new(3, "object exposes generic invocation"));
+        }
         let end = index
             .checked_add(1)
             .and_then(|n| n.checked_mul(8))
@@ -249,4 +325,35 @@ unsafe extern "C" fn clone_object<T: ?Sized + Send + Sync + 'static>(
 unsafe extern "C" fn drop_object<T: ?Sized>(data: *mut c_void, err: *mut AbiError) -> AbiStatus {
     // SAFETY: DOC-12 §5、§6，源侧Box与其用户析构一起在边界内释放。
     unsafe { release_boundary(err, || drop(Box::from_raw(data.cast::<ObjectData<T>>()))) }
+}
+
+// SAFETY: DOC-12 §7，data具有Object公共前缀，结果与错误槽有效。
+unsafe extern "C" fn missing_invoke(
+    data: *mut c_void,
+    _: AbiStr,
+    _: AbiBytes,
+    out: *mut AbiBuf,
+    err: *mut AbiError,
+) -> AbiStatus {
+    // SAFETY: DOC-12 §6、§7，缺席方法通过code3返回，输出保持原状。
+    unsafe {
+        boundary(object_environment(data), out, err, || {
+            Err(Error::new(3, "unknown method"))
+        })
+    }
+}
+// SAFETY: DOC-12 §7、§8，data具有Object公共前缀，Future输出槽有效。
+unsafe extern "C" fn missing_invoke_async(
+    data: *mut c_void,
+    _: AbiStr,
+    _: AbiBytes,
+    out: *mut crate::AbiFuture,
+    err: *mut AbiError,
+) -> AbiStatus {
+    // SAFETY: DOC-12 §6、§7，缺席异步方法通过code3返回。
+    unsafe {
+        boundary(object_environment(data), out, err, || {
+            Err(Error::new(3, "unknown method"))
+        })
+    }
 }

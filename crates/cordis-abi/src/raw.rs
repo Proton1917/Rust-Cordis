@@ -4,6 +4,10 @@ pub type AbiStatus = u32;
 pub type LibraryId = u64;
 pub const ABI_MAJOR: u32 = 1;
 pub const ABI_MINOR: u32 = 0;
+pub const FORMAT_NATIVE: u8 = 1;
+pub const FORMAT_PROCESS: u8 = 2;
+pub const FORMAT_WASM: u8 = 3;
+pub const OBJECT_TYPED_METHODS: u32 = 1;
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -69,13 +73,15 @@ pub struct AbiUnit {
     pub reserved: u8,
 }
 
-pub type FreeBuffer = unsafe extern "C" fn(*mut u8, u64, u64, *mut AbiError) -> AbiStatus;
+pub type FreeBuffer =
+    unsafe extern "C" fn(*mut c_void, *mut u8, u64, u64, *mut AbiError) -> AbiStatus;
 
 #[repr(C)]
 pub struct AbiBuf {
     pub ptr: *mut u8,
     pub len: u64,
     pub cap: u64,
+    pub owner: *mut c_void,
     pub free: Option<FreeBuffer>,
     pub library: LibraryId,
 }
@@ -86,6 +92,7 @@ impl AbiBuf {
             ptr: std::ptr::null_mut(),
             len: 0,
             cap: 0,
+            owner: std::ptr::null_mut(),
             free: None,
             library: 0,
         }
@@ -161,11 +168,21 @@ pub struct AbiObject {
 pub struct ObjectHeader {
     pub size: u64,
     pub kind: u32,
+    pub flags: u32,
     pub reserved: u32,
     pub interface: AbiStr,
     pub clone: unsafe extern "C" fn(*mut c_void, *mut AbiObject, *mut AbiError) -> AbiStatus,
     pub drop: unsafe extern "C" fn(*mut c_void, *mut AbiError) -> AbiStatus,
+    pub methods: *const AbiStr,
+    pub method_count: u64,
+    pub invoke: Invoke,
+    pub invoke_async: InvokeAsync,
 }
+
+pub type Invoke =
+    unsafe extern "C" fn(*mut c_void, AbiStr, AbiBytes, *mut AbiBuf, *mut AbiError) -> AbiStatus;
+pub type InvokeAsync =
+    unsafe extern "C" fn(*mut c_void, AbiStr, AbiBytes, *mut AbiFuture, *mut AbiError) -> AbiStatus;
 
 #[repr(C)]
 pub struct AbiFuture {
@@ -258,6 +275,9 @@ pub struct HostV1 {
     pub lease_release: unsafe extern "C" fn(LibraryId, *mut AbiError) -> AbiStatus,
     pub effect_settled: unsafe extern "C" fn(u64, *mut AbiFuture, *mut AbiError) -> AbiStatus,
     pub effect_dispose: unsafe extern "C" fn(u64, *mut AbiFuture, *mut AbiError) -> AbiStatus,
+    pub object_export: unsafe extern "C" fn(AbiObject, *mut u64, *mut AbiError) -> AbiStatus,
+    pub object_import: unsafe extern "C" fn(u64, *mut AbiObject, *mut AbiError) -> AbiStatus,
+    pub object_release: unsafe extern "C" fn(u64, *mut AbiError) -> AbiStatus,
 }
 
 pub type Apply = unsafe extern "C" fn(u64, AbiBytes, *mut AbiFuture, *mut AbiError) -> AbiStatus;
@@ -308,3 +328,7 @@ pub struct DependencyV1 {
 unsafe impl Send for AbiStr {}
 // SAFETY: DOC-12 §7，静态虚表的字符串地址在租约期间保持只读。
 unsafe impl Sync for AbiStr {}
+// SAFETY: DOC-12 §7，首部携带只读元数据和函数指针，实际访问由拥有对象维持寿命。
+unsafe impl Send for ObjectHeader {}
+// SAFETY: DOC-12 §7，虚表元数据按契约只读，指针解引用经拥有对象完成。
+unsafe impl Sync for ObjectHeader {}

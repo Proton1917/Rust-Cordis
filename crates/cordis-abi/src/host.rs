@@ -231,6 +231,42 @@ impl HostClient {
         }?;
         Ok(self.future(raw))
     }
+    pub fn object_export(self, object: Object) -> Result<u64> {
+        // SAFETY: DOC-12 §9，进入宿主时转交对象引用，成功写出宿主分配的资源编号。
+        unsafe {
+            self.env
+                .call(|out, err| (self.env.raw_host().object_export)(object.into_raw(), out, err))
+        }
+    }
+    pub fn object_import(self, id: u64) -> Result<Object> {
+        // SAFETY: DOC-12 §9，宿主克隆资源表中的对象，成功交出独立拥有引用。
+        let raw = unsafe {
+            self.env
+                .call(|out, err| (self.env.raw_host().object_import)(id, out, err))
+        }?;
+        // SAFETY: DOC-12 §5、§11，接管import产生的对象及租约。
+        Ok(unsafe { Object::from_raw(raw, self.env) })
+    }
+    pub fn object_release(self, id: u64) -> Result<()> {
+        // SAFETY: DOC-12 §9，宿主移出资源表引用并在锁外释放。
+        unsafe {
+            self.env
+                .call_unit(|err| (self.env.raw_host().object_release)(id, err))
+        }
+    }
+    pub fn import_resource(self, value: &crate::CborValue) -> Result<Object> {
+        if let crate::CborValue::Tag(crate::RESOURCE_TAG, value) = value {
+            if let crate::CborValue::Integer(id) = value.as_ref() {
+                return self.object_import(
+                    u64::try_from(*id).map_err(|error| Error::new(2, error.to_string()))?,
+                );
+            }
+        }
+        Err(Error::new(
+            2,
+            "resource requires tag 60000 and a u64 identifier",
+        ))
+    }
     fn future(self, raw: AbiFuture) -> RemoteFuture<AbiUnit> {
         // SAFETY: DOC-12 §8、§9，调用本辅助函数的Host方法均产生单位结果。
         unsafe { RemoteFuture::from_raw(raw, self.env) }

@@ -64,11 +64,43 @@ dependencies = [
 ]
 
 [[package]]
+name = "cordis-sdk"
+version = "0.1.0"
+dependencies = [
+ "cordis-abi",
+ "cordis-sdk-macros",
+ "counter",
+ "futures-util",
+ "kv-api",
+ "kv-mem",
+ "serde",
+ "tokio",
+]
+
+[[package]]
+name = "cordis-sdk-macros"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
+]
+
+[[package]]
 name = "cordis-testkit"
 version = "0.1.0"
 dependencies = [
  "cordis",
  "futures-util",
+]
+
+[[package]]
+name = "counter"
+version = "0.1.0"
+dependencies = [
+ "cordis-sdk",
+ "kv-api",
+ "serde",
 ]
 
 [[package]]
@@ -122,6 +154,22 @@ dependencies = [
  "cfg-if",
  "crunchy",
  "zerocopy",
+]
+
+[[package]]
+name = "kv-api"
+version = "0.1.0"
+dependencies = [
+ "cordis-sdk",
+ "serde",
+]
+
+[[package]]
+name = "kv-mem"
+version = "0.1.0"
+dependencies = [
+ "cordis-sdk",
+ "kv-api",
 ]
 
 [[package]]

@@ -1,11 +1,16 @@
 use crate::{
     AbiBuf, AbiBytes, AbiError, AbiStatus, Environment, Error, Result, error::release_boundary,
 };
-use std::mem::ManuallyDrop;
+use std::{ffi::c_void, mem::ManuallyDrop};
 
 pub struct Buf {
     raw: Option<AbiBuf>,
     env: Environment,
+}
+
+struct BufferOwner<T> {
+    bytes: Vec<u8>,
+    _owner: T,
 }
 
 // SAFETY: DOC-12 §5，Buf独占字节，源侧free支持任意线程调用。
@@ -28,9 +33,37 @@ impl Buf {
                 ptr: bytes.as_mut_ptr(),
                 len: bytes.len() as u64,
                 cap: bytes.capacity() as u64,
+                owner: std::ptr::null_mut(),
                 free: Some(free_buffer),
                 library: env.library(),
             }),
+            env,
+        })
+    }
+
+    pub fn with_owner<T: Send + 'static>(
+        bytes: Vec<u8>,
+        owner: T,
+        env: Environment,
+    ) -> Result<Self> {
+        env.acquire(env.library())?;
+        let owner = Box::into_raw(Box::new(BufferOwner {
+            bytes,
+            _owner: owner,
+        }));
+        // SAFETY: DOC-12 §5，全部所有权先进入最终Box，再从该存储取得字节指针。
+        let raw = unsafe {
+            AbiBuf {
+                ptr: (*owner).bytes.as_mut_ptr(),
+                len: (*owner).bytes.len() as u64,
+                cap: (*owner).bytes.capacity() as u64,
+                owner: owner.cast(),
+                free: Some(free_owned::<T>),
+                library: env.library(),
+            }
+        };
+        Ok(Self {
+            raw: Some(raw),
             env,
         })
     }
@@ -78,7 +111,7 @@ impl Buf {
             // SAFETY: DOC-12 §5，原始字段与源侧释放函数配套，唯一所有权在此结束。
             Some(free) => unsafe {
                 self.env
-                    .call_unit(|err| free(raw.ptr, raw.len, raw.cap, err))
+                    .call_unit(|err| free(raw.owner, raw.ptr, raw.len, raw.cap, err))
             },
             None => Ok(()),
         };
@@ -97,6 +130,7 @@ impl Drop for Buf {
 
 // SAFETY: DOC-12 §5，字段来自本模块创建的Vec，调用方独占该缓冲。
 unsafe extern "C" fn free_buffer(
+    _: *mut c_void,
     ptr: *mut u8,
     len: u64,
     cap: u64,
@@ -108,4 +142,16 @@ unsafe extern "C" fn free_buffer(
             drop(Vec::from_raw_parts(ptr, len as usize, cap as usize))
         })
     }
+}
+
+// SAFETY: DOC-12 §5，owner来自with_owner<T>，唯一Box所有权在此归还。
+unsafe extern "C" fn free_owned<T>(
+    owner: *mut c_void,
+    _: *mut u8,
+    _: u64,
+    _: u64,
+    err: *mut AbiError,
+) -> AbiStatus {
+    // SAFETY: DOC-12 §5、§6，在源侧释放字节与附带资源守卫并捕获析构panic。
+    unsafe { release_boundary(err, || drop(Box::from_raw(owner.cast::<BufferOwner<T>>()))) }
 }

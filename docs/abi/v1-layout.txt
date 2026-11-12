@@ -7,34 +7,40 @@ AbiStr size=16 align=8
 AbiBytes size=16 align=8
   ptr=0
   len=8
-AbiBuf size=40 align=8
+AbiBuf size=48 align=8
   ptr=0
   len=8
   cap=16
-  free=24
-  library=32
+  owner=24
+  free=32
+  library=40
 AbiUnit size=1 align=1
   reserved=0
-AbiError size=88 align=8
+AbiError size=104 align=8
   code=0
   message=8
-  detail=48
-AbiState size=88 align=8
+  detail=56
+AbiState size=104 align=8
   schema=0
-  version=40
-  reserved=44
-  data=48
+  version=48
+  reserved=52
+  data=56
 AbiObject size=24 align=8
   data=0
   vtable=8
   library=16
-ObjectHeader size=48 align=8
+ObjectHeader size=88 align=8
   size=0
   kind=8
-  reserved=12
-  interface=16
-  clone=32
-  drop=40
+  flags=12
+  reserved=16
+  interface=24
+  clone=40
+  drop=48
+  methods=56
+  method_count=64
+  invoke=72
+  invoke_async=80
 AbiFuture size=24 align=8
   data=0
   vtable=8
@@ -52,17 +58,17 @@ WakerVTable size=32 align=8
   wake=8
   wake_by_ref=16
   drop=24
-SyncCallbackVTable size=56 align=8
+SyncCallbackVTable size=96 align=8
   header=0
-  call=48
-AsyncCallbackVTable size=56 align=8
+  call=88
+AsyncCallbackVTable size=96 align=8
   header=0
-  call=48
-ExporterVTable size=64 align=8
+  call=88
+ExporterVTable size=104 align=8
   header=0
-  export=48
-  thaw=56
-HostV1 size=184 align=8
+  export=88
+  thaw=96
+HostV1 size=208 align=8
   size=0
   log=8
   now=16
@@ -86,6 +92,9 @@ HostV1 size=184 align=8
   lease_release=160
   effect_settled=168
   effect_dispose=176
+  object_export=184
+  object_import=192
+  object_release=200
 PluginV1 size=112 align=8
   size=0
   abi_major=8
@@ -154,13 +163,13 @@ AbiOption<AbiStr> size=24 align=8
 AbiOption<AbiBytes> size=24 align=8
   is_some=0
   value=8
-AbiOption<AbiBuf> size=48 align=8
+AbiOption<AbiBuf> size=56 align=8
   is_some=0
   value=8
 AbiOption<AbiObject> size=32 align=8
   is_some=0
   value=8
-AbiOption<AbiState> size=96 align=8
+AbiOption<AbiState> size=112 align=8
   is_some=0
   value=8
 AbiOption<AbiUnit> size=2 align=1

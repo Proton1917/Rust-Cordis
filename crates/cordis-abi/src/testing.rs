@@ -26,6 +26,9 @@ pub trait Backend: Send + Sync + 'static {
     fn lease_release(&self, library: LibraryId) -> Result<()>;
     fn effect_settled(&self, effect: u64) -> Result<RemoteFuture<AbiUnit>>;
     fn effect_dispose(&self, effect: u64) -> Result<RemoteFuture<AbiUnit>>;
+    fn object_export(&self, object: Object) -> Result<u64>;
+    fn object_import(&self, id: u64) -> Result<Object>;
+    fn object_release(&self, id: u64) -> Result<()>;
 }
 
 static BACKEND: OnceLock<Arc<dyn Backend>> = OnceLock::new();
@@ -123,6 +126,12 @@ host_call!(lease_acquire(library: LibraryId), { backend().lease_acquire(library)
 host_call!(lease_release(library: LibraryId), { backend().lease_release(library) });
 host_call!(effect_settled(effect: u64) -> AbiFuture, { backend().effect_settled(effect).map(RemoteFuture::into_raw) });
 host_call!(effect_dispose(effect: u64) -> AbiFuture, { backend().effect_dispose(effect).map(RemoteFuture::into_raw) });
+host_call!(object_export(object: AbiObject) -> u64, {
+    let object = Object::from_raw(object, environment(0));
+    backend().object_export(object)
+});
+host_call!(object_import(id: u64) -> AbiObject, { backend().object_import(id).map(Object::into_raw) });
+host_call!(object_release(id: u64), { backend().object_release(id) });
 
 static HOST: HostV1 = HostV1 {
     size: std::mem::size_of::<HostV1>() as u64,
@@ -148,6 +157,9 @@ static HOST: HostV1 = HostV1 {
     lease_release,
     effect_settled,
     effect_dispose,
+    object_export,
+    object_import,
+    object_release,
 };
 
 pub struct LoadedPlugin {

@@ -29,12 +29,25 @@ fn layout() -> String {
     .unwrap();
     record!(AbiStr, ptr, len);
     record!(AbiBytes, ptr, len);
-    record!(AbiBuf, ptr, len, cap, free, library);
+    record!(AbiBuf, ptr, len, cap, owner, free, library);
     record!(AbiUnit, reserved);
     record!(AbiError, code, message, detail);
     record!(AbiState, schema, version, reserved, data);
     record!(AbiObject, data, vtable, library);
-    record!(ObjectHeader, size, kind, reserved, interface, clone, drop);
+    record!(
+        ObjectHeader,
+        size,
+        kind,
+        flags,
+        reserved,
+        interface,
+        clone,
+        drop,
+        methods,
+        method_count,
+        invoke,
+        invoke_async
+    );
     record!(AbiFuture, data, vtable, library);
     record!(FutureVTable, size, poll, drop);
     record!(AbiWaker, data, vtable, library);
@@ -66,7 +79,10 @@ fn layout() -> String {
         lease_acquire,
         lease_release,
         effect_settled,
-        effect_dispose
+        effect_dispose,
+        object_export,
+        object_import,
+        object_release
     );
     record!(
         PluginV1,
@@ -121,7 +137,7 @@ fn layout() -> String {
 }
 
 #[test]
-fn abi_v1_matches_frozen_layout() {
+fn abi_v1_matches_layout_record() {
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/abi/v1-layout.txt");
     let actual = layout();
     if std::env::var_os("CORDIS_ABI_WRITE_LAYOUT").is_some() {
@@ -129,6 +145,9 @@ fn abi_v1_matches_frozen_layout() {
         std::fs::write(path, actual).unwrap();
     } else {
         let expected = include_str!("../../../docs/abi/v1-layout.txt");
-        assert_eq!(actual, expected, "ABI布局发生变化，需要对应ADR");
+        assert_eq!(
+            actual, expected,
+            "ABI 布局与记录存在差异，按 DOC-12 更新记录"
+        );
     }
 }

@@ -1,3 +1,5 @@
+#[path = "support/generic.rs"]
+mod generic_tests;
 mod support;
 
 use cordis_abi::*;
@@ -210,6 +212,7 @@ static SLICE_FREES: AtomicUsize = AtomicUsize::new(0);
 
 // SAFETY: DOC-12 §5，ptr/len/cap来自下方Vec分配，唯一所有权在此归还。
 unsafe extern "C" fn free_vector(
+    _: *mut c_void,
     ptr: *mut u8,
     len: u64,
     cap: u64,
@@ -225,7 +228,13 @@ unsafe extern "C" fn free_vector(
     }
 }
 // SAFETY: DOC-12 §5，ptr/len来自下方Box<[u8]>分配，唯一所有权在此归还。
-unsafe extern "C" fn free_slice(ptr: *mut u8, len: u64, _: u64, err: *mut AbiError) -> AbiStatus {
+unsafe extern "C" fn free_slice(
+    _: *mut c_void,
+    ptr: *mut u8,
+    len: u64,
+    _: u64,
+    err: *mut AbiError,
+) -> AbiStatus {
     // SAFETY: DOC-12 §5、§6，按原Box切片布局释放分配。
     unsafe {
         boundary_unit(support::host_environment(), err, || {
@@ -251,6 +260,7 @@ fn vector_and_boxed_slice_buffers_return_to_their_allocation_owners() {
         ptr: vector.as_mut_ptr(),
         len: vector.len() as u64,
         cap: vector.capacity() as u64,
+        owner: std::ptr::null_mut(),
         free: Some(free_vector),
         library: first.library(),
     };
@@ -261,6 +271,7 @@ fn vector_and_boxed_slice_buffers_return_to_their_allocation_owners() {
         ptr: Box::into_raw(slice).cast(),
         len,
         cap: len,
+        owner: std::ptr::null_mut(),
         free: Some(free_slice),
         library: second.library(),
     };

@@ -1,6 +1,6 @@
 use crate::{
-    ABI_MAJOR, ABI_MINOR, AbiError, AbiStatus, AbiStr, Apply, ComponentV1, DependencyV1, HostV1,
-    LibraryId, PluginV1, Resolve, error::release_boundary,
+    ABI_MAJOR, ABI_MINOR, AbiError, AbiStatus, AbiStr, Apply, ComponentV1, DependencyV1,
+    FORMAT_NATIVE, HostV1, LibraryId, PluginV1, Resolve, error::release_boundary,
 };
 use std::mem::{align_of, size_of};
 
@@ -146,7 +146,7 @@ impl PluginDescriptor {
             abi_major: ABI_MAJOR,
             abi_minor: ABI_MINOR,
             panic_unwind: u8::from(metadata.panic_unwind),
-            format: 1,
+            format: FORMAT_NATIVE,
             reserved: [0; 6],
             name: AbiStr::new(&metadata.name),
             version: AbiStr::new(&metadata.version),

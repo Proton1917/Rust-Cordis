@@ -6,7 +6,7 @@
 | 状态 | 已定稿（2026-11-11）。进展记录在 `docs/PROGRESS.md` |
 | 读者 | 实现者、评审者 |
 | 输入 | `DOC-10`–`DOC-13`、`ADR-0009`–`ADR-0014` |
-| 输出 | 通用退出条件 `Y-1`–`Y-10`、里程碑 `M7`–`M13`、验收场景 `AC-1`–`AC-9`、完成定义 |
+| 输出 | 通用退出条件 `Y-1`–`Y-10`、里程碑 `M7`–`M14`、验收场景 `AC-1`–`AC-9`、skill 验收 `SK-1`–`SK-3`、完成定义 |
 | 不包含 | `DOC-10` §4 的范围外事项 |
 
 ## 1 推进方式
@@ -96,6 +96,19 @@
 | 交付 | §4 的验收场景测试；`RM-1`–`RM-6` 的实测记录；根 `README.md` 的第二阶段章节（核心可执行文件的构建与运行、编写第一个插件）；`docs/PROGRESS.md` 的第二阶段总结 |
 | 退出 | `Y-1`–`Y-10`；§4 全部场景通过 |
 
+### M14 插件编写 skill
+
+`M7`–`M13` 产出的规则分散在 `DOC-11`、`DOC-13` 和 ADR 中，读者是平台的实现者。今后的插件由人或 AI 编写和重写（`DOC-10` §1 第 4 条），他们需要一份面向插件作者的操作手册。`M14` 把它做成一个 skill，供 Claude Code 与 Codex 加载。
+
+| 项 | 内容 |
+|---|---|
+| 依赖 | `M13`。SDK 与核心的使用方式在 `M13` 后不再变化，skill 以实际可运行的接口为准 |
+| 执行者 | 设计方（Claude）编写；Codex 在 `M13` 完成后停止，不进入本里程碑 |
+| 交付 | `skills/cordis-plugin/SKILL.md`：何时使用、插件项目结构、接口 crate、`Component` 实现、服务的提供与注入、事件、资源规则 `PR-1`–`PR-8` 的正确写法与错误写法、状态导出与继承、契约套件、`cordis verify`、编译与部署、常见错误及其症状；`skills/cordis-plugin/templates/`：可直接复制的接口 crate、插件 crate、契约套件 crate 模板；`skills/cordis-plugin/references/`：按需加载的接口版本规则与迁移指南（把既有 Rust 代码拆成插件的步骤） |
+| 安装 | 同一份 skill 链接或复制到 Claude Code 与 Codex 的用户 skill 目录；仓库中的版本为唯一来源 |
+| 验收 | `SK-1`：在没有本项目上下文的新会话中只加载该 skill，从空目录写出一个注入 `kv@1` 并导出状态的插件，编译后放入运行中的 `cordis`，插件进入 `Active`，热替换后状态保留。`SK-2`：同样条件下为 `kv@1` 写出第三个实现，通过 `kv-contract`。`SK-3`：skill 中的每段代码与模板都能在当前 SDK 上编译，由 `cargo test -p cordis-runtime --test skill_examples` 检查 |
+| 退出 | `Y-1`–`Y-3`、`Y-9`、`Y-10`；`SK-1`–`SK-3` 通过 |
+
 ## 4 验收场景
 
 场景在 `crates/cordis-runtime/tests/acceptance.rs` 中以子进程方式运行 `cordis`，使用示例插件与 fixture。
@@ -116,7 +129,7 @@
 
 第二阶段在以下条件全部成立时完成：
 
-1. `M7`–`M13` 的退出条件全部满足，`docs/PROGRESS.md` 有七个里程碑的记录。
+1. `M7`–`M14` 的退出条件全部满足，`docs/PROGRESS.md` 有八个里程碑的记录。
 2. `AC-1`–`AC-9` 全部通过。
 3. `RM-1`–`RM-6` 有实测数值，记录在 `PROGRESS.md`。
 4. `DOC-12` 状态为“已冻结 v1.0”，`docs/abi/v1-layout.txt` 与实现一致。

@@ -132,7 +132,7 @@ fn unsafe_is_localized_and_documents_its_contract() {
             syn::parse_file(&source).unwrap_or_else(|error| panic!("{}: {error}", file.display()));
         let relative = file.strip_prefix(root).unwrap().to_string_lossy();
         let allowed = file.starts_with(&manifest)
-            || relative.starts_with("crates/cordis-loader/")
+            || relative.starts_with("crates/cordis-host/")
             || relative.starts_with("crates/cordis-sdk-macros/");
         let mut audit = Audit {
             file: &file,

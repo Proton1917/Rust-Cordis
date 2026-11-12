@@ -7,6 +7,7 @@ mod descriptor;
 mod environment;
 mod error;
 mod future;
+mod generic;
 mod host;
 mod object;
 mod raw;
@@ -23,6 +24,11 @@ pub use descriptor::{
 pub use environment::Environment;
 pub use error::{Error, Result, boundary, boundary_unit, decode, encode, entry_boundary};
 pub use future::{RemoteFuture, make_future};
+pub use generic::{
+    CborEncoder, CborValue, GenericService, InvokeFuture, OPTION_SOME_TAG, RESOURCE_TAG,
+    decode_arguments, decode_value, from_value, generic_object, make_invoke_future, option_some,
+    option_take, to_value,
+};
 pub use host::{HostClient, State};
 pub use object::{Object, object_arc, object_data, object_environment};
 pub use raw::*;
