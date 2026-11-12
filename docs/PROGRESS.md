@@ -6,11 +6,11 @@
 
 | 项 | 值 |
 |---|---|
-| 最近完成的里程碑 | `M12` |
-| 进行中的里程碑 | 第二阶段 M13 |
-| 下一步 | 接入正式契约辅助与套件、独立验证会话、cordis-dev verify 和宿主验证门；完成 require_verified 的实际替换验收 |
+| 最近完成的里程碑 | `M13` |
+| 进行中的里程碑 | 第二阶段 M14 |
+| 下一步 | 整合 AC-1–AC-9、AU 场景及 RM 指标；完成固定 50 轮替换、直接调用基准、默认 Git 脚手架和 launchd 恢复验收 |
 | 阻塞项 | 无；用户已恢复执行 |
-| 最后更新 | 2026-11-13（Asia/Shanghai），M12 验收 |
+| 最后更新 | 2026-11-13（Asia/Shanghai），M13 验收 |
 
 ## 环境
 
@@ -276,6 +276,7 @@
 | cordis-testkit | 161 / 181 |
 | cordis-types | 156 / 177 |
 | cordis-up | 1613 / 1752 |
+| 六个核心 crate 合计 | 10927 / 12352 |
 
 ### M12 核心命令、配置调和与批次管理
 
@@ -294,7 +295,7 @@
 - MSRV：`cargo +1.85.0 build -p cordis-watch -p kv-file -p console-log --target-dir target/m12-msrv` 通过，6.24 秒。
 - CP-9：configuration-final 15151009 次 / 1801 秒 / exit 0；plugin_manifest-final 14687854 次 / 1801 秒 / exit 0；state_block-submitted 18529539 次 / 1801 秒 / exit 0。完整命令和状态在 target/runtime-m12/fuzz/logs 对应 JSON 与日志，限制保持 2048 MiB、单输入 2 秒、16 MiB。state 的旧候选曾触发 ASan 常驻内存上限，0 字节产物单次复放正常；最终运行采用 ASAN_OPTIONS=malloc_context_size=5，保留全部检测。M10 UP/1 解码器的 98394f9 正式证据独立保留。
 - 源码对应：configuration 快照比较 config.rs、config/scopes.rs；plugin_manifest 比较 manifest.rs、config.rs、config/scopes.rs；state_block 比较 storage.rs、config.rs、config/scopes.rs。命令形式为 `cmp target/m12-fuzz-tested/<目标>/src/<模块> crates/cordis-runtime/src/<模块>`，三组均退出 0。正式 fuzz 工程保存在 crates/cordis-runtime/fuzz。
-- Y-8：下表按 cloc 2.10 的 src 代码行口径统计。runtime 经职责拆分后为 4302 代码行，按 ADR-0034 调整目标/上限为 4500/5500；supervisor 为 5463 代码行，保持 ADR-0030 的 5500 上限。
+- Y-8：下表按 cloc 2.10 的 src 代码行口径统计。runtime 经职责拆分后为 4304 代码行，按 ADR-0034 调整目标/上限为 4500/5500；supervisor 为 5463 代码行，保持 ADR-0030 的 5500 上限。六个核心 crate 为 cordis、cordis-supervisor、cordis-runtime、cordis-up、cordis-process、cordis-types，按各阶段实际存在的实现求和。
 - Y-9：README、DOC-02/11/13/15、ADR-0017/0031–0034、解释页与当前状态已同步。解释页的实际桌面与移动进度区域截图为 target/explainer-m12-desktop.png、target/explainer-m12-mobile.png；检查后浏览器与本次服务已退出。
 - Y-10：提交主题 `M12: 实现核心运行与持久化批次管理`，推送至 origin/main。
 - 后续：M13 候选已有 kv-mem/kv-file 的两阶段真实契约成功、违约与崩溃失败及宿主验证门证据，下一步正式接入并完成运行时替换验收。后续范围按更新的项目规则持续至 M21，M15 skill 同属交付。
@@ -303,16 +304,53 @@
 |---|---:|
 | cordis | 4230 / 5112 |
 | cordis-abi | 2285 / 2700 |
-| cordis-dev | 238 / 280 |
+| cordis-dev | 241 / 283 |
 | cordis-host | 2345 / 2602 |
 | cordis-process | 374 / 410 |
-| cordis-runtime | 4302 / 4727 |
+| cordis-runtime | 4304 / 4729 |
 | cordis-sdk | 693 / 800 |
 | cordis-sdk-macros | 1179 / 1280 |
 | cordis-supervisor | 5463 / 5876 |
 | cordis-testkit | 161 / 181 |
 | cordis-types | 169 / 193 |
 | cordis-up | 1613 / 1752 |
+| 六个核心 crate 合计 | 16153 / 18072 |
+
+M12 复核按用户要求从 6b4687f 导出隔离源码，修正测试与脚手架的构建目录后，以旁侧 `CARGO_TARGET_DIR` 执行全工作区测试，全部通过。命令为 `PATH=/opt/homebrew/opt/rustup/bin:$PATH CARGO_TARGET_DIR=/Users/gordongauerk/Projects/Rust-cordis/target/m12-review/build cargo test --workspace`，工作目录为 target/m12-review/source，输出保存在 target/m12-review/workspace-external-target.log。隔离目录初次命令的 PATH 缺少 Rustup 入口，在实际编译前退出 127；加入已安装工具路径后执行完成。Host 测试工具使用显式目标目录，生成项目使用 `cargo build --target-dir target`，相关修正随 M13 提交。M12 表中的 dev/runtime 数值已对 6b4687f 的源码重新计量。
+
+### M13 契约验证与原生准入
+
+- commit：本节所在的 `M13: 实现独立契约验证与原生准入门` 提交。
+- 交付：cordis-contract、kv-contract、独立核心的两阶段契约会话、cordis-dev verify、共享结果/印记 DTO、宿主 SW-2 验证门及目录级单调副本序号。
+- Y-1–Y-2：`cargo fmt --all --check` 与 `cargo clippy --workspace --all-targets -- -D warnings` 通过，完整 clippy 4.41 秒。Host 的缓存印记发布按步骤拆分后，Host 定向 clippy 通过，1.13 秒。
+- Y-3：280 条运行测试与 2 条文档测试通过。完整工作区执行复用先前成功的两条真实 verify 流程，日志 target/m13-workspace-tests.log；这两条在 target/m13-verify-tests.log 中通过，27.53 秒。新增运行时准入场景通过，10.23 秒。`cargo build --workspace` 通过，4.92 秒。
+- 真实契约：kv-mem 与 kv-file 各通过 8 条行为断言，阶段 0 执行读写、覆盖、排序和 flush，停止套件后导出并重启被测实例，阶段 1 检查继承值。违约真实库产生 7 条失败，进程终止库由独立核心报告 early EOF；两者 exit 1，成功库保存真实副本与印记。候选测得 RM-5 为 2723/1734 毫秒，正式自动化流程保留逐条输出。
+- 真实准入：require_verified 模式下，缺印记的真实新库被拒绝；同字节旧 installed 引用取得真实印记后可以准入。用真实 kv-broken 字节覆盖候选并保留原印记时，SW-2 拒绝替换，原实例纪元与 KV 值 `[9,7,5]` 保持。已验证 kv-file 替换以 retired_image_limit=0 触发有状态宿主重启，缓存路径的印记和文件数据均验证通过。用例为 `gate::verified_runtime_install_replace_and_threshold_restart_use_real_receipts`。
+- 副本序号：Host 以目录 File::lock 保护最大序号扫描与预留，两个独立宿主共享带旧格式序号 7 的目录时分配 8、9。开发工具的会话与验证副本也采用同一分配规则，已有高序号且低编号空缺的实际 verify 生成会话 8 与 kv-8；成功证据在 target/m13-dev-sequences.log。
+- Y-4：M6 的 177 条矩阵校验通过，处置保持 8 条移植、166 条改写、3 条不适用。
+- Y-5：工作区 unsafe 源码审计通过；核心产品依赖树在 target/m13-core-dependencies.txt，开发工具依赖树在 target/m13-dev-dependencies.txt。验证操作通过独立进程执行，开发工具使用数据与进程接口。
+- Y-6–Y-7：本阶段 Miri 的 13 条边界用例通过，3.41 秒，布局比较通过，0.94 秒；原生布局比较通过，ABI 保持 v1.0。
+- Y-8：下表沿 cloc 2.10 的 src 代码行 / 总行口径。runtime 的契约会话增加后为 4726 代码行，高于 4500 目标、低于 ADR-0034 的 5500 上限；其余 crate 保持各自上限。
+- Y-9：README 验证命令、DOC-11 准入与缓存印记、DOC-13 的后续职责规划、M12 外置构建目录复核及代码行纠正已同步；解释页更新 M13 完成/M14 进行。
+- Y-10：提交主题 `M13: 实现独立契约验证与原生准入门`，推送至 origin/main。
+- 后续：M14 已准备真实 cordis 子进程的 50 次替换与 8 线程调用、直接调用基准、默认 Git 脚手架与 launchd 恢复。8 个独立库和 100 实例已取得预验证，启动 6139 毫秒；修改 load-one 后仅该插件重编译，记录在 target/acceptance-evidence 与 target/m14-ac1.log。
+
+| crate | 代码行 / 总行 |
+|---|---:|
+| cordis | 4230 / 5112 |
+| cordis-abi | 2285 / 2700 |
+| cordis-contract | 31 / 47 |
+| cordis-dev | 678 / 757 |
+| cordis-host | 2470 / 2743 |
+| cordis-process | 374 / 410 |
+| cordis-runtime | 4726 / 5193 |
+| cordis-sdk | 693 / 800 |
+| cordis-sdk-macros | 1179 / 1280 |
+| cordis-supervisor | 5463 / 5876 |
+| cordis-testkit | 161 / 181 |
+| cordis-types | 203 / 237 |
+| cordis-up | 1613 / 1752 |
+| 六个核心 crate 合计 | 16609 / 18580 |
 
 ## 第二阶段候选与恢复记录
 

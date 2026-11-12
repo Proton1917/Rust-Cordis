@@ -23,7 +23,7 @@ pub struct Cli {
 #[derive(Subcommand)]
 pub enum Action {
     /// 按项目配置启动核心与插件进程。
-    Run(ConfigurationPath),
+    Run(RunOptions),
     /// 读取项目状态文件。
     Status(ConfigurationPath),
     /// 生成并安装系统服务配置。
@@ -41,6 +41,47 @@ pub enum Action {
 pub struct ConfigurationPath {
     #[arg(short, long, default_value = "cordis.toml")]
     pub config: PathBuf,
+}
+
+#[derive(Args)]
+pub struct RunOptions {
+    #[arg(short, long, default_value = "cordis.toml")]
+    pub config: PathBuf,
+    #[arg(long, requires_all = ["contract_subject", "contract_report"])]
+    pub contract_suite: Option<String>,
+    #[arg(long, requires_all = ["contract_suite", "contract_report"])]
+    pub contract_subject: Option<String>,
+    #[arg(long, requires_all = ["contract_suite", "contract_subject"])]
+    pub contract_report: Option<PathBuf>,
+    #[arg(long, default_value_t = 30_000)]
+    pub contract_timeout_ms: u64,
+}
+
+impl RunOptions {
+    /// ADR-0017：契约参数成组建立独立会话，普通 run 沿既有部署流程。
+    pub async fn run(self) -> Result<()> {
+        let plan = match (
+            self.contract_suite,
+            self.contract_subject,
+            self.contract_report,
+        ) {
+            (Some(suite), Some(subject), Some(report)) if self.contract_timeout_ms > 0 => {
+                Some(crate::contract::Plan {
+                    suite,
+                    subject,
+                    report,
+                    timeout: std::time::Duration::from_millis(self.contract_timeout_ms),
+                })
+            }
+            (None, None, None) => None,
+            _ => {
+                return Err(parameter(
+                    "契约会话需要套件、被测实例、报告路径与正截止时间",
+                ));
+            }
+        };
+        crate::run_with_contract(self.config, plan).await
+    }
 }
 
 #[derive(Subcommand)]

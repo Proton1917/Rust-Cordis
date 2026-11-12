@@ -248,7 +248,7 @@ impl Host {
                     build_info: info.build_info,
                     sequence: info.sequence,
                     path: info.path,
-                    verified: false,
+                    verified: info.verified,
                     leases,
                     quiescent: retired && leases == 0,
                     retired,

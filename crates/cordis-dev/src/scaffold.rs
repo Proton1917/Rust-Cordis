@@ -202,9 +202,9 @@ config = { paths = ["target/debug"], debounce_ms = 300 }
 
 const README: &str = r#"# Cordis 插件项目
 
-运行 `cargo build` 编译插件，然后运行 `cordis run`。`app` 激活时发送日志事件，`watch` 监听构建产物和 `cordis.toml`，通过管理接口请求热替换和配置重读。运行状态可通过 `cordis status` 查看；`console-log` 插件把日志事件写入终端。
+运行 `cargo build --target-dir target` 编译插件，然后运行 `cordis run`。构建参数使产物位于本项目的 `target/debug`，并覆盖全局 `CARGO_TARGET_DIR`。`app` 激活时发送日志事件，`watch` 监听构建产物和 `cordis.toml`，通过管理接口请求热替换和配置重读。运行状态可通过 `cordis status` 查看；`console-log` 插件把日志事件写入终端。
 
-运行 `cordis new-plugin hello --rust` 新建插件。修改插件后再次运行 `cargo build`；正在运行的系统会装载新构建。实例配置位于 `cordis.toml`，运行状态可通过 `cordis status` 查看。
+运行 `cordis new-plugin hello --rust` 新建插件。修改插件后再次运行 `cargo build --target-dir target`；正在运行的系统会装载新构建。实例配置位于 `cordis.toml`，运行状态可通过 `cordis status` 查看。
 
 `interfaces/` 保存接口定义，`contracts/` 保存契约套件。`state/` 保存状态与检查点，`.cordis/` 保存插件版本副本。
 "#;

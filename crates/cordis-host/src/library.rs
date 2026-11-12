@@ -1,10 +1,12 @@
 //! DOC-12 §3、§10、DOC-11 SW-2：装载独立库副本并以描述符租约保持代码寿命。
 
 use crate::lease::{Descriptor, Lease, UnloadPolicy};
+use crate::verification;
 use cordis_abi::{
     ABI_MAJOR, AbiBytes, AbiUnit, Apply, ComponentV1, Entry, Environment, Error, PluginV1,
     RemoteFuture, Resolve, Result,
 };
+use cordis_types::VerificationReceipt;
 use cordis_up::payload::{Component as ComponentInfo, Dependency as DependencyInfo, Plugin};
 use libloading::Library;
 use semver::Version;
@@ -13,22 +15,20 @@ use std::{
     fs::{self, File, OpenOptions},
     mem::size_of,
     path::{Path, PathBuf},
-    sync::{
-        Arc,
-        atomic::{AtomicU64, Ordering},
-    },
+    sync::Arc,
 };
 
 #[derive(Clone, Debug)]
 pub struct LibraryOptions {
     pub directory: PathBuf,
+    pub verified_dir: PathBuf,
+    pub require_verified: bool,
     pub unload: UnloadPolicy,
     pub allow_panic_abort: bool,
 }
 
 pub struct LibraryStore {
     options: LibraryOptions,
-    next: AtomicU64,
 }
 
 #[derive(Clone, Debug)]
@@ -40,6 +40,7 @@ pub struct LibraryInfo {
     pub build_info: String,
     pub sequence: u64,
     pub path: PathBuf,
+    pub verified: bool,
     pub components: Vec<ComponentInfo>,
 }
 
@@ -125,8 +126,21 @@ pub struct OpenError {
 impl LibraryStore {
     pub fn new(options: LibraryOptions) -> Result<Self> {
         fs::create_dir_all(&options.directory).map_err(io_error)?;
+        Ok(Self { options })
+    }
+
+    /// DOC-11 SW-1：目录锁保护全局序号分配，预留文件后释放锁再复制和装载。
+    fn reserve_copy(&self, extension: &str) -> Result<(u64, PathBuf, File)> {
+        let lock = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(self.options.directory.join(".sequence.lock"))
+            .map_err(io_error)?;
+        lock.lock().map_err(io_error)?;
         let mut maximum = 0;
-        for entry in fs::read_dir(&options.directory).map_err(io_error)? {
+        for entry in fs::read_dir(&self.options.directory).map_err(io_error)? {
             let name = entry.map_err(io_error)?.file_name();
             if let Some((stem, "dylib" | "so")) = name.to_string_lossy().rsplit_once('.')
                 && let Some((_, sequence)) = stem.rsplit_once('-')
@@ -135,13 +149,19 @@ impl LibraryStore {
                 maximum = maximum.max(sequence);
             }
         }
-        let next = maximum
+        let sequence = maximum
             .checked_add(1)
             .ok_or_else(|| Error::new(2, "库副本序号已达到上限"))?;
-        Ok(Self {
-            options,
-            next: AtomicU64::new(next),
-        })
+        let path = self
+            .options
+            .directory
+            .join(format!("candidate-{sequence}.{extension}"));
+        let output = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)
+            .map_err(io_error)?;
+        Ok((sequence, path, output))
     }
 
     /// DOC-11 SW-1、SW-2：创建唯一副本后读取入口与描述符，失败返回已创建的副本路径。
@@ -157,44 +177,26 @@ impl LibraryStore {
                 .and_then(|extension| extension.to_str())
                 .filter(|extension| matches!(*extension, "dylib" | "so"))
                 .ok_or_else(|| Error::new(2, "原生库扩展名需要为 dylib 或 so"))?;
-            let sequence = self
-                .next
-                .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |value| {
-                    value.checked_add(1)
-                })
-                .map_err(|_| Error::new(2, "库副本序号已达到上限"))?;
-            let process = std::process::id();
-            let staged = self
-                .options
-                .directory
-                .join(format!("candidate-{process}-{sequence}.{extension}"));
             let mut input = File::open(source).map_err(io_error)?;
-            let mut output = OpenOptions::new()
-                .write(true)
-                .create_new(true)
-                .open(&staged)
-                .map_err(io_error)?;
+            let (sequence, staged, mut output) = self.reserve_copy(extension)?;
+            copy = Some(staged.clone());
             std::io::copy(&mut input, &mut output).map_err(io_error)?;
             output.sync_all().map_err(io_error)?;
             drop(output);
-            copy = Some(staged.clone());
+            let receipt = if self.options.require_verified {
+                Some(verification::before_open(
+                    source,
+                    &staged,
+                    &self.options.verified_dir,
+                )?)
+            } else {
+                None
+            };
             let descriptor = self.load_descriptor(&staged, environment)?;
             let lease = descriptor.lease.clone();
-            let decoded = self.decode(descriptor, sequence, staged.clone());
+            let decoded = self.decode(descriptor, receipt.as_ref(), sequence, staged.clone());
             match decoded {
-                Ok(mut loaded) => {
-                    let path = self.options.directory.join(format!(
-                        "{}-{process}-{sequence}.{extension}",
-                        loaded.info.name
-                    ));
-                    if let Err(error) = fs::rename(&staged, &path) {
-                        loaded.retire();
-                        return Err(io_error(error));
-                    }
-                    loaded.info.path = path.clone();
-                    copy = Some(path);
-                    Ok(loaded)
-                }
+                Ok(loaded) => self.publish_copy(loaded, extension, receipt.as_ref(), &mut copy),
                 Err(error) => {
                     lease.retire();
                     lease.reap();
@@ -203,6 +205,33 @@ impl LibraryStore {
             }
         })();
         result.map_err(|error| OpenError { error, copy })
+    }
+
+    /// SW-1、SW-2：通过握手的副本按逻辑名称发布，保存印记失败时退役本次库。
+    fn publish_copy(
+        &self,
+        mut loaded: NativeLibrary,
+        extension: &str,
+        receipt: Option<&VerificationReceipt>,
+        copy: &mut Option<PathBuf>,
+    ) -> Result<NativeLibrary> {
+        let path = self.options.directory.join(format!(
+            "{}-{}.{extension}",
+            loaded.info.name, loaded.info.sequence
+        ));
+        if let Err(error) = fs::rename(&loaded.info.path, &path) {
+            loaded.retire();
+            return Err(io_error(error));
+        }
+        *copy = Some(path.clone());
+        if let Some(receipt) = receipt
+            && let Err(error) = verification::preserve(&path, receipt)
+        {
+            loaded.retire();
+            return Err(error);
+        }
+        loaded.info.path = path;
+        Ok(loaded)
     }
 
     /// DOC-12 §3、§10：校验入口协议，描述符构造失败时回收初始库租约。
@@ -265,6 +294,7 @@ impl LibraryStore {
     fn decode(
         &self,
         descriptor: Arc<Descriptor>,
+        receipt: Option<&VerificationReceipt>,
         sequence: u64,
         path: PathBuf,
     ) -> Result<NativeLibrary> {
@@ -300,6 +330,7 @@ impl LibraryStore {
             build_info,
             sequence,
             path,
+            verified: receipt.is_some(),
             components: components
                 .values()
                 .map(|component| component.info.clone())
@@ -307,6 +338,9 @@ impl LibraryStore {
         };
         info.components
             .sort_by(|left, right| left.name.cmp(&right.name));
+        if let Some(receipt) = receipt {
+            verification::coverage(receipt, &info.components)?;
+        }
         Ok(NativeLibrary {
             info,
             lease: descriptor.lease.clone(),

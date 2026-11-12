@@ -1,5 +1,7 @@
 #![forbid(unsafe_code)]
 
+mod allocation;
+
 use clap::Parser;
 use cordis::{Clock, Context, FiberState, Spawn, Task};
 use cordis_supervisor::{
@@ -1055,6 +1057,7 @@ async fn main() -> Result<()> {
             "scoped-cross",
             "swap",
             "threshold",
+            "allocation",
             "panic",
             "apply-panic",
             "abort",
@@ -1076,6 +1079,7 @@ async fn main() -> Result<()> {
             "scoped-cross" => composition(&artifacts, false).await?,
             "swap" => swaps(&artifacts, false).await?,
             "threshold" => swaps(&artifacts, true).await?,
+            "allocation" => allocation::run(&artifacts).await?,
             "panic" | "apply-panic" | "abort" | "segfault" | "stack" | "exit" | "spin" => {
                 faults(&artifacts, &case).await?
             }

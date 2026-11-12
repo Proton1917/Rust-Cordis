@@ -9,6 +9,7 @@ pub mod lease;
 pub mod library;
 pub mod native;
 pub mod objects;
+mod verification;
 pub mod wire;
 
 pub use cordis_abi::{Error, Result};

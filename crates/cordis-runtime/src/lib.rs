@@ -5,6 +5,7 @@ mod builtins;
 mod catalog;
 pub mod cli;
 pub mod config;
+pub mod contract;
 mod control;
 mod executor;
 mod install;
@@ -14,4 +15,4 @@ mod runtime;
 mod status;
 pub mod storage;
 
-pub use runtime::run;
+pub use runtime::{run, run_with_contract};

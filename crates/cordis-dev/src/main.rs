@@ -1,7 +1,9 @@
 #![forbid(unsafe_code)]
 //! DOC-15 §3.1、§12.1：独立开发命令生成项目与插件，运行管理交由 cordis。
 
+mod receipts;
 mod scaffold;
+mod verify;
 
 use clap::{Args, Parser, Subcommand};
 use std::{path::PathBuf, process::ExitCode};
@@ -21,6 +23,8 @@ enum Action {
     New(NewProject),
     /// 在现有项目中创建 Rust 插件并登记实例。
     NewPlugin(NewPlugin),
+    /// 通过独立核心运行契约套件，保存已验证库副本。
+    Verify(verify::Options),
     /// 显示开发工具版本与支持的核心版本范围。
     Version,
 }
@@ -43,8 +47,9 @@ struct NewPlugin {
     rust: bool,
 }
 
-fn main() -> ExitCode {
-    match run(Cli::parse()) {
+#[tokio::main]
+async fn main() -> ExitCode {
+    match run(Cli::parse()).await {
         Ok(()) => ExitCode::SUCCESS,
         Err(problem) => {
             eprintln!("{problem}");
@@ -53,17 +58,18 @@ fn main() -> ExitCode {
     }
 }
 
-fn run(cli: Cli) -> Result<()> {
+async fn run(cli: Cli) -> Result<()> {
     match cli.command {
         Action::New(options) => {
             scaffold::project(&options.path, options.sdk_path.as_deref())?;
             println!("已创建项目 {}", options.path.display());
-            println!("进入项目后运行 cargo build，再运行 cordis run。");
+            println!("进入项目后运行 cargo build --target-dir target，再运行 cordis run。");
         }
         Action::NewPlugin(options) => {
             scaffold::plugin(&options.project, &options.name)?;
             println!("已创建插件 plugins/{}", options.name);
         }
+        Action::Verify(options) => verify::run(options).await?,
         Action::Version => println!(
             "cordis-dev {}\n支持核心 >=0.1.0,<0.2.0",
             env!("CARGO_PKG_VERSION")

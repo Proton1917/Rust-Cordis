@@ -1,6 +1,7 @@
 //! DOC-15 §3.2：串行执行管理变更，并协调运行版本、原快照与部署叠加层。
 
 mod batch;
+mod contract;
 mod outcomes;
 mod sources;
 pub(crate) use outcomes::{BatchOutcomes, PendingBatch};

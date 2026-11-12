@@ -75,6 +75,10 @@ fn library(directory: &Path, name: &str) -> PathBuf {
     ))
 }
 
+fn host_binary(workspace: &Path) -> PathBuf {
+    workspace.join("target/watch-tools/debug/cordis-host")
+}
+
 fn prepare(workspace: &Path) -> (PathBuf, PathBuf) {
     let fixtures = workspace.join("target/host-native");
     compile_host_fixtures(workspace, &fixtures);
@@ -86,7 +90,8 @@ fn prepare(workspace: &Path) -> (PathBuf, PathBuf) {
 fn compile_host_fixtures(workspace: &Path, fixtures: &Path) {
     let mut compile = Command::new(env!("CARGO"));
     compile
-        .args(["build", "-p", "cordis-host"])
+        .args(["build", "-p", "cordis-host", "--target-dir"])
+        .arg(workspace.join("target/watch-tools"))
         .current_dir(workspace);
     build(compile);
     let mut fixtures_command = Command::new(env!("CARGO"));
@@ -98,7 +103,7 @@ fn compile_host_fixtures(workspace: &Path, fixtures: &Path) {
         .args(["--", "--build-only", "--artifacts-dir"])
         .arg(fixtures)
         .arg("--host")
-        .arg(workspace.join("target/debug/cordis-host"));
+        .arg(host_binary(workspace));
     build(fixtures_command);
     let mut current_consumer = Command::new(env!("CARGO"));
     current_consumer
@@ -136,11 +141,7 @@ fn create_project(workspace: &Path, fixtures: &Path, label: &str) -> PathBuf {
     fs::create_dir_all(project.join("sources")).unwrap();
     let watch_target = workspace.join("target/watch-plugin");
     fs::copy(env!("CARGO_BIN_EXE_cordis"), project.join("cordis")).unwrap();
-    fs::copy(
-        workspace.join("target/debug/cordis-host"),
-        project.join("cordis-host"),
-    )
-    .unwrap();
+    fs::copy(host_binary(workspace), project.join("cordis-host")).unwrap();
     fs::copy(
         library(&watch_target.join("debug"), "cordis_watch"),
         library(&project.join("plugins"), "watch"),

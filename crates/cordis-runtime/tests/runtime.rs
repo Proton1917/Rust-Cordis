@@ -9,11 +9,18 @@ use std::{
     time::{Duration, Instant},
 };
 
+#[path = "runtime/gate.rs"]
+mod gate;
+
 struct Process(Option<Child>);
 impl Process {
     fn start(project: &Path, label: &str) -> Self {
+        Self::start_binary(Path::new(env!("CARGO_BIN_EXE_cordis")), project, label)
+    }
+
+    fn start_binary(binary: &Path, project: &Path, label: &str) -> Self {
         let log = fs::File::create(project.join(format!("core-{label}.log"))).unwrap();
-        let child = Command::new(env!("CARGO_BIN_EXE_cordis"))
+        let child = Command::new(binary)
             .args(["run", "--config"])
             .arg(project.join("cordis.toml"))
             .current_dir(project)
@@ -151,11 +158,12 @@ fn active(project: &Path, name: &str) -> Value {
 }
 
 fn send(project: &Path, id: u64, interface: &str, method: &str, args: Value) -> Value {
-    let (commands, results) = if interface.starts_with("fixture.counter@") {
-        ("client-commands", "client-results")
-    } else {
-        ("commands", "results")
-    };
+    let (commands, results) =
+        if interface.starts_with("fixture.counter@") || interface.starts_with("kv@") {
+            ("client-commands", "client-results")
+        } else {
+            ("commands", "results")
+        };
     let command = project.join(commands).join(format!("{id:03}.json"));
     fs::create_dir_all(command.parent().unwrap()).unwrap();
     let staged = command.with_extension("next");

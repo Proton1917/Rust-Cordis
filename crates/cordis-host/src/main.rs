@@ -34,6 +34,8 @@ struct Arguments {
     allow_panic_abort: bool,
     #[arg(long)]
     require_verified: bool,
+    #[arg(long, default_value = ".cordis/verified")]
+    verified_dir: PathBuf,
     #[arg(long, default_value_t = 2)]
     native_workers: usize,
     #[arg(long, default_value_t = 30_000)]
@@ -61,15 +63,14 @@ async fn main() {
 }
 
 async fn run(args: Arguments) -> cordis_host::Result<i32> {
-    if args.require_verified {
-        return Err(cordis_host::Error::new(3, "当前宿主缺少验证印记校验能力"));
-    }
     let timeout = Duration::from_millis(args.request_timeout_ms);
     let host = Host::new(
         HostOptions {
             libraries: args.libraries,
             library: LibraryOptions {
                 directory: args.cache_dir,
+                verified_dir: args.verified_dir,
+                require_verified: args.require_verified,
                 unload: match args.unload {
                     Unload::Never => UnloadPolicy::Never,
                     Unload::WhenUnleased => UnloadPolicy::WhenUnleased,

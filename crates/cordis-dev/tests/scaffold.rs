@@ -115,7 +115,9 @@ fn forwarded_scaffold_builds_and_runs_native_plugins() {
         .env("PATH", &path)
         .args(["new-plugin", "hello", "--rust", "--project"])
         .arg(&project));
-    run(Command::new("cargo").current_dir(&project).arg("build"));
+    run(Command::new("cargo")
+        .current_dir(&project)
+        .args(["build", "--target-dir", "target"]));
     let output = fs::File::create(project.join("runtime.stdout.log")).unwrap();
     let errors = fs::File::create(project.join("runtime.stderr.log")).unwrap();
     let mut running = Running(

@@ -24,6 +24,7 @@ pub fn install(source: &Path, project: &Path, data: &Path, plugins: &Path) -> Re
     }
     let (existing, sequence) = installed_reference(&source, plugins)?;
     if let Some(reference) = existing {
+        copy_receipt(&source, &plugins.join(&reference))?;
         return Ok(reference);
     }
     let next = sequence
@@ -44,7 +45,31 @@ pub fn install(source: &Path, project: &Path, data: &Path, plugins: &Path) -> Re
         &plugins.join(format!(".install-{next}")),
         &plugins.join(&reference),
     )?;
+    copy_receipt(&source, &plugins.join(&reference))?;
     Ok(reference)
+}
+
+/// DOC-11 SW-2：单库安装同步旁置验证印记，宿主继续核验保留副本的完整字节与接口覆盖。
+fn copy_receipt(source: &Path, destination: &Path) -> Result<()> {
+    if source.is_dir() {
+        return Ok(());
+    }
+    let receipt_path = |path: &Path| {
+        let mut name = path.as_os_str().to_owned();
+        name.push(".verified.json");
+        PathBuf::from(name)
+    };
+    let source = receipt_path(source);
+    match fs::symlink_metadata(&source) {
+        Ok(_) => {}
+        Err(problem) if problem.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(problem) => return Err(io_error(problem)),
+    }
+    let destination = receipt_path(destination);
+    if destination.exists() && equal(&source, &destination)? {
+        return Ok(());
+    }
+    publish_copy(&source, &destination.with_extension("next"), &destination)
 }
 
 /// DOC-15 §3.2：接续既有安装序号，并按完整内容查找可复用的安装引用。

@@ -65,6 +65,7 @@ native_scenarios! {
     cross_group_composition => "scoped-cross",
     native_library_swap_and_rollback => "swap",
     retired_image_threshold_restarts_group => "threshold",
+    shared_directory_allocates_monotonic_copies => "allocation",
     service_panic_preserves_host => "panic",
     apply_panic_reports_failure => "apply-panic",
     abort_isolates_group => "abort",

@@ -82,9 +82,7 @@ impl Catalog {
         let mut matches = self.packages.values().filter(|package| {
             package.name == reference && !package.reference.starts_with("installed-")
         });
-        let package = matches
-            .next()
-            .ok_or_else(|| parameter(format!("插件引用 {reference} 缺席")))?;
+        let package = matches.next().ok_or_else(|| missing_reference(reference))?;
         if matches.next().is_some() {
             return Err(parameter(format!(
                 "插件 {reference} 有多个来源，请在配置中指定文件或目录名"
@@ -92,6 +90,18 @@ impl Catalog {
         }
         Ok(package.clone())
     }
+}
+
+/// ADR-0032：缺席引用同时报告外部构建目录，帮助调用方定位实际插件产物。
+fn missing_reference(reference: &str) -> cordis_up::WireError {
+    let message = match std::env::var_os("CARGO_TARGET_DIR") {
+        Some(directory) => format!(
+            "插件引用 {reference} 缺席；CARGO_TARGET_DIR={} 会改变 Cargo 产物位置，请核对 runtime.plugin_dir。脚手架项目使用 cargo build --target-dir target。",
+            PathBuf::from(directory).display()
+        ),
+        None => format!("插件引用 {reference} 缺席"),
+    };
+    parameter(message)
 }
 
 /// DOC-15 Q0、§9：解析清单后通过独立宿主探测原生库，校验声明的名称和版本。
@@ -166,7 +176,14 @@ async fn native_description(
             .into_owned(),
     ];
     if options.require_verified {
-        command.push("--require-verified".into());
+        command.extend([
+            "--require-verified".into(),
+            "--verified-dir".into(),
+            project
+                .join(".cordis/verified")
+                .to_string_lossy()
+                .into_owned(),
+        ]);
     }
     let bytes = cordis_supervisor::run_capture(
         &command,
@@ -250,7 +267,14 @@ fn native_command(
         options.invoke_timeout_ms.to_string(),
     ];
     if options.require_verified {
-        command.push("--require-verified".into());
+        command.extend([
+            "--require-verified".into(),
+            "--verified-dir".into(),
+            project
+                .join(".cordis/verified")
+                .to_string_lossy()
+                .into_owned(),
+        ]);
     }
     for package in packages {
         let Entry::Native { library } = &package.entry else {

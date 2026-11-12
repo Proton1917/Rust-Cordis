@@ -125,6 +125,7 @@ impl Shared {
         let inject = match self.role.as_str() {
             "admin" => vec!["cordis.manage@1.0", "cordis.runtime@1.1"],
             "reader" | "client" => vec![self.counter_interface()],
+            "kv-client" => vec!["kv@1.0"],
             _ => Vec::new(),
         }
         .into_iter()
@@ -343,7 +344,7 @@ impl Shared {
                     fs::write(path, serde_json::to_vec(&meta).map_err(error)?).map_err(error)?;
                 }
             }
-            "admin" | "client" => {
+            "admin" | "client" | "kv-client" => {
                 fs::create_dir_all(&session.config.commands).map_err(error)?;
                 fs::create_dir_all(&session.config.results).map_err(error)?;
                 while session.active.load(Ordering::Acquire) {
@@ -361,13 +362,17 @@ impl Shared {
                             serde_json::from_slice(&fs::read(&path).map_err(error)?)
                                 .map_err(error)?;
                         fs::remove_file(&path).map_err(error)?;
-                        let result = Self::invoke(
-                            &session,
-                            &command.interface,
-                            &command.method,
-                            command.args,
-                        )
-                        .await;
+                        // DOC-12 §7.3：Kv.put 的 Vec<u8> 在 UP/1 中使用 CBOR 字节串。
+                        let arguments = if self.role == "kv-client" && command.method == "put" {
+                            let (key, bytes): (String, Vec<u8>) =
+                                decode(&Value::Array(command.args))?;
+                            vec![Value::Text(key), Value::Bytes(bytes)]
+                        } else {
+                            command.args
+                        };
+                        let result =
+                            Self::invoke(&session, &command.interface, &command.method, arguments)
+                                .await;
                         let reply = match result {
                             Ok(value) => Reply {
                                 ok: true,

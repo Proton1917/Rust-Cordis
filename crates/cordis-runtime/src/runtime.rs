@@ -3,6 +3,7 @@
 use crate::{
     builtins::{DataDirectory, Logs, RuntimeInfo},
     config::{self, Configuration, Result, parameter},
+    contract::{Plan, Session},
     control::{ControlServices, Controller},
     executor::Executor,
     request::{Handle, Operation, Request},
@@ -29,6 +30,12 @@ use tokio::{
 
 /// DOC-15 §3.1、CP-7：配置通过版本检查后创建唯一根，所有结束路径释放该根。
 pub async fn run(path: PathBuf) -> Result<()> {
+    run_with_contract(path, None).await
+}
+
+/// DOC-11 §8：验证会话与普通部署共用唯一内核，最终报告在完整清理之后写出。
+pub async fn run_with_contract(path: PathBuf, plan: Option<Plan>) -> Result<()> {
+    let session = plan.map(Session::new).transpose()?;
     let path = path.canonicalize().map_err(io_error)?;
     let configuration = config::parse(&storage::read(&path)?)?;
     configuration
@@ -38,11 +45,26 @@ pub async fn run(path: PathBuf) -> Result<()> {
     let root = Context::new(Arc::new(Executor::new()));
     let result = async {
         let (controller, requests, view) = create_controller(&root, path, configuration).await?;
-        serve(controller, requests, view, &mut terminate, &mut interrupt).await
+        if let Some(session) = &session {
+            session.install(&controller.manager)?;
+        }
+        serve(
+            controller,
+            requests,
+            view,
+            &mut terminate,
+            &mut interrupt,
+            session.as_ref(),
+        )
+        .await
     }
     .await;
     let disposed = root.fiber().dispose().await.map_err(kernel);
-    result.and(disposed)
+    let result = result.and(disposed);
+    if let Some(session) = session {
+        session.save(&result)?;
+    }
+    result
 }
 
 /// DOC-15 §3.2、CP-11：创建状态目录与监管器，并把内置服务和授权队列交给控制器。
@@ -160,8 +182,18 @@ async fn serve(
     view: View,
     terminate: &mut Signal,
     interrupt: &mut Signal,
+    session: Option<&Session>,
 ) -> Result<()> {
     let mut writer = StatusWriter::start(view, controller.store.directory.join("status.json"));
+    if let Some(session) = session {
+        let result = tokio::select! {
+            result = session.run(&mut controller) => result,
+            _ = terminate.recv() => Err(WireError::new(7, "契约会话收到终止信号")),
+            _ = interrupt.recv() => Err(WireError::new(7, "契约会话收到中断信号")),
+            result = &mut writer.task => writer.observed(result).and(Err(WireError::new(7, "契约会话状态发布任务已结束"))),
+        };
+        return finish(&controller, &mut requests, writer, result.map(|_| None)).await;
+    }
     let outcome = match controller.start().await {
         Ok(()) => {
             controller.diagnostics.lock().phase = "running".into();

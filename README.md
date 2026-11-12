@@ -133,11 +133,11 @@ conda run -n base python tools/conformance.py check   # 校验一致性矩阵
 原生验收会自动构建真实插件库，并使用 Rust 1.85.0 验证较旧编译器生成的插件。开发与运行工具可以一起构建：
 
 ```bash
-cargo build --workspace
+cargo build --workspace --target-dir target
 target/debug/cordis version
 target/debug/cordis new target/hello-cordis --sdk-path "$PWD/crates/cordis-sdk"
 cd target/hello-cordis
-cargo build
+cargo build --target-dir target
 ../../target/debug/cordis run
 ```
 
@@ -152,6 +152,22 @@ cd examples/native
 ```
 
 另一个终端可在该目录执行 `./cordis status` 读取实例与库状态。`SIGTERM` 或 `SIGINT` 触发最终状态导出和有序退出；再次运行时继承保存的状态。
+
+## 契约验证
+
+`cordis verify` 转交独立开发工具，启动隔离的核心和宿主执行真实套件。下面的命令验证内存 KV 的读写、键顺序、flush 和状态继承：
+
+```bash
+mkdir -p target/verify-demo
+target/debug/cordis verify \
+  --plugin target/debug/libkv_mem.dylib \
+  --suite target/debug/libkv_contract.dylib \
+  --project target/verify-demo
+```
+
+Linux 使用相应的 `.so` 文件名。验证成功后，命令保存已验证副本和库旁的 `.verified.json` 印记，逐项输出断言结果与验证时长。文件 KV 可通过 `--config` 指定包含 `path` 的 TOML 配置文件。
+
+部署设置 `runtime.require_verified = true` 后，宿主在打开候选库前比较完整字节，握手后核对实际提供接口的契约覆盖。安装引用和宿主缓存库携带印记，有状态重启继续执行同一检查。
 
 ## 进度
 
@@ -173,7 +189,7 @@ cd examples/native
 | `M13` | 独立进程中的契约验证与验证印记 |
 | `M14` | 系统验收、替换指标与使用文档 |
 
-`M0`–`M12` 及并发评审修复已提交。原生宿主、核心命令、配置调和、批次管理、检查点、watch 与脚手架已通过实际验收，ABI v1.0 已冻结。M12 的三个产品解析目标均完成固定 1800 秒 fuzz，正式源码与被测源码已逐字节比较。当前推进 M13 契约验证；各里程碑的结果和接口清单记录在 `docs/PROGRESS.md`。
+`M0`–`M13` 及评审修复已提交。原生宿主、核心命令、配置调和、批次管理、检查点、watch、脚手架与契约验证已通过实际验收，ABI v1.0 已冻结。M12 的三个产品解析目标均完成固定 1800 秒 fuzz，正式源码与被测源码已逐字节比较。当前推进 M14 系统验收与性能度量；各里程碑的结果和接口清单记录在 `docs/PROGRESS.md`。
 
 ## 后续阶段
 

@@ -2,7 +2,9 @@
 //! ADR-0028：运行时、宿主与 SDK 共用的接口数据，序列化形式由各接口版本定义。
 
 mod context;
+mod verification;
 pub use context::{ContextOptions, Interception, Isolation};
+pub use verification::{ContractAssertion, ContractReport, VerificationReceipt, VerificationSuite};
 
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
