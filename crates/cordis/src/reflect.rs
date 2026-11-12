@@ -284,7 +284,18 @@ impl Context {
         };
         let id = match located {
             Some((_, Some(id))) => id,
-            Some((Some(_), None)) => {
+            Some((Some(fiber), None)) => {
+                if state.fibers[fiber]
+                    .inject
+                    .entries
+                    .iter()
+                    .any(|entry| entry.key == *key && !entry.required)
+                {
+                    return Err(Error::new(format!(
+                        "optional service \"{}\" is absent in committed view",
+                        key
+                    )));
+                }
                 return Err(Error::new(format!(
                     "cannot get required service \"{}\" in inactive context",
                     key
@@ -610,26 +621,45 @@ fn refresh_keys(kernel: &Arc<Kernel>, id: FiberId, key: Option<&Arc<str>>) {
                 });
                 let check = binding.and_then(|binding| state.impls[binding].check.clone());
                 let provider = binding.map(|binding| state.impls[binding].scope.clone());
-                (index, pair, binding, active, check, provider)
+                let predicate = entry.predicate.clone();
+                let value = predicate
+                    .as_ref()
+                    .and_then(|_| binding.map(|id| state.impls[id].value.clone()));
+                (
+                    index, pair, binding, active, check, provider, predicate, value,
+                )
             })
             .collect::<Vec<_>>()
     };
     let checked = candidates
         .into_iter()
-        .map(|(index, pair, binding, active, check, provider)| {
-            let available = active
-                && check.is_none_or(|check| match catch_unwind(AssertUnwindSafe(|| check())) {
-                    Ok(value) => value,
-                    Err(payload) => {
-                        kernel.report(
-                            provider.as_ref().expect("checked provider exists").fiber,
-                            Error::panic(payload),
-                        );
-                        false
-                    }
-                });
-            (index, pair, binding, active, available)
-        })
+        .map(
+            |(index, pair, binding, active, check, provider, predicate, value)| {
+                let available = active
+                    && check.is_none_or(|check| match catch_unwind(AssertUnwindSafe(|| check())) {
+                        Ok(value) => value,
+                        Err(payload) => {
+                            kernel.report(
+                                provider.as_ref().expect("checked provider exists").fiber,
+                                Error::panic(payload),
+                            );
+                            false
+                        }
+                    })
+                    && predicate.as_ref().is_none_or(|predicate| {
+                        match catch_unwind(AssertUnwindSafe(|| {
+                            predicate(value.as_ref().expect("active binding value"))
+                        })) {
+                            Ok(available) => available,
+                            Err(payload) => {
+                                kernel.report(id, Error::panic(payload));
+                                false
+                            }
+                        }
+                    });
+                (index, pair, binding, active, available, predicate, value)
+            },
+        )
         .collect::<Vec<_>>();
     {
         let mut state = kernel.state.lock();
@@ -638,25 +668,35 @@ fn refresh_keys(kernel: &Arc<Kernel>, id: FiberId, key: Option<&Arc<str>>) {
         }
         let length = state.fibers[id].inject.entries.len();
         state.fibers[id].bindings.resize(length, None);
-        for (index, pair, binding, active, available) in checked {
+        for (index, pair, binding, active, available, predicate, value) in &checked {
             if state.fibers[id]
                 .inject
                 .entries
-                .get(index)
+                .get(*index)
                 .is_none_or(|entry| entry.key != pair.0)
             {
                 continue;
             }
-            let current = state.store.get(&pair).copied();
+            let current = state.store.get(pair).copied();
             let current_active = current.is_some_and(|binding| {
                 state.fibers[state.impls[binding].scope.fiber].state == FiberState::Active
             });
-            if current == binding && current_active == active {
-                state.fibers[id].bindings[index] = binding.filter(|_| available);
+            let current_predicate = &state.fibers[id].inject.entries[*index].predicate;
+            let same_predicate = match (predicate.as_ref(), current_predicate.as_ref()) {
+                (None, None) => true,
+                (Some(previous), Some(current)) => Arc::ptr_eq(previous, current),
+                _ => false,
+            };
+            let same_value = value.as_ref().is_none_or(|previous| {
+                current.is_some_and(|id| Arc::ptr_eq(previous, &state.impls[id].value))
+            });
+            if current == *binding && current_active == *active && same_predicate && same_value {
+                state.fibers[id].bindings[*index] = binding.filter(|_| *available);
             }
         }
         crate::fiber::enqueue_locked(&mut state, id);
     }
+    drop(checked);
     crate::fiber::drain(kernel);
 }
 
@@ -668,7 +708,11 @@ pub(crate) fn epoch_ids(state: &State, id: FiberId) -> Option<Vec<u64>> {
     fiber
         .bindings
         .iter()
-        .map(|id| id.and_then(|id| state.impls.get(id).map(|binding| binding.uid)))
+        .zip(&fiber.inject.entries)
+        .map(|(id, dependency)| {
+            id.and_then(|id| state.impls.get(id).map(|binding| binding.uid))
+                .or_else(|| (!dependency.required).then_some(0))
+        })
         .collect()
 }
 
@@ -749,5 +793,111 @@ pub(crate) fn status_changed(kernel: &Arc<Kernel>, id: FiberId) {
     };
     for (key, realm) in pairs {
         notify(kernel, &key, realm);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{ComponentDef, Context, DependencyPredicate, Inject, kernel::Kernel};
+    use std::sync::{
+        Arc, Mutex, Weak,
+        atomic::{AtomicU8, Ordering},
+    };
+    use std::time::{Duration, Instant};
+
+    struct Host(Instant);
+    impl crate::Spawn for Host {
+        fn spawn(&self, task: crate::Task) {
+            tokio::spawn(task);
+        }
+    }
+    impl crate::Clock for Host {
+        fn now(&self) -> Duration {
+            self.0.elapsed()
+        }
+        fn sleep(&self, duration: Duration) -> crate::Task {
+            Box::pin(tokio::time::sleep(duration))
+        }
+    }
+
+    struct ObserveDrop {
+        kernel: Weak<Kernel>,
+        observed: Arc<AtomicU8>,
+    }
+
+    impl Drop for ObserveDrop {
+        fn drop(&mut self) {
+            let kernel = self.kernel.upgrade().expect("kernel retained by operation");
+            let unlocked = kernel.state.try_lock().is_some();
+            self.observed
+                .store(if unlocked { 1 } else { 2 }, Ordering::SeqCst);
+        }
+    }
+
+    // A-3：谓词替换实际服务值后，快照中的最后一份旧值引用在锁外释放。
+    #[tokio::test]
+    async fn refresh_snapshot_value_drop_runs_outside_lock() {
+        let root = Context::new(Arc::new(Host(Instant::now())));
+        let observed = Arc::new(AtomicU8::new(0));
+        let provision = root
+            .provide_named(
+                "value",
+                Arc::new(ObserveDrop {
+                    kernel: Arc::downgrade(&root.kernel),
+                    observed: observed.clone(),
+                }),
+            )
+            .unwrap();
+        let predicate: DependencyPredicate = Arc::new(move |_| {
+            provision.set(Arc::new(0u64)).unwrap();
+            true
+        });
+        root.inject(
+            Inject::new().with_named_options("value", true, Some(predicate)),
+            |_| async { Ok(()) },
+        )
+        .unwrap();
+        root.fiber().dispose().await.unwrap();
+        assert_eq!(
+            observed.load(Ordering::SeqCst),
+            1,
+            "value destructor observed the kernel lock"
+        );
+    }
+
+    // A-3：重入替换移除原依赖声明后，快照中的最后一份谓词引用在锁外释放。
+    #[tokio::test]
+    async fn refresh_snapshot_predicate_drop_runs_outside_lock() {
+        let root = Context::new(Arc::new(Host(Instant::now())));
+        let observed = Arc::new(AtomicU8::new(0));
+        let old = Arc::new(Mutex::new(None));
+        let source = old.clone();
+        let registry = root.registry();
+        let next = ComponentDef::new("next", Inject::new(), |_, ()| async { Ok(()) });
+        let captured = ObserveDrop {
+            kernel: Arc::downgrade(&root.kernel),
+            observed: observed.clone(),
+        };
+        let predicate: DependencyPredicate = Arc::new(move |_| {
+            let _capture = &captured;
+            let old = source.lock().unwrap().take().expect("original component");
+            registry.replace(&old, &next);
+            true
+        });
+        let definition = ComponentDef::new(
+            "old",
+            Inject::new().with_named_options("value", true, Some(predicate)),
+            |_, ()| async { Ok(()) },
+        );
+        *old.lock().unwrap() = Some(definition.clone());
+        root.mount_with(&definition, ()).unwrap();
+        drop(definition);
+        root.provide_named("value", Arc::new(1u64)).unwrap();
+        root.fiber().dispose().await.unwrap();
+        assert_eq!(
+            observed.load(Ordering::SeqCst),
+            1,
+            "predicate destructor observed the kernel lock"
+        );
     }
 }

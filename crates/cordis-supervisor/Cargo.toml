@@ -1,0 +1,19 @@
+[package]
+name = "cordis-supervisor"
+description = "Core lifecycle authority and bounded process supervision for Cordis."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[dependencies]
+cordis.workspace = true
+cordis-up.workspace = true
+tokio = { workspace = true, features = ["process", "io-util", "signal"] }
+nix.workspace = true
+rustix.workspace = true
+serde.workspace = true
+parking_lot.workspace = true
+futures-util.workspace = true
+semver.workspace = true

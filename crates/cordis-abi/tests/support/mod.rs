@@ -91,6 +91,7 @@ pub static HOST: HostV1 = HostV1 {
     object_export,
     object_import,
     object_release,
+    effect_release,
 };
 
 // SAFETY: DOC-12 §9，message是调用期借用，err为可写槽。
@@ -232,6 +233,11 @@ unsafe extern "C" fn config(_: u64, out: *mut AbiBuf, err: *mut AbiError) -> Abi
 unsafe extern "C" fn effect_future(_: u64, out: *mut AbiFuture, err: *mut AbiError) -> AbiStatus {
     // SAFETY: DOC-12 §6，退役句柄写出错误。
     unsafe { boundary(host_environment(), out, err, retired) }
+}
+// SAFETY: DOC-12 §9，effect使用宿主编号，err为有效错误槽。
+unsafe extern "C" fn effect_release(_: u64, err: *mut AbiError) -> AbiStatus {
+    // SAFETY: DOC-12 §6、§9，该宿主保持退役上下文状态，返回对应句柄错误。
+    unsafe { boundary_unit(host_environment(), err, retired) }
 }
 // SAFETY: DOC-12 §11，library是已登记的库编号，err是可写槽。
 unsafe extern "C" fn lease_acquire(library: LibraryId, err: *mut AbiError) -> AbiStatus {

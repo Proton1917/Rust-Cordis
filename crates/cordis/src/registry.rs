@@ -20,6 +20,9 @@ use std::{
 /// 容器保留值的具体 Rust 类型，可通过 `Any::downcast_ref` 或 `Arc::downcast` 读取。
 pub type RawConfig = Arc<dyn Any + Send + Sync>;
 
+/// ADR-0016：声明方对实际绑定值执行的锁外可用性判断。
+pub type DependencyPredicate = Arc<dyn Fn(&crate::AnyArc) -> bool + Send + Sync>;
+
 /// T-COE-4：按声明顺序保存组件需要的服务键及各键的元数据。
 ///
 /// 同一键重复加入时替换该键的元数据，并保留它原来的声明位置。
@@ -32,6 +35,8 @@ pub struct Inject {
 pub(crate) struct Dependency {
     pub key: Arc<str>,
     pub meta: Option<RawConfig>,
+    pub required: bool,
+    pub predicate: Option<DependencyPredicate>,
 }
 
 impl Inject {
@@ -69,8 +74,29 @@ impl Inject {
     pub fn with_named_meta(self, name: impl Into<Arc<str>>, meta: crate::AnyArc) -> Self {
         self.named_entry(name.into(), Some(meta))
     }
-    fn named_entry(mut self, key: Arc<str>, meta: Option<RawConfig>) -> Self {
-        let entry = Dependency { key, meta };
+    /// ADR-0016：按名称声明可选性与该使用方的可用性条件。
+    pub fn with_named_options(
+        self,
+        name: impl Into<Arc<str>>,
+        required: bool,
+        predicate: Option<DependencyPredicate>,
+    ) -> Self {
+        self.insert_entry(Dependency {
+            key: name.into(),
+            meta: None,
+            required,
+            predicate,
+        })
+    }
+    fn named_entry(self, key: Arc<str>, meta: Option<RawConfig>) -> Self {
+        self.insert_entry(Dependency {
+            key,
+            meta,
+            required: true,
+            predicate: None,
+        })
+    }
+    fn insert_entry(mut self, entry: Dependency) -> Self {
         if let Some(old) = self.entries.iter_mut().find(|old| old.key == entry.key) {
             *old = entry;
         } else {
@@ -302,6 +328,28 @@ pub struct Registry {
 }
 
 impl Registry {
+    /// ADR-0016、K-4：实例登记清空后显式退役转发终点与相关别名。
+    pub fn forget(&self, component: &ComponentDef) -> Result<()> {
+        let removed = {
+            let mut state = self.ctx.kernel.state.lock();
+            let target = forward(&state, component.id);
+            if state.runtimes.contains_key(&target) {
+                return Err(Error::new("component still has registered instances"));
+            }
+            let aliases: Vec<_> = state
+                .aliases
+                .keys()
+                .copied()
+                .filter(|id| forward(&state, *id) == target)
+                .collect();
+            for alias in aliases {
+                state.aliases.remove(&alias);
+            }
+            state.definitions.remove(&target)
+        };
+        drop(removed);
+        Ok(())
+    }
     /// 返回保有登记实例的组件运行时数量。
     pub fn len(&self) -> usize {
         self.ctx.kernel.state.lock().runtimes.len()

@@ -223,7 +223,7 @@ struct WakerVTable {
 
 ## 9 宿主虚表 `HostV1`
 
-宿主虚表以 `size: u64` 开头，其后为函数指针，按下表顺序排列。所有函数返回 `AbiStatus`，表中的 err 类型均为 `*mut AbiError`。ctx、scope、effect 为 u64。ctx 按加载纪元分配，保留至该纪元的 apply、任务、线程及效应清理结束；清理期间 get 继续读取 committed 依赖，config、日志、时钟、sleep 和事件调用继续有效。`is_current` 表达目标纪元是否有效。纪元结束后句柄退役，调用返回 code 4。scope 在效应体执行期间有效，effect 保留至所属纪元清理结束。ctx 0 保留给 log 的库级诊断。
+宿主虚表以 `size: u64` 开头，其后为函数指针，按下表顺序排列。所有函数返回 `AbiStatus`，表中的 err 类型均为 `*mut AbiError`。ctx、scope、effect 为 u64。ctx 按加载纪元分配，保留至该纪元的 apply、任务、线程及效应清理结束；清理期间 get 继续读取 committed 依赖，config、日志、时钟、sleep 和事件调用继续有效。`is_current` 表达目标纪元是否有效。纪元结束后句柄退役，调用返回 code 4。scope 在效应体执行期间有效。effect 的外部句柄保留至 SDK 最后一份引用释放或所属 context 退役；核心内核独立持有实际效应，外部句柄释放后效应继续遵循原有生命周期。ctx 0 保留给 log 的库级诊断。
 
 | 序号 | 函数 | 作用 | 对应内核接口 |
 |---|---|---|---|
@@ -252,6 +252,7 @@ struct WakerVTable {
 | 22 | `object_export(value: AbiObject, out: *mut u64, err)` | 消费对象并分配资源编号 | 宿主资源表 |
 | 23 | `object_import(id: u64, out: *mut AbiObject, err)` | 克隆资源表中的对象 | 宿主资源表 |
 | 24 | `object_release(id: u64, err)` | 移出并释放资源表引用 | 宿主资源表 |
+| 25 | `effect_release(effect: u64, err)` | 释放 SDK 外部效应句柄记录；实际效应由 dispose 或所属实例停用恢复 | 核心效应句柄表 |
 
 M11 冻结前按确认的契约调整此表，调整后同步更新本节和布局记录。冻结后的追加位于表尾，并提升 HostV1 的次版本（size 增大）。
 

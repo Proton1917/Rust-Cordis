@@ -1,0 +1,14 @@
+[package]
+name = "cordis-manager-fixture"
+version = "0.1.0"
+edition = "2024"
+publish = false
+license = "MIT"
+
+[workspace]
+
+[dependencies]
+cordis-up = { path = "../../../../crates/cordis-up" }
+serde = { version = "=1.0.229", features = ["derive"] }
+parking_lot = "=0.13.0"
+tokio = { version = "=1.54.1", features = ["rt-multi-thread", "macros", "io-std", "io-util", "sync", "time"] }

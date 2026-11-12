@@ -29,6 +29,7 @@ pub trait Backend: Send + Sync + 'static {
     fn object_export(&self, object: Object) -> Result<u64>;
     fn object_import(&self, id: u64) -> Result<Object>;
     fn object_release(&self, id: u64) -> Result<()>;
+    fn effect_release(&self, effect: u64) -> Result<()>;
 }
 
 static BACKEND: OnceLock<Arc<dyn Backend>> = OnceLock::new();
@@ -132,6 +133,7 @@ host_call!(object_export(object: AbiObject) -> u64, {
 });
 host_call!(object_import(id: u64) -> AbiObject, { backend().object_import(id).map(Object::into_raw) });
 host_call!(object_release(id: u64), { backend().object_release(id) });
+host_call!(effect_release(effect: u64), { backend().effect_release(effect) });
 
 static HOST: HostV1 = HostV1 {
     size: std::mem::size_of::<HostV1>() as u64,
@@ -160,6 +162,7 @@ static HOST: HostV1 = HostV1 {
     object_export,
     object_import,
     object_release,
+    effect_release,
 };
 
 pub struct LoadedPlugin {

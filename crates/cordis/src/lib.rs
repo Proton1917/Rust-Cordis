@@ -32,7 +32,7 @@ pub use reflect::{
     AnyArc, InternalGet, InternalService, InternalSet, ServiceAccess, ServiceChange, ServiceValue,
 };
 pub use registry::{
-    Component, ComponentDef, ComponentId, Config, Inject, InternalReplace, RawConfig, Registry,
-    ValidationError, ValidationIssue,
+    Component, ComponentDef, ComponentId, Config, DependencyPredicate, Inject, InternalReplace,
+    RawConfig, Registry, ValidationError, ValidationIssue,
 };
 pub use service::{Merge, NamedProvision, Provision, Scoped, ServiceKey};

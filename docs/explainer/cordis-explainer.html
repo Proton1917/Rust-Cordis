@@ -1,0 +1,1088 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+</head>
+<body>
+<title>Cordis 核心图解</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Noto+Sans+SC:wght@400;500;700&family=Space+Grotesk:wght@500;700&display=swap">
+<style>
+/* 布局：单栏说明页。概述 → 运行模拟 → 进程结构 → 挂载过程 → 核心职责 → 插件写法 → 实现进度 → 术语表；术语可点开侧边面板 */
+:root {
+  --bg: #eef1f3;
+  --panel: #ffffff;
+  --ink: #15202a;
+  --muted: #5a6772;
+  --line: #d3dae0;
+  --accent: #2446c4;
+  --accent-soft: #e4e9fb;
+  --code-bg: #f5f7f9;
+  --s-pending: #77838d;
+  --s-loading: #a86d0c;
+  --s-active: #1b8455;
+  --s-unloading: #b05a10;
+  --s-failed: #c1352e;
+  --s-disposed: #a3adb5;
+  --lang-rust: #b5492a;
+  --lang-py: #2f6fae;
+  --lang-ts: #6a4bb8;
+  --shadow: rgba(21, 32, 42, 0.16);
+  --f-display: "Space Grotesk", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --f-body: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1419; --panel: #151d24; --ink: #dde5eb; --muted: #93a1ad; --line: #27333d;
+    --accent: #8ba5ff; --accent-soft: #1c2645; --code-bg: #10171d;
+    --s-pending: #8f9ba5; --s-loading: #e2ad4f; --s-active: #4fc48c; --s-unloading: #e58d40; --s-failed: #f06b63; --s-disposed: #56626c;
+    --lang-rust: #ec8a68; --lang-py: #79b0e8; --lang-ts: #ad97f0; --shadow: rgba(0, 0, 0, 0.5);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1419; --panel: #151d24; --ink: #dde5eb; --muted: #93a1ad; --line: #27333d;
+  --accent: #8ba5ff; --accent-soft: #1c2645; --code-bg: #10171d;
+  --s-pending: #8f9ba5; --s-loading: #e2ad4f; --s-active: #4fc48c; --s-unloading: #e58d40; --s-failed: #f06b63; --s-disposed: #56626c;
+  --lang-rust: #ec8a68; --lang-py: #79b0e8; --lang-ts: #ad97f0; --shadow: rgba(0, 0, 0, 0.5);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--f-body);
+  font-size: 15px;
+  line-height: 1.75;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 32px 64px;
+}
+.wrap { max-width: 1120px; margin: 0 auto; display: grid; gap: 56px; }
+h1, h2, h3 { font-family: var(--f-display); text-wrap: balance; margin: 0; line-height: 1.3; }
+h1 { font-size: clamp(28px, 4.2vw, 40px); font-weight: 700; }
+h2 { font-size: clamp(21px, 2.6vw, 25px); font-weight: 700; }
+h3 { font-size: 16px; font-weight: 700; }
+p { margin: 0; }
+.eyebrow { font-family: var(--f-mono); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); }
+.lead { color: var(--muted); max-width: 68ch; font-size: 16px; }
+section { display: grid; gap: 20px; min-width: 0; }
+.sec-head { display: grid; gap: 8px; }
+code, .mono { font-family: var(--f-mono); font-size: 0.92em; }
+
+/* 术语 */
+.term {
+  font: inherit; color: inherit; background: none; border: 0; padding: 0; margin: 0; cursor: pointer;
+  border-bottom: 1px dotted var(--accent); line-height: inherit;
+}
+.term:hover { color: var(--accent); }
+.term:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+.term.code { font-family: var(--f-mono); font-size: 0.92em; }
+.term-panel {
+  position: fixed; z-index: 20;
+  right: calc(16px + env(safe-area-inset-right, 0px));
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  width: min(380px, calc(100vw - 32px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)));
+  max-height: 70vh; overflow-y: auto;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+  box-shadow: 0 12px 32px var(--shadow);
+  padding: 16px 18px; display: grid; gap: 10px;
+}
+.term-panel header { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.term-panel h3 { font-size: 18px; }
+.term-panel .alias { font-family: var(--f-mono); font-size: 12px; color: var(--muted); }
+.term-panel .def { font-size: 15px; }
+.term-panel .more { font-size: 14px; color: var(--muted); }
+.term-panel .see { display: flex; flex-wrap: wrap; gap: 6px; font-size: 13px; color: var(--muted); align-items: center; }
+.term-panel .see .term { font-size: 13px; }
+.close { font: inherit; font-size: 13px; cursor: pointer; padding: 2px 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); }
+
+/* 概述 */
+.hero { display: grid; gap: 18px; }
+.promises { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 12px; }
+.promise { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 16px 18px; display: grid; gap: 4px; align-content: start; }
+.promise b { font-family: var(--f-display); font-size: 16px; }
+.promise span { color: var(--muted); font-size: 14px; }
+
+/* 模拟 */
+.sim { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 18px; display: grid; gap: 16px; min-width: 0; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: space-between; }
+.toolbar .group { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.status { font-family: var(--f-mono); font-size: 13px; color: var(--muted); display: flex; align-items: center; gap: 8px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--s-active); }
+.busy .dot { background: var(--s-loading); animation: blink 0.8s infinite alternate; }
+@keyframes blink { to { opacity: 0.25; } }
+label.check { display: inline-flex; gap: 6px; align-items: center; font-size: 14px; cursor: pointer; }
+select { font: inherit; font-size: 14px; padding: 4px 8px; border-radius: 6px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); }
+button.btn {
+  font: inherit; font-size: 14px; cursor: pointer;
+  padding: 6px 12px; border-radius: 6px;
+  border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+}
+button.btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+button.btn:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+button.btn.danger:hover:not(:disabled) { border-color: var(--s-failed); color: var(--s-failed); }
+
+.flow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; font-size: 14px; padding: 10px 12px; background: var(--code-bg); border-radius: 8px; }
+.flow .node { font-weight: 500; }
+.flow .edge { font-family: var(--f-mono); font-size: 12px; padding: 2px 8px; border-radius: 999px; border: 1px dashed var(--line); color: var(--muted); }
+.flow .edge.on { border-style: solid; border-color: var(--s-active); color: var(--s-active); }
+
+.cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 900px) { .cards { grid-template-columns: 1fr; } }
+.card { border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: grid; gap: 10px; align-content: start; min-width: 0; background: var(--panel); transition: border-color 0.2s; }
+.card[data-state="Loading"], .card[data-state="Unloading"] { border-color: var(--s-loading); }
+.card[data-state="Failed"] { border-color: var(--s-failed); }
+.card[data-state="Disposed"] { opacity: 0.7; }
+.card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+.card-title { display: grid; gap: 2px; min-width: 0; }
+.card-title small { color: var(--muted); font-size: 12px; font-family: var(--f-mono); overflow-wrap: anywhere; }
+.lang { font-family: var(--f-mono); font-size: 11px; padding: 1px 6px; border-radius: 4px; border: 1px solid currentColor; margin-left: 6px; vertical-align: 2px; }
+.lang.rust { color: var(--lang-rust); } .lang.py { color: var(--lang-py); } .lang.ts { color: var(--lang-ts); }
+.pill { font-family: var(--f-mono); font-size: 12px; padding: 3px 9px; border-radius: 999px; white-space: nowrap; font-weight: 500; border: 0; cursor: pointer; }
+.pill.Pending { color: var(--s-pending); background: color-mix(in srgb, var(--s-pending) 14%, transparent); }
+.pill.Loading { color: var(--s-loading); background: color-mix(in srgb, var(--s-loading) 16%, transparent); }
+.pill.Active { color: var(--s-active); background: color-mix(in srgb, var(--s-active) 15%, transparent); }
+.pill.Unloading { color: var(--s-unloading); background: color-mix(in srgb, var(--s-unloading) 16%, transparent); }
+.pill.Failed { color: var(--s-failed); background: color-mix(in srgb, var(--s-failed) 15%, transparent); }
+.pill.Disposed { color: var(--s-disposed); background: color-mix(in srgb, var(--s-disposed) 18%, transparent); }
+.socket { font-size: 13px; color: var(--muted); }
+.deps { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 13px; color: var(--muted); }
+.chip { font-family: var(--f-mono); font-size: 12px; padding: 1px 7px; border-radius: 4px; border: 1px solid var(--line); color: var(--ink); }
+.chip.ok { border-color: var(--s-active); color: var(--s-active); }
+.chip.miss { border-color: var(--s-failed); color: var(--s-failed); border-style: dashed; }
+.meta { font-family: var(--f-mono); font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.ledger { background: var(--code-bg); border-radius: 8px; padding: 8px 10px; min-height: 104px; }
+.ledger .lh { font-size: 12px; color: var(--muted); margin-bottom: 4px; display: flex; justify-content: space-between; gap: 8px; }
+.ledger ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; }
+.ledger li { font-size: 13px; padding: 2px 8px; border-left: 2px solid var(--accent); background: var(--panel); border-radius: 0 4px 4px 0; transition: background 0.15s; }
+.ledger li.top { border-left-color: var(--ink); }
+.ledger li.reverting { background: color-mix(in srgb, var(--s-failed) 18%, var(--panel)); border-left-color: var(--s-failed); text-decoration: line-through; }
+.ledger .empty { font-size: 13px; color: var(--muted); padding: 2px 0; }
+.view { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; display: grid; gap: 2px; }
+.view .big { font-family: var(--f-display); font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.25; }
+.view .small { font-size: 12px; color: var(--muted); }
+.actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.actions .btn { font-size: 13px; padding: 5px 10px; }
+
+.log-wrap { display: grid; gap: 6px; min-width: 0; }
+.log-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.log-head span { font-size: 13px; color: var(--muted); }
+.log { background: var(--code-bg); border-radius: 8px; padding: 8px 4px 8px 10px; height: 300px; overflow-y: auto; font-size: 13px; }
+.log ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.log li { display: grid; grid-template-columns: 44px 64px minmax(0, 1fr); gap: 8px; align-items: baseline; }
+.log .n { font-family: var(--f-mono); font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.log .who { font-size: 12px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.who.kernel { color: var(--accent); }
+.who.store { color: var(--lang-rust); } .who.counter { color: var(--lang-py); } .who.web { color: var(--lang-ts); }
+.log li.fresh .t { font-weight: 500; }
+
+.ops { overflow-x: auto; }
+.ops table, .duty table, .progress table, .gloss table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.ops th, .ops td, .duty th, .duty td, .progress th, .progress td, .gloss th, .gloss td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.ops th[scope="row"], .duty th[scope="row"] { font-weight: 500; white-space: nowrap; width: 8em; }
+.ops td, .duty td, .gloss td { color: var(--muted); }
+.ops thead th, .progress thead th, .gloss thead th { font-weight: 500; color: var(--muted); font-size: 13px; }
+
+/* 架构图 */
+.diagram { overflow-x: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+.diagram svg { display: block; width: 100%; min-width: 720px; height: auto; }
+.arch text { font-family: var(--f-body); fill: var(--ink); }
+.arch .muted { fill: var(--muted); }
+.arch .core { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.5; }
+.arch .sub { fill: var(--panel); stroke: var(--line); }
+.arch .proc { fill: var(--panel); stroke: var(--line); stroke-width: 1.2; }
+.arch .lib { fill: var(--code-bg); stroke: var(--line); }
+.arch .wire { stroke: var(--muted); stroke-width: 1.2; stroke-dasharray: 5 4; fill: none; }
+.arch .direct { stroke: var(--s-active); stroke-width: 1.5; fill: none; }
+.arch .tag { font-family: var(--f-mono); font-size: 11px; fill: var(--muted); }
+.arch .title { font-family: var(--f-display); font-weight: 700; }
+.notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.note { font-size: 14px; color: var(--muted); }
+.note b { color: var(--ink); font-weight: 500; display: block; }
+
+/* 挂载过程 */
+.steps { list-style: none; margin: 0; padding: 0; display: grid; counter-reset: s; }
+.steps li { counter-increment: s; display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 12px; padding: 12px 0; border-top: 1px solid var(--line); }
+.steps li:last-child { border-bottom: 1px solid var(--line); }
+.steps li::before { content: counter(s); font-family: var(--f-display); font-weight: 700; font-size: 20px; color: var(--accent); line-height: 1.4; }
+.steps b { font-weight: 500; }
+.steps p { color: var(--muted); font-size: 14px; }
+.callout { background: var(--accent-soft); border-radius: 8px; padding: 12px 16px; font-size: 15px; }
+
+/* 职责 */
+.duty { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 16px; }
+@media (max-width: 760px) { .duty { grid-template-columns: 1fr; } }
+.side { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: grid; gap: 8px; align-content: start; }
+.side ul { margin: 0; padding-left: 18px; color: var(--muted); font-size: 14px; }
+
+/* 代码 */
+.tabs { display: flex; gap: 4px; flex-wrap: wrap; }
+.tabs .btn[aria-selected="true"] { background: var(--ink); color: var(--panel); border-color: var(--ink); }
+.codebox { background: var(--code-bg); border: 1px solid var(--line); border-radius: 10px; overflow-x: auto; }
+.codebox pre { margin: 0; padding: 14px 16px; font-family: var(--f-mono); font-size: 13px; line-height: 1.65; }
+.codecap { font-size: 13px; color: var(--muted); }
+
+/* 进度与术语表 */
+.progress, .gloss { overflow-x: auto; }
+.progress table { min-width: 560px; }
+.gloss table { min-width: 560px; }
+.gloss th[scope="row"] { white-space: nowrap; font-weight: 500; width: 9em; }
+.st { font-family: var(--f-mono); font-size: 12px; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+.st.done { color: var(--s-active); background: color-mix(in srgb, var(--s-active) 14%, transparent); }
+.st.doing { color: var(--s-loading); background: color-mix(in srgb, var(--s-loading) 15%, transparent); }
+.st.todo { color: var(--s-pending); background: color-mix(in srgb, var(--s-pending) 14%, transparent); }
+footer { font-size: 13px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 16px; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}
+</style>
+
+<div class="wrap">
+
+  <header class="hero">
+    <div class="eyebrow">Rust-Cordis</div>
+    <h1>Cordis 运行时核心</h1>
+    <p class="lead"><button class="term" data-term="core">核心</button>是一个长期运行的 Rust 程序。软件的功能全部以<button class="term" data-term="plugin">插件</button>形式提供：数据存储、业务逻辑、网页、AI 调用各自是单独编译的插件，在核心运行期间插入、拔出或更换。核心不包含业务功能，负责插件的启动与停止、插件之间的<button class="term" data-term="service">服务</button>连接，以及插件移除后的清理。</p>
+    <div class="promises">
+      <div class="promise"><b>插件拔出后不留残余</b><span>插件运行时打开的文件、提供的服务、注册的页面都作为<button class="term" data-term="effect">效应</button>记在核心里。插件停止时，核心按<button class="term" data-term="lifo">后进先出</button>顺序全部撤销。</span></div>
+      <div class="promise"><b>依赖变化时自动重连</b><span>插件声明自己需要的服务（<button class="term" data-term="inject">依赖</button>）。服务出现时插件启动，服务更换时插件重建，服务消失时插件进入等待。</span></div>
+      <div class="promise"><b>插件故障不影响核心</b><span>插件运行在核心之外的独立进程中。插件崩溃后，核心按记录收回它的全部效应，并重新启动它。</span></div>
+    </div>
+  </header>
+
+  <section aria-labelledby="sim-title">
+    <div class="sec-head">
+      <div class="eyebrow">模拟</div>
+      <h2 id="sim-title">三个插件的运行过程</h2>
+      <p class="lead">模拟中有三个插件。存储插件（Rust）把数字保存在文件里，提供服务 <button class="term code" data-term="service">kv@1</button>；计数插件（Python）每秒加一，把结果写入存储，提供服务 <button class="term code" data-term="service">counter@1</button>；前端插件（TypeScript）在浏览器页面中显示当前数字。每张卡片下方的按钮触发一次核心操作，日志按顺序记录核心的每一步处理。</p>
+    </div>
+
+    <div class="sim" id="sim">
+      <div class="toolbar">
+        <div class="status" id="status"><span class="dot"></span><span id="status-text">空闲，3 个实例运行中</span></div>
+        <div class="group">
+          <label class="check" for="faulty"><input type="checkbox" id="faulty"> 新版本带有启动错误</label>
+          <label class="check" for="speed">速度
+            <select id="speed">
+              <option value="900">慢</option>
+              <option value="550" selected>中</option>
+              <option value="220">快</option>
+            </select>
+          </label>
+          <button class="btn danger" id="btn-root">全部拔出</button>
+          <button class="btn" id="btn-reset">恢复初始状态</button>
+        </div>
+      </div>
+
+      <div class="flow" id="flow" aria-label="服务依赖关系"></div>
+      <div class="cards" id="cards"></div>
+
+      <div class="log-wrap">
+        <div class="log-head"><h3>核心日志</h3><span>蓝色为核心的处理，彩色为插件自身的动作</span></div>
+        <div class="log" id="log" tabindex="0" aria-label="核心日志"><ol id="log-list"></ol></div>
+      </div>
+
+      <div class="ops">
+        <table>
+          <thead><tr><th>操作</th><th>核心的处理</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">拔出</th><td>先停止使用该插件服务的实例，再按后进先出顺序撤销该插件的全部效应，实例进入“已释放”。</td></tr>
+            <tr><th scope="row">换成新版本</th><td><button class="term" data-term="hotswap">热替换</button>：旧版本导出状态，使用方先停止，旧版本卸下，新版本装入并继承状态，使用方重新连接。</td></tr>
+            <tr><th scope="row">模拟崩溃</th><td>插件进程退出。使用方先停止，核心按记录代为撤销该插件的效应，随后重启该插件。</td></tr>
+            <tr><th scope="row">新版本带有启动错误</th><td><button class="term" data-term="rollback">回滚</button>：新版本启动失败，核心撤销它已登记的效应，换回旧版本并交回更换前的状态。</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="arch-title">
+    <div class="sec-head">
+      <div class="eyebrow">结构</div>
+      <h2 id="arch-title">进程结构</h2>
+      <p class="lead">核心进程只运行核心自己的代码。插件全部运行在核心之外的进程中，与核心之间通过 <button class="term code" data-term="up1">UP/1</button> 消息通信。插件中的段错误、死循环、内存错误只影响它所在的进程。</p>
+    </div>
+    <div class="diagram">
+      <svg class="arch" viewBox="0 0 960 410" role="img" aria-label="核心进程与插件进程的结构">
+        <rect class="core" x="170" y="18" width="620" height="160" rx="12"/>
+        <text class="title" x="192" y="48" font-size="17">cordis 核心进程</text>
+        <text class="muted" x="770" y="48" font-size="12" text-anchor="end">纯 Rust · 无 unsafe · 不运行插件代码</text>
+        <rect class="sub" x="192" y="68" width="136" height="88" rx="8"/>
+        <text x="206" y="96" font-size="15" class="title">内核</text>
+        <text class="muted" x="206" y="120" font-size="12">实例 · 依赖</text>
+        <text class="muted" x="206" y="138" font-size="12">效应记录</text>
+        <rect class="sub" x="340" y="68" width="136" height="88" rx="8"/>
+        <text x="354" y="96" font-size="15" class="title">进程监管</text>
+        <text class="muted" x="354" y="120" font-size="12">启动 · 超时</text>
+        <text class="muted" x="354" y="138" font-size="12">崩溃回收与重启</text>
+        <rect class="sub" x="488" y="68" width="136" height="88" rx="8"/>
+        <text x="502" y="96" font-size="15" class="title">路由</text>
+        <text class="muted" x="502" y="120" font-size="12">跨进程调用</text>
+        <text class="muted" x="502" y="138" font-size="12">事件转发</text>
+        <rect class="sub" x="636" y="68" width="136" height="88" rx="8"/>
+        <text x="650" y="96" font-size="15" class="title">配置与存档</text>
+        <text class="muted" x="650" y="120" font-size="12">cordis.toml</text>
+        <text class="muted" x="650" y="138" font-size="12">检查点 · 热替换</text>
+
+        <path class="wire" d="M125 262 L 300 178"/>
+        <path class="wire" d="M355 262 L 420 178"/>
+        <path class="wire" d="M585 262 L 540 178"/>
+        <path class="wire" d="M815 262 L 660 178"/>
+        <text class="tag" x="196" y="226">UP/1</text>
+        <text class="tag" x="392" y="226">UP/1</text>
+        <text class="tag" x="566" y="226">UP/1</text>
+        <text class="tag" x="742" y="226">UP/1</text>
+
+        <rect class="proc" x="20" y="262" width="210" height="124" rx="10"/>
+        <text class="title" x="34" y="288" font-size="14">cordis-host · 插件组 storage</text>
+        <rect class="lib" x="34" y="304" width="182" height="34" rx="6"/>
+        <text x="46" y="326" font-size="13">存储插件（Rust 动态库）</text>
+        <text class="muted" x="34" y="368" font-size="12">高速插口</text>
+
+        <rect class="proc" x="250" y="262" width="210" height="124" rx="10"/>
+        <text class="title" x="264" y="288" font-size="14">cordis-host · 插件组 math</text>
+        <rect class="lib" x="264" y="304" width="80" height="34" rx="6"/>
+        <text x="274" y="326" font-size="12">math-core</text>
+        <rect class="lib" x="366" y="304" width="80" height="34" rx="6"/>
+        <text x="374" y="326" font-size="12">math-solver</text>
+        <path class="direct" d="M344 321 L 366 321"/>
+        <text class="muted" x="264" y="368" font-size="12">组内直接调用</text>
+
+        <rect class="proc" x="480" y="262" width="210" height="124" rx="10"/>
+        <text class="title" x="494" y="288" font-size="14">python 进程</text>
+        <rect class="lib" x="494" y="304" width="182" height="34" rx="6"/>
+        <text x="506" y="326" font-size="13">计数插件（Python）</text>
+        <text class="muted" x="494" y="368" font-size="12">通用插口</text>
+
+        <rect class="proc" x="710" y="262" width="230" height="124" rx="10"/>
+        <text class="title" x="724" y="288" font-size="14">浏览器页面</text>
+        <rect class="lib" x="724" y="304" width="202" height="34" rx="6"/>
+        <text x="736" y="326" font-size="13">前端插件（TypeScript）</text>
+        <text class="muted" x="724" y="368" font-size="12">网页宿主，经 http 插件转发</text>
+      </svg>
+    </div>
+    <div class="notes">
+      <div class="note"><b>唯一的内核</b>系统中只有一个<button class="term" data-term="kernel">内核</button>，位于核心进程。实例的启动、停止、更换顺序由它决定，插件进程按核心的指令执行。</div>
+      <div class="note"><b>高速插口与插件组</b>Rust 插件编译为动态库，经<button class="term" data-term="fastsocket">高速插口</button>由 <button class="term code" data-term="host">cordis-host</button> 装载。同一<button class="term" data-term="group">插件组</button>的插件在同一进程中直接调用。</div>
+      <div class="note"><b>通用插口</b>Python、TypeScript 等语言的插件是普通程序，经<button class="term" data-term="unisocket">通用插口</button>与核心收发消息。核心不包含这些语言的运行环境。</div>
+      <div class="note"><b>前端插件</b>前端代码同样是插件，经通用插口接入。浏览器页面是<button class="term" data-term="webhost">网页宿主</button>，不含内核；页面的消息由 http 插件转发给核心，核心本身不监听网络。</div>
+    </div>
+  </section>
+
+  <section aria-labelledby="mount-title">
+    <div class="sec-head">
+      <div class="eyebrow">挂载</div>
+      <h2 id="mount-title">插件的挂载过程</h2>
+    </div>
+    <ol class="steps">
+      <li><div><b>读取配置</b><p>核心读取 <button class="term code" data-term="toml">cordis.toml</button>，得到要运行的实例、各自使用的插件、配置和插件组。</p></div></li>
+      <li><div><b>启动插件进程</b><p>Rust 插件由 cordis-host 装入动态库，Python 插件由 python 运行，TypeScript 插件由 node 运行。</p></div></li>
+      <li><div><b>握手</b><p>插件报告名称、版本、包含的<button class="term" data-term="component">组件</button>、每个组件需要和提供的服务。版本不兼容的插件在此被拒绝。</p></div></li>
+      <li><div><b>挂载为实例</b><p>核心为每个组件生成一个<button class="term" data-term="instance">实例</button>，交给内核管理。所需服务不全时，实例处于“等待中”。</p></div></li>
+      <li><div><b>启动</b><p>所需服务齐全后，内核向插件进程发出 <code>apply</code>，插件执行自己的启动代码。</p></div></li>
+      <li><div><b>记录效应</b><p>插件每打开一项资源、提供一项服务、注册一个页面，都以一条消息报告核心，内核记入该实例的<button class="term" data-term="ledger">效应记录</button>。</p></div></li>
+      <li><div><b>停止与撤销</b><p>实例被拔出、更换或依赖消失时，内核按效应记录逆序撤销。插件一侧的清理动作由核心发消息通知插件执行。</p></div></li>
+    </ol>
+    <p class="callout">插件代码在插件进程中执行，效应记录保存在核心中。插件进程崩溃后，核心依据记录完成回收。</p>
+  </section>
+
+  <section aria-labelledby="duty-title">
+    <div class="sec-head">
+      <div class="eyebrow">职责</div>
+      <h2 id="duty-title">核心的职责</h2>
+    </div>
+    <div class="duty">
+      <div class="ops">
+        <table>
+          <tbody>
+            <tr><th scope="row">实例启停</th><td>启动、停止、重启每个实例。这一决定只由核心作出。</td></tr>
+            <tr><th scope="row">依赖管理</th><td>服务齐全时启动使用方，服务消失时先停使用方，服务更换时重建使用方。停止顺序为先使用方、后提供方。</td></tr>
+            <tr><th scope="row">效应记录</th><td>记录每个实例的服务、监听器、资源；实例停止时按后进先出顺序全部撤销，每项至多撤销一次。</td></tr>
+            <tr><th scope="row">热替换与回滚</th><td>导出状态、卸下旧版本、装入新版本、交回状态；新版本出错时换回旧版本。替换请求来自启动配置，或来自获得授权的插件。</td></tr>
+            <tr><th scope="row">进程监管</th><td>启动插件进程，检查版本兼容，处理超时、消息洪泛与崩溃；崩溃后收回服务并按策略重启。</td></tr>
+            <tr><th scope="row">消息路由</th><td>转发不同进程中插件之间的调用与事件。</td></tr>
+            <tr><th scope="row">准入与存档</th><td>拒绝版本不兼容或未通过验证的插件；定期保存<button class="term" data-term="checkpoint">检查点</button>，退出时导出全部状态。</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="side">
+        <h3>由插件提供的功能</h3>
+        <ul>
+          <li>业务逻辑与计算</li>
+          <li>网页与界面</li>
+          <li>数据库与文件格式</li>
+          <li>HTTP 与网络协议</li>
+          <li>AI 调用与工具注册</li>
+          <li>桌面窗口</li>
+          <li>管理后台与插件更新（经授权的管理接口）</li>
+          <li>文件变化后的自动热替换</li>
+        </ul>
+        <p class="note">核心只包含插件管理所需的功能，规模小、变化少，约每年升级一次。脚手架、代码生成、打包等开发工具在独立程序 cordis-dev 中，与核心分别升级。</p>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="code-title">
+    <div class="sec-head">
+      <div class="eyebrow">插件</div>
+      <h2 id="code-title">插件的写法</h2>
+      <p class="lead">一个组件声明需要的服务，在 <code>apply</code> 中完成启动，并把需要撤销的内容登记为效应。插件编译后放入插件目录，在 cordis.toml 中增加一条实例配置。</p>
+    </div>
+    <div class="tabs" role="tablist" aria-label="示例">
+      <button class="btn" role="tab" id="tab-rust" aria-selected="true" data-tab="rust">Rust 插件</button>
+      <button class="btn" role="tab" id="tab-py" aria-selected="false" data-tab="py">Python 插件</button>
+      <button class="btn" role="tab" id="tab-toml" aria-selected="false" data-tab="toml">cordis.toml</button>
+    </div>
+    <div class="codebox"><pre><code id="code"></code></pre></div>
+    <p class="codecap" id="code-cap"></p>
+  </section>
+
+  <section aria-labelledby="prog-title">
+    <div class="sec-head">
+      <div class="eyebrow">进度</div>
+      <h2 id="prog-title">实现进度（2026-11-12）</h2>
+      <p class="lead">内核的全部语义已经实现并通过测试。插口、插件进程管理和核心程序正在实现。上方模拟展示的是设计完成后的整体行为。</p>
+    </div>
+    <div class="progress">
+      <table>
+        <thead><tr><th>部分</th><th>里程碑</th><th>状态</th><th>内容</th></tr></thead>
+        <tbody>
+          <tr><td>内核：效应、依赖、生命周期、事件、替换</td><td class="mono">M0–M7</td><td><span class="st done">已完成</span></td><td>上游 cordis 的 177 条用例全部移植或改写；8 线程 1000 轮压力测试</td></tr>
+          <tr><td>原生插件 ABI 与 Rust SDK</td><td class="mono">M8–M9</td><td><span class="st doing">进行中</span></td><td>跨进程通用调用入口</td></tr>
+          <tr><td>UP/1 协议、进程监管、cordis-host</td><td class="mono">M10–M11</td><td><span class="st todo">待开始</span></td><td>核心隔离、插件组、崩溃回收</td></tr>
+          <tr><td>核心程序、验证、第二阶段验收</td><td class="mono">M12–M14</td><td><span class="st todo">待开始</span></td><td>cordis run、检查点、项目脚手架、核心崩溃恢复</td></tr>
+          <tr><td>插件编写手册</td><td class="mono">M15</td><td><span class="st todo">待开始</span></td><td>面向人与 AI 的插件编写指南</td></tr>
+          <tr><td>打包、WIT、Python 与 TypeScript SDK、全栈插件</td><td class="mono">M16–M21</td><td><span class="st todo">待开始</span></td><td>cordis pack、多语言插件、前端插件（浏览器页面经 http 插件接入）</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section aria-labelledby="gloss-title">
+    <div class="sec-head">
+      <div class="eyebrow">术语</div>
+      <h2 id="gloss-title">术语表</h2>
+    </div>
+    <div class="gloss">
+      <table>
+        <thead><tr><th>术语</th><th>含义</th></tr></thead>
+        <tbody id="gloss-body"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer>依据：论文《一种面向时空可组合性的编程范式》；仓库文档 DOC-15（核心隔离与两种插口）、DOC-11（插件模型）、DOC-12（ABI v1）。代码示例的接口在实现中可能微调。</footer>
+</div>
+
+<aside class="term-panel" id="term-panel" role="dialog" aria-modal="false" aria-labelledby="term-name" hidden>
+  <header><div><h3 id="term-name"></h3><div class="alias" id="term-alias"></div></div><button class="close" id="term-close">关闭</button></header>
+  <p class="def" id="term-def"></p>
+  <p class="more" id="term-more"></p>
+  <div class="see" id="term-see"></div>
+</aside>
+
+<script>
+(function () {
+  "use strict";
+  function $(s) { return document.querySelector(s); }
+  function esc(t) { return String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+
+  /* ---------- 术语 ---------- */
+  var TERMS = {
+    core: { name: "核心", alias: "cordis 可执行文件",
+      def: "长期运行的 Rust 程序，负责插件的启动与停止、插件之间的服务连接、插件移除后的清理。",
+      more: "核心由内核、进程监管、路由、配置与存档四部分组成。核心进程只运行核心自己的代码，不包含任何业务功能，约每年升级一次。",
+      see: ["kernel", "plugin", "up1"] },
+    kernel: { name: "内核", alias: "crates/cordis",
+      def: "核心中的决策部分，记录每个实例的依赖与效应，决定实例何时启动、停止、重建。",
+      more: "系统中只有一个内核，位于核心进程。内核的语义来自论文《一种面向时空可组合性的编程范式》，行为与上游 cordis 的 177 条测试用例一致。",
+      see: ["instance", "effect", "epoch"] },
+    plugin: { name: "插件", alias: "plugin",
+      def: "单独编译的功能单元，包含一个或多个组件，通过插口接入核心。",
+      more: "Rust 插件编译为动态库（.dylib/.so），经高速插口接入；其他语言的插件是普通程序，经通用插口接入。插件可在核心运行期间插入、拔出、更换。",
+      see: ["component", "fastsocket", "unisocket"] },
+    component: { name: "组件", alias: "Component",
+      def: "插件中的一项功能定义：需要哪些服务、提供哪些服务、启动时执行的代码（apply）。",
+      more: "组件按一份配置挂载一次，得到一个实例。同一组件可以按不同配置挂载多次。",
+      see: ["instance", "inject", "service"] },
+    instance: { name: "实例", alias: "Fiber",
+      def: "组件按一份配置挂载后的运行单元。内核为每个实例保存状态、依赖与效应记录。",
+      more: "实例有六种状态：等待中（Pending）、启动中（Loading）、运行中（Active）、停止中（Unloading）、出错（Failed）、已释放（Disposed）。",
+      see: ["state", "ledger", "epoch"] },
+    state: { name: "实例状态", alias: "FiberState",
+      def: "等待中：所需服务不全；启动中：正在执行 apply；运行中：启动完成；停止中：正在撤销效应；出错：启动失败；已释放：实例已拔出。",
+      more: "状态由内核根据目标与现状计算。启动和停止一旦开始就执行到底，结束后直接转向最新的目标，期间的多次变化合并为一次。",
+      see: ["epoch", "instance"] },
+    service: { name: "服务", alias: "名称@主版本，例如 kv@1",
+      def: "实例对外提供的功能，按“名称@主版本”标识。其他实例通过声明依赖取得服务。",
+      more: "同一主版本内只追加方法、不修改已有方法，不兼容的修改发布新主版本（例如 kv@2），新旧主版本可以同时存在。",
+      see: ["inject", "component"] },
+    inject: { name: "依赖", alias: "inject",
+      def: "实例声明需要的服务。服务齐全时实例启动，服务更换时实例重建，服务消失时实例进入等待。",
+      more: "提供方停止前，内核先停止全部使用方，使用方不会持有已失效的服务。",
+      see: ["service", "epoch"] },
+    effect: { name: "效应", alias: "Effect",
+      def: "实例对外界做的一项修改，同时附带撤销方法，例如打开文件并登记关闭动作。",
+      more: "提供服务、注册监听器、挂载子实例、打开资源都是效应。效应属于登记它的实例，实例停止时由内核撤销，每项至多撤销一次。",
+      see: ["ledger", "lifo"] },
+    ledger: { name: "效应记录", alias: "effects",
+      def: "内核为每个实例保存的效应列表，按登记顺序排列。",
+      more: "插件进程只执行代码，效应记录保存在核心中。插件进程崩溃时，核心依据效应记录代为撤销。",
+      see: ["effect", "lifo"] },
+    lifo: { name: "后进先出", alias: "LIFO",
+      def: "撤销顺序与登记顺序相反：最后登记的效应最先撤销。",
+      more: "例如先打开文件、再基于文件提供服务，停止时先撤下服务、再关闭文件。",
+      see: ["effect", "ledger"] },
+    epoch: { name: "纪元", alias: "Epoch",
+      def: "实例的目标版本，由配置版本和所用服务的身份组成。",
+      more: "配置更新或所用服务更换时纪元变化，内核随即比较目标与现状并执行加载或卸载，这一过程称为调和。",
+      see: ["state", "inject"] },
+    hotswap: { name: "热替换", alias: "replace",
+      def: "核心运行期间更换插件版本：旧版本导出状态，使用方先停止，旧版本卸下，新版本装入并继承状态，使用方重新连接。",
+      more: "由获得授权的插件请求，例如在插件文件变化时触发的 watch 插件，或管理后台。更换前核心检查版本兼容性，并确认新版本提供的服务覆盖旧版本。",
+      see: ["rollback", "statex"] },
+    rollback: { name: "回滚", alias: "rollback",
+      def: "新版本启动失败或在确认期内出错时，核心撤销新版本的效应，换回旧版本，并交回更换前导出的状态。",
+      more: "回滚使用更换开始时保存的状态，新版本产生的数据不参与回滚。",
+      see: ["hotswap", "statex"] },
+    statex: { name: "状态导出与继承", alias: "export_state / inherited_state",
+      def: "组件登记一个导出器，热替换或核心退出时交出内存中的数据；新版本在启动时继承这份数据。",
+      more: "导出时组件暂停写入，保证交出的数据完整。持久化数据保存在插件自己的数据目录中，不经过导出。",
+      see: ["hotswap", "checkpoint"] },
+    checkpoint: { name: "检查点", alias: "checkpoint_ms",
+      def: "核心定期调用全部导出器保存的状态。",
+      more: "核心崩溃后由系统服务管理器重新拉起，实例从最近一次检查点继承状态。",
+      see: ["statex", "core"] },
+    fastsocket: { name: "高速插口", alias: "ABI v1",
+      def: "Rust 等语言编译的动态库接入核心的方式。动态库由 cordis-host 装载，同组插件之间直接调用。",
+      more: "动态库与 cordis-host 之间的接口是 ABI v1，一种固定的 C 语言二进制接口，插件可以用不同版本的编译器构建。",
+      see: ["host", "group", "unisocket"] },
+    unisocket: { name: "通用插口", alias: "进程插件",
+      def: "任何语言的程序接入核心的方式。程序作为独立进程运行，通过 UP/1 消息与核心通信。",
+      more: "首批支持 Python 与 TypeScript。核心不包含这些语言的运行环境，运行环境随插件或部署环境提供。浏览器中的前端插件也经通用插口接入，传输方式为 WebSocket。",
+      see: ["up1", "fastsocket", "webhost"] },
+    group: { name: "插件组", alias: "group",
+      def: "装入同一个 cordis-host 进程的一组 Rust 插件。组内插件之间直接调用。",
+      more: "分组在 cordis.toml 中配置，插件无需重新编译。同组插件共享一个进程，一个插件崩溃时整组重启；未配置分组的插件单独运行。",
+      see: ["host", "fastsocket", "toml"] },
+    host: { name: "cordis-host", alias: "插件宿主程序",
+      def: "装载 Rust 插件动态库的宿主程序，一个进程对应一个插件组。",
+      more: "cordis-host 不含内核，只按核心的指令打开动态库、调用插件函数、转发插件的登记请求。",
+      see: ["group", "kernel", "up1"] },
+    webhost: { name: "网页宿主", alias: "cordis-web",
+      def: "运行前端插件的浏览器页面。页面中的 cordis-web 脚本按核心的指令装载、启动、停止前端插件。",
+      more: "网页宿主不含内核，地位与 cordis-host 相同。页面经 WebSocket 连接 http 插件，http 插件把每个页面作为一条独立的 UP/1 连接转交核心。每个页面上的前端插件在核心中各有一个子实例，页面关闭时由核心回收；前端插件经核心使用任何插件提供的服务。",
+      see: ["unisocket", "host", "up1"] },
+    up1: { name: "UP/1", alias: "插件协议第 1 版",
+      def: "核心与所有插件之间的消息协议：进程插件通过标准输入输出传送带长度前缀的 CBOR 消息，浏览器页面通过 WebSocket 传送同样的消息。",
+      more: "消息包括握手、启动（apply）、调用、清理回调、状态导出、释放与关闭。核心对每条消息设置长度、速率与超时上限。",
+      see: ["core", "unisocket", "host"] },
+    toml: { name: "cordis.toml", alias: "部署配置",
+      def: "列出要运行的实例、每个实例使用的插件与配置、所属插件组，以及核心的运行参数。",
+      more: "配置文件变化时，核心计算新旧差异：新增实例则挂载，删除实例则拔出，配置变化则更新实例。",
+      see: ["instance", "group"] }
+  };
+  var panel = $("#term-panel"), lastTrigger = null;
+  function openTerm(key, trigger) {
+    var t = TERMS[key];
+    if (!t) return;
+    $("#term-name").textContent = t.name;
+    $("#term-alias").textContent = t.alias;
+    $("#term-def").textContent = t.def;
+    $("#term-more").textContent = t.more;
+    $("#term-see").innerHTML = t.see && t.see.length
+      ? "相关：" + t.see.map(function (k) { return '<button class="term" data-term="' + k + '">' + esc(TERMS[k].name) + "</button>"; }).join(" ")
+      : "";
+    panel.hidden = false;
+    if (trigger) lastTrigger = trigger;
+    $("#term-close").focus();
+  }
+  function closeTerm() {
+    panel.hidden = true;
+    if (lastTrigger && document.body.contains(lastTrigger)) lastTrigger.focus();
+  }
+  $("#term-close").addEventListener("click", closeTerm);
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape" && !panel.hidden) closeTerm(); });
+  $("#gloss-body").innerHTML = Object.keys(TERMS).map(function (k) {
+    var t = TERMS[k];
+    return '<tr><th scope="row"><button class="term" data-term="' + k + '">' + esc(t.name) + "</button></th><td>" + esc(t.def) + "</td></tr>";
+  }).join("");
+
+  /* ---------- 模拟 ---------- */
+  var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var speed = reduce ? 150 : 550;
+  function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+  function step(f) { return sleep(speed * (f || 1)); }
+
+  var ORDER = ["store", "counter", "web"];
+  var SPEC = {
+    store: { title: "存储插件", lang: "Rust", langClass: "rust", file: "libkv_store.dylib",
+      socket: "fastsocket", socketText: "高速插口 · 插件组 storage", needs: [], provides: "kv@1",
+      effects: ["打开数据文件 kv.db", "提供服务 kv@1"] },
+    counter: { title: "计数插件", lang: "Python", langClass: "py", file: "plugins/counter-py/",
+      socket: "unisocket", socketText: "通用插口 · python 进程", needs: ["kv@1"], provides: "counter@1", stateful: true,
+      effects: ["取得服务 kv@1", "启动每秒加一的任务", "提供服务 counter@1"] },
+    web: { title: "前端插件", lang: "TypeScript", langClass: "ts", file: "plugins/counter-web/",
+      socket: "webhost", socketText: "通用插口 · 浏览器页面", needs: ["counter@1"], provides: null,
+      effects: ["经 http 插件登记网页 /counter", "取得服务 counter@1", "在页面中挂载数字显示", "订阅数字变化"] }
+  };
+  var STATE_ZH = { Pending: "等待中", Loading: "启动中", Active: "运行中", Unloading: "停止中", Failed: "出错", Disposed: "已释放" };
+
+  var S;
+  function fresh() {
+    S = { busy: false, n: 0, log: [], kv: 41, inst: {} };
+    ORDER.forEach(function (id) {
+      S.inst[id] = { alive: true, state: "Active", version: 1, loads: 1, ledger: SPEC[id].effects.slice(),
+        reverting: -1, crashed: false, frozen: false, restarts: 0, value: 0 };
+    });
+    S.inst.counter.value = 41;
+    [
+      ["核心", "kernel", "读取 cordis.toml：3 个实例 store、counter、web"],
+      ["核心", "kernel", "启动 cordis-host（插件组 storage）装入存储插件；启动 python 与 node 进程"],
+      ["核心", "kernel", "三个插件握手完成，版本兼容。counter 需要 kv@1，web 需要 counter@1"],
+      ["核心", "kernel", "存储插件启动完成，开始提供 kv@1"],
+      ["核心", "kernel", "计数插件所需的 kv@1 已就绪，启动完成，开始提供 counter@1"],
+      ["核心", "kernel", "前端插件所需的 counter@1 已就绪，启动完成"],
+      ["计数插件", "counter", "从 kv@1 读出上次保存的数字 41，每秒加一"]
+    ].forEach(function (e) { pushLog(e[0], e[1], e[2]); });
+  }
+
+  function pushLog(who, cls, text) {
+    S.n += 1;
+    S.log.push({ n: S.n, who: who, cls: cls, text: text });
+    if (S.log.length > 160) S.log.shift();
+  }
+  function log(who, cls, text) { pushLog(who, cls, text); renderLog(); }
+  function K(text) { log("核心", "kernel", text); }
+  function P(id, text) { log(SPEC[id].title, id, text); }
+
+  function provider(svc) {
+    for (var i = 0; i < ORDER.length; i++) {
+      var id = ORDER[i];
+      if (SPEC[id].provides === svc && S.inst[id].state === "Active") return id;
+    }
+    return null;
+  }
+  function satisfied(id) { return SPEC[id].needs.every(function (s) { return provider(s); }); }
+  function dependents(id) {
+    var svc = SPEC[id].provides;
+    if (!svc) return [];
+    return ORDER.filter(function (d) {
+      return SPEC[d].needs.indexOf(svc) >= 0 && (S.inst[d].state === "Active" || S.inst[d].state === "Loading");
+    });
+  }
+
+  function renderFlow() {
+    var kvOn = !!provider("kv@1"), ctOn = !!provider("counter@1");
+    $("#flow").innerHTML =
+      '<span class="node">存储插件</span><span class="edge' + (kvOn ? " on" : "") + '">kv@1 →</span>' +
+      '<span class="node">计数插件</span><span class="edge' + (ctOn ? " on" : "") + '">counter@1 →</span>' +
+      '<span class="node">前端插件</span>';
+  }
+
+  function renderCards() {
+    $("#cards").innerHTML = ORDER.map(function (id) {
+      var sp = SPEC[id], I = S.inst[id];
+      var needs = sp.needs.length ? sp.needs.map(function (s) {
+        return '<span class="chip ' + (provider(s) ? "ok" : "miss") + '">' + s + "</span>";
+      }).join(" ") : '<span class="chip">无</span>';
+      var provides = sp.provides ? '<span class="chip' + (I.state === "Active" ? " ok" : "") + '">' + sp.provides + "</span>" : '<span class="chip">无</span>';
+      var items = I.ledger.slice().reverse().map(function (e, k) {
+        var idx = I.ledger.length - 1 - k;
+        return '<li class="' + (k === 0 ? "top" : "") + (idx === I.reverting ? " reverting" : "") + '">' + esc(e) + "</li>";
+      }).join("");
+      var ledger = '<div class="ledger"><div class="lh"><span><button class="term" data-term="ledger">效应记录</button>（最近登记的在上）</span><span>' + I.ledger.length + " 项</span></div>" +
+        (items ? "<ol>" + items + "</ol>" : '<div class="empty">无效应</div>') + "</div>";
+      var view;
+      if (id === "counter") {
+        view = '<div class="view"><span class="small">内存中的数字' + (I.frozen ? "（已导出，暂停写入）" : "") + '</span><span class="big">' +
+          (I.state === "Active" || I.frozen ? I.value : "—") + '</span><span class="small">kv.db 中已保存 ' + S.kv + "</span></div>";
+      } else if (id === "web") {
+        view = '<div class="view"><span class="small">浏览器中的 /counter 页面</span><span class="big">' +
+          (I.state === "Active" ? "显示 " + S.inst.counter.value : "—") + '</span><span class="small">' +
+          (I.state === "Active" ? "随 counter@1 实时更新" : I.state === "Pending" ? "页面下线，等待 counter@1" : "页面下线") + "</span></div>";
+      } else {
+        view = '<div class="view"><span class="small">磁盘上的数据文件 kv.db</span><span class="big">count = ' + S.kv + '</span><span class="small">' +
+          (I.state === "Active" ? "正在提供 kv@1" : "文件保留，kv@1 暂停") + "</span></div>";
+      }
+      var dis = S.busy ? " disabled" : "";
+      var canAct = I.alive && I.state === "Active" && !S.busy;
+      var actions = '<div class="actions">' +
+        '<button class="btn" data-op="toggle" data-id="' + id + '"' + dis + ">" + (I.alive ? "拔出" : "插入") + "</button>" +
+        '<button class="btn" data-op="replace" data-id="' + id + '"' + (canAct ? "" : " disabled") + ">换成 v" + (I.version + 1) + "</button>" +
+        '<button class="btn danger" data-op="crash" data-id="' + id + '"' + (canAct ? "" : " disabled") + ">模拟崩溃</button></div>";
+      return '<article class="card" data-state="' + I.state + '">' +
+        '<div class="card-head"><div class="card-title"><h3>' + sp.title + '<span class="lang ' + sp.langClass + '">' + sp.lang + "</span></h3><small>" + sp.file + "</small></div>" +
+        '<button class="pill ' + I.state + '" data-term="state" title="实例状态">' + STATE_ZH[I.state] + "</button></div>" +
+        '<p class="socket"><button class="term" data-term="' + sp.socket + '">' + sp.socketText + "</button>" + (I.crashed ? " · 进程已退出" : "") + "</p>" +
+        '<div class="deps"><button class="term" data-term="inject">需要</button> ' + needs + ' <button class="term" data-term="service">提供</button> ' + provides + "</div>" +
+        '<div class="meta">版本 v' + I.version + " · 启动 " + I.loads + " 次" + (I.restarts ? " · 重启 " + I.restarts + " 次" : "") + "</div>" +
+        ledger + view + actions + "</article>";
+    }).join("");
+  }
+
+  function renderLog() {
+    var box = $("#log");
+    var last = S.log.length ? S.log[S.log.length - 1].n : 0;
+    $("#log-list").innerHTML = S.log.map(function (e) {
+      return '<li class="' + (e.n === last ? "fresh" : "") + '"><span class="n">#' + String(e.n).padStart(3, "0") +
+        '</span><span class="who ' + e.cls + '">' + e.who + '</span><span class="t">' + esc(e.text) + "</span></li>";
+    }).join("");
+    box.scrollTop = box.scrollHeight;
+  }
+
+  function renderStatus() {
+    $("#sim").classList.toggle("busy", S.busy);
+    var alive = ORDER.filter(function (id) { return S.inst[id].state === "Active"; }).length;
+    $("#status-text").textContent = S.busy ? "核心处理中" : "空闲，" + alive + " 个实例运行中";
+    $("#btn-root").disabled = S.busy;
+    $("#btn-reset").disabled = S.busy;
+  }
+
+  function render() { renderFlow(); renderCards(); renderStatus(); }
+
+  async function revertLedger(id, crashed) {
+    var I = S.inst[id];
+    while (I.ledger.length) {
+      I.reverting = I.ledger.length - 1;
+      render();
+      await step(0.6);
+      var e = I.ledger.pop();
+      I.reverting = -1;
+      if (crashed) K("代" + SPEC[id].title + "撤销：" + e);
+      else P(id, "撤销：" + e);
+      render();
+      await step(0.4);
+    }
+  }
+
+  async function unload(id, finalState, opts) {
+    opts = opts || {};
+    var I = S.inst[id], sp = SPEC[id];
+    var deps = dependents(id);
+    for (var i = 0; i < deps.length; i++) {
+      K(SPEC[deps[i]].title + "正在使用 " + sp.provides + "，先停止" + SPEC[deps[i]].title);
+      await step();
+      await unload(deps[i], "Pending", { cascade: true });
+    }
+    I.state = "Unloading";
+    render();
+    if (opts.crashed) K(sp.title + "的进程已退出，核心按效应记录代为撤销");
+    else K(sp.title + "开始停止，按后进先出顺序撤销效应");
+    await step();
+    await revertLedger(id, opts.crashed);
+    I.state = finalState;
+    I.frozen = false;
+    if (finalState === "Pending" && opts.cascade) K(sp.title + "已停止，等待 " + sp.needs.join("、") + " 恢复");
+    if (finalState === "Pending" && opts.replacing) K(sp.title + " v" + I.version + " 已卸下，效应记录为空");
+    if (finalState === "Disposed") K(sp.title + "已释放，效应记录为空");
+    if (finalState === "Failed") K(sp.title + "进入出错状态");
+    render();
+    await step(0.5);
+  }
+
+  async function load(id, inherited) {
+    var I = S.inst[id], sp = SPEC[id];
+    I.loads += 1;
+    I.state = "Loading";
+    render();
+    K(sp.needs.length ? sp.title + "所需的 " + sp.needs.join("、") + " 已就绪，开始启动（v" + I.version + "）" : sp.title + "开始启动（v" + I.version + "）");
+    await step();
+    K("向" + sp.title + "发出 apply");
+    await step();
+    for (var i = 0; i < sp.effects.length; i++) {
+      I.ledger.push(sp.effects[i]);
+      P(id, "登记效应：" + sp.effects[i]);
+      render();
+      await step(0.7);
+    }
+    if (sp.stateful) {
+      if (inherited != null) { I.value = inherited; P(id, "继承旧版本导出的数字 " + inherited); }
+      else { I.value = S.kv; P(id, "从 kv@1 读出上次保存的数字 " + S.kv); }
+      I.frozen = false;
+      render();
+      await step(0.6);
+    }
+    I.state = "Active";
+    K(sp.title + "启动完成" + (sp.provides ? "，开始提供 " + sp.provides : ""));
+    render();
+    await step(0.6);
+  }
+
+  async function loadFaulty(id) {
+    var I = S.inst[id], sp = SPEC[id];
+    I.loads += 1;
+    I.state = "Loading";
+    render();
+    K(sp.title + " v" + I.version + " 开始启动");
+    await step();
+    K("向" + sp.title + "发出 apply");
+    await step();
+    I.ledger.push(sp.effects[0]);
+    P(id, "登记效应：" + sp.effects[0]);
+    render();
+    await step(0.7);
+    P(id, "apply 出错：读取配置字段 path 失败");
+    I.state = "Failed";
+    render();
+    await step();
+    K("v" + I.version + " 启动失败，撤销它已登记的效应");
+    await revertLedger(id, false);
+  }
+
+  async function reconcile() {
+    var progressed = true;
+    while (progressed) {
+      progressed = false;
+      for (var i = 0; i < ORDER.length; i++) {
+        var id = ORDER[i], I = S.inst[id];
+        if (I.alive && I.state === "Pending" && satisfied(id)) {
+          await load(id, null);
+          progressed = true;
+        }
+      }
+    }
+    ORDER.forEach(function (id) {
+      var I = S.inst[id];
+      if (I.alive && I.state === "Pending") {
+        var miss = SPEC[id].needs.filter(function (s) { return !provider(s); });
+        K(SPEC[id].title + "缺少 " + miss.join("、") + "，处于等待中");
+      }
+    });
+    render();
+  }
+
+  async function opToggle(id) {
+    var I = S.inst[id], sp = SPEC[id];
+    if (I.alive) {
+      K("cordis.toml 中移除" + sp.title);
+      await step(0.6);
+      if (I.state === "Active" || I.state === "Loading") await unload(id, "Disposed");
+      else { I.state = "Disposed"; I.ledger = []; K(sp.title + "已释放"); }
+      I.alive = false;
+      render();
+    } else {
+      I.alive = true;
+      I.state = "Pending";
+      I.crashed = false;
+      K("cordis.toml 中加入" + sp.title + "，启动进程并完成握手");
+      render();
+      await step();
+      await reconcile();
+    }
+  }
+
+  async function opReplace(id) {
+    var I = S.inst[id], sp = SPEC[id];
+    var faulty = $("#faulty").checked;
+    var oldV = I.version, nv = oldV + 1;
+    K("watch 插件报告" + sp.title + " v" + nv + " 已构建，请求替换");
+    await step();
+    K("v" + nv + " 与核心兼容，提供的服务不变，开始热替换");
+    await step();
+    var exported = null;
+    if (sp.stateful) {
+      exported = I.value;
+      I.frozen = true;
+      P(id, "导出状态：数字 " + exported + "，暂停写入");
+      render();
+      await step();
+    }
+    await unload(id, "Pending", { replacing: true });
+    I.version = nv;
+    K("装入" + sp.title + " v" + nv);
+    render();
+    await step(0.6);
+    if (faulty) {
+      await loadFaulty(id);
+      I.version = oldV;
+      I.state = "Pending";
+      K("回滚到 v" + oldV + (sp.stateful ? "，交回更换前导出的数字 " + exported : ""));
+      render();
+      await step();
+      await load(id, exported);
+      $("#faulty").checked = false;
+    } else {
+      await load(id, exported);
+    }
+    await reconcile();
+  }
+
+  async function opCrash(id) {
+    var I = S.inst[id], sp = SPEC[id];
+    I.crashed = true;
+    K(sp.title + "的进程意外退出（模拟段错误），核心进程正常运行");
+    render();
+    await step();
+    await unload(id, "Failed", { crashed: true });
+    I.restarts += 1;
+    K("按重启策略重新启动" + sp.title + "（第 " + I.restarts + " 次）");
+    await step(1.6);
+    I.crashed = false;
+    I.state = "Pending";
+    K(sp.title + "的进程已重新启动，握手完成");
+    render();
+    await step();
+    await reconcile();
+  }
+
+  async function opRoot() {
+    K("按插入的相反顺序拔出全部实例");
+    await step();
+    var rev = ORDER.slice().reverse();
+    for (var i = 0; i < rev.length; i++) {
+      var id = rev[i], I = S.inst[id];
+      if (!I.alive) continue;
+      if (I.state === "Active" || I.state === "Loading") await unload(id, "Disposed");
+      else { I.state = "Disposed"; I.ledger = []; }
+      I.alive = false;
+    }
+    K("全部实例已释放，三份效应记录均为空");
+    render();
+  }
+
+  async function run(fn) {
+    if (S.busy) return;
+    S.busy = true;
+    render();
+    try { await fn(); } finally { S.busy = false; render(); }
+  }
+
+  document.addEventListener("click", function (ev) {
+    var t = ev.target.closest("[data-term]");
+    if (t) { openTerm(t.getAttribute("data-term"), t); return; }
+    var b = ev.target.closest("button[data-op]");
+    if (!b || b.disabled) return;
+    var id = b.getAttribute("data-id"), op = b.getAttribute("data-op");
+    if (op === "toggle") run(function () { return opToggle(id); });
+    if (op === "replace") run(function () { return opReplace(id); });
+    if (op === "crash") run(function () { return opCrash(id); });
+  });
+  $("#btn-root").addEventListener("click", function () { run(opRoot); });
+  $("#btn-reset").addEventListener("click", function () {
+    if (S.busy) return;
+    fresh();
+    pushLog("核心", "kernel", "演示已恢复初始状态");
+    render();
+    renderLog();
+  });
+  $("#speed").addEventListener("change", function (e) { speed = reduce ? 150 : Number(e.target.value); });
+
+  setInterval(function () {
+    var c = S.inst.counter;
+    if (c.state === "Active" && !c.frozen && provider("kv@1")) {
+      c.value += 1;
+      S.kv = c.value;
+      renderCards();
+    }
+  }, 1000);
+
+  /* ---------- 代码示例 ---------- */
+  var CODE = {
+    rust: {
+      cap: "Rust 插件编译为动态库，由 cordis-host 装载。effect 中登记的撤销动作在实例停止时执行。",
+      text: [
+        "use cordis_sdk::prelude::*;",
+        "use kv_api::Kv;                                    // 接口由 kv.wit 生成",
+        "",
+        "struct Counter;",
+        "",
+        "impl Component for Counter {",
+        "    const NAME: &'static str = \"counter\";",
+        "    type Config = CounterConfig;",
+        "",
+        "    fn inject() -> Inject {                         // 依赖 kv@1",
+        "        Inject::new().with::<dyn Kv>()",
+        "    }",
+        "",
+        "    async fn apply(ctx: Context, config: CounterConfig) -> Result {",
+        "        let kv = ctx.get::<dyn Kv>()?;",
+        "        ctx.effect(\"tick\", move |fx| {",
+        "            let task = start_ticking(kv, config.interval_ms);",
+        "            fx.defer(move || task.stop())           // 撤销动作",
+        "        })?;",
+        "        Ok(())",
+        "    }",
+        "}",
+        "",
+        "cordis_sdk::export_plugin!(name = \"counter\", version = \"0.1.0\", components = [Counter]);"
+      ].join("\n")
+    },
+    py: {
+      cap: "Python 插件是普通的 Python 程序，经通用插口通过标准输入输出与核心收发 UP/1 消息。",
+      text: [
+        "from cordis_sdk import Component, Context, run",
+        "from kv_api import Kv                              # 由 kv.wit 生成",
+        "",
+        "class MemoryKv(Kv):",
+        "    def __init__(self):",
+        "        self.data = {}",
+        "    def get(self, key: str) -> bytes | None:",
+        "        return self.data.get(key)",
+        "    def put(self, key: str, value: bytes) -> None:",
+        "        self.data[key] = value",
+        "",
+        "class KvStore(Component):",
+        "    name = \"kv-store\"",
+        "    provides = [Kv]                                # 提供 kv@1",
+        "",
+        "    async def apply(self, ctx: Context, config: dict) -> None:",
+        "        store = MemoryKv()",
+        "        if (state := ctx.inherited_state(\"kv-py.snapshot\")) is not None:",
+        "            store.data = state.decode()            # 继承旧版本的数据",
+        "        ctx.export_state(\"kv-py.snapshot\", 1, lambda: store.data)",
+        "        ctx.provide(Kv, store)",
+        "",
+        "run(components=[KvStore])"
+      ].join("\n")
+    },
+    toml: {
+      cap: "部署配置。group 相同的 Rust 插件装入同一个 cordis-host 进程；未设置 group 的插件单独运行。",
+      text: [
+        "[runtime]",
+        "plugin_dir = \"plugins\"",
+        "checkpoint_ms = 60000          # 检查点间隔",
+        "",
+        "[instance.store]",
+        "plugin = \"kv-store\"",
+        "group = \"storage\"               # 高速插口，插件组 storage",
+        "config = { path = \"kv.db\" }",
+        "",
+        "[instance.counter]",
+        "plugin = \"counter-py\"            # 通用插口，python 进程",
+        "config = { interval_ms = 1000 }",
+        "",
+        "[instance.web]",
+        "plugin = \"counter-web\"           # 前端插件，浏览器页面中运行",
+        "config = {}"
+      ].join("\n")
+    }
+  };
+  function showTab(key) {
+    document.querySelectorAll(".tabs .btn").forEach(function (b) {
+      b.setAttribute("aria-selected", b.getAttribute("data-tab") === key ? "true" : "false");
+    });
+    $("#code").textContent = CODE[key].text;
+    $("#code-cap").textContent = CODE[key].cap;
+  }
+  document.querySelectorAll(".tabs .btn").forEach(function (b) {
+    b.addEventListener("click", function () { showTab(b.getAttribute("data-tab")); });
+  });
+
+  fresh();
+  render();
+  renderLog();
+  showTab("rust");
+})();
+</script>
+
+</body>
+</html>

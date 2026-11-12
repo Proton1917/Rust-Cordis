@@ -5,11 +5,13 @@ members = [
     "crates/cordis-abi",
     "crates/cordis-sdk",
     "crates/cordis-sdk-macros",
+    "crates/cordis-up",
+    "crates/cordis-supervisor",
     "plugins/kv-api",
     "plugins/kv-mem",
     "plugins/counter",
 ]
-exclude = ["target/tmp"]
+exclude = ["target/tmp", "crates/cordis-up/fuzz", "crates/cordis-supervisor/fixtures/process-plugin", "crates/cordis-supervisor/fixtures/manager-plugin"]
 resolver = "3"
 
 [workspace.package]
@@ -29,12 +31,16 @@ ciborium = "=0.2.2"
 syn = { version = "=2.0.119", features = ["full", "visit", "visit-mut"] }
 proc-macro2 = { version = "=1.0.107", features = ["span-locations"] }
 quote = "=1.0.47"
+nix = { version = "=0.31.3", features = ["signal", "process"] }
+rustix = { version = "=1.1.5", features = ["process"] }
+semver = "=1.0.28"
 tokio = { version = "=1.54.1", features = ["rt-multi-thread", "macros", "time", "sync"] }
 cordis = { path = "crates/cordis" }
 cordis-testkit = { path = "crates/cordis-testkit" }
 cordis-abi = { path = "crates/cordis-abi" }
 cordis-sdk = { path = "crates/cordis-sdk" }
 cordis-sdk-macros = { path = "crates/cordis-sdk-macros" }
+cordis-up = { path = "crates/cordis-up" }
 kv-api = { path = "plugins/kv-api" }
 kv-mem = { path = "plugins/kv-mem" }
 counter = { path = "plugins/counter" }

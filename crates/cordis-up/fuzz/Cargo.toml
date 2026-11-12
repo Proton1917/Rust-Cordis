@@ -1,0 +1,21 @@
+[package]
+name = "cordis-up-fuzz"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[workspace]
+
+[dependencies]
+libfuzzer-sys = "=0.4.13"
+cordis-up = { path = ".." }
+
+[[bin]]
+name = "up1_decoder"
+path = "fuzz_targets/up1_decoder.rs"
+test = false
+doc = false
+bench = false

@@ -82,7 +82,8 @@ fn layout() -> String {
         effect_dispose,
         object_export,
         object_import,
-        object_release
+        object_release,
+        effect_release
     );
     record!(
         PluginV1,

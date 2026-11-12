@@ -267,6 +267,14 @@ impl HostClient {
             "resource requires tag 60000 and a u64 identifier",
         ))
     }
+    /// 归还SDK持有的外部效应句柄，实际效应继续由核心内核管理。
+    pub fn effect_release(self, effect: u64) -> Result<()> {
+        // SAFETY: DOC-12 §9，宿主表与错误槽有效，effect为核心分配的外部句柄。
+        unsafe {
+            self.env
+                .call_unit(|err| (self.env.raw_host().effect_release)(effect, err))
+        }
+    }
     fn future(self, raw: AbiFuture) -> RemoteFuture<AbiUnit> {
         // SAFETY: DOC-12 §8、§9，调用本辅助函数的Host方法均产生单位结果。
         unsafe { RemoteFuture::from_raw(raw, self.env) }

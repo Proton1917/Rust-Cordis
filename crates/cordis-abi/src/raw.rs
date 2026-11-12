@@ -278,6 +278,7 @@ pub struct HostV1 {
     pub object_export: unsafe extern "C" fn(AbiObject, *mut u64, *mut AbiError) -> AbiStatus,
     pub object_import: unsafe extern "C" fn(u64, *mut AbiObject, *mut AbiError) -> AbiStatus,
     pub object_release: unsafe extern "C" fn(u64, *mut AbiError) -> AbiStatus,
+    pub effect_release: unsafe extern "C" fn(u64, *mut AbiError) -> AbiStatus,
 }
 
 pub type Apply = unsafe extern "C" fn(u64, AbiBytes, *mut AbiFuture, *mut AbiError) -> AbiStatus;

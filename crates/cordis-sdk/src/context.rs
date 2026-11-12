@@ -95,10 +95,7 @@ impl Context {
             })
         })?;
         let handle = environment.host().effect(self.handle, label, callback)?;
-        Ok(Effect {
-            environment,
-            handle,
-        })
+        Ok(Effect::new(environment, handle))
     }
 
     pub fn effect_async<F, Fut>(&self, label: &str, body: F) -> Result<Effect>
@@ -121,10 +118,7 @@ impl Context {
         let handle = environment
             .host()
             .effect_async(self.handle, label, callback)?;
-        Ok(Effect {
-            environment,
-            handle,
-        })
+        Ok(Effect::new(environment, handle))
     }
 
     pub fn provide<I: Interface + ?Sized>(&self, value: Arc<I>) -> Result<()> {
@@ -232,21 +226,51 @@ impl Context {
     }
 }
 
+/// 外部句柄由Clone共享，最后一个引用释放宿主句柄；效应本身由所属上下文管理。
 #[derive(Clone)]
 pub struct Effect {
+    inner: Arc<EffectHandle>,
+}
+
+struct EffectHandle {
     environment: Environment,
     handle: u64,
 }
 
 impl Effect {
+    fn new(environment: Environment, handle: u64) -> Self {
+        Self {
+            inner: Arc::new(EffectHandle {
+                environment,
+                handle,
+            }),
+        }
+    }
+
     pub async fn settled(&self) -> Result<()> {
-        self.environment.host().effect_settled(self.handle)?.await?;
+        self.inner
+            .environment
+            .host()
+            .effect_settled(self.inner.handle)?
+            .await?;
         Ok(())
     }
 
     pub async fn dispose(&self) -> Result<()> {
-        self.environment.host().effect_dispose(self.handle)?.await?;
+        self.inner
+            .environment
+            .host()
+            .effect_dispose(self.inner.handle)?
+            .await?;
         Ok(())
+    }
+}
+
+impl Drop for EffectHandle {
+    fn drop(&mut self) {
+        if let Err(error) = self.environment.host().effect_release(self.handle) {
+            self.environment.report(error);
+        }
     }
 }
 

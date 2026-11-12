@@ -68,7 +68,7 @@ ExporterVTable size=104 align=8
   header=0
   export=88
   thaw=96
-HostV1 size=208 align=8
+HostV1 size=216 align=8
   size=0
   log=8
   now=16
@@ -95,6 +95,7 @@ HostV1 size=208 align=8
   object_export=184
   object_import=192
   object_release=200
+  effect_release=208
 PluginV1 size=112 align=8
   size=0
   abi_major=8

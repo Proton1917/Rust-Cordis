@@ -312,6 +312,7 @@ async fn exercise() -> Result<()> {
     effect.settled().await?;
     effect.dispose().await?;
     assert_eq!(*order.lock().unwrap(), vec!["async", "sync"]);
+    drop(effect);
     let async_effect = ctx.effect_async("async body", {
         let order = order.clone();
         move |scope| async move {
@@ -361,9 +362,11 @@ async fn exercise() -> Result<()> {
         vec!["async", "sync", "async body cleanup"]
     );
     assert_eq!(ctx.is_current().unwrap_err().code(), 4);
+    drop(async_effect);
     drop(probe);
-    assert_eq!(host.called_slots(), (1 << 25) - 1);
+    assert_eq!(host.called_slots(), (1 << 26) - 1);
     assert_eq!(host.resources(), 0);
+    assert_eq!(host.effect_records(), (0, 0));
     assert!(
         host.leases().values().all(|count| *count == 0),
         "{:?}",

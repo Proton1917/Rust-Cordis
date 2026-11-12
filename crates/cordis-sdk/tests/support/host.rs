@@ -17,7 +17,7 @@ struct Instance {
     services: Mutex<BTreeMap<String, Arc<Object>>>,
     listeners: Mutex<Vec<(String, u32, Arc<Object>)>>,
     exporter: Mutex<Option<(String, u32, Arc<Object>)>>,
-    effects: Mutex<Vec<u64>>,
+    effects: Mutex<Vec<(u64, Arc<Effect>)>>,
     tasks: Mutex<Vec<tokio::task::JoinHandle<Result<AbiUnit>>>>,
     threads: Mutex<Vec<std::thread::JoinHandle<Result<()>>>>,
 }
@@ -33,6 +33,7 @@ struct Effect {
 struct Inner {
     instances: Mutex<BTreeMap<u64, Arc<Instance>>>,
     effects: Mutex<BTreeMap<u64, Arc<Effect>>>,
+    effect_handles: Mutex<BTreeMap<u64, Arc<Effect>>>,
     next: AtomicU64,
     leases: Mutex<BTreeMap<u64, usize>>,
     resources: Mutex<BTreeMap<u64, Arc<Object>>>,
@@ -47,12 +48,19 @@ pub struct Loopback {
     runtime: tokio::runtime::Handle,
 }
 
+impl Default for Loopback {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Loopback {
     pub fn new() -> Self {
         Self {
             inner: Arc::new(Inner {
                 instances: Mutex::new(BTreeMap::new()),
                 effects: Mutex::new(BTreeMap::new()),
+                effect_handles: Mutex::new(BTreeMap::new()),
                 next: AtomicU64::new(1),
                 leases: Mutex::new(BTreeMap::new()),
                 resources: Mutex::new(BTreeMap::new()),
@@ -79,6 +87,13 @@ impl Loopback {
 
     pub fn resources(&self) -> usize {
         self.inner.resources.lock().unwrap().len()
+    }
+
+    pub fn effect_records(&self) -> (usize, usize) {
+        (
+            self.inner.effects.lock().unwrap().len(),
+            self.inner.effect_handles.lock().unwrap().len(),
+        )
     }
 
     pub fn context(&self, config: Vec<u8>, inject: Vec<u64>, inherited: Option<State>) -> u64 {
@@ -123,6 +138,28 @@ impl Loopback {
             .ok_or_else(|| Error::new(4, "效应已释放"))
     }
 
+    fn effect_handle(&self, id: u64) -> Result<Arc<Effect>> {
+        self.inner
+            .effect_handles
+            .lock()
+            .unwrap()
+            .get(&id)
+            .cloned()
+            .ok_or_else(|| Error::new(4, "效应句柄已释放"))
+    }
+
+    fn release_effect_handle(&self, id: u64) -> Result<()> {
+        let effect = self
+            .inner
+            .effect_handles
+            .lock()
+            .unwrap()
+            .remove(&id)
+            .ok_or_else(|| Error::new(4, "效应句柄已释放"))?;
+        drop(effect);
+        Ok(())
+    }
+
     fn create_effect(&self, ctx: u64) -> Result<(u64, Arc<Effect>)> {
         let instance = self.instance(ctx)?;
         let id = self.inner.next.fetch_add(1, Ordering::Relaxed);
@@ -138,12 +175,16 @@ impl Loopback {
             .lock()
             .unwrap()
             .insert(id, effect.clone());
-        instance.effects.lock().unwrap().push(id);
+        self.inner
+            .effect_handles
+            .lock()
+            .unwrap()
+            .insert(id, effect.clone());
+        instance.effects.lock().unwrap().push((id, effect.clone()));
         Ok((id, effect))
     }
 
-    async fn cleanup(&self, id: u64) -> Result<()> {
-        let effect = self.effect_state(id)?;
+    async fn cleanup(&self, id: u64, effect: Arc<Effect>) -> Result<()> {
         if effect.disposed.swap(true, Ordering::AcqRel) {
             return wait(&effect.cleaned).await;
         }
@@ -164,6 +205,13 @@ impl Loopback {
             }
         }
         let result = failure.map_or(Ok(()), Err);
+        self.instance(effect.context)?
+            .effects
+            .lock()
+            .unwrap()
+            .retain(|(effect_id, _)| *effect_id != id);
+        let registration = self.inner.effects.lock().unwrap().remove(&id);
+        drop(registration);
         effect.cleaned.send_replace(Some(result.clone()));
         result
     }
@@ -187,8 +235,8 @@ impl Loopback {
             }
         }
         let effects = instance.effects.lock().unwrap().clone();
-        for effect in effects.into_iter().rev() {
-            if let Err(error) = self.cleanup(effect).await {
+        for (id, effect) in effects.into_iter().rev() {
+            if let Err(error) = self.cleanup(id, effect).await {
                 failure.get_or_insert(error);
             }
         }
@@ -328,8 +376,10 @@ impl Backend for Loopback {
         let result = body.call_sync(ctx, id, &[]);
         effect.running.send_replace(Some(result.clone()));
         if result.is_err() {
+            self.release_effect_handle(id)?;
             let host = self.clone();
-            self.runtime.spawn(async move { host.cleanup(id).await });
+            self.runtime
+                .spawn(async move { host.cleanup(id, effect).await });
         }
         result.map(|()| id)
     }
@@ -345,7 +395,7 @@ impl Backend for Loopback {
             drop(body);
             effect.running.send_replace(Some(result.clone()));
             if result.is_err() {
-                host.cleanup(id).await?;
+                host.cleanup(id, effect).await?;
             }
             result
         });
@@ -496,7 +546,7 @@ impl Backend for Loopback {
     }
     fn effect_settled(&self, id: u64) -> Result<RemoteFuture<AbiUnit>> {
         self.record(20);
-        let effect = self.effect_state(id)?;
+        let effect = self.effect_handle(id)?;
         make_future(
             async move {
                 let result = wait(&effect.running).await;
@@ -511,11 +561,11 @@ impl Backend for Loopback {
     }
     fn effect_dispose(&self, id: u64) -> Result<RemoteFuture<AbiUnit>> {
         self.record(21);
-        self.effect_state(id)?;
+        let effect = self.effect_handle(id)?;
         let host = self.clone();
         make_future(
             async move {
-                host.cleanup(id).await?;
+                host.cleanup(id, effect).await?;
                 Ok(AbiUnit::default())
             },
             environment(0),
@@ -557,5 +607,10 @@ impl Backend for Loopback {
             .ok_or_else(|| Error::new(4, "服务资源编号已释放"))?;
         drop(object);
         Ok(())
+    }
+
+    fn effect_release(&self, id: u64) -> Result<()> {
+        self.record(25);
+        self.release_effect_handle(id)
     }
 }

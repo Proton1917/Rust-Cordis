@@ -17,7 +17,8 @@
 | `crates/cordis-testkit` | 确定性执行器 |
 | `crates/cordis-up` | UP/1 消息类型、受限 CBOR 编解码与帧协议 |
 | `crates/cordis-supervisor` | 核心侧进程监管、对象路由、截止时间、背压与故障回收 |
-| `crates/cordis-runtime` | 核心可执行文件 cordis：配置、目录监视、状态、检查点、命令行 |
+| `crates/cordis-runtime` | 核心可执行文件 cordis：运行、状态、检查点、管理接口与服务安装 |
+| `crates/cordis-dev` | 独立开发工具：脚手架、验证、打包与代码生成，通过 cordis-host 读取原生描述符 |
 | `crates/cordis-host` | 原生插件宿主程序：分组装载、ABI 适配、租约、组内替换、UP/1 桥 |
 | `crates/cordis-abi` | 原生插件与宿主之间的 ABI 类型、安全包装、布局测试 |
 | `crates/cordis-sdk` | 原生插件作者接口：Component、Context、Service、事件、状态 |
@@ -26,6 +27,8 @@
 | `plugins/kv-api` | kv@1 接口定义 |
 | `plugins/kv-mem`、`plugins/kv-file` | kv@1 的内存和文件实现 |
 | `plugins/kv-contract`、`plugins/counter`、`plugins/console-log` | 契约套件、计数使用方、终端日志 |
+| `plugins/watch` | 持有管理授权的文件监视与自动替换插件 |
+| `plugins/window` | M16 的独立进程窗口插件，主线程运行界面并提供 window@1 |
 | `fixtures/` | 真实行为与故障测试插件 |
 | `docs/abi/v1-layout.txt` | ABI 布局记录，由测试生成 |
 
@@ -36,6 +39,7 @@
 | cordis-runtime | cordis、cordis-supervisor、cordis-up |
 | cordis-supervisor | cordis、cordis-up |
 | cordis-host | cordis-up、cordis-abi、cordis-sdk |
+| cordis-dev | cordis-up 的协议数据；通过子进程使用 cordis、cordis-host |
 | 原生插件、契约辅助与原生 fixture | cordis-sdk；接口 crate |
 | cordis-sdk | cordis-abi、cordis-sdk-macros |
 
@@ -52,9 +56,10 @@
 | `cordis-sdk` | 2000 | 3500 |
 | `cordis-sdk-macros` | 1200 | 2000 |
 | `cordis-up` | 1500 | 2500 |
-| `cordis-supervisor` | 2000 | 3500 |
+| `cordis-supervisor` | 3500 | 4500（ADR-0026） |
 | `cordis-host` | 2000 | 3500 |
 | `cordis-runtime` | 1500 | 2500 |
+| `cordis-dev` | 1500 | 2500 |
 | `cordis-contract` | 500 | 1000 |
 
 超出目标时在 `docs/PROGRESS.md` 记录原因；超出上限需要写 ADR。
@@ -120,13 +125,15 @@
 
 ### 3.5 `cordis-runtime`
 
-- 可执行文件 `cordis`，子命令 `run`（默认）与 `verify`。
+- 可执行文件 cordis 提供 run、status、service install、version；其余命令原样转交同目录或 PATH 中的 cordis-dev（ADR-0024）。
 - tokio 多线程运行时实现 `Spawn + Clock`。
 - 配置：`cordis.toml`（`DOC-11` §10）。配置解析失败时启动失败；运行中配置文件变为无效时保持当前状态并记录错误。
-- 目录监视：`notify` crate，事件去抖 300 毫秒后计算差异。
+- 管理接口 cordis.manage@1 按配置中的 grants 检查每个方法，串行执行变更并保存 state/instances.toml 叠加层。watch 插件经此接口触发安装、替换和配置重读。
 - 状态目录布局：`state/<实例名>.state`、`state/consumed/`、`state/data/<插件名>/`（`cordis.data-dir@1`）、`state/status.json`。
 - `status.json`：每个库的插件名、版本、副本序号和路径、是否验证、租约数、静止状态；每个实例的状态、纪元、最近一次替换报告。
 - 信号：`SIGTERM`/`SIGINT` 触发 `DOC-11` §9 的有序退出。
+
+cordis-dev 提供 new、new-plugin、verify、pack、idl gen，随对应里程碑接入。原生描述符由 cordis-host --describe 读取；验证由独立 cordis run 部署执行；模板与 M15 skill 共用。开发工具使用协议数据和子进程，产品依赖与内核、ABI、SDK 分离。
 
 ### 3.6 `cordis-contract`
 
@@ -136,7 +143,7 @@
 
 ### 3.7 `cordis-up` 与 `cordis-supervisor`
 
-cordis-up 保存双方共用的消息类型、帧大小约束、CBOR 深度与集合长度约束。cordis-supervisor 负责进程组、握手、双向请求、对象编号与服务路由、超时、取消、背压、退出回收及有界重启。两者遵守 CP-1–CP-10，协议字段在 M10 的 DOC-16 中确定。
+cordis-up 保存双方共用的消息类型、帧大小约束、CBOR 深度与集合长度约束，并提供有界双向 RPC 连接、截止时间和载荷引用所有权。cordis-supervisor 负责进程组、握手、对象编号与服务路由、唯一内核中的生命周期控制、退出回收及有界重启。两者遵守 CP-1–CP-10，协议字段在 M10 的 DOC-16 中确定。
 
 ## 4 SDK 接口
 
@@ -186,6 +193,7 @@ pub trait Kv: Send + Sync {
 | `cordis.data-dir@1` | 运行时 | 返回实例所属插件的数据目录（`PR-7`） |
 | `cordis.contract@1` | 验证核心，经 UP/1 | 契约结果、完成通知、阶段查询与状态往返请求（ADR-0017） |
 | `cordis.runtime@1` | 运行时 | 只读查询：已装载库、实例状态（供管理类插件使用） |
+| `cordis.manage@1` | 运行时，经 UP/1 | install、add、remove、replace、rollback、configure、reload、shutdown；授权来自实例条目的 grants（ADR-0024） |
 
 运行时通过 UP/1 通知发布 `cordis.log@1`，载荷含 level、message、instance。跨进程监听器异步接收，服务调用承担需要返回值的交互（DOC-15 §6.3）。
 
@@ -195,13 +203,13 @@ pub trait Kv: Send + Sync {
 |---|---|
 | `B-1` | 内核 crate 继续遵守第一阶段的 `A-1`–`A-12`，不使用 `unsafe`，不依赖 tokio |
 | `B-2` | 核心进程的全部 crate 使用安全 Rust，依赖树与 cordis-abi、cordis-sdk 分离。unsafe 位于 cordis-abi、cordis-host 与宏生成的固定代码形态；每个 unsafe 块、函数、impl、extern 块和属性前一行有 SAFETY 注释说明 DOC-12 契约，宏模板同时生成相应文档。源码审计使用 syn 解析。cordis-abi 与 cordis-host 开启 deny(unsafe_op_in_unsafe_fn) |
-| `B-3` | 跨插件边界只出现 `DOC-12` 的类型（`Q3`）。`cordis-sdk` 的公开接口中不出现内核类型 |
+| `B-3` | 同组原生边界使用 DOC-12 类型，跨进程使用 UP/1；SDK 的公开类型与内核类型分离（Q3） |
 | `B-4` | 每个跨边界函数在被调用侧捕获 panic（`DOC-12` §6） |
 | `B-5` | 宿主侧每个收到的对象都包装为持有租约的值（`DOC-12` §11） |
-| `B-6` | 装载器的每一步副作用（打开的库、挂载的实例、监视器、状态块）都登记为内核效应 |
+| `B-6` | 核心管理连接、实例、服务与插件登记的效应；宿主用 RAII 持有本地库、租约和对象表，按核心指令释放。watch 的监视器作为插件效应登记 |
 | `B-7` | `SW-1`–`SW-4` 保持实例、纪元和绑定原状；`SW-5` 仅进入可逆冻结，导出失败时解冻；`SW-6` 开始生命周期替换（`DOC-11` §6） |
-| `B-8` | 持有内核锁或装载器内部锁时，不调用插件代码 |
-| `B-9` | 插件代码的调用都发生在宿主执行器的任务中或调用方线程上，装载器不为插件创建隐藏线程 |
+| `B-8` | 内核锁、路由锁与宿主资源锁在远端等待、插件调用和用户资源析构前释放 |
+| `B-9` | 原生代码在宿主执行器的工作线程或调用方线程执行；UP/1 读写与 EOF 监测独立调度，插件系统线程经显式资源接口登记 |
 | `B-10` | `docs/abi/v1-layout.txt` 在 M11 冻结前的修改记入 PROGRESS，冻结后随 ADR 修改 |
 
 ## 7 依赖白名单
@@ -212,14 +220,15 @@ pub trait Kv: Send + Sync {
 |---|---|---|
 | `serde` | 配置、DTO、状态块的序列化 | `cordis-abi`、`cordis-sdk`、`cordis-runtime` |
 | `serde_json` | JSON 验证印记、状态与报告 | `cordis-host`、`cordis-runtime`、`cordis-contract` |
-| `semver` | 插件版本解析与接口数值版本处理 | `cordis-host`、`cordis-runtime` |
-| `clap` | 命令行参数与子命令解析 | `cordis-runtime`、`cordis-host` |
+| `semver` | 插件版本解析与接口数值版本处理 | `cordis-host`、`cordis-supervisor`、`cordis-runtime` |
+| `clap` | 命令行参数与子命令解析 | `cordis-runtime`、`cordis-host`、`cordis-dev` |
 | `ciborium` | CBOR 编解码（`ADR-0010`） | `cordis-abi`、`cordis-sdk`、`cordis-host`、`cordis-up` |
 | `libloading` | 打开动态库 | `cordis-host` |
-| `tokio` | 执行器、计时与子进程 I/O | `cordis-runtime`、`cordis-supervisor`、`cordis-host` |
+| `tokio` | 执行器、计时、双向消息与子进程 I/O | `cordis-runtime`、`cordis-supervisor`、`cordis-host`、`cordis-up` |
 | `nix` | 安全的 POSIX 进程组信号接口（ADR-0021） | `cordis-supervisor` |
+| `rustix` | 安全的 waitid 状态观察与待回收子进程管理（ADR-0027） | `cordis-supervisor` |
 | `libfuzzer-sys` | CP-9 输入模糊测试（ADR-0021） | 独立 fuzz 工作区的开发构建 |
-| `notify` | 目录监视 | `cordis-runtime` |
+| `notify` | 目录监视 | `plugins/watch` |
 | `toml` | 解析 `cordis.toml` | `cordis-runtime` |
 | `syn`、`quote`、`proc-macro2` | 过程宏 | `cordis-sdk-macros` |
 | `parking_lot`、`futures-util`、`thiserror` | 与内核相同 | 各 crate |
