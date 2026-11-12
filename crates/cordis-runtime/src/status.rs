@@ -243,6 +243,7 @@ fn runtime_replace(report: ReplaceReport) -> GroupReplaceReport {
         previous_connection: report.previous_connection,
         candidate_connection: report.candidate_connection,
         affected_instances: report.affected_instances,
+        pause_ms: report.pause_ms,
         committed: report.committed,
         succeeded: report.succeeded,
         rolled_back: report.rolled_back,

@@ -153,14 +153,86 @@ impl Component for Optional {
 struct Contract;
 
 struct Callers;
+
+#[derive(serde::Deserialize)]
+struct CallersConfig {
+    #[serde(default)]
+    observation: Option<std::path::PathBuf>,
+}
+
+#[derive(serde::Serialize)]
+struct CallerObservation {
+    pid: u32,
+    complete: bool,
+    values: [u64; 8],
+    versions: [u64; 8],
+}
+
+struct CallerObservations {
+    path: std::path::PathBuf,
+    seen: std::sync::atomic::AtomicU8,
+    values: [std::sync::atomic::AtomicU64; 8],
+    versions: [std::sync::atomic::AtomicU64; 8],
+}
+
+impl CallerObservations {
+    /// AC-9：每次加载先公布待观测状态，避免下一纪元复用上一纪元的线程结果。
+    fn new(path: std::path::PathBuf) -> Result<Self> {
+        let observation = Self {
+            path,
+            seen: std::sync::atomic::AtomicU8::new(0),
+            values: std::array::from_fn(|_| std::sync::atomic::AtomicU64::new(0)),
+            versions: std::array::from_fn(|_| std::sync::atomic::AtomicU64::new(0)),
+        };
+        observation.write(false)?;
+        Ok(observation)
+    }
+
+    /// AC-9：各真实线程保存首次读取结果，八项齐备后一次发布该加载纪元的观察文件。
+    fn record(&self, index: usize, value: u64, version: u64) -> Result<()> {
+        use std::sync::atomic::Ordering;
+        self.values[index].store(value, Ordering::Release);
+        self.versions[index].store(version, Ordering::Release);
+        let previous = self.seen.fetch_or(1 << index, Ordering::AcqRel);
+        if previous != u8::MAX && previous | (1 << index) == u8::MAX {
+            self.write(true)?;
+        }
+        Ok(())
+    }
+
+    /// AC-9：观察文件写入部署提供的插件数据目录，原子发布保护并发读取。
+    fn write(&self, complete: bool) -> Result<()> {
+        let observation = CallerObservation {
+            pid: std::process::id(),
+            complete,
+            values: std::array::from_fn(|index| {
+                self.values[index].load(std::sync::atomic::Ordering::Acquire)
+            }),
+            versions: std::array::from_fn(|index| {
+                self.versions[index].load(std::sync::atomic::Ordering::Acquire)
+            }),
+        };
+        let staged = self.path.with_extension("next");
+        std::fs::write(&staged, cordis_sdk::encode(&observation)?)
+            .map_err(|error| Error::new(1, error.to_string()))?;
+        std::fs::rename(staged, &self.path).map_err(|error| Error::new(1, error.to_string()))
+    }
+}
+
 impl Component for Callers {
     const NAME: &'static str = "callers";
-    type Config = EmptyConfig;
+    type Config = CallersConfig;
     fn inject() -> Inject {
         Inject::new().with::<dyn Counter>()
     }
-    async fn apply(ctx: Context, _: EmptyConfig) -> Result<()> {
+    async fn apply(ctx: Context, config: CallersConfig) -> Result<()> {
+        let observation = config
+            .observation
+            .map(CallerObservations::new)
+            .transpose()?
+            .map(Arc::new);
         for index in 0..8 {
+            let observation = observation.clone();
             ctx.spawn_thread(&format!("caller-{index}"), move |context| {
                 let mut observed = 0;
                 while context.is_current()? {
@@ -168,9 +240,12 @@ impl Component for Callers {
                         .get::<dyn Counter>()
                         .and_then(|service| Ok((service.value()?, service.implementation()?)))
                     {
-                        Ok((_, version)) if observed != version => {
+                        Ok((value, version)) if observed != version => {
                             observed = version;
                             context.log(2, &format!("caller-{index}-version-{version}"))?;
+                            if let Some(observation) = &observation {
+                                observation.record(index, value, version)?;
+                            }
                         }
                         Ok(_) => {}
                         Err(error) if error.code() == 4 => {}

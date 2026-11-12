@@ -86,9 +86,10 @@ impl Manager {
         let reported_group = group.clone();
         let reported_plugin = plugin.clone();
         self.transaction(move |manager| async move {
+            let started = std::time::Instant::now();
             manager.validate_restore_states(&group, Some(&plugin), &states)?;
             manager
-                .swap_library(&group, &plugin, &path, states, marker)
+                .swap_library(&group, &plugin, &path, states, marker, started)
                 .await
         })
         .await
@@ -292,9 +293,9 @@ impl Manager {
         path: &Path,
         states: HashMap<String, Option<payload::State>>,
         committed: Arc<AtomicBool>,
+        started: std::time::Instant,
     ) -> Result<SwapReport> {
         let swap = self.prepare_native(group_name, plugin_name, path).await?;
-        let started = std::time::Instant::now();
         self.activate_native(&swap, states).await?;
         let mut report = SwapReport {
             plugin: plugin_name.into(),
@@ -308,6 +309,7 @@ impl Manager {
             rolled_back: false,
             failure: None,
         };
+        let mut confirmation = Duration::ZERO;
         let accepted = match self
             .stabilize(&swap.transition.before, &swap.transition.names)
             .await
@@ -315,7 +317,10 @@ impl Manager {
             Ok(changed) => {
                 report.affected_instances = changed.len();
                 report.pause_ms = started.elapsed().as_millis().min(u64::MAX as u128) as u64;
-                self.confirm(&changed, &swap.previous.connection).await
+                let confirming = std::time::Instant::now();
+                let result = self.confirm(&changed, &swap.previous.connection).await;
+                confirmation = confirming.elapsed();
+                result
             }
             Err(problem) => Err(problem),
         };
@@ -323,7 +328,8 @@ impl Manager {
             return self.rollback_native(swap, report, problem).await;
         }
         committed.store(true, Ordering::Release);
-        self.commit_native(swap, report).await
+        self.commit_native(swap, report, started + confirmation)
+            .await
     }
 
     /// DOC-11 SW-6：宿主切换成功后提交内核定义，宿主拒绝时解冻原版本。
@@ -400,7 +406,12 @@ impl Manager {
     }
 
     /// DOC-11 SW-9：释放冻结引用后退役原库，保存宿主报告及手动回滚所需的原状态。
-    async fn commit_native(&self, swap: NativeSwap, mut report: SwapReport) -> Result<SwapReport> {
+    async fn commit_native(
+        &self,
+        mut swap: NativeSwap,
+        mut report: SwapReport,
+        started: std::time::Instant,
+    ) -> Result<SwapReport> {
         report.committed = true;
         *swap.group.health.lock() = Health {
             state: "running".into(),
@@ -415,49 +426,79 @@ impl Manager {
             &swap.transition.frozen,
         );
         self.record_native(&swap, &report);
-        let NativeSwap {
-            group,
-            plugin,
-            previous,
-            specification,
-            old_library,
-            transition,
-            ..
-        } = swap;
-        drop(transition.frozen);
+        drop(std::mem::take(&mut swap.transition.frozen));
+        let retired_images = self.retire_native(&swap, &mut report).await?;
+        self.finish_native(swap, report, retired_images, started)
+            .await
+    }
+
+    /// SW-9：释放原库的实际租约，退役错误保留已确认的版本提交事实。
+    async fn retire_native(&self, swap: &NativeSwap, report: &mut SwapReport) -> Result<u64> {
         let retired = self
             .library_command::<payload::LibraryRetired>(
-                &previous.connection,
+                &swap.previous.connection,
                 "library_retire",
-                old_library,
+                swap.old_library,
             )
             .await;
         let retired = match retired {
             Ok(retired) => retired,
             Err(problem) => {
                 report.failure = Some(metadata::clipped(&problem.message));
-                group.health.lock().error = Some(saved_error(&problem));
-                self.0.catalog.lock().native_reports.insert(
-                    (group.name.clone(), plugin.clone()),
-                    (previous.connection.id(), report),
-                );
+                swap.group.health.lock().error = Some(saved_error(&problem));
+                self.record_native(swap, report);
                 return Err(problem);
             }
         };
         report.quiescence_ms = retired.quiescence_ms;
-        report.succeeded = retired.leases == 0;
-        if !report.succeeded {
+        if retired.leases != 0 {
             report.failure = Some("旧库仍有活动租约".into());
-        }
-        self.0.catalog.lock().native_reports.insert(
-            (group.name.clone(), plugin.clone()),
-            (previous.connection.id(), report.clone()),
-        );
-        if !report.succeeded {
+            self.record_native(swap, report);
             return Err(error(6, "旧库仍有活动租约"));
         }
-        self.enforce_image_limit(&group.name, specification, retired.retired_images)
-            .await?;
+        Ok(retired.retired_images)
+    }
+
+    /// RM-3/RM-4：阈值重启属于原替换事务，统计最终稳定时刻与全部纪元变化。
+    async fn finish_native(
+        &self,
+        mut swap: NativeSwap,
+        mut report: SwapReport,
+        retired_images: u64,
+        started: std::time::Instant,
+    ) -> Result<SwapReport> {
+        let restarted = self
+            .enforce_image_limit(
+                &swap.group.name,
+                swap.specification.take(),
+                retired_images,
+                started,
+            )
+            .await;
+        match restarted {
+            Ok(Some(restarted)) => {
+                report.pause_ms = restarted.pause_ms;
+                report.affected_instances = self
+                    .epochs()
+                    .iter()
+                    .filter(|(name, epoch)| {
+                        swap.transition
+                            .before
+                            .get(*name)
+                            .is_some_and(|before| before != *epoch)
+                    })
+                    .count();
+            }
+            Ok(None) => {}
+            Err(problem) => {
+                report.succeeded = false;
+                report.failure = Some(metadata::clipped(&problem.message));
+                self.record_native(&swap, &report);
+                return Err(problem);
+            }
+        }
+        report.succeeded = true;
+        self.record_native(&swap, &report);
         Ok(report)
     }
 
@@ -467,22 +508,26 @@ impl Manager {
         group: &str,
         specification: Option<GroupSpec>,
         retired_images: u64,
-    ) -> Result<()> {
+        started: std::time::Instant,
+    ) -> Result<Option<ReplaceReport>> {
         if retired_images > self.0.options.retired_image_limit
             && let Some(specification) = specification
         {
             let original = self.last_replacement_states(group);
-            let restarted = self.replace(specification).await;
+            let restarted = self
+                .replace_with_states(specification, HashMap::new(), None, started)
+                .await;
             self.0
                 .catalog
                 .lock()
                 .replacement_states
                 .insert(group.into(), original);
-            restarted?;
+            return restarted.map(Some);
         }
-        Ok(())
+        Ok(None)
     }
 
+    /// DOC-10 RM-3/RM-4：阈值重启完成后保存整次事务的实际影响数和 Active 时间。
     fn record_native(&self, swap: &NativeSwap, report: &SwapReport) {
         self.0.catalog.lock().native_reports.insert(
             (swap.group.name.clone(), swap.plugin.clone()),

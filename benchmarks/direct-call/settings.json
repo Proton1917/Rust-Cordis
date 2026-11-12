@@ -1,0 +1,9 @@
+{
+  "baseline": "target/direct-call/baseline/release/libdirect_benchmark_baseline.dylib",
+  "current": "target/direct-call/current/release/libdirect_benchmark_current.dylib",
+  "rounds": 9,
+  "warmup": 10000,
+  "iterations": 100000,
+  "median_ratio_limit": 1.05,
+  "maximum_ratio_limit": 1.15
+}

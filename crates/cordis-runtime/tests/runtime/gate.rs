@@ -50,7 +50,7 @@ fn artifacts() -> Artifacts {
     }
 }
 
-fn checked(command: &mut Command) {
+pub(super) fn checked(command: &mut Command) {
     let output = command.output().unwrap();
     assert!(
         output.status.success(),
@@ -60,7 +60,7 @@ fn checked(command: &mut Command) {
     );
 }
 
-fn library(directory: &Path, name: &str) -> PathBuf {
+pub(super) fn library(directory: &Path, name: &str) -> PathBuf {
     directory.join(format!(
         "{}{}{}",
         std::env::consts::DLL_PREFIX,

@@ -74,6 +74,7 @@ impl Manager {
         states: HashMap<String, Option<payload::State>>,
         committed: Arc<AtomicBool>,
     ) -> Result<HashMap<String, Option<payload::State>>> {
+        let started = std::time::Instant::now();
         self.running()?;
         let prepared = self
             .prepare_batch_sources(replacements, &before, &mut target)
@@ -89,31 +90,33 @@ impl Manager {
             .collect::<HashMap<_, _>>();
         let mut inherited = batch_inherited(&transition, &before, &target);
         inherited.extend(states);
-        let started = std::time::Instant::now();
         let accepted = match self
             .apply_batch(&prepared, &before, &target, &inherited, false)
             .await
         {
             Ok(()) => {
-                self.accept_batch(&prepared, &transition.before, &names, &target)
+                self.accept_batch(&prepared, &transition.before, &names, &target, started)
                     .await
             }
             Err(problem) => Err(problem),
         };
-        if let Err(problem) = accepted {
-            return Err(self
-                .rollback_batch(
-                    &prepared,
-                    &before,
-                    &target,
-                    transition,
-                    started.elapsed(),
-                    problem,
-                )
-                .await);
-        }
+        let (paused, affected) = match accepted {
+            Ok(accepted) => accepted,
+            Err(problem) => {
+                return Err(self
+                    .rollback_batch(
+                        &prepared,
+                        &before,
+                        &target,
+                        transition,
+                        started.elapsed(),
+                        problem,
+                    )
+                    .await);
+            }
+        };
         committed.store(true, Ordering::Release);
-        self.record_batch_reports(&prepared, names.len(), started.elapsed(), true, false, None);
+        self.record_batch_reports(&prepared, affected, paused, true, false, None);
         self.commit_batch(&prepared, &before, &target, &transition)
             .await?;
         drop(transition);
@@ -570,13 +573,15 @@ impl Manager {
         epochs: &HashMap<String, cordis::Epoch>,
         names: &HashSet<String>,
         target: &[BatchInstance],
-    ) -> Result<()> {
+        started: std::time::Instant,
+    ) -> Result<(Duration, usize)> {
         let names = target
             .iter()
             .filter(|item| names.contains(&item.specification.name))
             .map(|item| item.specification.name.clone())
             .collect::<Vec<_>>();
         let changed = self.stabilize(epochs, &names).await?;
+        let paused = started.elapsed();
         for result in join_all(
             prepared
                 .values()
@@ -586,7 +591,7 @@ impl Manager {
         {
             result?;
         }
-        Ok(())
+        Ok((paused, changed.len()))
     }
 
     /// SW-9：保存全批提交事实和原快照，进程监管继续指向本次活动版本。
@@ -707,6 +712,7 @@ impl Manager {
                 &group.group.name,
                 group.specification.clone(),
                 retired_images,
+                std::time::Instant::now(),
             )
             .await
         {
@@ -737,6 +743,7 @@ impl Manager {
                     previous_connection: previous.connection.id(),
                     candidate_connection: group.candidate.connection.id(),
                     affected_instances: affected,
+                    pause_ms: elapsed.as_millis().min(u64::MAX as u128) as u64,
                     committed,
                     succeeded: false,
                     rolled_back,

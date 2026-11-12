@@ -1,0 +1,16 @@
+[package]
+name = "kv-scoped"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+publish = false
+
+[workspace]
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+cordis-sdk = { path = "../../../../crates/cordis-sdk" }
+kv-api = { path = "../../../../plugins/kv-api" }
+serde = { version = "=1.0.229", features = ["derive"] }

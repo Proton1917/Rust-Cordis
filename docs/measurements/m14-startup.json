@@ -1,0 +1,18 @@
+{
+  "RM-2": [
+    "load_one"
+  ],
+  "instances": 100,
+  "libraries": [
+    "app",
+    "load-five",
+    "load-four",
+    "load-one",
+    "load-six",
+    "load-three",
+    "load-two",
+    "watch"
+  ],
+  "scenario": "AC-1",
+  "startup_ms": 6139
+}

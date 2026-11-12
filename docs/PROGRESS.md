@@ -6,11 +6,11 @@
 
 | 项 | 值 |
 |---|---|
-| 最近完成的里程碑 | `M13` |
-| 进行中的里程碑 | 第二阶段 M14 |
-| 下一步 | 整合 AC-1–AC-9、AU 场景及 RM 指标；完成固定 50 轮替换、直接调用基准、默认 Git 脚手架和 launchd 恢复验收 |
+| 最近完成的里程碑 | `M14` |
+| 进行中的里程碑 | 第二阶段 M15 |
+| 下一步 | 正式交付插件编写 skill 与共享模板；执行 SK-1、SK-2 独立新会话验收及 SK-3 模板编译验收 |
 | 阻塞项 | 无；用户已恢复执行 |
-| 最后更新 | 2026-11-13（Asia/Shanghai），M13 验收 |
+| 最后更新 | 2026-11-13（Asia/Shanghai），M14 验收 |
 
 ## 环境
 
@@ -351,6 +351,55 @@ M12 复核按用户要求从 6b4687f 导出隔离源码，修正测试与脚手�
 | cordis-types | 203 / 237 |
 | cordis-up | 1613 / 1752 |
 | 六个核心 crate 合计 | 16609 / 18580 |
+
+### M14 系统验收与可替换性测量
+
+- commit：本节所在的 `M14: 完成系统验收与可替换性测量` 提交。
+- 交付：AC-1–AC-9、AU-1/2/8–11/16/18、RM-1–6/9/10 的证据与正式测试；README 默认 Git SDK 创建流程；替换报告计时与 Runtime 1.3。场景、计量口径和原始结果统一见 [M14 运行时验收与测量](measurements/m14-acceptance.md)。
+- Y-1–Y-2：`cargo fmt --all --check` 与 `cargo clippy --workspace --all-targets -- -D warnings` 通过，clippy 3.91 秒。监管器随后共用四处报告发布，受影响文件格式检查及 supervisor 全 targets clippy 通过，后者 0.56 秒，见 target/m14-group-report-clippy-final.log；压力测试步骤提取后的目标 clippy 通过，1.00 秒。
+- Y-3：288 条运行测试与 2 条文档测试通过。工作区执行通过 280 条运行测试和 2 条文档测试，复用本阶段已成功的 8 条定向验收，命令见下；完整日志 target/m14-workspace-tests.log。监管器报告发布重构后，`cargo test -p cordis-supervisor --test manager replacement_` 的 `failed_group_replacement_rolls_back_state`、`accepted_replacement_survives_waiter_cancellation` 两条通过，0.89 秒，见 target/m14-group-report-tests.log。`cargo build --workspace` 通过，4.64 秒；监管器重构后 `cargo build -p cordis-runtime` 通过，2.08 秒，见 target/m14-runtime-rebuild.log。
+- Y-4：M6 一致性矩阵通过，177 条仍为 8 条移植、166 条改写、3 条不适用，见 target/m14-conformance.log。
+- Y-5：工作区中的 `unsafe_is_localized_and_documents_its_contract` 通过，0.57 秒；`tools/unsafe_audit.py` 调用同一测试，复用该结果。核心产品依赖声明保持 M13 的 Q0 分离，见 target/m13-core-dependencies.txt。
+- Y-6–Y-7：`MIRI_SYSROOT="$PWD/target/miri-sysroot" TMPDIR="$PWD/target/tmp" cargo +nightly miri test -p cordis-abi` 通过，13 条边界用例 3.41 秒、布局比较 0.94 秒；原生布局比较同样通过。工具链沿用环境表，日志 target/m14-miri.log。
+- Y-8：下表按 cloc 2.10 的 src 代码行 / 总行口径。supervisor 的报告发布共用实现后为 5500 代码行，达到 ADR-0030 上限；目标 4500。runtime 为 4727 代码行，高于目标 4500、低于上限 5500；其余 crate 保持各自上限。六核心合计 16649 代码行 / 18625 总行。
+- Y-9：README、DOC-11、ADR-0032/0035、测量原始 JSON、直接调用复现工程与解释页按实际行为更新。解释页 1440 桌面与 390 移动进度区截图已查看，路径为 target/explainer-m14-desktop.png、target/explainer-m14-mobile.png，控制台 0 错误；浏览器与 HTTP 服务已退出。模板命名规则在生成文件前检查，`hello_world` 与 `MyPlugin` 的真实失败回归通过，项目配置与目录保持；日志 target/m14-name-before.log、target/m14-name-after.log。
+- Y-10：提交主题 `M14: 完成系统验收与可替换性测量`，推送目标 origin/main。
+- 固定压力：实际 cordis 子进程中的 8 个线程完成 50 次替换，每轮读取状态 137；第 21、42 次触发有状态宿主重启，idle 纪元只在这两次变化。RM-3 中位数 3 / 最大值 4，RM-4 中位数 241 ms / 最大值 661 ms；完整 RPC 中位数 260.5165 ms / 最大值 682.222 ms。总 RSS 增量 118.4 KiB/次，核心 27.84 KiB/次；两次宿主 RSS 分别由 13664→5616 KiB、13712→5632 KiB。日志 target/m14-ac9.log；50 轮原始样本随仓库保存。
+- 直接调用：M9 基线 dc93da1 与当前 consumer 同为 Rust 1.85 release，同一 provider；固定 9 轮、每轮 10000 次预热和 100000 次完整调用。中位数 19.66792 ns / 18.62083 ns，中位数比 0.946762、两组最大值比 0.721550，达到预定 1.05/1.15 标准。逐轮下降趋势及全部样本同时保留；测量按既定轮次结束。正式复现 driver 编译通过，8.03 秒。
+- 真实部署：8 库 100 实例启动 6139 ms；修改 load-one 后实际重编译 1 个 crate。默认 Git SDK 的空目录创建、插件构建与 Active 流程通过。launchd 恢复耗时 9938 ms，旧 Host 退出，状态 73 覆盖配置初值 29，临时 job 已卸载。
+- KV 链路：kv-mem → kv-file → kv-mem 0.2 后计数达到 29、50；失败版本自动回滚，kv@2 候选在 SW-4 拒绝；1.85 counter 继续到 107，SIGTERM 保存 109，重启达到 113。两个真实文件 KV 的隔离与三种提供方位置的 Scoped metadata 均通过。
+- 后续：M15 候选手册、接口/组件/提供方/契约模板的 SK-3 编译已通过，1 条 / 7.72 秒；正式迁入后与 cordis-dev 共用模板，并由全新会话分别执行 SK-1、SK-2。后续持续推进 M16–M21，保留构建缓存。
+
+工作区退出检查通过 `--skip` 复用本阶段成功事实：AC-1、README 和 AU-11 的日志为 target/m14-ac1.log、target/m14-readme-recovery.log；AC-9 为 target/m14-ac9.log；KV 迁移为 target/m14-kv-migration-observation-fixed.log；两条隔离用例为 target/m14-kv-isolation.log；命名回归为 target/m14-name-after.log。
+
+```bash
+cargo test --workspace -- \
+  --skip eight_independent_libraries_and_one_hundred_instances \
+  --skip readme_first_plugin_builds_from_pinned_git_sdk \
+  --skip launchd_restores_core_and_checkpoint_after_core_exit \
+  --skip eight_threads_survive_fifty_native_replacements_with_stateful_restarts \
+  --skip continuous_counter_migrates_rolls_back_rejects_and_restores_across_compilers \
+  --skip real_file_kv_instances_keep_tenant_data_separate \
+  --skip kv_scoped_metadata_reaches_same_cross_and_process_providers \
+  --skip rejected_plugin_name_keeps_project_unchanged
+```
+
+| crate | 代码行 / 总行 |
+|---|---:|
+| cordis | 4230 / 5112 |
+| cordis-abi | 2285 / 2700 |
+| cordis-contract | 31 / 47 |
+| cordis-dev | 703 / 784 |
+| cordis-host | 2470 / 2743 |
+| cordis-process | 374 / 410 |
+| cordis-runtime | 4727 / 5194 |
+| cordis-sdk | 693 / 800 |
+| cordis-sdk-macros | 1179 / 1280 |
+| cordis-supervisor | 5500 / 5918 |
+| cordis-testkit | 161 / 181 |
+| cordis-types | 205 / 239 |
+| cordis-up | 1613 / 1752 |
+| 六个核心 crate 合计 | 16649 / 18625 |
 
 ## 第二阶段候选与恢复记录
 

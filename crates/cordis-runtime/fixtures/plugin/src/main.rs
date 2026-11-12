@@ -106,6 +106,7 @@ struct Reply {
     code: Option<u32>,
     value: Value,
     detail: Value,
+    rpc_wall_us: u64,
 }
 
 impl Shared {
@@ -126,6 +127,7 @@ impl Shared {
             "admin" => vec!["cordis.manage@1.0", "cordis.runtime@1.1"],
             "reader" | "client" => vec![self.counter_interface()],
             "kv-client" => vec!["kv@1.0"],
+            "native-client" => vec!["loader.counter@1.0"],
             _ => Vec::new(),
         }
         .into_iter()
@@ -344,7 +346,7 @@ impl Shared {
                     fs::write(path, serde_json::to_vec(&meta).map_err(error)?).map_err(error)?;
                 }
             }
-            "admin" | "client" | "kv-client" => {
+            "admin" | "client" | "kv-client" | "native-client" => {
                 fs::create_dir_all(&session.config.commands).map_err(error)?;
                 fs::create_dir_all(&session.config.results).map_err(error)?;
                 while session.active.load(Ordering::Acquire) {
@@ -370,21 +372,25 @@ impl Shared {
                         } else {
                             command.args
                         };
+                        let started = std::time::Instant::now();
                         let result =
                             Self::invoke(&session, &command.interface, &command.method, arguments)
                                 .await;
+                        let rpc_wall_us = started.elapsed().as_micros() as u64;
                         let reply = match result {
                             Ok(value) => Reply {
                                 ok: true,
                                 code: None,
                                 value,
                                 detail: Value::Null,
+                                rpc_wall_us,
                             },
                             Err(problem) => Reply {
                                 ok: false,
                                 code: Some(problem.code),
                                 value: problem.message.into(),
                                 detail: problem.detail,
+                                rpc_wall_us,
                             },
                         };
                         let destination = session

@@ -144,12 +144,12 @@ fn workspace(sdk: Value) -> Result<Table> {
 
 fn validate_name(name: &str) -> Result<()> {
     if name.is_empty()
-        || !name.as_bytes()[0].is_ascii_alphabetic()
+        || !name.as_bytes()[0].is_ascii_lowercase()
         || !name
             .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
     {
-        return Err("插件名称以字母开头，使用英文字母、数字、短横线或下划线".into());
+        return Err("插件名称以小写字母开头，使用小写字母、数字和短横线".into());
     }
     Ok(())
 }
@@ -208,3 +208,30 @@ const README: &str = r#"# Cordis 插件项目
 
 `interfaces/` 保存接口定义，`contracts/` 保存契约套件。`state/` 保存状态与检查点，`.cordis/` 保存插件版本副本。
 "#;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rejected_plugin_name_keeps_project_unchanged() {
+        let crate_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let project_dir = crate_dir
+            .join("../../target/name-regression")
+            .join(std::process::id().to_string());
+        fs::create_dir_all(project_dir.parent().unwrap()).unwrap();
+        project(&project_dir, Some(&crate_dir.join("../cordis-sdk"))).unwrap();
+        let configuration = fs::read(project_dir.join("cordis.toml")).unwrap();
+        for name in ["hello_world", "MyPlugin"] {
+            assert!(
+                plugin(&project_dir, name).is_err(),
+                "宿主命名规则应在生成文件前检查"
+            );
+            assert!(!project_dir.join("plugins").join(name).exists());
+            assert_eq!(
+                fs::read(project_dir.join("cordis.toml")).unwrap(),
+                configuration
+            );
+        }
+    }
+}

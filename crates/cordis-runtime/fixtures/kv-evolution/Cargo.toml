@@ -1,0 +1,20 @@
+[package]
+name = "kv-evolution"
+version = "0.2.0"
+edition = "2024"
+rust-version = "1.85"
+publish = false
+
+[workspace]
+
+[lib]
+crate-type = ["cdylib"]
+
+[features]
+fails = []
+incompatible = []
+
+[dependencies]
+cordis-sdk = { path = "../../../../crates/cordis-sdk" }
+kv-api = { path = "../../../../plugins/kv-api" }
+kv-mem = { path = "../../../../plugins/kv-mem", features = ["rlib"] }

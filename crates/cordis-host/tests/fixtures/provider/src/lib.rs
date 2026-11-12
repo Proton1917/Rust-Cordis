@@ -128,7 +128,13 @@ impl Store {
         Ok(*value)
     }
     fn implementation(&self) -> Result<u64> {
-        Ok(if cfg!(feature = "version2") { 2 } else { 1 })
+        Ok(
+            if cfg!(any(feature = "version2", feature = "implementation2")) {
+                2
+            } else {
+                1
+            },
+        )
     }
 }
 
@@ -247,7 +253,7 @@ impl Component for Provider {
             scope.defer(move || {
                 retained.log(
                     2,
-                    if cfg!(feature = "version2") {
+                    if cfg!(any(feature = "version2", feature = "implementation2")) {
                         "provider-cleanup:2"
                     } else {
                         "provider-cleanup:1"

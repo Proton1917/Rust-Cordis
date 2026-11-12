@@ -106,6 +106,8 @@ pub struct GroupReplaceReport<F = String> {
     pub candidate_connection: u64,
     pub affected_instances: usize,
     #[serde(default)]
+    pub pause_ms: u64,
+    #[serde(default)]
     pub committed: bool,
     pub succeeded: bool,
     pub rolled_back: bool,

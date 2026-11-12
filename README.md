@@ -169,6 +169,46 @@ Linux 使用相应的 `.so` 文件名。验证成功后，命令保存已验证�
 
 部署设置 `runtime.require_verified = true` 后，宿主在打开候选库前比较完整字节，握手后核对实际提供接口的契约覆盖。安装引用和宿主缓存库携带印记，有状态重启继续执行同一检查。
 
+## 运行核心与编写第一个插件
+
+在仓库根目录构建运行程序，并把它们所在目录加入当前终端的 PATH：
+
+```bash
+cargo build --release --target-dir target -p cordis-runtime -p cordis-host -p cordis-dev
+export PATH="$PWD/target/release:$PATH"
+```
+
+`cordis` 负责运行和状态管理，`cordis-host` 在独立进程中装载原生插件，`cordis-dev` 执行开发命令。三者放在同一目录时，核心可以直接找到宿主和开发工具。
+
+从新目录创建插件项目：
+
+```bash
+cordis new demo
+cd demo
+cordis new-plugin hello --rust
+cargo build --target-dir target
+cordis run
+```
+
+项目包含 `app`、`watch` 和新建的 `hello`。SDK 依赖固定到开发工具构建时的 Git 修订；在本仓库开发 SDK 时，可以在仓库根目录执行 `cordis new demo --sdk-path "$PWD/crates/cordis-sdk"`。构建命令中的 `--target-dir target` 使动态库落在项目配置使用的 `target/debug`，也适用于设置了全局 `CARGO_TARGET_DIR` 的环境。
+
+另开一个终端，进入同一个 `demo` 目录执行 `cordis status`，可以在实例列表中查看 `hello` 的 `active` 状态。修改 `plugins/hello/src/lib.rs` 后再次执行 `cargo build --target-dir target`，`watch` 会把同一防抖窗口的变化作为一批提交给管理接口。批次失败时，运行配置、插件版本和原状态共同恢复。Ctrl-C 触发有序退出并保存检查点。
+
+生成的 `hello` 组件在激活时发送日志事件；部署 `console-log` 插件可以把这些事件显示在终端。服务、效应、隔离域、状态导出和管理授权的接口见 [插件模型](docs/11-plugin-model.md) 与 [SDK 接口](docs/13-runtime-architecture.md#4-sdk-接口)。
+
+## 验证插件与部署为服务
+
+契约套件在独立核心中运行。下面的命令在仓库根目录构建并验证内存 KV 实现：
+
+```bash
+cargo build --release --target-dir target -p kv-mem -p kv-contract
+cordis verify --plugin target/release/libkv_mem.dylib --suite target/release/libkv_contract.dylib
+```
+
+macOS 动态库扩展名为 `.dylib`，Linux 使用 `.so`。验证成功后，工具保存 `.cordis/verified/` 中的完整库副本，并在被测库旁写入 `.verified.json`。配置 `require_verified = true` 后，宿主在打开候选库前比较完整字节，再核对接口契约覆盖范围。
+
+在部署项目目录中执行 `cordis service install --name com.example.cordis.demo`，会生成并安装当前平台的 launchd 或 systemd 配置。只查看配置时使用 `--dry-run`。核心意外退出后由服务管理器重新启动，插件按检查点恢复；状态文件和插件数据保存在项目的 `state/` 中。
+
 ## 进度
 
 第一阶段 `M0`–`M6` 交付内核，第二阶段推进独立核心、插件宿主与开发工具，每个里程碑一个提交。

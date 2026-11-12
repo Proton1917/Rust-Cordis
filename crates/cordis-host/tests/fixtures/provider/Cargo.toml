@@ -10,6 +10,7 @@ crate-type = ["cdylib"]
 
 [features]
 version2 = []
+implementation2 = []
 apply-fails = []
 apply-panics = []
 method-panics = []

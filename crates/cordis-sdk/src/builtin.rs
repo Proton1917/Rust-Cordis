@@ -22,7 +22,7 @@ pub struct LogRecord {
 }
 
 /// ADR-0017：装载器维护的库、实例和替换报告快照。
-#[crate::interface(name = "cordis.runtime", version = "1.2")]
+#[crate::interface(name = "cordis.runtime", version = "1.3")]
 pub trait Runtime: Send + Sync {
     fn snapshot(&self) -> Result<RuntimeSnapshot>;
 }

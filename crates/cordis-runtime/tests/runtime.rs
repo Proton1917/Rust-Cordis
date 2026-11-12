@@ -12,6 +12,12 @@ use std::{
 #[path = "runtime/gate.rs"]
 mod gate;
 
+#[path = "runtime/migration.rs"]
+mod migration;
+
+#[path = "runtime/isolation.rs"]
+mod isolation;
+
 struct Process(Option<Child>);
 impl Process {
     fn start(project: &Path, label: &str) -> Self {

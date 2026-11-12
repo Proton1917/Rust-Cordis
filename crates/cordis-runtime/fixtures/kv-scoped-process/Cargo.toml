@@ -1,0 +1,13 @@
+[package]
+name = "cordis-kv-scoped-process"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+cordis-up = { path = "../../../../crates/cordis-up" }
+serde = { version = "=1.0.229", features = ["derive"] }
+parking_lot = "=0.13.0"
+tokio = { version = "=1.54.1", features = ["rt-multi-thread", "macros", "io-std", "io-util", "sync"] }

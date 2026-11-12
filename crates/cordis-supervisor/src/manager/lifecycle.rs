@@ -9,6 +9,7 @@ use std::{
 };
 
 /// SW-5：原状态与导出器持有关系；提交或解冻完成后统一释放。
+#[derive(Default)]
 pub(super) struct Frozen {
     pub(super) states: HashMap<String, payload::State>,
     pub(super) held: Vec<(Arc<Generation>, Arc<Exporter>)>,
@@ -781,9 +782,10 @@ impl Manager {
         let committed = Arc::new(AtomicBool::new(false));
         let marker = committed.clone();
         self.transaction(move |manager| async move {
+            let started = std::time::Instant::now();
             manager.validate_restore_states(&specification.name, None, &states)?;
             manager
-                .replace_with_states(specification, states, Some(marker))
+                .replace_with_states(specification, states, Some(marker), started)
                 .await
         })
         .await
@@ -792,19 +794,14 @@ impl Manager {
         })
     }
 
-    /// DOC-15 §8.7：分组换代和旧映像阈值重启共用当前状态迁移。
-    pub(super) async fn replace(&self, specification: GroupSpec) -> Result<ReplaceReport> {
-        self.replace_with_states(specification, HashMap::new(), None)
-            .await
-    }
-
     /// SW-3–SW-9、ADR-0013：候选预检后冻结旧状态，重建并确认；失败恢复原连接与原快照。
     /// states为显式手工回滚状态，自动失败回滚始终使用本次替换前导出值。
-    async fn replace_with_states(
+    pub(super) async fn replace_with_states(
         &self,
         specification: GroupSpec,
         states: HashMap<String, Option<payload::State>>,
         committed: Option<Arc<AtomicBool>>,
+        started: std::time::Instant,
     ) -> Result<ReplaceReport> {
         self.running()?;
         if specification.restart.max > 5 {
@@ -835,13 +832,14 @@ impl Manager {
             previous_connection: previous.connection.id(),
             candidate_connection: candidate.connection.id(),
             affected_instances: 0,
+            pause_ms: 0,
             committed: false,
             succeeded: false,
             rolled_back: false,
             failure: None,
         };
         if let Err(problem) = self
-            .accept_group(&candidate, &transition, &mut report)
+            .accept_group(&candidate, &transition, &mut report, started)
             .await
         {
             return self
@@ -868,11 +866,13 @@ impl Manager {
         candidate: &GroupGeneration,
         transition: &Transition,
         report: &mut ReplaceReport,
+        started: std::time::Instant,
     ) -> Result<()> {
         let changed = self
             .stabilize(&transition.before, &transition.names)
             .await?;
         report.affected_instances = changed.len();
+        report.pause_ms = started.elapsed().as_millis().min(u64::MAX as u128) as u64;
         self.confirm(&changed, &candidate.connection).await
     }
 
@@ -894,11 +894,7 @@ impl Manager {
         group.restarts.store(0, Ordering::Release);
         report.committed = true;
         self.retain_replacement_states(&group.name, &transition.names, &transition.frozen);
-        self.0
-            .catalog
-            .lock()
-            .reports
-            .insert(group.name.clone(), report.clone());
+        self.record_group_report(report.clone());
         drop(transition);
         let completion = async {
             self.monitor(group.clone(), candidate)?;
@@ -908,19 +904,11 @@ impl Manager {
         if let Err(problem) = completion {
             report.failure = Some(Failure::from(&problem));
             group.health.lock().error = Some(saved_error(&problem));
-            self.0
-                .catalog
-                .lock()
-                .reports
-                .insert(group.name.clone(), report);
+            self.record_group_report(report);
             return Err(problem);
         }
         report.succeeded = true;
-        self.0
-            .catalog
-            .lock()
-            .reports
-            .insert(group.name.clone(), report.clone());
+        self.record_group_report(report.clone());
         Ok(report)
     }
 
@@ -947,11 +935,7 @@ impl Manager {
         }
         .into();
         group.health.lock().error = Some(saved_error(&problem));
-        self.0
-            .catalog
-            .lock()
-            .reports
-            .insert(group.name.clone(), report);
+        self.record_group_report(report);
         drop(transition);
         self.retire(candidate).await?;
         if let Err(rollback) = rollback {
@@ -965,6 +949,12 @@ impl Manager {
             ));
         }
         Err(problem)
+    }
+
+    /// SW-8/SW-9：分组的提交、完成和回滚统一按报告中的身份发布。
+    fn record_group_report(&self, report: ReplaceReport) {
+        let mut catalog = self.0.catalog.lock();
+        catalog.reports.insert(report.group.clone(), report);
     }
 
     /// SW-4：候选覆盖当前组件和被使用的接口版本；预检保持既有纪元与绑定。

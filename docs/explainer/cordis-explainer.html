@@ -452,7 +452,7 @@ footer { font-size: 13px; color: var(--muted); border-top: 1px solid var(--line)
     <div class="sec-head">
       <div class="eyebrow">进度</div>
       <h2 id="prog-title">实现进度（2026-11-13）</h2>
-      <p class="lead">内核、原生插件宿主、核心程序与契约验证已经完成验收。当前测量整体部署、连续替换与核心恢复。上方模拟同时包含后续阶段的多语言与前端场景。</p>
+      <p class="lead">Rust 原生插件系统已经完成验收：8 库 100 实例、8 线程 50 次连续替换，以及服务管理器下的核心恢复均通过。当前整理插件编写手册。上方模拟同时包含后续阶段的多语言与前端场景。</p>
     </div>
     <div class="progress">
       <table>
@@ -463,8 +463,8 @@ footer { font-size: 13px; color: var(--muted); border-top: 1px solid var(--line)
           <tr><td>UP/1 协议、进程监管、cordis-host</td><td class="mono">M10–M11</td><td><span class="st done">已完成</span></td><td>13 个原生场景通过；组内替换、Scoped、子组件与进程故障隔离</td></tr>
           <tr><td>核心程序与开发工具</td><td class="mono">M12</td><td><span class="st done">已完成</span></td><td>检查点、配置组、管理授权、整批替换、watch 自身恢复与脚手架</td></tr>
           <tr><td>契约验证</td><td class="mono">M13</td><td><span class="st done">已完成</span></td><td>真实套件通过验证；字节变化候选在装载前被拒绝</td></tr>
-          <tr><td>系统验收</td><td class="mono">M14</td><td><span class="st doing">进行中</span></td><td>8 库 100 实例已通过预验证；继续测量替换与核心恢复</td></tr>
-          <tr><td>插件编写手册</td><td class="mono">M15</td><td><span class="st todo">待开始</span></td><td>面向人与 AI 的插件编写指南</td></tr>
+          <tr><td>系统验收</td><td class="mono">M14</td><td><span class="st done">已完成</span></td><td>连续替换与状态保持通过；核心恢复实测 9.938 秒</td></tr>
+          <tr><td>插件编写手册</td><td class="mono">M15</td><td><span class="st doing">进行中</span></td><td>共享模板、接口与资源规则，以及新会话使用验收</td></tr>
           <tr><td>打包、WIT、Python 与 TypeScript SDK、全栈插件</td><td class="mono">M16–M21</td><td><span class="st todo">待开始</span></td><td>cordis pack、多语言插件、前端插件（浏览器页面经 http 插件接入）</td></tr>
         </tbody>
       </table>
