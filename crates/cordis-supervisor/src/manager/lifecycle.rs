@@ -150,7 +150,10 @@ impl Manager {
     }
 
     /// CP-4、CP-7：启动拥有型进程；握手失败时先终止并回收，再交回原错误。
-    async fn prepare_process(&self, specification: &GroupSpec) -> Result<Arc<GroupGeneration>> {
+    pub(super) async fn prepare_process(
+        &self,
+        specification: &GroupSpec,
+    ) -> Result<Arc<GroupGeneration>> {
         let weak = Arc::downgrade(&self.0);
         let log = Arc::new(move |id, line| {
             if let Some(core) = weak.upgrade() {
@@ -410,7 +413,7 @@ impl Manager {
     }
 
     /// DOC-11 §5.2、T-LIF-1：已验证的配置进入内核，目录记录和检查点归属同一个实例名。
-    fn install_instance(
+    pub(super) fn install_instance(
         &self,
         view: Context,
         specification: InstanceSpec,
@@ -677,7 +680,11 @@ impl Manager {
             let Some(generation) = generation else {
                 continue;
             };
-            if !generation.is_current() || instance.fiber.state() != cordis::FiberState::Active {
+            // CP-6：断连可先于排队的回收事务，导出资格同时取决于实际连接。
+            if !generation.is_current()
+                || instance.fiber.state() != cordis::FiberState::Active
+                || !generation.component.connection.is_alive()
+            {
                 continue;
             }
             let exporter = generation.exporter.lock().clone();
@@ -1054,7 +1061,9 @@ impl Manager {
             }
             match candidate.definitions.get(&key) {
                 Some(next) => {
-                    self.0.context.registry().replace(&old, next);
+                    if old.id() != next.id() {
+                        self.0.context.registry().replace(&old, next);
+                    }
                 }
                 None => self
                     .0
@@ -1221,7 +1230,7 @@ impl Manager {
     }
 
     /// CP-6：连接断开只提交恢复请求，恢复动作由唯一事务执行者安排。
-    fn monitor(&self, group: Arc<Group>, version: Arc<GroupGeneration>) -> Result<()> {
+    pub(super) fn monitor(&self, group: Arc<Group>, version: Arc<GroupGeneration>) -> Result<()> {
         let connection = version.connection.clone();
         let weak = Arc::downgrade(&self.0);
         let mut stopped = self.0.stop.subscribe();
@@ -1441,7 +1450,7 @@ impl Manager {
     }
 
     /// SW-9、CP-7：等待进程拥有者完成退出，再回收连接目录。
-    async fn retire(&self, version: &GroupGeneration) -> Result<()> {
+    pub(super) async fn retire(&self, version: &GroupGeneration) -> Result<()> {
         let result = match &version.process {
             Some(process) if process.is_alive() => {
                 process.shutdown(self.0.options.cleanup_timeout).await

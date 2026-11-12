@@ -8,11 +8,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 | 代理 | 指令文件 | 职责 |
 |---|---|---|
-| Claude（你） | 本文件 | 设计、评审、派活：写设计文档与 ADR、复核 Codex 的提交、把意见发给 Codex、向用户汇报 |
+| Claude（你） | 本文件 | 高层设计、评审、派活：只写计划与设计文档（`docs/1x-*.md`、ADR、`AGENTS.md`），复核 Codex 的提交，把意见发给 Codex，向用户汇报 |
 | Codex | `AGENTS.md` | 实现：写 `crates/`、`plugins/`、`tools/` 中的代码与测试，按里程碑提交并推送 `origin/main` |
 
 规则：
 
+- 除计划与设计文档外不写任何交付物：不写代码、测试、skill、模板、解释页内容。这些全部由 Codex 落地（用户 2026-11-12 明确要求；`M15` skill 与 `docs/explainer/` 的后续更新都归 Codex）。
 - 不修改 `crates/`、`plugins/`、`fixtures/`、`tools/` 中的代码，不运行会改动 Codex 工作区的命令。发现问题时写成意见发给 Codex，由它修改。用户明确要求时例外。
 - 不提交 git commit。你写的文档留在工作区，由 Codex 随它的下一个提交一并提交；派活时告诉它哪些未提交文件是你的。用户明确要求时例外，提交消息末尾加署名行。
 - `AGENTS.md` 由你维护（它是 Codex 的入口），但其中的工作规则是给 Codex 的，不约束你。
@@ -32,7 +33,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | `docs/00`–`04` | 第一阶段（内核库），内核语义的依据 |
 | `docs/adr/` | 决策记录。新建前先 `ls docs/adr` 取下一个编号，Codex 也会新建 ADR |
 | `docs/reference/cordis-paper.zh.{pdf,txt}` | 论文 `PAPER`，规范 |
-| `cordis/`（上游克隆，只读，不进版本控制） | `UPSTREAM`，cordis `packages/core` commit `261c5fd`，行为参考 |
+| `cordis/`（上游克隆，只读，不进版本控制） | `UPSTREAM`，cordis `packages/core` commit `261c5fd`，行为参考；`UPSTREAM-EXT`：`packages/loader`、`hmr`、`create`、`logger-console`，作为第二、三阶段的行为参考（见 AGENTS.md） |
 
 写文档时使用 `engineering-delivery-writing` skill。
 

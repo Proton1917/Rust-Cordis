@@ -6,11 +6,11 @@
 
 | 项 | 值 |
 |---|---|
-| 最近完成的里程碑 | `M11` |
-| 进行中的里程碑 | 第二阶段 M12 |
-| 下一步 | 接入 cordis-runtime、cordis-dev 与 watch；完成原生部署、管理叠加层、原快照回滚、检查点与三项产品解析器 fuzz 验收 |
+| 最近完成的里程碑 | `M12` |
+| 进行中的里程碑 | 第二阶段 M13 |
+| 下一步 | 接入正式契约辅助与套件、独立验证会话、cordis-dev verify 和宿主验证门；完成 require_verified 的实际替换验收 |
 | 阻塞项 | 无；用户已恢复执行 |
-| 最后更新 | 2026-11-12（Asia/Shanghai），M11 验收 |
+| 最后更新 | 2026-11-13（Asia/Shanghai），M12 验收 |
 
 ## 环境
 
@@ -275,6 +275,43 @@
 | cordis-supervisor | 4562 / 4912 |
 | cordis-testkit | 161 / 181 |
 | cordis-types | 156 / 177 |
+| cordis-up | 1613 / 1752 |
+
+### M12 核心命令、配置调和与批次管理
+
+- commit：本节所在的 `M12: 实现核心运行与持久化批次管理` 提交。
+- 交付：正式 cordis-runtime、cordis-dev、watch、console-log、kv-file 与原生部署示例；UPSTREAM-EXT 规则见 ADR-0031–0033。管理接口 1.1、Runtime 1.2 提供逐方法授权、叠加层、scope/disabled、原状态回滚、整窗口替换和持久化批次结果。
+- Y-1：`cargo fmt --all --check` 通过；仅修复开发工具 UUID 配置布局和监管器模块顺序的格式差异。
+- Y-2：`cargo clippy --workspace --all-targets -- -D warnings` 通过，4.13 秒；随后修复关闭竞态，受影响的 supervisor 定向 clippy 通过，1.22 秒。
+- Y-3：275 条运行测试与 2 条文档测试通过。工作区执行复用已成功的 watch 用例；首轮到 supervisor 的重启上限用例时发现关闭竞态，其余 258 条运行测试通过。修复该失败用例后 1 条通过，17.95 秒；后续 process 4 条、其余包 11 条、watch 1 条和内核 2 条文档测试全部通过。日志为 target/m12-workspace-tests.log、m12-shutdown-race.log、m12-process-tests.log、m12-tests-remaining.log、m12-watch-self-confirmed.log、m12-doc-tests.log。`cargo build --workspace` 通过，4.70 秒。
+- 关闭竞态：失败分组的连接已结束，状态快照先于排队回收显示 Failed；shutdown 取消排队回收后，旧纤程仍处于 Active，导出路径向已结束连接发送请求。导出资格现同时检查连接存活，已断源沿 CP-6 保留最近检查点，已开始导出的真实错误继续返回。当前失败位置为 restart_limit_uses_backoff_and_latest_snapshot 的最终 shutdown；M10 评审中那次未记录用例名的失败继续保留原证据范围。
+- 实际管理：原状态 46 与候选 91 的手动回滚、可变基础来源覆盖后的原副本恢复、137 跨核心 SIGKILL 恢复、空原快照、退役失败后的已提交状态，以及提供方和使用方共同升级 counter@1→@2 均通过。不同组共用基础来源时分别保存 0.2.0/0.1.0，并在坏基础来源下重启恢复；后续配置更新仍可把真实服务值改为 73。
+- 实际 watch：整窗口候选及配置共同提交，失败同时恢复；Ticket 在执行前持久化，实例重建后接续待确认窗口；相同被拒内容保持当前版本。自身失败场景曾复现基础库路径覆盖后的重启失败，修复为独立的按实例声明来源与已确认副本关联；正式完整场景通过，20.83 秒，包含坏基础 watch 库覆盖后的核心重启。
+- 原生宿主的 13 个场景现各有独立测试名，fixtures 通过 OnceLock 只构建一次，正式测试通过，9.73 秒。核心实际原生示例的最终状态为 stopped；console-log 已验证等级、标签、多行、截断、时间和过滤，实际输出在 target/runtime-m12/build/console-live/output.log。
+- Y-4：`conda run -n base python tools/conformance.py check --through M6` 通过，177 条处置保持 8 条移植、166 条改写、3 条不适用。
+- Y-5：工作区 unsafe 审计测试通过。`cargo tree -p cordis-runtime --edges normal` 的产品依赖保持 Q0 边界，记录在 target/m12-core-dependencies.txt；文件监视、时间格式化与随机请求标识分别由插件持有。
+- Y-6–Y-7：使用工作区 MIRI_SYSROOT/TMPDIR 的 `cargo +nightly miri test -p cordis-abi` 通过，13 条边界行为 3.41 秒、布局比较 0.94 秒；工作区原生布局比较也通过，ABI 继续为 v1.0。
+- MSRV：`cargo +1.85.0 build -p cordis-watch -p kv-file -p console-log --target-dir target/m12-msrv` 通过，6.24 秒。
+- CP-9：configuration-final 15151009 次 / 1801 秒 / exit 0；plugin_manifest-final 14687854 次 / 1801 秒 / exit 0；state_block-submitted 18529539 次 / 1801 秒 / exit 0。完整命令和状态在 target/runtime-m12/fuzz/logs 对应 JSON 与日志，限制保持 2048 MiB、单输入 2 秒、16 MiB。state 的旧候选曾触发 ASan 常驻内存上限，0 字节产物单次复放正常；最终运行采用 ASAN_OPTIONS=malloc_context_size=5，保留全部检测。M10 UP/1 解码器的 98394f9 正式证据独立保留。
+- 源码对应：configuration 快照比较 config.rs、config/scopes.rs；plugin_manifest 比较 manifest.rs、config.rs、config/scopes.rs；state_block 比较 storage.rs、config.rs、config/scopes.rs。命令形式为 `cmp target/m12-fuzz-tested/<目标>/src/<模块> crates/cordis-runtime/src/<模块>`，三组均退出 0。正式 fuzz 工程保存在 crates/cordis-runtime/fuzz。
+- Y-8：下表按 cloc 2.10 的 src 代码行口径统计。runtime 经职责拆分后为 4302 代码行，按 ADR-0034 调整目标/上限为 4500/5500；supervisor 为 5463 代码行，保持 ADR-0030 的 5500 上限。
+- Y-9：README、DOC-02/11/13/15、ADR-0017/0031–0034、解释页与当前状态已同步。解释页的实际桌面与移动进度区域截图为 target/explainer-m12-desktop.png、target/explainer-m12-mobile.png；检查后浏览器与本次服务已退出。
+- Y-10：提交主题 `M12: 实现核心运行与持久化批次管理`，推送至 origin/main。
+- 后续：M13 候选已有 kv-mem/kv-file 的两阶段真实契约成功、违约与崩溃失败及宿主验证门证据，下一步正式接入并完成运行时替换验收。后续范围按更新的项目规则持续至 M21，M15 skill 同属交付。
+
+| crate | 代码行 / 总行 |
+|---|---:|
+| cordis | 4230 / 5112 |
+| cordis-abi | 2285 / 2700 |
+| cordis-dev | 238 / 280 |
+| cordis-host | 2345 / 2602 |
+| cordis-process | 374 / 410 |
+| cordis-runtime | 4302 / 4727 |
+| cordis-sdk | 693 / 800 |
+| cordis-sdk-macros | 1179 / 1280 |
+| cordis-supervisor | 5463 / 5876 |
+| cordis-testkit | 161 / 181 |
+| cordis-types | 169 / 193 |
 | cordis-up | 1613 / 1752 |
 
 ## 第二阶段候选与恢复记录

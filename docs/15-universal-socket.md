@@ -93,6 +93,7 @@ cordis（核心进程，纯 Rust，无 unsafe，不含插件代码）
 | `add(name, plugin, group, config)` | 新增实例 |
 | `remove(name)` | 卸下并删除实例 |
 | `replace(name, plugin)` | 按 `DOC-11` §6 热替换 |
+| `replace_batch(replacements, reload, request_id)` | `cordis.manage@1.1`：持久化受理后返回 BatchTicket；按最终候选集合执行整批替换，reload 为 true 时包含配置变化，Runtime@1.2 的 last_batch 发布实际结果，见 ADR-0031 |
 | `rollback(name)` | 回到该实例的上一版本（`DOC-11` §7） |
 | `configure(name, config)` | 更新实例配置，按内核的 `update` 语义处理 |
 | `reload()` | 重读 `cordis.toml`，调和与当前实例的差异 |
@@ -118,12 +119,14 @@ cordis（核心进程，纯 Rust，无 unsafe，不含插件代码）
 
 ### 3.3 文件变更触发热替换：`watch` 插件
 
-核心不监视目录。`plugins/watch`（原生插件）监视配置的路径（插件构建产物、Python 与 TypeScript 插件目录、`cordis.toml`），变化稳定后（`debounce_ms`，默认 300）调用 `cordis.manage@1` 的 `install`、`replace` 或 `reload`。
+`plugins/watch`（原生插件）监视配置的路径（插件构建产物、Python 与 TypeScript 插件目录、`cordis.toml`），变化稳定后（`debounce_ms`，默认 300）调用 `cordis.manage@1.1` 的 `install` 与 `replace_batch`，核心负责部署事务。
+
+按 ADR-0031，防抖窗口中的插件来源先全部安装，再以一次 `replace_batch` 提交；同窗配置变化设置 `reload = true`。核心对全部候选预检并统一提交定义，失败恢复窗口开始前的配置、版本与原状态。原生批次保持同组其他实例的定义身份。watch 保存被拒批次的实际副本并逐字节比较，重复通知保持当前部署。
 
 ```toml
 [instance.watch]
 plugin = "watch"
-grants = { "cordis.manage@1" = ["install", "replace", "reload"] }
+grants = { "cordis.manage@1" = ["install", "replace_batch", "reload"] }
 config = { debounce_ms = 300 }
 ```
 
@@ -599,15 +602,15 @@ mathbook-studio-1.0-macos-arm64/
 | `M12` 核心可执行文件 | `cordis run`、`cordis.toml`（含 `group`、`checkpoint_ms`、`requires_core`）、插件清单 `socket = "native"`（§9）、状态目录、`status.json`、有序退出、定期检查点（`CP-11`）、`cordis service install`（launchd、systemd）；子命令转交与 `cordis-dev`（`new`、`new-plugin` 的 Rust 模板，§3.1）；`cordis.manage@1`、`grants` 与叠加层 `state/instances.toml`（§3.2）；`plugins/watch`（§3.3）；实例条目的 `isolate`、`intercept`（§6.4） | `M11` | 原 `M11` 测试；核心进程依赖树中无 `cordis-abi`、`cordis-sdk`、`wit-parser`、文件监视库，核心 crate 无 `unsafe`；检查点按间隔写出；未授权实例得不到 `cordis.manage@1`，授权外的方法返回权限错误；`watch` 触发的替换与回滚；叠加层在核心重启后生效；`cordis new` 经转交执行，生成的项目可直接 `cordis run`；`AU-18` 中部署层的部分 |
 | `M13` 验证门 | 原 `M12`；`cordis-dev verify` 启动独立的 `cordis run` 进程运行契约套件与被测插件（§3.1） | `M12` | 原 `M12` 测试 |
 | `M14` 第二阶段验收 | 原 `M13`；`AC-*` 按 §14 修订；`AU-1`、`AU-2`、`AU-8`–`AU-11`、`AU-16`、`AU-18`；`RM-10` | `M13` | `AC-1`–`AC-9` 与所列 `AU-*` |
-| `M15` 插件编写 skill | 设计方编写；Rust 插件部分；模板与 `cordis new-plugin` 共用 | `M14` | `SK-1`–`SK-3` |
+| `M15` 插件编写 skill | Codex 编写；Rust 插件部分；模板与 `cordis new-plugin` 共用 | `M14` | `SK-1`–`SK-3` |
 | `M16` 发布打包与窗口插件 | `cordis-dev pack`；目标平台检查；`.app` 与压缩包；`--sign`；`runtimes/` 机制（以 Rust 编写的进程插件测试替身验证命令改写）；`plugins/window`（§11.6），窗口库的选择写 ADR | `M14` | `AU-12`、`AU-17` |
 | `M17` 接口描述语言 | `cordis-dev idl gen`；`kv-api` 改为由 `kv.wit` 生成 | `M14` | 生成的 Rust 代码与手写版本行为一致；§7 映射表每一行有用例 |
 | `M18` Python SDK | `sdks/python`（含 §6.4 的 `isolate`、`intercept`、`plugin`、`scoped`）；`plugins/kv-py`、`plugins/counter-py`；`cordis new-plugin --python` | `M17` | 跨插口互调两个方向；热替换与状态迁移；`kv-contract` 验证 `kv-py`；`AU-18` 以 Python 提供方重做 |
 | `M19` TypeScript SDK | `sdks/typescript`；`plugins/kv-ts`；`cordis new-plugin --ts` | `M17` | 同 `M18` |
 | `M20` 前端插件与全栈插件 | `plugins/http`（静态资源、`cordis.web@1`、WebSocket 转发）；核心侧转发通道与页面子实例（§11.2、§11.3）；网页宿主 `cordis-web`；清单 `socket = "web"` 与 `[web]` 段；示例：一个前端插件、一个 Rust 后端的全栈插件、一个 Python 后端的全栈插件；`cordis new-plugin --web` | `M18`、`M19` | 资源登记与撤回；页面关闭后子实例与效应回收；前端注入 Rust、Python、TypeScript 提供的服务；无头浏览器验证局部更新与回滚；`AU-7`、`AU-14`、`AU-15` |
-| `M21` 第三阶段验收 | §16 全部场景；`RM-7`–`RM-9`；`cordis pack` 附带 Python 与 Node 运行时的发布包；skill 增加 Python、TypeScript、全栈与打包章节（设计方编写） | `M20`、`M16` | §16 全部通过 |
+| `M21` 第三阶段验收 | §16 全部场景；`RM-7`–`RM-9`；`cordis pack` 附带 Python 与 Node 运行时的发布包；skill 增加 Python、TypeScript、全栈与打包章节 | `M20`、`M16` | §16 全部通过 |
 
-Codex 连续推进到 `M14`；`M15` 由设计方完成；之后 Codex 从 `M16` 继续到 `M21`，其中 skill 章节由设计方编写。
+Codex 从 `M9` 连续推进到 `M21`，包括 `M15` 的 skill 与 `M21` 的 skill 章节；设计方只负责设计文档、ADR 与复核。
 
 ## 16 验收场景
 

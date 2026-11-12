@@ -11,6 +11,15 @@
 
 两者矛盾时以 `PAPER` 为准并写 ADR。`PAPER` 未覆盖的细节以 `UPSTREAM` 为准。
 
+第二、三阶段另以同一上游提交中的以下包作为行为参考（`UPSTREAM-EXT`），只参考行为与配置语义，不移植代码，与 `Q0`、`DOC-15` 冲突时以后者为准：
+
+| 包 | 位置 | 对应 | 参考内容 |
+|---|---|---|---|
+| `@cordisjs/loader` | `cordis/packages/loader/src` | `M12` `cordis.toml` 装配 | 配置条目的结构、分组、`isolate`、`disabled`，配置变化时的增量调和 |
+| `@cordisjs/plugin-hmr` | `cordis/packages/hmr/src` | `M12` `watch` 插件 | 事务式热替换：一批文件变化作为一次替换，失败整体回滚 |
+| `create-cordis` | `cordis/packages/create/src` | `cordis-dev new` | 项目脚手架流程 |
+| `@cordisjs/logger-console` | `cordis/packages/logger-console/src` | `console-log` 插件 | 终端日志格式 |
+
 本仓库由两个代理协作：设计方（Claude，指令在 `CLAUDE.md`）负责设计文档、ADR 与评审；你负责实现。`CLAUDE.md` 属于设计方，不需要阅读或修改；设计方写在工作区的未提交文档，随你的下一个提交一并提交。
 
 ## 当前阶段
@@ -18,8 +27,10 @@
 | 阶段 | 里程碑 | 内容 | 状态 |
 |---|---|---|---|
 | 第一阶段 | `M0`–`M6` | 内核库 `crates/cordis` | 已完成（`e459aa7`，评审修复至 `940650c`） |
-| 第二阶段 | `M7`–`M15` | 核心可执行文件 `cordis`、插件 ABI v1、Rust SDK、`UP/1` 与核心监管、插件宿主 `cordis-host`、验证门；`M15` 插件编写 skill 由设计方完成 | 进行中。`M7`、`M8` 已提交；Codex 推进到 `M14` 为止 |
-| 第三阶段 | `M16`–`M21` | 发布打包、WIT 接口描述语言、Python 与 TypeScript SDK、全栈插件 | 待第二阶段完成后由 Codex 继续 |
+| 第二阶段 | `M7`–`M15` | 核心可执行文件 `cordis`、插件 ABI v1、Rust SDK、`UP/1` 与核心监管、插件宿主 `cordis-host`、验证门、插件编写 skill | 进行中，`M7`–`M11` 已提交 |
+| 第三阶段 | `M16`–`M21` | 发布打包、WIT 接口描述语言、Python 与 TypeScript SDK、全栈插件 | 第二阶段完成后直接继续 |
+
+全部里程碑由你实现，包括 `M15` 的 skill、`M21` 的 skill 章节，以及 `docs/explainer/` 解释页随进度的更新。里程碑之间不等待评审，从 `M12` 连续推进到 `M21`。
 
 目标：核心编译成独立可执行文件，是系统中最稳定、长期不动的部分；核心进程不运行任何插件代码（`Q0`）。Rust 原生插件由 `cordis-host` 进程按分组装载（高速插口），任何语言的插件以进程形式接入（通用插口），前端插件在浏览器页面中经 `http` 插件转发的 WebSocket 接入（通用插口的第二种传输，浏览器中无内核），核心与所有插件之间只通过 `UP/1` 通信。核心在运行中装载、替换插件，依赖方自动重建。
 

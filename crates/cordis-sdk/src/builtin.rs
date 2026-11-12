@@ -1,7 +1,7 @@
 use crate::Result;
 pub use cordis_types::{
-    ComponentInfo, DependencyInfo, GroupInfo, GroupReplaceReport, InstanceInfo, LibraryInfo,
-    PluginInfo, RuntimeSnapshot, SwapReport,
+    BatchOutcome, BatchTicket, ComponentInfo, DependencyInfo, GroupInfo, GroupReplaceReport,
+    InstanceInfo, LibraryInfo, PluginInfo, RuntimeSnapshot, SwapReport,
 };
 use serde::{Deserialize, Serialize};
 
@@ -22,13 +22,13 @@ pub struct LogRecord {
 }
 
 /// ADR-0017：装载器维护的库、实例和替换报告快照。
-#[crate::interface(name = "cordis.runtime", version = "1.1")]
+#[crate::interface(name = "cordis.runtime", version = "1.2")]
 pub trait Runtime: Send + Sync {
     fn snapshot(&self) -> Result<RuntimeSnapshot>;
 }
 
 /// ADR-0024：核心按实例授权执行串行管理操作。
-#[crate::interface(name = "cordis.manage", version = "1.0")]
+#[crate::interface(name = "cordis.manage", version = "1.1")]
 pub trait Manage: Send + Sync {
     async fn install(&self, source: &str) -> Result<String>;
     async fn add(
@@ -44,6 +44,13 @@ pub trait Manage: Send + Sync {
     async fn configure(&self, name: &str, config: crate::CborValue) -> Result<()>;
     async fn reload(&self) -> Result<()>;
     async fn shutdown(&self) -> Result<()>;
+    /// ADR-0031：一个防抖窗口的替换与可选配置重读由核心统一提交。
+    async fn replace_batch(
+        &self,
+        replacements: Vec<(String, String)>,
+        reload: bool,
+        request_id: String,
+    ) -> Result<BatchTicket>;
 }
 
 /// ADR-0017：契约套件报告断言，并请求宿主协调状态往返。

@@ -63,7 +63,7 @@
 | `cordis-up` | 1500 | 2500 |
 | `cordis-supervisor` | 4500 | 5500（ADR-0030） |
 | `cordis-host` | 2000 | 3500 |
-| `cordis-runtime` | 1500 | 2500 |
+| `cordis-runtime` | 4500 | 5500（ADR-0034） |
 | `cordis-dev` | 1500 | 2500 |
 | `cordis-contract` | 500 | 1000 |
 
@@ -78,7 +78,7 @@
 | 编号 | 改动 | 原因 | 验证 |
 |---|---|---|---|
 | `K-1` | 组件名、服务名、事件名由 `&'static str` 改为宿主拥有的字符串（`Arc<str>`）。涉及 `ComponentDef.name`、`State.names`、日志名称等 | 插件的名字位于插件库内存中。旧库静止后不得再有指向它的引用 | 测试：用运行时构造的字符串创建组件定义与服务，原字符串释放后名称仍可读取 |
-| `K-2` | 命名服务键：`ctx.provide_named(name, value)`、`ctx.get_named(name)`、`Inject::with_named(name)`，值类型为 `Arc<dyn Any + Send + Sync>`。类型化键 `ServiceKey` 以 `K::NAME` 映射到同一命名空间。M10 按 `ADR-0016` 增加依赖声明的 `required` 和可用性谓词 | 独立编译插件按名称识别服务；每个使用方分别声明可选性与最低次版本 | 测试：命名与类型化服务的提供、注入、替换、隔离、拦截；可选项纪元变化、使用方版本门槛及实际绑定清理顺序 |
+| `K-2` | 命名服务键：`ctx.provide_named(name, value)`、`ctx.get_named(name)`、`Inject::with_named(name)`，值类型为 `Arc<dyn Any + Send + Sync>`。`lookup_named(name: impl Into<Arc<str>>) -> Option<AnyArc>` 查询当前域中处于 Active 的实时绑定，get_named 读取声明依赖的纪元承诺绑定。类型化键 `ServiceKey` 以 `K::NAME` 映射到同一命名空间。M10 按 `ADR-0016` 增加依赖声明的 `required` 和可用性谓词 | 独立编译插件按名称识别服务；每个使用方分别声明可选性与最低次版本；M12 按最终候选图检查核心内置服务 | 测试：命名与类型化服务的提供、注入、替换、隔离、拦截；可选项纪元变化、使用方版本门槛及实际绑定清理顺序；整批新提供方与新使用方共同切换 |
 | `K-3` | 命名事件：`ctx.on_named(name, listener)`、`ctx.emit_named(name, payload)`、`ctx.parallel_named`，载荷为 `Arc<dyn Any + Send + Sync>` | 同 `K-2` | 测试：命名事件的派发、监听器回退、重入语义与类型化事件一致 |
 | `K-4` | 别名表保存 `ComponentId → ComponentId`，当前终点定义支持旧别名重新挂载；替换时释放旧定义。M10 增加 `Registry::forget`，在终点实例全部释放后显式退役该终点及相关别名（`ADR-0016`） | 定义闭包持有对应库的代码租约，替换和库关闭都需要明确的释放时机 | 测试：连续替换的旧闭包 `Weak` 释放；终点重挂；活跃实例保护及显式退役后的租约释放 |
 | `K-5` | 调和循环的复位守卫 | 已在 `940650c` 完成 | 该提交附带的测试继续保留 |
@@ -172,13 +172,16 @@ pub trait Kv: Send + Sync {
 |---|---|
 | `Component` | NAME、Config、inject/provides/listens/state、resolve、异步 apply；apply 返回 `Result<()>` |
 | `Context` 服务 | `provide::<dyn I>(Arc<dyn I>) -> Result<()>`；`get::<dyn I>() -> Result<Service<dyn I>>`；`data_dir() -> Result<PathBuf>`，使用方声明 DataDir 依赖 |
+| `Context` 派生 | `derive(&ContextOptions) -> Result<Context>`；`isolate::<dyn I>(Option<&str>)` 建立命名或独立域；`intercept::<dyn I, M>(&M)` 在新视图中覆盖接口元数据 |
+| `Context` 组合 | `plugin::<C>(&C::Config)`、`plugin_named(component, &config)` 异步返回子实例编号，组件来自调用方插件的描述符 |
+| `Scoped<I>` | `Scoped::new(Arc<I>, factory)` 保存基对象与元数据视图工厂；`provide_scoped::<dyn I>(Scoped<I>)` 声明按上下文提供视图，组内继续使用类型化调用 |
 | `Context` 效应 | 同步 effect 与异步 effect_async 返回 `Result<Effect>`；Effect 的 settled/dispose 都异步返回 `Result<()>`；EffectScope 支持 defer/defer_async |
 | `Context` 任务 | spawn、spawn_thread 返回 `Result<()>`；`is_current() -> Result<bool>`；sleep 异步返回 `Result<()>` |
 | `Context` 状态 | `inherited_state() -> Result<Option<StateBlob>>`；export_state 返回 Frozen；export_state_with 接收与写路径共享的 Frozen |
 | `Context` 事件 | on/emit 对应 SyncEvent；on_async/emit_async 对应 AsyncEvent；全部通过 Result 表达失败 |
 | `export_plugin!` | 导出入口、ABI 主版本和描述符；可选 rlib_feature 供回环测试链接，独立 cdylib 构建使用标准 C 符号 |
 
-完整可编译实现位于 `plugins/kv-api/src/lib.rs`、`plugins/kv-mem/src/lib.rs` 和 `plugins/counter/src/lib.rs`。kv-mem 在状态锁内检查 Frozen 后写入；导出时先设置冻结标志再取得状态锁。counter 成功写入 KV 后更新本地计数，加载时从继承状态与 KV 当前值中取较大者。`crates/cordis-sdk/tests/loopback.rs` 通过实际入口执行这些组件，并覆盖 25 个 Host 槽。
+完整可编译实现位于 `plugins/kv-api/src/lib.rs`、`plugins/kv-mem/src/lib.rs` 和 `plugins/counter/src/lib.rs`。kv-mem 在状态锁内检查 Frozen 后写入；导出时先设置冻结标志再取得状态锁。counter 成功写入 KV 后更新本地计数，加载时从继承状态与 KV 当前值中取较大者。`crates/cordis-sdk/tests/loopback.rs` 通过实际入口执行基础组件与宿主操作，effect_handles 检验外部效应句柄释放；28 槽 HostV1 的派生、子组件和 Scoped 路径由 `crates/cordis-host/tests/native.rs` 的同组、跨组真实宿主场景覆盖。
 
 ## 5 运行时结构
 
@@ -225,18 +228,20 @@ pub trait Kv: Send + Sync {
 
 | crate | 用途 | 使用者 |
 |---|---|---|
-| `serde` | 配置、DTO、状态块的序列化 | `cordis-abi`、`cordis-sdk`、`cordis-runtime` |
-| `serde_json` | JSON 验证印记、状态与报告 | `cordis-host`、`cordis-runtime`、`cordis-contract` |
+| `serde` | 配置、DTO、状态块的序列化 | `cordis-abi`、`cordis-sdk`、`cordis-runtime`、`cordis-types`、`cordis-up`、插件 |
+| `serde_json` | JSON 验证印记、状态与报告 | `cordis-host`、`cordis-runtime`、`cordis-dev` |
 | `semver` | 插件版本解析与接口数值版本处理 | `cordis-host`、`cordis-supervisor`、`cordis-runtime` |
 | `clap` | 命令行参数与子命令解析 | `cordis-runtime`、`cordis-host`、`cordis-dev` |
 | `ciborium` | CBOR 编解码（`ADR-0010`） | `cordis-abi`、`cordis-sdk`、`cordis-host`、`cordis-up` |
 | `libloading` | 打开动态库 | `cordis-host` |
-| `tokio` | 执行器、计时、双向消息与子进程 I/O | `cordis-runtime`、`cordis-supervisor`、`cordis-host`、`cordis-up` |
+| `tokio` | 执行器、计时、双向消息与子进程 I/O | `cordis-runtime`、`cordis-supervisor`、`cordis-host`、`cordis-up`、`cordis-process`、`cordis-dev` |
 | `nix` | 安全的 POSIX 进程组信号接口（ADR-0021） | `cordis-process` |
 | `rustix` | 安全的 waitid 状态观察与待回收子进程管理（ADR-0027） | `cordis-process` |
 | `libfuzzer-sys` | CP-9 输入模糊测试（ADR-0021） | 独立 fuzz 工作区的开发构建 |
 | `notify` | 目录监视 | `plugins/watch` |
-| `toml` | 解析 `cordis.toml` | `cordis-runtime` |
+| `uuid` | 随机批次请求标识（ADR-0031） | `plugins/watch` |
+| `chrono` | 终端日志时间格式（ADR-0032） | `plugins/console-log` |
+| `toml` | 解析 `cordis.toml` 与生成项目配置 | `cordis-runtime`、`cordis-dev` |
 | `syn`、`quote`、`proc-macro2` | 过程宏 | `cordis-sdk-macros` |
 | `parking_lot`、`futures-util`、`thiserror` | 与内核相同 | 各 crate |
 

@@ -334,6 +334,17 @@ impl Context {
         }
     }
 
+    /// K-2、S-SVC-3：按名称反射查询当前隔离域中活动提供方的类型擦除存储值。
+    /// 返回的值沿用 lookup 的实时绑定语义，声明依赖的已提交视图由 get_named 读取。
+    pub fn lookup_named(&self, name: impl Into<Arc<str>>) -> Option<AnyArc> {
+        let key = name.into();
+        let state = self.kernel.state.lock();
+        let id = *state.store.get(&(key.clone(), self.resolve_realm(&key)))?;
+        let binding = &state.impls[id];
+        (state.fibers[binding.scope.fiber].state == FiberState::Active)
+            .then(|| binding.value.clone())
+    }
+
     /// 返回共享内核中全部隔离域的当前绑定总数。
     ///
     /// 加载中提供方已经登记的绑定计入总数，撤回时绑定随实时表移除。

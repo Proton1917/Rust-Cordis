@@ -208,6 +208,8 @@ enum Epoch {
 
 本节展示公开接口的形状。完整接口文档由 `cargo doc --workspace --no-deps` 生成，完整可运行程序位于 `crates/cordis/examples/plugins.rs` 和 `crates/cordis/examples/readme.rs`。
 
+K-2 的命名服务入口与类型化服务共用解析规则：`Context::lookup_named(name: impl Into<Arc<str>>) -> Option<AnyArc>` 在当前域查询实时绑定，提供方处于 Active 时返回服务值；`get_named(name) -> Result<AnyArc>` 按使用方已声明的依赖取得该纪元承诺的绑定。批次候选检查通过 lookup_named 读取已存在的核心内置服务，实例执行通过 get_named 保持依赖与清理顺序。
+
 ```rust
 // ── 根 ────────────────────────────────────────────────────────────
 let root: Context = Context::new(executor.clone());

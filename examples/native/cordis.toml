@@ -1,0 +1,25 @@
+requires_core = "^0.1"
+
+[runtime]
+plugin_dir = "plugins"
+state_dir = "state"
+checkpoint_ms = 1000
+confirm_ms = 100
+
+[instance.console]
+plugin = "console-log"
+component = "console"
+group = "logs"
+config = { level = 2 }
+
+[instance.store]
+plugin = "kv"
+component = "kv-store"
+group = "application"
+config = { path = "store.cbor" }
+
+[instance.counter]
+plugin = "counter"
+component = "counter"
+group = "application"
+config = { interval_ms = 100 }

@@ -111,7 +111,7 @@ impl Manager {
     }
 
     /// DOC-15 §8.7：用宿主已复制的库路径准备重启命令，保留完整活动库集合。
-    async fn restart_specification(
+    pub(super) async fn restart_specification(
         &self,
         group: &Group,
         candidate: &GroupGeneration,
@@ -148,7 +148,7 @@ impl Manager {
     }
 
     /// DOC-15 CP-4：库激活和退役共用清理截止时间，超时触发连接回收。
-    async fn library_command<T: DeserializeOwned>(
+    pub(super) async fn library_command<T: DeserializeOwned>(
         &self,
         connection: &Connection,
         command: &str,
@@ -220,7 +220,7 @@ impl Manager {
     }
 
     /// DOC-11 SW-1–SW-3：宿主复制与握手完成后返回候选编号，保持当前实例。
-    async fn prepare_library(
+    pub(super) async fn prepare_library(
         &self,
         connection: &Connection,
         path: &Path,
@@ -239,7 +239,7 @@ impl Manager {
     }
 
     /// DOC-11 SW-3–SW-4：替换逻辑插件的定义，保持同组其他定义身份。
-    fn native_generation(
+    pub(super) fn native_generation(
         &self,
         group: &str,
         plugin: &str,
@@ -456,19 +456,31 @@ impl Manager {
         if !report.succeeded {
             return Err(error(6, "旧库仍有活动租约"));
         }
-        if retired.retired_images > self.0.options.retired_image_limit
+        self.enforce_image_limit(&group.name, specification, retired.retired_images)
+            .await?;
+        Ok(report)
+    }
+
+    /// DOC-15 §8.7：退役映像超过配置阈值时重启该组，并保留本次替换的原版本快照。
+    pub(super) async fn enforce_image_limit(
+        &self,
+        group: &str,
+        specification: Option<GroupSpec>,
+        retired_images: u64,
+    ) -> Result<()> {
+        if retired_images > self.0.options.retired_image_limit
             && let Some(specification) = specification
         {
-            let original = self.last_replacement_states(&group.name);
+            let original = self.last_replacement_states(group);
             let restarted = self.replace(specification).await;
             self.0
                 .catalog
                 .lock()
                 .replacement_states
-                .insert(group.name.clone(), original);
+                .insert(group.into(), original);
             restarted?;
         }
-        Ok(report)
+        Ok(())
     }
 
     fn record_native(&self, swap: &NativeSwap, report: &SwapReport) {

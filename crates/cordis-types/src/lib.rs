@@ -134,6 +134,20 @@ pub struct LogRecord {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct BatchTicket {
+    pub id: String,
+}
+
+/// ADR-0031：核心持久化的最近批次结果，由请求标识关联到调用方的待确认窗口。
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct BatchOutcome {
+    pub id: String,
+    pub caller: String,
+    pub state: String,
+    pub error: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RuntimeSnapshot {
     pub libraries: Vec<LibraryInfo>,
     pub instances: Vec<InstanceInfo>,
@@ -144,4 +158,6 @@ pub struct RuntimeSnapshot {
     pub groups: Vec<GroupInfo>,
     #[serde(default)]
     pub last_replace: Vec<GroupReplaceReport>,
+    #[serde(default)]
+    pub last_batch: Vec<BatchOutcome>,
 }

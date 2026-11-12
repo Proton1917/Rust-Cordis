@@ -1,0 +1,73 @@
+#![forbid(unsafe_code)]
+//! DOC-15 §3.1、§12.1：独立开发命令生成项目与插件，运行管理交由 cordis。
+
+mod scaffold;
+
+use clap::{Args, Parser, Subcommand};
+use std::{path::PathBuf, process::ExitCode};
+
+type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
+
+#[derive(Parser)]
+#[command(name = "cordis-dev", version, about = "Cordis 插件开发工具")]
+struct Cli {
+    #[command(subcommand)]
+    command: Action,
+}
+
+#[derive(Subcommand)]
+enum Action {
+    /// 创建带 watch 与示例插件的 Rust 项目。
+    New(NewProject),
+    /// 在现有项目中创建 Rust 插件并登记实例。
+    NewPlugin(NewPlugin),
+    /// 显示开发工具版本与支持的核心版本范围。
+    Version,
+}
+
+#[derive(Args)]
+struct NewProject {
+    path: PathBuf,
+    /// 使用本机 SDK 源码。
+    #[arg(long)]
+    sdk_path: Option<PathBuf>,
+}
+
+#[derive(Args)]
+struct NewPlugin {
+    name: String,
+    #[arg(long, default_value = ".")]
+    project: PathBuf,
+    /// 生成 Rust 原生插件。
+    #[arg(long)]
+    rust: bool,
+}
+
+fn main() -> ExitCode {
+    match run(Cli::parse()) {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(problem) => {
+            eprintln!("{problem}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+fn run(cli: Cli) -> Result<()> {
+    match cli.command {
+        Action::New(options) => {
+            scaffold::project(&options.path, options.sdk_path.as_deref())?;
+            println!("已创建项目 {}", options.path.display());
+            println!("进入项目后运行 cargo build，再运行 cordis run。");
+        }
+        Action::NewPlugin(options) => {
+            scaffold::plugin(&options.project, &options.name)?;
+            println!("已创建插件 plugins/{}", options.name);
+        }
+        Action::Version => println!(
+            "cordis-dev {}\n支持核心 >=0.1.0,<0.2.0",
+            env!("CARGO_PKG_VERSION")
+        ),
+    }
+    Ok(())
+}

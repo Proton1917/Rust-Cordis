@@ -130,6 +130,8 @@ SDK 为第 1 条提供辅助：`ctx.export_state` 返回一个冻结标志，组
 
 核心监管器安排验证、状态导出、依赖清理、切换与回滚；原生宿主按指令准备或退役库、执行 apply 和回调。组内服务依赖同样由核心内核解析，直接方法调用保持本地 ABI 路径。完整进程替换在新进程握手与实例稳定后终止旧进程；原生库的组内替换沿下表执行。
 
+核心在启动时按配置建立实例。运行中的安装、替换、回滚和配置重读由持有授权的插件调用 `cordis.manage@1`；开发时的文件变化由 `watch` 插件观察并提交这些请求。管理操作经过同一串行事务队列，按当前实例与依赖决定受影响范围。
+
 | 步骤 | 操作 | 输出 | 检查 |
 |---|---|---|---|
 | `SW-1` | 把 `F_new` 复制到 `.cordis/lib/candidate-<序号>.<扩展名>`；序号在该目录中单调递增，启动时接续已有序号；握手取得逻辑插件名后把同一副本重命名为 `<插件名>-<序号>.<扩展名>` | 唯一路径的副本 | 每个候选拥有独立的装载路径，重命名保留同一文件内容 |
@@ -164,7 +166,7 @@ SDK 为第 1 条提供辅助：`ctx.export_state` 返回一个冻结标志，组
 1. 用 `L_old` 的组件定义再次调用 `Registry::replace(new, old)`。
 2. 旧实例的 `apply` 继承 §5.5 保留的原状态块。
 3. 新库按 `SW-9` 的规则静止。
-4. 记录回滚原因，`status.json` 中该插件标记为“已回滚”，`.cordis/lib/` 保留被拒副本。文件监视器将后续候选与被拒副本完整逐字节比较，内容一致时保持当前状态，内容变化时处理新候选。
+4. 记录回滚原因，`status.json` 中该插件标记为“已回滚”，`.cordis/lib/` 保留被拒副本。`watch` 插件将后续候选与被拒副本完整逐字节比较，内容一致时保持当前状态，内容变化时提交新候选。
 
 回滚本身失败时，该插件的实例停在 `Failed`，其余插件不受影响，日志记录两次失败的原因。
 
@@ -197,12 +199,14 @@ cordis verify --plugin plugins/libkv_file.dylib --suite contracts/libkv_contract
 
 核心收到 `SIGTERM` 或 `SIGINT` 时：
 
-1. 停止文件监视，不再开始新的替换；等待进行中的替换结束或回滚。
+1. 关闭管理请求入口，等待已经开始的替换结束或回滚。
 2. 对全部实例调用导出器，状态块写入 `state/<实例名>.state`。
-3. 释放根纤程，等待全部实例 `Disposed`。
-4. 退出。
+3. 释放根纤程，等待全部实例 `Disposed`；`watch` 的清理回调释放文件监视器。
+4. 等待全部插件进程组退出并完成回收，随后退出核心。
 
 核心启动时，每个实例的 `apply` 继承 `state/<实例名>.state`，读取后该文件移入 `state/consumed/`。
+
+运行期间按 `checkpoint_ms` 导出实例状态并写入状态目录，默认间隔为 60000 毫秒，`0` 关闭定期检查点。有序退出仍写出最终状态。服务管理器在核心崩溃后重新启动核心，实例继承最近一次检查点；插件宿主通过标准输入关闭感知核心退出，释放所属进程资源（`CP-10`、`CP-11`）。
 
 升级核心的步骤：停止旧核心（上述 1–4），替换核心可执行文件，启动新核心。新核心支持的 ABI 主版本范围覆盖现有插件时，插件不需要重新编译（`ADR-0014`）。
 
@@ -211,6 +215,8 @@ cordis verify --plugin plugins/libkv_file.dylib --suite contracts/libkv_contract
 核心读取 `cordis.toml`。
 
 ```toml
+requires_core = ">=0.1.0,<0.2.0"
+
 [runtime]
 plugin_dir = "plugins"          # 插件库与清单所在目录
 state_dir = "state"             # 状态块与插件数据目录
@@ -218,11 +224,19 @@ require_verified = false
 swap_timeout_ms = 30000
 confirm_ms = 10000
 export_timeout_ms = 5000
+apply_timeout_ms = 30000
+cleanup_timeout_ms = 30000
+invoke_timeout_ms = 30000
+checkpoint_ms = 60000
+restart_max = 5
+restart_backoff_ms = 500
+retired_image_limit = 20
 unload = "never"                # never | when-unleased，见 ADR-0012
 
 [instance.store]                 # 实例名 store
 plugin = "kv"                    # kv-mem 与 kv-file 的共同插件名
 component = "kv-store"           # 组件名
+group = "storage"               # 原生宿主分组
 config = { path = "kv" }         # 交给组件的配置，以自描述格式编码后传入
 
 [instance.counter]
@@ -245,9 +259,10 @@ config = { debounce_ms = 300 }
 | 删除实例条目 | 释放该实例 |
 | 实例的 `config` 变化 | `Fiber::update` |
 | 实例的 `plugin` 或 `component` 变化 | 释放旧实例，挂载新实例，状态不迁移 |
-| 插件目录中出现插件名已装载的新文件 | 热替换（§6） |
-| 插件目录中出现新插件名的文件 | 装载库，挂载引用它的实例 |
-| 插件目录中的文件被删除 | 不操作。已装载的库继续运行，直到配置不再引用它 |
+| 实例的 `group`、`isolate` 或 `intercept` 变化 | 在新分组或新视图中重新挂载 |
+| `watch` 观察到已有逻辑插件的新构建 | 调用 `install`，然后对对应分组调用 `replace`（§6） |
+| 获得授权的 `add` 请求引用新插件 | 在指定分组挂载新增实例 |
+| 构建来源文件被删除 | 已装载的副本继续服务，配置或管理请求决定实例的释放 |
 
 这一层就是 `PAPER` §4.2 的组件加载器，它本身由运行时以普通组件的形式挂载在内核上。
 
@@ -257,4 +272,76 @@ cordis.manage@1 提供 install、add、remove、replace、rollback、configure�
 
 管理变更保存到 state/instances.toml，启动时覆盖基础配置中的同名实例；删除操作保留相应持久标记。status 显示覆盖来源。基础 cordis.toml 由人维护，管理操作记录调用方、方法、目标及结果。对调用方自身的 remove、replace 在响应之后执行。
 
-install 的 source 位于项目目录或调用方的数据目录，安装使用单调序号；完整字节相同的内容复用已有插件引用。运行时串行处理管理操作并执行既定验证、时限与回滚规则。详细授权与叠加层验收属于 M12（ADR-0024）。
+install 的 source 位于项目目录或调用方的数据目录，安装使用单调序号；完整字节相同的内容复用已有插件引用。运行时串行处理管理操作并执行既定验证、时限与回滚规则。调用方的服务可见性和每次方法调用分别由核心检查（ADR-0024）。`replace_batch` 的完整窗口事务及附加重读授权见 ADR-0031。
+
+### 10.2 隔离域与拦截
+
+实例条目的 `isolate` 以接口键为索引，字符串值指定共享的命名域，`true` 创建该实例独有的域。提供方与使用方使用同一个域名时共享该域内的服务绑定。`intercept` 在实例上下文中覆盖相应接口的元数据；声明 `scoped` 的提供方经 `cordis.scope` 为该使用方建立视图对象（DOC-15 §6.4）。
+
+```toml
+[instance.tenant-store]
+plugin = "kv"
+component = "kv-store"
+isolate = { "kv@1" = "tenant-a" }
+config = { path = "tenant-a.cbor" }
+
+[instance.tenant-counter]
+plugin = "counter"
+component = "counter"
+isolate = { "kv@1" = "tenant-a" }
+intercept = { "kv@1" = { namespace = "tenant-a" } }
+config = { interval_ms = 100 }
+```
+
+这些配置由核心内核派生上下文实现。插件通过 `ctx.isolate`、`ctx.intercept` 与 `ctx.plugin` 使用相同的语义。父实例释放完成时，它创建的子实例和私有域服务均已回收。
+
+逻辑配置组使用 `[scope.<名称>]`，实例通过 `scope` 指定归属，组通过 `parent` 形成继承关系。组的禁用状态、隔离域和拦截元数据传递给成员；组中的 `isolate = true` 使成员共享该组的独有域。实例的 `group` 继续表示宿主进程分组，二者分别对应上下文继承和代码装载（ADR-0033）。
+
+```toml
+[scope.tenant]
+disabled = false
+isolate = { "kv@1" = true }
+intercept = { "kv@1" = { namespace = "tenant" } }
+
+[scope.tenant-readers]
+parent = "tenant"
+
+[instance.scoped-store]
+plugin = "kv"
+component = "kv-store"
+scope = "tenant"
+group = "storage"
+config = { path = "tenant.cbor" }
+
+[instance.scoped-counter]
+plugin = "counter"
+component = "counter"
+scope = "tenant-readers"
+disabled = false
+```
+
+设置组或实例的 `disabled = true` 后，其配置保留，成员从运行目标中移出；重新启用时恢复挂载。配置重读按稳定的实例名比较展开后的目标，变化涉及的条目执行更新或重建，其余实例沿用现有纪元。管理持久化保存成员自身的字段，祖先属性在每次目标展开时合并。
+
+### 10.3 插件清单
+
+原生插件可以直接以动态库文件名作为实例的 `plugin` 引用；目录形式的插件使用 `cordis-plugin.toml` 描述入口。原生清单的名称和版本与宿主读取的动态库描述符一致，`library` 按当前平台补全动态库前缀与扩展名。
+
+```toml
+name = "kv"
+version = "0.1.0"
+socket = "native"
+library = "kv_file"
+```
+
+进程插件使用 `socket = "process"`，声明 `protocol = 1`、`command` 和可选的 `restart`。原生分组由实例的 `group` 配置决定，进程插件各自运行在独立进程中。清单的 `socket = "web"` 与 `[web]` 字段以及实例的 `forwarder` 标记按 DOC-15 §9、§11、§15 在 M20 接入网页宿主。
+
+### 10.4 上游配置与工具行为对应
+
+| 上游参考 | Rust 配置或工具 | 采用方式与差异依据 |
+|---|---|---|
+| loader 的 `EntryOptions.id/name/config` | 实例表名、`plugin/component/config` | 稳定实例身份用于增量调和；插件与组件分别选取描述符中的装载单位和入口 |
+| loader 的 `group = true`、父上下文继承 | `scope`、`parent` | 逻辑组继承隔离域、元数据和禁用状态；`group` 留给 DOC-15 的宿主进程分组 |
+| loader 的布尔 `disabled`、命名或独有 `isolate` | 同名字段 | 采用布尔禁用和上下文域语义；JavaScript 表达式按 Q0 改为数据配置，服务依赖由插件描述符声明 |
+| create 的目录准备、模板和启动提示 | `cordis new`、`new-plugin` | 支持新目录与已有空目录；本地模板匹配 Rust SDK，显式命令便于 Cargo 工作流，已有文件保留（ADR-0032） |
+| logger-console 的前缀、标签、时间与多行布局 | `console-log` | 保留格式与过滤行为；标准错误承载终端输出，时间以事件接收时刻计算，日期格式采用 strftime（ADR-0032） |
+| hmr 的变更合并与替换单元 | `watch` 的完整窗口事务 | 按项目要求覆盖整个防抖窗口；配置与插件候选共同成功或共同恢复，具体上游差异见 ADR-0031 |

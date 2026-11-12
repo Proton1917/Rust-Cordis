@@ -15,7 +15,7 @@
 
 ## 决定
 
-- 插件版本采用 semver 1.0.28，命令行采用 clap 4.6.7，JSON 印记与状态采用 serde_json 1.0.154。serde_json 用于 host/runtime/contract，semver 用于 host/supervisor/runtime，clap 用于 runtime/host。文件配置继续使用 toml，二进制载荷继续使用 ciborium。
+- 插件版本采用 semver 1.0.28，命令行采用 clap 4.6.7，JSON 印记与状态采用 serde_json 1.0.154。serde_json 用于 host/runtime/dev，semver 用于 host/supervisor/runtime，clap 用于 runtime/host/dev。runtime/dev 通过 toml 解析配置和生成项目文件，二进制载荷继续使用 ciborium。开发工具的异步子进程调用由 tokio 和 cordis-process 执行，资源回收按 ADR-0029 处理。
 - Q0 约束核心进程的内核、cordis-up、cordis-supervisor、cordis-runtime：源码使用安全 Rust，依赖树与 cordis-abi、cordis-sdk 分离。cordis-host 与原生插件依赖 SDK；接口 crate 的最低 Rust 版本为 1.85。
 - `cordis.log@1` 的载荷包含 `level`、`message`、`instance`。核心向远端监听器发送异步通知，console-log 收到通知后写入终端。同组原生监听器继续遵守其本地事件族；跨进程的 bail、waterfall 返回值由服务调用表达（DOC-15 §6.3）。
 - `cordis.contract@1` 包含 `report(name, passed, message)`、`finish()`、`stage() -> u32` 和 `request_state_roundtrip()`。套件在阶段 0 完成读写断言并请求状态往返，交回 apply；宿主停用套件、导出被测实例、重启并继承状态，再以阶段 1 挂载同一套件。阶段 1 检查迁移结果并调用 finish。宿主按阶段合并断言记录。
@@ -24,6 +24,7 @@
 - `cordis.contract@1` 同样由核心经 UP/1 提供；契约辅助 crate 复用插件侧 SDK 接口，核心使用协议数据处理断言与阶段转换。
 - ADR-0024 规定 cordis.runtime@1 保持只读；管理操作由 cordis.manage@1 提供，逐方法授权来自 cordis.toml 的 grants。持久变更写入 state/instances.toml，每次操作记录调用方、目标与结果。文件监视属于 watch 插件。
 - 开发命令在 cordis-dev 中实现。该程序通过 cordis-host --describe 获取原生描述符，通过 cordis run 的独立部署执行验证；核心保留运行命令与参数转交。
+- `cordis new` 生成包含 Rust 插件、watch、授权与运行配置的 Cargo 工作区；`cordis new-plugin` 追加插件源码及实例条目。SDK Git 依赖固定到已交付修订，开发仓库可通过 `--sdk-path` 指定本机源码。模板与 M15 插件编写 skill 共用。`cordis-dev version` 声明支持的核心版本范围，生成的配置写入相同的 `requires_core`。
 
 ## 后果
 

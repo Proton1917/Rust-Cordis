@@ -23,6 +23,8 @@
 
 两者矛盾时以 `PAPER` 为准。`PAPER` 未覆盖的细节以 `UPSTREAM` 为准。每条上游用例在 `docs/04-conformance.md` 中有一行处置记录。
 
+第二阶段的配置装配、文件变化、脚手架与终端日志，分别参考同一提交的 loader、hmr、create、logger-console。Rust 的批次回滚、进程分组和静态配置规则在 ADR-0031–0033 中说明。
+
 ## 概念与接口
 
 | 论文概念 | 上游（TypeScript） | 本仓库（Rust） |
@@ -128,6 +130,29 @@ cargo clippy --workspace --all-targets -- -D warnings
 conda run -n base python tools/conformance.py check   # 校验一致性矩阵
 ```
 
+原生验收会自动构建真实插件库，并使用 Rust 1.85.0 验证较旧编译器生成的插件。开发与运行工具可以一起构建：
+
+```bash
+cargo build --workspace
+target/debug/cordis version
+target/debug/cordis new target/hello-cordis --sdk-path "$PWD/crates/cordis-sdk"
+cd target/hello-cordis
+cargo build
+../../target/debug/cordis run
+```
+
+生成的项目包含 app 与 watch。watch 合并一个防抖窗口内的构建产物和配置变化，核心统一检查并替换，失败恢复原配置、原版本及原状态。管理授权写在 `cordis.toml`，运行中变更保存在状态目录的叠加层；批次受理票据与实际结果分别记录，watch 自身重建后继续处理待确认窗口。
+
+文件 KV、计数组件和终端日志的部署示例位于 [`examples/native`](examples/native/cordis.toml)：
+
+```bash
+bash examples/native/build.sh
+cd examples/native
+./cordis run
+```
+
+另一个终端可在该目录执行 `./cordis status` 读取实例与库状态。`SIGTERM` 或 `SIGINT` 触发最终状态导出和有序退出；再次运行时继承保存的状态。
+
 ## 进度
 
 第一阶段 `M0`–`M6` 交付内核，第二阶段推进独立核心、插件宿主与开发工具，每个里程碑一个提交。
@@ -148,11 +173,11 @@ conda run -n base python tools/conformance.py check   # 校验一致性矩阵
 | `M13` | 独立进程中的契约验证与验证印记 |
 | `M14` | 系统验收、替换指标与使用文档 |
 
-`M0`–`M11` 及并发评审修复已提交。`cordis-host` 的真实跨库、Rust 1.85 插件、组内替换、Scoped 与子组件、进程故障隔离验收通过，ABI v1.0 已冻结。当前推进 M12 的核心命令、部署与开发工具；各里程碑的结果和接口清单记录在 `docs/PROGRESS.md`。
+`M0`–`M12` 及并发评审修复已提交。原生宿主、核心命令、配置调和、批次管理、检查点、watch 与脚手架已通过实际验收，ABI v1.0 已冻结。M12 的三个产品解析目标均完成固定 1800 秒 fuzz，正式源码与被测源码已逐字节比较。当前推进 M13 契约验证；各里程碑的结果和接口清单记录在 `docs/PROGRESS.md`。
 
 ## 后续阶段
 
-第二阶段交付 Rust 原生插件与通用协议。第三阶段按 `docs/15-universal-socket.md` 继续发布打包、WIT、Python 与 TypeScript SDK、浏览器前端插件和全栈插件；M15 的插件编写 skill 由设计方编写。
+第二阶段交付 Rust 原生插件、通用协议、契约验证与插件编写 skill。第三阶段按 `docs/15-universal-socket.md` 继续发布打包、WIT、Python 与 TypeScript SDK、浏览器前端插件和全栈插件，验收推进至 M21。
 
 ## 文档
 

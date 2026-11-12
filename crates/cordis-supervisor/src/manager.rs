@@ -1,5 +1,6 @@
 //! DOC-15 Q0、CP-3–CP-6：核心侧唯一内核的远端组件、资源路由与连接生命周期。
 
+mod batch;
 mod generation;
 mod handlers;
 mod lifecycle;
@@ -9,6 +10,7 @@ mod native;
 mod routing;
 mod views;
 
+pub use batch::{BatchInstance, BatchReplacement};
 pub use model::{
     Failure, GroupSnapshot, GroupSpec, InstanceSnapshot, InstanceSpec, LogOrigin, LogRecord,
     LogSink, ManagerOptions, ReplaceReport, RestartPolicy, Snapshot,

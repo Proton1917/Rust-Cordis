@@ -1,0 +1,20 @@
+[package]
+name = "cordis-watch"
+version.workspace = true
+edition.workspace = true
+rust-version = "1.85"
+publish.workspace = true
+license.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+rlib = []
+
+[dependencies]
+cordis-sdk.workspace = true
+notify = "=8.2.0"
+uuid = { version = "=1.26.1", features = ["v4"] }
+serde.workspace = true
+

@@ -53,6 +53,8 @@ struct Artifacts {
 struct Selection {
     #[arg(long)]
     reuse_artifacts: bool,
+    #[arg(long, conflicts_with = "reuse_artifacts")]
+    build_only: bool,
     #[arg(long)]
     artifacts_dir: Option<PathBuf>,
     #[arg(long)]
@@ -87,7 +89,7 @@ fn existing_artifacts(build: &Path, host: Option<PathBuf>) -> Result<Artifacts> 
     })
 }
 
-fn build(host_root: &Path, build: &Path, host: Option<PathBuf>) -> Result<Artifacts> {
+fn build(host_root: &Path, build: &Path, host: Option<&Path>) -> Result<()> {
     if host.is_none() {
         run(
             Command::new("cargo")
@@ -165,7 +167,7 @@ fn build(host_root: &Path, build: &Path, host: Option<PathBuf>) -> Result<Artifa
             .arg(&previous),
         "用Rust 1.85.0构建使用方动态库",
     )?;
-    existing_artifacts(build, host)
+    Ok(())
 }
 
 struct Control(Mutex<Option<RemoteObject>>);
@@ -1038,11 +1040,13 @@ async fn main() -> Result<()> {
     let directory = selection
         .artifacts_dir
         .unwrap_or_else(|| root.join("../../target/host-native"));
-    let artifacts = if selection.reuse_artifacts {
-        existing_artifacts(&directory, selection.host)?
-    } else {
-        build(&root, &directory, selection.host)?
-    };
+    if !selection.reuse_artifacts {
+        build(&root, &directory, selection.host.as_deref())?;
+    }
+    if selection.build_only {
+        return Ok(());
+    }
+    let artifacts = existing_artifacts(&directory, selection.host)?;
     let cases = if selection.cases.is_empty() {
         [
             "basic-same",
