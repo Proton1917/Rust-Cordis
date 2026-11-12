@@ -1,0 +1,17 @@
+[package]
+name = "{{name}}"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+rlib = []
+
+[dependencies]
+cordis-sdk.workspace = true
+service-api = { package = "{{name}}-api", path = "../../interfaces/{{name}}-api" }
+serde = { version = "=1.0.229", features = ["derive"] }

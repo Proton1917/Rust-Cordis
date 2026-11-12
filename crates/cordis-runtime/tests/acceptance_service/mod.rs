@@ -96,10 +96,17 @@ fn launch(project: &Path) -> Job {
         target: format!("{domain}/{label}"),
         active: true,
     };
+    let plist = project.join("service").join(format!("{label}.plist"));
     command(
         Command::new(&core)
             .current_dir(project)
-            .args(["service", "install", "--name", &label]),
+            .args(["service", "install", "--name", &label, "--output"])
+            .arg(&plist),
+    );
+    command(
+        Command::new("launchctl")
+            .args(["bootstrap", &domain])
+            .arg(plist),
     );
     job
 }

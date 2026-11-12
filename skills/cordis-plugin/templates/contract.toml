@@ -1,0 +1,17 @@
+[package]
+name = "{{name}}-contract"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+rlib = []
+
+[dependencies]
+cordis-contract.workspace = true
+cordis-sdk.workspace = true
+service-api = { package = "{{name}}-api", path = "../../interfaces/{{name}}-api" }

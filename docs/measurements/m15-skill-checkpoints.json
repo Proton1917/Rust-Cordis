@@ -1,0 +1,468 @@
+{
+  "sdk_revision": "8330e71143a14bc5a5f1c7005747f6af00f8234a",
+  "checkpoint_ms": 1,
+  "counter_interval_ms": 250,
+  "fixed_window": {
+    "start_unix_ms": 1794520460092,
+    "end_unix_ms": 1794520490092,
+    "duration_ms": 30000,
+    "scheduler_elapsed_seconds": 30.1320601250045,
+    "samples": 118,
+    "first": {
+      "unix_ms": 1794520460228,
+      "value": {
+        "count": 4,
+        "writer_version": "0.1.0"
+      }
+    },
+    "last": {
+      "unix_ms": 1794520490076,
+      "value": {
+        "count": 108,
+        "writer_version": "0.2.0"
+      }
+    },
+    "count_increase": 104
+  },
+  "five_second_segments": [
+    {
+      "offset_seconds": 0,
+      "samples": 20,
+      "first": {
+        "unix_ms": 1794520460228,
+        "value": {
+          "count": 4,
+          "writer_version": "0.1.0"
+        }
+      },
+      "last": {
+        "unix_ms": 1794520465066,
+        "value": {
+          "count": 20,
+          "writer_version": "0.1.0"
+        }
+      },
+      "increase": 16
+    },
+    {
+      "offset_seconds": 5,
+      "samples": 19,
+      "first": {
+        "unix_ms": 1794520465321,
+        "value": {
+          "count": 20,
+          "writer_version": "0.1.0"
+        }
+      },
+      "last": {
+        "unix_ms": 1794520469914,
+        "value": {
+          "count": 34,
+          "writer_version": "0.1.0"
+        }
+      },
+      "increase": 14
+    },
+    {
+      "offset_seconds": 10,
+      "samples": 20,
+      "first": {
+        "unix_ms": 1794520470170,
+        "value": {
+          "count": 35,
+          "writer_version": "0.1.0"
+        }
+      },
+      "last": {
+        "unix_ms": 1794520475007,
+        "value": {
+          "count": 51,
+          "writer_version": "0.1.0"
+        }
+      },
+      "increase": 16
+    },
+    {
+      "offset_seconds": 15,
+      "samples": 19,
+      "first": {
+        "unix_ms": 1794520475263,
+        "value": {
+          "count": 52,
+          "writer_version": "0.1.0"
+        }
+      },
+      "last": {
+        "unix_ms": 1794520479923,
+        "value": {
+          "count": 70,
+          "writer_version": "0.2.0"
+        }
+      },
+      "increase": 18
+    },
+    {
+      "offset_seconds": 20,
+      "samples": 20,
+      "first": {
+        "unix_ms": 1794520480178,
+        "value": {
+          "count": 71,
+          "writer_version": "0.2.0"
+        }
+      },
+      "last": {
+        "unix_ms": 1794520484995,
+        "value": {
+          "count": 91,
+          "writer_version": "0.2.0"
+        }
+      },
+      "increase": 20
+    },
+    {
+      "offset_seconds": 25,
+      "samples": 20,
+      "first": {
+        "unix_ms": 1794520485248,
+        "value": {
+          "count": 92,
+          "writer_version": "0.2.0"
+        }
+      },
+      "last": {
+        "unix_ms": 1794520490076,
+        "value": {
+          "count": 108,
+          "writer_version": "0.2.0"
+        }
+      },
+      "increase": 16
+    }
+  ],
+  "snapshot_samples": [
+    {
+      "label": "t00",
+      "observation": {
+        "unix_ms": 1794520459974,
+        "value": {
+          "count": 3,
+          "writer_version": "0.1.0"
+        }
+      },
+      "counter_state": "active",
+      "revision": 0,
+      "context": 6
+    },
+    {
+      "label": "t05",
+      "observation": {
+        "unix_ms": 1794520465321,
+        "value": {
+          "count": 20,
+          "writer_version": "0.1.0"
+        }
+      },
+      "counter_state": "active",
+      "revision": 0,
+      "context": 6
+    },
+    {
+      "label": "t10",
+      "observation": {
+        "unix_ms": 1794520470170,
+        "value": {
+          "count": 35,
+          "writer_version": "0.1.0"
+        }
+      },
+      "counter_state": "active",
+      "revision": 0,
+      "context": 6
+    },
+    {
+      "label": "t14",
+      "observation": {
+        "unix_ms": 1794520474242,
+        "value": {
+          "count": 50,
+          "writer_version": "0.1.0"
+        }
+      },
+      "counter_state": "active",
+      "revision": 0,
+      "context": 6
+    },
+    {
+      "label": "t20",
+      "observation": {
+        "unix_ms": 1794520480178,
+        "value": {
+          "count": 71,
+          "writer_version": "0.2.0"
+        }
+      },
+      "counter_state": "active",
+      "revision": 1,
+      "context": 12
+    },
+    {
+      "label": "t25",
+      "observation": {
+        "unix_ms": 1794520485248,
+        "value": {
+          "count": 92,
+          "writer_version": "0.2.0"
+        }
+      },
+      "counter_state": "active",
+      "revision": 1,
+      "context": 12
+    },
+    {
+      "label": "t30",
+      "observation": {
+        "unix_ms": 1794520490076,
+        "value": {
+          "count": 108,
+          "writer_version": "0.2.0"
+        }
+      },
+      "counter_state": "active",
+      "revision": 1,
+      "context": 12
+    }
+  ],
+  "upgrade_published": {
+    "event": "upgrade_published",
+    "unix_ms": 1794520475241,
+    "elapsed_seconds": 15.148888791911304,
+    "source": "artifacts/v2/libcounter.dylib",
+    "destination": "artifacts/live/libcounter.dylib"
+  },
+  "version_boundary": [
+    {
+      "last_old": {
+        "unix_ms": 1794520476876,
+        "value": {
+          "count": 58,
+          "writer_version": "0.1.0"
+        }
+      },
+      "first_new": {
+        "unix_ms": 1794520477131,
+        "value": {
+          "count": 59,
+          "writer_version": "0.2.0"
+        }
+      }
+    }
+  ],
+  "decreases": 0,
+  "states": {
+    "counter-replaced": {
+      "schema": "counter.snapshot",
+      "version": 1,
+      "data": {
+        "value": {
+          "count": 58,
+          "writer_version": "0.1.0"
+        },
+        "activations": 1,
+        "inherited_count": null,
+        "inherited_version": null,
+        "exports": 1397,
+        "kv_frozen_waits": 2
+      }
+    },
+    "kv-stopped": {
+      "schema": "kv.snapshot",
+      "version": 1,
+      "data": {
+        "entries": {
+          "skill-eval.counter": [
+            123,
+            34,
+            99,
+            111,
+            117,
+            110,
+            116,
+            34,
+            58,
+            49,
+            48,
+            57,
+            44,
+            34,
+            119,
+            114,
+            105,
+            116,
+            101,
+            114,
+            95,
+            118,
+            101,
+            114,
+            115,
+            105,
+            111,
+            110,
+            34,
+            58,
+            34,
+            48,
+            46,
+            50,
+            46,
+            48,
+            34,
+            125
+          ]
+        }
+      },
+      "decoded_entries": {
+        "skill-eval.counter": {
+          "count": 109,
+          "writer_version": "0.2.0"
+        }
+      }
+    },
+    "counter-stopped": {
+      "schema": "counter.snapshot",
+      "version": 1,
+      "data": {
+        "value": {
+          "count": 109,
+          "writer_version": "0.2.0"
+        },
+        "activations": 2,
+        "inherited_count": 58,
+        "inherited_version": "0.1.0",
+        "exports": 1735,
+        "kv_frozen_waits": 4
+      }
+    },
+    "kv-before": {
+      "schema": "kv.snapshot",
+      "version": 1,
+      "data": {
+        "entries": {
+          "skill-eval.counter": [
+            123,
+            34,
+            99,
+            111,
+            117,
+            110,
+            116,
+            34,
+            58,
+            53,
+            55,
+            44,
+            34,
+            119,
+            114,
+            105,
+            116,
+            101,
+            114,
+            95,
+            118,
+            101,
+            114,
+            115,
+            105,
+            111,
+            110,
+            34,
+            58,
+            34,
+            48,
+            46,
+            49,
+            46,
+            48,
+            34,
+            125
+          ]
+        }
+      },
+      "decoded_entries": {
+        "skill-eval.counter": {
+          "count": 57,
+          "writer_version": "0.1.0"
+        }
+      }
+    },
+    "counter-before": {
+      "schema": "counter.snapshot",
+      "version": 1,
+      "data": {
+        "value": {
+          "count": 57,
+          "writer_version": "0.1.0"
+        },
+        "activations": 1,
+        "inherited_count": null,
+        "inherited_version": null,
+        "exports": 1396,
+        "kv_frozen_waits": 2
+      }
+    }
+  },
+  "last_batch": [
+    {
+      "caller": "watch",
+      "error": null,
+      "id": "20f8e99f-ca74-4931-9c04-75f2986ce646",
+      "state": "succeeded"
+    }
+  ],
+  "last_replace": [
+    {
+      "affected_instances": 1,
+      "candidate_connection": 2,
+      "committed": true,
+      "failure": null,
+      "group": "services",
+      "pause_ms": 124,
+      "previous_connection": 2,
+      "rolled_back": false,
+      "succeeded": true
+    }
+  ],
+  "last_swap": [
+    {
+      "affected_instances": 1,
+      "candidate_library": 5,
+      "committed": true,
+      "failure": null,
+      "pause_ms": 124,
+      "plugin": "counter",
+      "previous_library": 2,
+      "quiescence_ms": 0,
+      "rolled_back": false,
+      "succeeded": true
+    }
+  ],
+  "errors": {
+    "configuration_error": null,
+    "instance_errors": {},
+    "plugin_errors": {}
+  },
+  "cleanup": {
+    "core_pid": 30184,
+    "core_returncode": 0,
+    "started_processes": {
+      "30184": "cordis run -c cordis.toml",
+      "30196": "/Users/gordongauerk/Projects/Rust-cordis/target/skill-tools/release/cordis-host --cache-dir /Users/gordongauerk/Projects/Rust-cordis/target/skill-eval/sk1b/counter-demo/.cordis/lib/observer --unload never --request-timeout-ms 30000 --library /Users/gordongauerk/Projects/Rust-cordis/target/skill-eval/sk1b/counter-demo/artifacts/live/installed-3.dylib",
+      "30197": "/Users/gordongauerk/Projects/Rust-cordis/target/skill-tools/release/cordis-host --cache-dir /Users/gordongauerk/Projects/Rust-cordis/target/skill-eval/sk1b/counter-demo/.cordis/lib/services --unload never --request-timeout-ms 30000 --library /Users/gordongauerk/Projects/Rust-cordis/target/skill-eval/sk1b/counter-demo/artifacts/live/installed-1.dylib --library /Users/gordongauerk/Projects/Rust-cordis/target/skill-eval/sk1b/counter-demo/artifacts/live/installed-2.dylib",
+      "30198": "/Users/gordongauerk/Projects/Rust-cordis/target/skill-tools/release/cordis-host --cache-dir /Users/gordongauerk/Projects/Rust-cordis/target/skill-eval/sk1b/counter-demo/.cordis/lib/watch --unload never --request-timeout-ms 30000 --library /Users/gordongauerk/Projects/Rust-cordis/target/skill-eval/sk1b/counter-demo/artifacts/live/installed-4.dylib",
+      "30201": "/Users/gordongauerk/Projects/Rust-cordis/target/skill-tools/release/cordis-host --describe /Users/gordongauerk/Projects/Rust-cordis/target/skill-eval/sk1b/counter-demo/artifacts/live/installed-3.dylib --cache-dir /Users/gordongauerk/Projects/Rust-cordis/target/skill-eval/sk1b/counter-demo/.cordis/lib/discovery"
+    },
+    "remaining_processes": []
+  }
+}

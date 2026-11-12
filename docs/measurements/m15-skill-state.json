@@ -1,0 +1,23 @@
+{
+  "core_pid_before": 19018,
+  "core_pid_after": 19018,
+  "core_running_after": true,
+  "initial_value": 100,
+  "old_last_tick": 189,
+  "old_exported_value": 189,
+  "new_inherited_value": 189,
+  "new_ticks": [
+    190,
+    191,
+    192,
+    193
+  ],
+  "kv_observations_after": [
+    189,
+    190,
+    191,
+    191,
+    192
+  ],
+  "continuity_passed": true
+}

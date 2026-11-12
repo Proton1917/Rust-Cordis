@@ -1,0 +1,13 @@
+[package]
+name = "plugin"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+publish = false
+license = "MIT"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+cordis-sdk.workspace = true

@@ -196,6 +196,8 @@ cordis run
 
 生成的 `hello` 组件在激活时发送日志事件；部署 `console-log` 插件可以把这些事件显示在终端。服务、效应、隔离域、状态导出和管理授权的接口见 [插件模型](docs/11-plugin-model.md) 与 [SDK 接口](docs/13-runtime-architecture.md#4-sdk-接口)。
 
+[Cordis 插件编写手册](skills/cordis-plugin/SKILL.md) 说明共享接口、服务、事件、效应清理、冻结状态、契约验证与替换，并提供可复制的接口、提供方和契约套件模板。Claude Code 与 Codex 可加载同一份 skill；`cordis new-plugin` 直接读取其中的组件模板。
+
 ## 验证插件与部署为服务
 
 契约套件在独立核心中运行。下面的命令在仓库根目录构建并验证内存 KV 实现：
@@ -207,7 +209,9 @@ cordis verify --plugin target/release/libkv_mem.dylib --suite target/release/lib
 
 macOS 动态库扩展名为 `.dylib`，Linux 使用 `.so`。验证成功后，工具保存 `.cordis/verified/` 中的完整库副本，并在被测库旁写入 `.verified.json`。配置 `require_verified = true` 后，宿主在打开候选库前比较完整字节，再核对接口契约覆盖范围。
 
-在部署项目目录中执行 `cordis service install --name com.example.cordis.demo`，会生成并安装当前平台的 launchd 或 systemd 配置。只查看配置时使用 `--dry-run`。核心意外退出后由服务管理器重新启动，插件按检查点恢复；状态文件和插件数据保存在项目的 `state/` 中。
+在部署项目目录中执行 `cordis service install --name com.example.cordis.demo`，macOS 会把配置写入 `~/Library/LaunchAgents/`（root 使用 `/Library/LaunchDaemons/`）并启动服务；Linux 使用 systemd 用户单元目录。服务在后续登录时继续启动。使用 `--output service/demo.plist` 可在指定位置生成配置供检查；`--dry-run` 默认生成在项目的 `service/` 目录。核心意外退出后由服务管理器重新启动，插件按检查点恢复；状态文件和插件数据保存在项目的 `state/` 中。
+
+执行 `cordis service uninstall --name com.example.cordis.demo` 可停止服务、删除安装配置，并查看实际删除的路径。
 
 ## 进度
 
@@ -228,8 +232,9 @@ macOS 动态库扩展名为 `.dylib`，Linux 使用 `.so`。验证成功后，�
 | `M12` | 核心可执行文件、声明式部署、管理接口、watch 与脚手架 |
 | `M13` | 独立进程中的契约验证与验证印记 |
 | `M14` | 系统验收、替换指标与使用文档 |
+| `M15` | 插件编写 skill、共享模板与独立新会话验收 |
 
-`M0`–`M13` 及评审修复已提交。原生宿主、核心命令、配置调和、批次管理、检查点、watch、脚手架与契约验证已通过实际验收，ABI v1.0 已冻结。M12 的三个产品解析目标均完成固定 1800 秒 fuzz，正式源码与被测源码已逐字节比较。当前推进 M14 系统验收与性能度量；各里程碑的结果和接口清单记录在 `docs/PROGRESS.md`。
+`M0`–`M15` 的仓库交付及评审修复已完成。插件编写手册经过独立新会话的热替换、周期检查点与 KV 契约验证，ABI v1.0 已冻结。M12 的三个产品解析目标均完成固定 1800 秒 fuzz，正式源码与被测源码已逐字节比较。M14 的固定 50 次替换、直接调用、隔离与核心恢复结果见 [运行时验收与测量](docs/measurements/m14-acceptance.md)。当前推进 M16 发布打包与窗口插件；各里程碑结果和用户环境安装状态记录在 `docs/PROGRESS.md`。
 
 ## 后续阶段
 
@@ -246,6 +251,7 @@ macOS 动态库扩展名为 `.dylib`，Linux 使用 `.so`。验证成功后，�
 | `docs/04-conformance.md` | 177 条上游用例的处置矩阵 |
 | `docs/adr/` | 决策记录 |
 | `docs/PROGRESS.md` | 进度日志 |
+| `skills/cordis-plugin/SKILL.md` | 插件编写手册、资源与状态指南、接口和契约模板 |
 
 ## 许可证
 

@@ -1,0 +1,10 @@
+[package]
+name = "{{name}}-api"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+publish = false
+
+[dependencies]
+cordis-sdk.workspace = true
+serde = { version = "=1.0.229", features = ["derive"] }

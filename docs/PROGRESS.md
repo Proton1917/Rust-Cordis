@@ -6,11 +6,11 @@
 
 | 项 | 值 |
 |---|---|
-| 最近完成的里程碑 | `M14` |
-| 进行中的里程碑 | 第二阶段 M15 |
-| 下一步 | 正式交付插件编写 skill 与共享模板；执行 SK-1、SK-2 独立新会话验收及 SK-3 模板编译验收 |
-| 阻塞项 | 无；用户已恢复执行 |
-| 最后更新 | 2026-11-13（Asia/Shanghai），M14 验收 |
+| 最近完成的仓库里程碑 | `M15`；用户目录 skill 链接待授权 |
+| 进行中的里程碑 | 第三阶段 M16 |
+| 下一步 | 接入 M16 已验证的发布包、窗口、HTTP 与运行目录实现；按授权结果完成 skill 用户目录链接及窗口界面验收 |
+| 阻塞项 | 用户目录的 skill 链接、按窗口 PID 使用外部界面测试接口等待授权；项目内工作继续 |
+| 最后更新 | 2026-11-13（Asia/Shanghai），SK-1b、窗口恢复与发布包候选 |
 
 ## 环境
 
@@ -400,6 +400,33 @@ cargo test --workspace -- \
 | cordis-types | 205 / 239 |
 | cordis-up | 1613 / 1752 |
 | 六个核心 crate 合计 | 16649 / 18625 |
+
+### M15 插件编写手册、共享模板与服务安装
+
+- 交付：`skills/cordis-plugin/SKILL.md`、三份按需阅读的参考和八份接口/组件/提供方/契约模板；`cordis-dev` 通过 `include_str!` 直接使用同一组件源码与 manifest。手册说明 PR-1–PR-8、服务和事件、Scoped/隔离、冻结状态与迁移、真实契约和部署。
+- SK-1 首次热替换观测：独立 `codex exec` 会话从空目录编写 journal-counter，注入 kv@1 并导出 journal-counter.snapshot。0.1.0 最后计数与导出值均为 189；0.2.0 继承 189 后递增到 190–193，独立 KV 消费者读到对应值。核心 PID 19018、宿主 PID 19031 保持，批次 succeeded；有序退出返回 0，进程清理记录为空。会话 thread `01a1d172-1cdb-7d72-9a83-84d8427612f3`，完整结果 target/skill-eval/sk1-final.txt，原始目录 target/skill-eval/sk1/journal-demo/evidence/run-02，状态记录见 [SK-1 观测](measurements/m15-skill-state.json)。独立项目保留全局规则，按独立 Git 根加载作者 skill 与必要原始材料。
+- SK-2：独立会话 `01a1d17c-c1fc-7353-a4fe-1d58d652f589` 使用有序 Vec 与 binary_search 编写 kv-vector，共用原 kv-api 的 Snapshot。实际 kv-contract 的 8 条断言全部通过，覆盖读写、覆盖、键排序、flush 与跨阶段状态继承，RM-5 为 1985 ms。报告为 target/skill-eval/sk2/kv-vector/evidence/verify-report.txt，真实印记为 artifacts/libkv_vector.dylib.verified.json。
+- SK-3：`cargo test -p cordis-runtime --test skill_examples` 通过，1 条 / 9.11 秒；组件、接口、提供方、契约套件全部使用当前 SDK 编译，见 target/m15-skill-examples.log。skill-creator 的 quick_validate 已通过，见 target/skill-m15-validation/quick-validate.log；后续仅补充资源参考正文，frontmatter 与模板保持。
+- Y-1–Y-2：工作区格式检查通过，服务修改后复用 target/m15-format-final.log。Clippy 按已成功目标分段覆盖全部 workspace/all-targets：dev/runtime 1.04 秒，其余包 1.67 秒；服务修改后 runtime 定向通过，3.51 秒。日志为 target/m15-clippy.log、target/m15-clippy-remaining.log、target/m15-service-clippy.log。
+- Y-3：291 条运行测试与 2 条文档测试通过。工作区执行 281 条运行测试和 2 条文档测试，复用当前 SK-3 与 M14 七条专项场景；后续新增服务单元测试 2 条通过，AU-11 按新节流配置定向通过并取代该项旧观测。工作区命令沿 M14 的跳过范围，将命名回归换为 `shared_skill_templates_build_with_current_sdk`；日志 target/m15-workspace-tests.log、target/m15-service-unit.log、target/m15-au11.log。`cargo build -p cordis-dev` 通过，0.87 秒；真实 new/new-plugin 转交、构建与运行流程通过，27.15 秒，AU-11 自行构建当前核心与宿主。
+- 服务安装：实现按 DOC-15 §5.1 生成持久服务位置；macOS 使用标准 LaunchAgents/LaunchDaemons，systemd 使用用户单元目录并 enable --now。`--output` 和 `--dry-run` 生成供检查的配置；uninstall 停止服务并删除对应配置。默认目录与缺席服务保留相邻文件的行为由两条单元测试检查。实际 launchd 验收在工作区内生成配置并显式 bootstrap，ThrottleInterval 生效后 RM-10 为 1038 ms，检查点 73 覆盖新配置 29，旧 Host 已退出、临时服务已回收，结果见 [M15 核心恢复](measurements/m15-core-recovery.json)。
+- 代码量：runtime 4898 代码行 / 5392 总行，dev 692 / 770；六核心合计 16820 / 18823。统计来自 target/m15-source-lines.log，其余核心实现沿用 M14。supervisor 的后续增量依 DOC-13 先提取 cordis-routing 并写 ADR。
+- 解释页：M15 进度区与独立 HTML 已同步；1440 桌面和 390 移动画面已查看，移动表格横向滚动可读。截图为 target/explainer-m15-desktop.png、target/explainer-m15-mobile.png、target/explainer-m15-mobile-details.png；控制台 0 错误，页面与本次 HTTP 服务已退出。
+- 安装目标：`/Users/gordongauerk/.codex/skills/cordis-plugin` 与 `/Users/gordongauerk/.claude/skills/cordis-plugin`，均采用符号链接指向 `/Users/gordongauerk/Projects/Rust-cordis/skills/cordis-plugin`，仓库手册为共同来源。两个目标路径当前缺席，用户目录写入待用户授权。
+- 持续任务修订：SK-1 生成的计数循环通过 `frozen.check()?` 传播暂停错误，并在 KV 写入前提交本地计数。原库在独立部署中按 checkpoint_ms=1、counter_interval_ms=250 固定观察 30 秒，139 次 KV 读取均为 100、1840 次导出均为 100、递增记录为 0，三个实例均 Active。动态证据确认停滞，code 4 的具体退出路径由 SDK/Host/生成插件的源码调用链确定；本次原观察者记录 KV 读值，后台错误事件记录缺项。证据为 target/skill-eval/sk1-checkpoint/evidence/{observations,interpretation,cleanup}.json；退出 0，两个进程均已回收。资源指南已补充冻结期等待、跨服务在途操作和提交语义。
+- SK-1b：全新线程 `01a1d1bb-202b-7292-99d8-f5c1dbf70cd7` 使用修订手册，CLI 退出 0。独立观察者处于另一个宿主；固定 30 秒、checkpoint_ms=1、counter_interval_ms=250，118 条有效读取由 4 增至 108，六个 5 秒分段均增长。旧版状态 58，新版继承 58 后读到 59；有序退出时本地状态与 KV 均为 109。成功导出累计 1735 次，KV 冻结等待 4 次后持续增长；替换 succeeded，暂停 124 ms，全部进程回收。原始 JSON 保存为 [检查点与热替换观测](measurements/m15-skill-checkpoints.json)，命令及原始记录位于 target/skill-eval/sk1b/counter-demo/evidence，完整回复为 target/skill-eval/sk1b-final.txt。本次重验针对已确认的后台停滞问题，修订后达到持续运行与状态继承要求。
+- Y-9–Y-10：进度、参考指南与解释页已更新；仓库提交主题为 `M15: 交付插件编写手册与持久服务安装`，推送 origin/main。用户 skill 目录链接作为单独的环境安装项等待授权，仓库内容可通过明确路径使用。
+- 后续：接入 M16 候选；用户目录的链接按授权结果执行并记录。pack 候选保存在 target/pack-m16；M16 窗口和 HTTP 候选同样保存在 target。
+
+### M16 候选实现与验收状态
+
+- 打包：target/pack-m16 保存 pack、Host 多验证根和 ADR-0036 候选。原生 tar、解释器命令改写、签名后真实契约重验与移动、app 包外写入及签名保持、多验证根、显式静态资源均取得定向成功证据；日志分别为 release-state-fixed.log、signed-cdylib-fixed.log、app-test.log、assets-test.log，位于该目录。候选 pack/Host 全 targets clippy 通过，2.73/2.47 秒。
+- Bundle 运行：target/runtime-m16 把 Bundle 源目录与状态目录内的安装副本、宿主缓存区分；无参运行从 Contents/MacOS 定位部署，普通部署保持原目录。路径测试 1 条通过，release 构建 12.67 秒，全 targets clippy 0.97 秒；config.rs、manifest.rs、storage.rs 的解析函数保持既有源码。真实 app 无参启动后插件 Active、verified=true，退出后签名校验通过，见 target/pack-m16/app-test.log。
+- HTTP：target/http-m16 保存 web-api、真实原生 HTTP 插件及 ADR-0038 候选。静态服务与 Web.entry 前移到 M16 以满足窗口依赖；通道转发仍在 M20。真实 HTTP 专项 1 条 / 0.07 秒，覆盖页面、静态资源、会话令牌与连接清理；workspace/all-targets clippy 2.87 秒。首次构建 11.90 秒，最终源码构建 0.78 秒。
+- 窗口：target/window-m16 保存主线程 tao/wry/muda 窗口进程、UP/1 接口、window-api、真实原生使用方和 ADR-0037 候选。第一次组合运行的 HTTP、窗口、KV、使用方全部 Active，open/close 返回编号与异步 closed 事件均为 6；SIGTERM 退出 0，全部进程回收。标准输入关闭的实际程序退出 0。当前代码在导出时只记录已显示窗口，异步修改在冻结期间等候 thaw。
+- 窗口故障修复：第一次 app 故障注入中窗口已恢复，但使用方恰逢周期检查点而收到冻结错误，进入 Failed；原始状态为 target/window-m16/app-recovery-failed.json。修复后按同一 250 ms 检查点重做一次：窗口与使用方 890 ms 恢复，核心 PID 29117 保持，HTTP/store 的 context 分别保持 5/7，window 为 9→14、probe 为 11→16，重启次数恰为 1。证据为 target/window-m16/recovery-fixed/app-recovery.json。随后 SIGTERM 退出 0，5 个进程均已回收，运行后 codesign --verify --strict 通过。状态导出辅助函数提取后的定向 clippy 0.51 秒。
+- 界面验收：macOS 应用信息显示唯一 Regular 进程为窗口 PID 28022，应用名 CordisWindowAcceptance；记录为 target/window-m16/app-window-before.json。CUA 按共同 Bundle 标识选择后台核心，报 cgWindowNotFound；系统截图命令返回无法生成图像，当前保留真实画面和 Cmd-Q 验收缺项。外部界面测试程序已准备在 target/window-m16/inspect_window.swift，等待用户对本次按 PID 读取、截图和 Cmd-Q 的授权。全部窗口验收进程已停止。
+- 后续：取得界面验收结果后将候选迁入正式 workspace，执行 M16 退出检查并提交；M17 的 WIT 候选由既有代理在 target/idl-m17 准备。target/macros-m17 已按职责拆分 interface/plugin 的 expand，候选构建 4.01 秒、clippy 0.96 秒通过，1283 代码行 / 1399 总行；生成代码行为随 M17 接入时使用既有 SDK/Host 用例检验。
 
 ## 第二阶段候选与恢复记录
 

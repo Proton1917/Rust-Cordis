@@ -75,7 +75,7 @@ cordis（核心进程，纯 Rust，无 unsafe，不含插件代码）
 
 | 程序 | 命令 | 依赖 |
 |---|---|---|
-| `cordis`（核心） | `run`、`status`（读取 `state/status.json`）、`service install`、`version` | 核心 crate |
+| `cordis`（核心） | `run`、`status`（读取 `state/status.json`）、`service install`、`service uninstall`、`version` | 核心 crate |
 | `cordis-dev`（开发工具） | `new`、`new-plugin`、`idl gen`、`verify`、`pack` | `wit-parser` 等工具依赖，不进入核心的依赖树 |
 
 1. `cordis` 收到自己不认识的子命令时，执行与它同目录的 `cordis-dev`（其次为 `PATH` 中的 `cordis-dev`），参数原样传递，退出码原样返回。使用者照常写 `cordis new`、`cordis pack`。核心中只有这段转交逻辑，不含任何工具的代码；找不到 `cordis-dev` 时报告“该命令由开发工具 cordis-dev 提供，当前未安装”。
@@ -201,6 +201,8 @@ group = "math"          # 同组插件装进同一个 cordis-host 进程
 | 环节 | 做法 |
 |---|---|
 | 拉起核心 | 由操作系统的服务管理器负责：macOS 的 launchd（`KeepAlive`），Linux 的 systemd（`Restart=always`）。`cordis` 随附两者的配置模板，由 `cordis service install` 生成 |
+| 安装位置 | 安装后的服务须在注销、重启后仍然生效。macOS 写入 `~/Library/LaunchAgents/<名称>.plist`（root 时为 `/Library/LaunchDaemons`）再执行 `launchctl bootstrap`；从其他目录 bootstrap 的任务只存在到注销为止，不满足要求。Linux 写入或链接到 systemd 用户单元目录并 `enable --now`。`--output` 指定其他位置时只生成文件，供检查与测试使用。plist 设置 `ThrottleInterval`，使核心崩溃后的重新拉起不受 launchd 默认 10 秒节流的限制（`RM-10`） |
+| 卸载 | `cordis service uninstall --name <名称>` 停止服务（launchd `bootout`；systemd `disable --now`），删除安装位置中的配置文件，并报告实际删除的路径。服务不存在时返回错误，不改动其他文件 |
 | 清理插件进程 | 核心的标准输入输出随进程消失，插件进程按 `CP-10` 自行退出；`CP-7` 的进程组保证没有遗漏 |
 | 恢复插件 | 核心重启后按 `cordis.toml` 重新装载全部插件 |
 | 恢复状态 | 持久化数据在插件的数据目录中，不受影响；内存状态从最近一次检查点（`CP-11`）继承，最多丢失一个检查点间隔内的变化 |
@@ -516,7 +518,8 @@ my-project/
 | `cordis new <项目名>` | `cordis-dev` | 生成上述目录骨架与 `cordis.toml`（含 `watch` 插件条目，§3.3） |
 | `cordis new-plugin <名称> [--rust\|--python\|--ts] [--web]` | `cordis-dev` | 在 `plugins/` 下生成插件模板。语言选项生成后端部分，`--web` 生成前端部分；两者都给时生成全栈插件，只给 `--web` 时生成前端插件 |
 | `cordis run` | 核心 | 在项目目录中运行；插件重新编译后由 `watch` 插件触发热替换 |
-| `cordis service install` | 核心 | 生成并安装 launchd 或 systemd 配置（§5.1） |
+| `cordis service install` | 核心 | 生成并安装 launchd 或 systemd 配置，注销与重启后仍生效（§5.1） |
+| `cordis service uninstall` | 核心 | 停止并移除 `service install` 安装的服务（§5.1） |
 | `cordis idl gen`、`cordis verify`、`cordis pack` | `cordis-dev` | 代码生成（§7）、验证门、发布打包（§12.2） |
 
 `cordis.toml` 的 `requires_core` 高于当前核心版本时，核心拒绝启动并报告所需版本。模板与 `M15` skill 中的模板为同一份文件。

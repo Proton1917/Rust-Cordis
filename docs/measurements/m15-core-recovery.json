@@ -1,0 +1,16 @@
+{
+  "RM-10_ms": 1038,
+  "inherited_value": 73,
+  "launchd_target": "gui/501/com.cordis.acceptance.19550",
+  "new_initial_value": 29,
+  "previous_core": 20021,
+  "previous_plugins": [
+    20026
+  ],
+  "restored_core": 20028,
+  "restored_plugins": [
+    20034
+  ],
+  "scenario": "AU-11",
+  "service_removed": true
+}

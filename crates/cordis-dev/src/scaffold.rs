@@ -6,7 +6,8 @@ use toml::{Table, Value};
 
 const REPOSITORY: &str = "https://github.com/Proton1917/Rust-Cordis.git";
 const SDK_REVISION: &str = env!("CORDIS_SOURCE_REVISION");
-const PLUGIN: &str = include_str!("../templates/plugin.rs");
+const PLUGIN: &str = include_str!("../../../skills/cordis-plugin/templates/plugin.rs");
+const PLUGIN_MANIFEST: &str = include_str!("../../../skills/cordis-plugin/templates/plugin.toml");
 const WATCH: &str = include_str!("../../../plugins/watch/src/lib.rs");
 
 /// DOC-15 §12.1：目标目录由本次命令创建，固定 SDK 来源供全部插件共用。
@@ -172,21 +173,6 @@ fn write_new(path: &Path, content: &str) -> Result<()> {
         .write_all(content.as_bytes())?;
     Ok(())
 }
-
-const PLUGIN_MANIFEST: &str = r#"[package]
-name = "plugin"
-version = "0.1.0"
-edition = "2024"
-rust-version = "1.85"
-publish = false
-license = "MIT"
-
-[lib]
-crate-type = ["cdylib"]
-
-[dependencies]
-cordis-sdk.workspace = true
-"#;
 
 const CONFIGURATION: &str = r#"requires_core = ">=0.1.0,<0.2.0"
 

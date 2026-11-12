@@ -46,7 +46,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   - 通用插口：任何语言的进程插件（首先 Python、TypeScript）。
   - 前端插件也走通用插口（`ADR-0023`、`DOC-15` §11）：浏览器页面是网页宿主 `cordis-web`，不含内核；`http` 插件终结 WebSocket，经转发通道把每个页面作为独立连接交给核心，核心不监听网络。每个页面一个 realm，页面上的每个前端组件在核心中有一个子实例。原生与进程插件可带 `[web]` 段成为全栈插件，`socket = "web"` 为纯前端插件。
 - **核心之外一切皆插件**（`ADR-0024`、`DOC-15` §3.1–§3.3、§11.6）：
-  - 核心 `cordis` 只含 `run`、`status`、`service install`、`version`。开发工具在独立程序 `cordis-dev` 中（`new`、`new-plugin`、`idl gen`、`verify`、`pack`），由 `cordis` 转交未知子命令。
+  - 核心 `cordis` 只含 `run`、`status`、`service install`/`uninstall`、`version`。开发工具在独立程序 `cordis-dev` 中（`new`、`new-plugin`、`idl gen`、`verify`、`pack`），由 `cordis` 转交未知子命令。
   - 运行中的装载、替换、回滚由持有授权的插件经 `cordis.manage@1` 请求。授权只写在 `cordis.toml` 的 `grants` 中，变更写入叠加层 `state/instances.toml`。
   - 核心不监视目录，由 `watch` 插件触发热替换。桌面窗口是进程插件 `plugins/window`（macOS 主线程约束）。
 - **空间组合对插件开放**（`ADR-0025`、`DOC-15` §6.4）：`isolate`、`intercept`、子组件装入经 `UP/1` 的 `context_derive`、`plugin` 与 `cordis.toml` 的 `isolate`/`intercept` 提供；拦截元数据经 `scoped` 提供方的 `cordis.scope` 视图对象送达，不改 ABI 对象入口。`bail`、`waterfall` 只用于核心内部。

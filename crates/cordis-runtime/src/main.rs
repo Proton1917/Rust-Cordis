@@ -23,6 +23,12 @@ async fn main() {
             println!("{}", path.display());
             0
         }),
+        Some(Action::Service {
+            action: ServiceAction::Uninstall(options),
+        }) => cli::uninstall(options).map(|path| {
+            println!("已删除 {}", path.display());
+            0
+        }),
         Some(Action::Developer(arguments)) => cli::forward(&arguments),
     };
     match result {
