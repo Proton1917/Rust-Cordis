@@ -1,6 +1,6 @@
 use crate::{
-    AbiBytes, AbiFuture, AbiOption, AbiState, AbiStr, AbiUnit, Buf, Environment, Error, Object,
-    RemoteFuture, Result,
+    AbiBytes, AbiContext, AbiFuture, AbiOption, AbiState, AbiStr, AbiUnit, Buf, Environment, Error,
+    Object, RemoteFuture, Result,
 };
 
 #[derive(Clone, Debug)]
@@ -8,6 +8,11 @@ pub struct State {
     pub schema: String,
     pub version: u32,
     pub data: Vec<u8>,
+}
+
+pub struct DerivedContext {
+    pub context: u64,
+    pub lease: Object,
 }
 
 #[derive(Clone, Copy)]
@@ -99,11 +104,17 @@ impl HostClient {
             _ => Err(Error::new(2, "invalid ABI boolean")),
         }
     }
-    pub fn provide(self, ctx: u64, interface: &str, value: Object) -> Result<()> {
+    pub fn provide(self, ctx: u64, interface: &str, value: Object, scoped: bool) -> Result<()> {
         // SAFETY: DOC-12 §5、§9，接口对象及租约转交宿主。
         unsafe {
             self.env.call_unit(|err| {
-                (self.env.raw_host().provide)(ctx, AbiStr::new(interface), value.into_raw(), err)
+                (self.env.raw_host().provide)(
+                    ctx,
+                    AbiStr::new(interface),
+                    value.into_raw(),
+                    u8::from(scoped),
+                    err,
+                )
             })
         }
     }
@@ -274,6 +285,38 @@ impl HostClient {
             self.env
                 .call_unit(|err| (self.env.raw_host().effect_release)(effect, err))
         }
+    }
+
+    pub fn context_derive(self, context: u64, options: &[u8]) -> Result<DerivedContext> {
+        // SAFETY: DOC-12 §9，参数借用覆盖调用，成功输出上下文及一份视图租约。
+        let result: AbiContext = unsafe {
+            self.env.call(|out, err| {
+                (self.env.raw_host().context_derive)(context, AbiBytes::new(options), out, err)
+            })
+        }?;
+        // SAFETY: DOC-12 §5、§9，成功返回的lease携带独立拥有引用及其既有租约。
+        let lease = unsafe { Object::from_raw(result.lease, self.env) };
+        Ok(DerivedContext {
+            context: result.context,
+            lease,
+        })
+    }
+
+    pub fn plugin(self, context: u64, component: &str, config: &[u8]) -> Result<RemoteFuture<u64>> {
+        // SAFETY: DOC-12 §8、§9，入口复制配置并返回输出实例编号的Future。
+        let future = unsafe {
+            self.env.call(|out, err| {
+                (self.env.raw_host().plugin)(
+                    context,
+                    AbiStr::new(component),
+                    AbiBytes::new(config),
+                    out,
+                    err,
+                )
+            })
+        }?;
+        // SAFETY: DOC-12 §8、§9，plugin的结果布局为u64，Future及租约转入。
+        Ok(unsafe { RemoteFuture::from_raw(future, self.env) })
     }
     fn future(self, raw: AbiFuture) -> RemoteFuture<AbiUnit> {
         // SAFETY: DOC-12 §8、§9，调用本辅助函数的Host方法均产生单位结果。

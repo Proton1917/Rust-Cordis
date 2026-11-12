@@ -13,7 +13,7 @@ pub trait Backend: Send + Sync + 'static {
     fn defer(&self, scope: u64, cleanup: Object) -> Result<()>;
     fn defer_async(&self, scope: u64, cleanup: Object) -> Result<()>;
     fn is_current(&self, ctx: u64) -> Result<bool>;
-    fn provide(&self, ctx: u64, interface: &str, value: Object) -> Result<()>;
+    fn provide(&self, ctx: u64, interface: &str, value: Object, scoped: bool) -> Result<()>;
     fn get(&self, ctx: u64, interface: &str) -> Result<Object>;
     fn on(&self, ctx: u64, event: &str, listener: Object) -> Result<()>;
     fn emit(&self, ctx: u64, event: &str, payload: &[u8]) -> Result<()>;
@@ -30,6 +30,8 @@ pub trait Backend: Send + Sync + 'static {
     fn object_import(&self, id: u64) -> Result<Object>;
     fn object_release(&self, id: u64) -> Result<()>;
     fn effect_release(&self, effect: u64) -> Result<()>;
+    fn context_derive(&self, context: u64, options: &[u8]) -> Result<DerivedContext>;
+    fn plugin(&self, context: u64, component: &str, config: &[u8]) -> Result<RemoteFuture<u64>>;
 }
 
 static BACKEND: OnceLock<Arc<dyn Backend>> = OnceLock::new();
@@ -90,9 +92,10 @@ host_call!(defer_async(scope: u64, cleanup: AbiObject), {
     backend().defer_async(scope, cleanup)
 });
 host_call!(is_current(ctx: u64) -> u8, { backend().is_current(ctx).map(u8::from) });
-host_call!(provide(ctx: u64, interface: AbiStr, value: AbiObject), {
+host_call!(provide(ctx: u64, interface: AbiStr, value: AbiObject, scoped: u8), {
     let value = Object::from_raw(value, environment(0));
-    backend().provide(ctx, interface.as_str()?, value)
+    let scoped = match scoped { 0 => false, 1 => true, _ => return Err(Error::new(2, "scoped标志需要为0或1")) };
+    backend().provide(ctx, interface.as_str()?, value, scoped)
 });
 host_call!(get(ctx: u64, interface: AbiStr) -> AbiObject, { backend().get(ctx, interface.as_str()?).map(Object::into_raw) });
 host_call!(on(ctx: u64, event: AbiStr, listener: AbiObject), {
@@ -134,6 +137,13 @@ host_call!(object_export(object: AbiObject) -> u64, {
 host_call!(object_import(id: u64) -> AbiObject, { backend().object_import(id).map(Object::into_raw) });
 host_call!(object_release(id: u64), { backend().object_release(id) });
 host_call!(effect_release(effect: u64), { backend().effect_release(effect) });
+host_call!(context_derive(context: u64, options: AbiBytes) -> AbiContext, {
+    let result = backend().context_derive(context, options.as_slice())?;
+    Ok(AbiContext { context: result.context, lease: result.lease.into_raw() })
+});
+host_call!(plugin(context: u64, component: AbiStr, config: AbiBytes) -> AbiFuture, {
+    backend().plugin(context, component.as_str()?, config.as_slice()).map(RemoteFuture::into_raw)
+});
 
 static HOST: HostV1 = HostV1 {
     size: std::mem::size_of::<HostV1>() as u64,
@@ -163,6 +173,8 @@ static HOST: HostV1 = HostV1 {
     object_import,
     object_release,
     effect_release,
+    context_derive,
+    plugin,
 };
 
 pub struct LoadedPlugin {

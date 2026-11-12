@@ -9,12 +9,14 @@ struct Arithmetic;
 impl Handler for Arithmetic {
     fn request(
         &self,
-        _: Connection,
+        peer: Connection,
         method: String,
         params: Payload,
     ) -> HandlerFuture<'_, Result<Outgoing, WireError>> {
         Box::pin(async move {
             match method.as_str() {
+                "close" => Ok(Outgoing::new(Value::Null)
+                    .after_write(move || peer.terminate("response delivered"))),
                 "bytes" => {
                     let length = usize::try_from(
                         params
@@ -52,6 +54,51 @@ impl Handler for Arithmetic {
     ) -> HandlerFuture<'_, Result<(), WireError>> {
         Box::pin(async { Err(WireError::new(3, "unknown notification")) })
     }
+}
+
+// 自管理操作的关闭动作在完整响应写出之后执行。
+#[tokio::test]
+async fn after_write_runs_after_the_complete_response() {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let (mut client, server) = tokio::io::duplex(64);
+    let (read, write) = tokio::io::split(server);
+    let connection = Connection::attach(
+        1,
+        read,
+        write,
+        ConnectionOptions::default(),
+        Arc::new(Arithmetic),
+    )
+    .unwrap();
+    let request = cordis_up::encode(
+        &cordis_up::Message::Request {
+            id: 1,
+            method: "close".into(),
+            params: Value::Null,
+        },
+        &cordis_up::Limits::default(),
+    )
+    .unwrap();
+    client
+        .write_all(&(request.len() as u32).to_be_bytes())
+        .await
+        .unwrap();
+    client.write_all(&request).await.unwrap();
+    let mut response = Vec::new();
+    tokio::time::timeout(Duration::from_secs(3), client.read_to_end(&mut response))
+        .await
+        .unwrap()
+        .unwrap();
+    let length = u32::from_be_bytes(response[..4].try_into().unwrap()) as usize;
+    assert_eq!(response.len(), length + 4);
+    assert!(matches!(
+        cordis_up::decode(&response[4..], &cordis_up::Limits::default()).unwrap(),
+        cordis_up::Message::Response {
+            id: 1,
+            result: Ok(Value::Null)
+        }
+    ));
+    assert!(!connection.is_alive());
 }
 
 // CP-2、CP-3：本地编码容量错误保持接收连接，响应错误也通过同一条真实字节管道报告。

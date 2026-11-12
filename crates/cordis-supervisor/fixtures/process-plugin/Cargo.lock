@@ -57,10 +57,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "cordis-types"
+version = "0.1.0"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "cordis-up"
 version = "0.1.0"
 dependencies = [
  "ciborium",
+ "cordis-types",
  "parking_lot",
  "serde",
  "thiserror",

@@ -16,7 +16,9 @@
 | `crates/cordis` | 第一阶段内核及 K-1–K-5 |
 | `crates/cordis-testkit` | 确定性执行器 |
 | `crates/cordis-up` | UP/1 消息类型、受限 CBOR 编解码与帧协议 |
+| `crates/cordis-types` | 内置接口的纯 serde 数据类型，MSRV 1.85（ADR-0028） |
 | `crates/cordis-supervisor` | 核心侧进程监管、对象路由、截止时间、背压与故障回收 |
+| `crates/cordis-process` | 共享的安全进程执行、组回收与受限探测；开发工具与监管器复用 |
 | `crates/cordis-runtime` | 核心可执行文件 cordis：运行、状态、检查点、管理接口与服务安装 |
 | `crates/cordis-dev` | 独立开发工具：脚手架、验证、打包与代码生成，通过 cordis-host 读取原生描述符 |
 | `crates/cordis-host` | 原生插件宿主程序：分组装载、ABI 适配、租约、组内替换、UP/1 桥 |
@@ -36,12 +38,13 @@
 
 | 使用方 | 项目内产品依赖 |
 |---|---|
-| cordis-runtime | cordis、cordis-supervisor、cordis-up |
-| cordis-supervisor | cordis、cordis-up |
-| cordis-host | cordis-up、cordis-abi、cordis-sdk |
-| cordis-dev | cordis-up 的协议数据；通过子进程使用 cordis、cordis-host |
+| cordis-runtime | cordis、cordis-supervisor、cordis-up、cordis-types |
+| cordis-supervisor | cordis、cordis-up、cordis-process、cordis-types |
+| cordis-process | cordis-up |
+| cordis-host | cordis-up、cordis-abi、cordis-types |
+| cordis-dev | cordis-up、cordis-process、cordis-types；通过子进程使用 cordis、cordis-host |
 | 原生插件、契约辅助与原生 fixture | cordis-sdk；接口 crate |
-| cordis-sdk | cordis-abi、cordis-sdk-macros |
+| cordis-sdk | cordis-abi、cordis-sdk-macros、cordis-types |
 
 核心与插件宿主通过 UP/1 通信。Q0 要求核心进程的依赖树与 ABI、SDK 分离，内置接口以 UP/1 数据协议提供；宿主负责转换为原生对象（ADR-0017、ADR-0018）。
 
@@ -55,14 +58,18 @@
 | `cordis-abi` | 2500 | 3000（ADR-0022） |
 | `cordis-sdk` | 2000 | 3500 |
 | `cordis-sdk-macros` | 1200 | 2000 |
+| `cordis-types` | 200 | 400 |
+| `cordis-process` | 400 | 700（ADR-0029） |
 | `cordis-up` | 1500 | 2500 |
-| `cordis-supervisor` | 3500 | 4500（ADR-0026） |
+| `cordis-supervisor` | 4500 | 5500（ADR-0030） |
 | `cordis-host` | 2000 | 3500 |
 | `cordis-runtime` | 1500 | 2500 |
 | `cordis-dev` | 1500 | 2500 |
 | `cordis-contract` | 500 | 1000 |
 
-超出目标时在 `docs/PROGRESS.md` 记录原因；超出上限需要写 ADR。
+目标与上限统计 `src/` 中的 Rust 代码行，排除空行、普通注释与文档注释；同一行同时有代码与注释时计为代码行。`docs/PROGRESS.md` 同时报告“代码行 / 总行”并记录统计工具与算法。
+
+超过目标时在 `docs/PROGRESS.md` 记录原因。通过职责拆分、去重和复用调整实现，保持标准格式、必要注释与完整功能；调整后代码行仍超过上限时写 ADR，继续推进，由设计方复核。全部模块与关键函数使用文档注释说明负责步骤、前置条件和失败处理，并引用相应条款。约 60 行以上的函数按实际步骤拆分。
 
 ## 2 内核改动
 
@@ -225,8 +232,8 @@ pub trait Kv: Send + Sync {
 | `ciborium` | CBOR 编解码（`ADR-0010`） | `cordis-abi`、`cordis-sdk`、`cordis-host`、`cordis-up` |
 | `libloading` | 打开动态库 | `cordis-host` |
 | `tokio` | 执行器、计时、双向消息与子进程 I/O | `cordis-runtime`、`cordis-supervisor`、`cordis-host`、`cordis-up` |
-| `nix` | 安全的 POSIX 进程组信号接口（ADR-0021） | `cordis-supervisor` |
-| `rustix` | 安全的 waitid 状态观察与待回收子进程管理（ADR-0027） | `cordis-supervisor` |
+| `nix` | 安全的 POSIX 进程组信号接口（ADR-0021） | `cordis-process` |
+| `rustix` | 安全的 waitid 状态观察与待回收子进程管理（ADR-0027） | `cordis-process` |
 | `libfuzzer-sys` | CP-9 输入模糊测试（ADR-0021） | 独立 fuzz 工作区的开发构建 |
 | `notify` | 目录监视 | `plugins/watch` |
 | `toml` | 解析 `cordis.toml` | `cordis-runtime` |

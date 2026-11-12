@@ -6,22 +6,24 @@ mod model;
 mod service;
 
 pub use context::{Context, Effect, EffectScope};
-pub use cordis_abi::{Error, Result, decode, encode};
+pub use cordis_abi::{CborValue, Error, Result, decode, encode};
+pub use cordis_types::{Interception, Isolation};
+pub type ContextOptions = cordis_types::ContextOptions<CborValue>;
 pub use cordis_sdk_macros::{event, export_plugin, interface};
 pub use model::{
     AsyncEvent, BoxFuture, Component, Dependency, EmptyConfig, Event, Frozen, Inject, Listens,
     Provides, StateBlob, StateSchema, SyncEvent,
 };
-pub use service::{Interface, Proxy, Service};
+pub use service::{Interface, Scoped, Service};
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const BUILD_INFO: &str = concat!(env!("CORDIS_RUSTC"), " ", env!("CORDIS_TARGET"));
 
 pub mod prelude {
     pub use crate::{
-        AsyncEvent, BoxFuture, Component, Context, Effect, EffectScope, EmptyConfig, Error, Event,
-        Frozen, Inject, Interface, Listens, Provides, Result, Service, StateBlob, StateSchema,
-        SyncEvent,
+        AsyncEvent, BoxFuture, CborValue, Component, Context, ContextOptions, Effect, EffectScope,
+        EmptyConfig, Error, Event, Frozen, Inject, Interception, Interface, Isolation, Listens,
+        Provides, Result, Scoped, Service, StateBlob, StateSchema, SyncEvent,
     };
     pub use std::sync::Arc;
 }

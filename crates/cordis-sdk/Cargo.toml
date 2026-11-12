@@ -9,6 +9,7 @@ license.workspace = true
 [dependencies]
 cordis-abi.workspace = true
 cordis-sdk-macros.workspace = true
+cordis-types.workspace = true
 serde.workspace = true
 
 [dev-dependencies]

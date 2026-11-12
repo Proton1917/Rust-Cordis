@@ -1,4 +1,7 @@
-use crate::{AsyncEvent, Error, Frozen, Interface, Result, Service, StateBlob, SyncEvent};
+use crate::{
+    AsyncEvent, Component, ContextOptions, Error, Frozen, Interception, Interface, Isolation,
+    Result, Scoped, Service, StateBlob, SyncEvent,
+};
 use cordis_abi::{
     AbiUnit, Environment, async_callback, make_future, state_exporter, sync_callback,
 };
@@ -13,6 +16,7 @@ use std::time::Duration;
 pub struct Context {
     environment: Environment,
     handle: u64,
+    _lease: Option<Arc<cordis_abi::Object>>,
 }
 
 impl Context {
@@ -21,6 +25,65 @@ impl Context {
         Self {
             environment,
             handle,
+            _lease: None,
+        }
+    }
+
+    pub fn derive(&self, options: &ContextOptions) -> Result<Self> {
+        let derived = self
+            .environment
+            .host()
+            .context_derive(self.handle, &crate::encode(options)?)?;
+        Ok(Self {
+            environment: self.environment,
+            handle: derived.context,
+            _lease: Some(Arc::new(derived.lease)),
+        })
+    }
+
+    pub fn isolate<I: Interface + ?Sized>(&self, realm: Option<&str>) -> Result<Self> {
+        self.derive(&ContextOptions {
+            isolate: vec![Isolation {
+                interface: I::INTERFACE.into(),
+                realm: realm.map(str::to_owned),
+            }],
+            intercept: Vec::new(),
+        })
+    }
+
+    pub fn intercept<I: Interface + ?Sized, M: Serialize>(&self, metadata: &M) -> Result<Self> {
+        self.derive(&ContextOptions {
+            isolate: Vec::new(),
+            intercept: vec![Interception {
+                interface: I::INTERFACE.into(),
+                meta: cordis_abi::to_value(metadata)?,
+            }],
+        })
+    }
+
+    pub async fn plugin<C: Component>(&self, config: &C::Config) -> Result<u64>
+    where
+        C::Config: Serialize,
+    {
+        self.plugin_named(C::NAME, config).await
+    }
+
+    pub async fn plugin_named<C: Serialize + ?Sized>(
+        &self,
+        component: &str,
+        config: &C,
+    ) -> Result<u64> {
+        self.environment
+            .host()
+            .plugin(self.handle, component, &crate::encode(config)?)?
+            .await
+    }
+
+    fn callback_context(&self, context: u64) -> Result<Self> {
+        if context == self.handle {
+            Ok(self.clone())
+        } else {
+            Err(Error::new(2, "回调上下文与登记视图不一致"))
         }
     }
 
@@ -75,9 +138,10 @@ impl Context {
         F: FnOnce(Context) -> Result<()> + Send + 'static,
     {
         let environment = self.environment;
+        let retained = self.clone();
         let body = Mutex::new(Some(body));
         let callback = sync_callback(environment, move |ctx, _, _| {
-            take_once(&body)?(Context::new(environment, ctx))
+            take_once(&body)?(retained.callback_context(ctx)?)
         })?;
         environment.host().spawn_thread(self.handle, name, callback)
     }
@@ -87,10 +151,11 @@ impl Context {
         F: FnOnce(EffectScope) -> Result<()> + Send + 'static,
     {
         let environment = self.environment;
+        let retained = self.clone();
         let body = Mutex::new(Some(body));
         let callback = sync_callback(environment, move |ctx, scope, _| {
             take_once(&body)?(EffectScope {
-                context: Context::new(environment, ctx),
+                context: retained.callback_context(ctx)?,
                 handle: scope,
             })
         })?;
@@ -104,12 +169,14 @@ impl Context {
         Fut: Future<Output = Result<()>> + Send + 'static,
     {
         let environment = self.environment;
+        let retained = self.clone();
         let body = Mutex::new(Some(body));
         let callback = async_callback(environment, move |ctx, scope, _| {
             let body = take_once(&body);
+            let context = retained.callback_context(ctx);
             async move {
                 body?(EffectScope {
-                    context: Context::new(environment, ctx),
+                    context: context?,
                     handle: scope,
                 })
                 .await
@@ -125,7 +192,14 @@ impl Context {
         let object = I::object(value, self.environment)?;
         self.environment
             .host()
-            .provide(self.handle, I::INTERFACE, object)
+            .provide(self.handle, I::INTERFACE, object, false)
+    }
+
+    pub fn provide_scoped<I: Interface + ?Sized>(&self, value: Scoped<I>) -> Result<()> {
+        let object = I::scoped_object(value.value, value.scope, self.environment)?;
+        self.environment
+            .host()
+            .provide(self.handle, I::INTERFACE, object, true)
     }
 
     pub fn get<I: Interface + ?Sized>(&self) -> Result<Service<I>> {

@@ -1,3 +1,5 @@
+//! DOC-16 §4/§5：双向请求包络与拥有独立编号空间的响应关联。
+//! 方法参数保留CBOR资源标签；错误详情限定为普通诊断数据。
 use crate::Value;
 use serde::{Deserialize, Serialize};
 
@@ -23,6 +25,7 @@ pub enum Message {
     },
 }
 
+/// DOC-12 §6、DOC-16 §4：跨连接传递错误，代码与消息保持调用边界语义。
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, thiserror::Error)]
 #[error("{message} (code {code})")]
 #[serde(deny_unknown_fields)]

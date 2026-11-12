@@ -1,0 +1,15 @@
+[package]
+name = "cordis-host-driver"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.96"
+publish = false
+
+[workspace]
+
+[dependencies]
+cordis = { path = "../../../cordis" }
+cordis-up = { path = "../../../cordis-up" }
+cordis-supervisor = { path = "../../../cordis-supervisor" }
+tokio = { version = "=1.54.1", features = ["rt-multi-thread", "macros", "time", "sync"] }
+clap = { version = "=4.6.7", features = ["derive"] }

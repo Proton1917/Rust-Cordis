@@ -1,7 +1,7 @@
 use crate::{
-    AbiBuf, AbiBytes, AbiError, AbiObject, AbiStatus, AbiStr, AbiUnit, AsyncCall, Buf, Environment,
-    Error, Invoke, InvokeAsync, InvokeFuture, OBJECT_TYPED_METHODS, ObjectHeader, RemoteFuture,
-    Result, SyncCall, boundary, error::release_boundary,
+    AbiBuf, AbiBytes, AbiError, AbiObject, AbiStatus, AbiStr, AbiUnit, AsyncCall, Buf, CborValue,
+    Environment, Error, Invoke, InvokeAsync, InvokeFuture, OBJECT_TYPED_METHODS, ObjectHeader,
+    RemoteFuture, Result, SyncCall, boundary, error::release_boundary,
 };
 use std::{ffi::c_void, mem::size_of, sync::Arc};
 
@@ -9,6 +9,7 @@ use std::{ffi::c_void, mem::size_of, sync::Arc};
 struct ObjectPrefix {
     env: Environment,
     vtable: *const ObjectHeader,
+    scope: Option<ScopeFactory>,
 }
 #[repr(C)]
 struct ObjectData<T: ?Sized> {
@@ -20,6 +21,8 @@ pub struct Object {
     raw: Option<AbiObject>,
     env: Environment,
 }
+
+pub type ScopeFactory = Arc<dyn Fn(CborValue) -> Result<Object> + Send + Sync>;
 
 // SAFETY: DOC-12 §2、§7，接口实现及回调支持跨线程，Object持有库租约。
 unsafe impl Send for Object {}
@@ -76,9 +79,33 @@ impl Object {
         vtable: *const ObjectHeader,
         env: Environment,
     ) -> Result<Self> {
+        // SAFETY: DOC-12 §7，类型与完整虚表的关联继承调用者契约。
+        unsafe { Self::create(value, vtable, env, None) }
+    }
+
+    /// # Safety
+    /// DOC-12 §7：vtable满足new的类型与完整范围契约；scope在原对象库内生成视图。
+    // SAFETY: DOC-12 §7，作用域工厂及其捕获由对象和库租约共同持有。
+    pub unsafe fn new_scoped<T: ?Sized + Send + Sync + 'static>(
+        value: Arc<T>,
+        vtable: *const ObjectHeader,
+        env: Environment,
+        scope: ScopeFactory,
+    ) -> Result<Self> {
+        // SAFETY: DOC-12 §7，工厂与原对象共享源侧生命周期。
+        unsafe { Self::create(value, vtable, env, Some(scope)) }
+    }
+
+    // SAFETY: DOC-12 §7，调用入口确认T、虚表及可选工厂来自同一源侧实现。
+    unsafe fn create<T: ?Sized + Send + Sync + 'static>(
+        value: Arc<T>,
+        vtable: *const ObjectHeader,
+        env: Environment,
+        scope: Option<ScopeFactory>,
+    ) -> Result<Self> {
         env.acquire(env.library())?;
         let data = Box::new(ObjectData {
-            prefix: ObjectPrefix { env, vtable },
+            prefix: ObjectPrefix { env, vtable, scope },
             value,
         });
         Ok(Self {
@@ -300,6 +327,18 @@ pub unsafe fn object_environment(data: *mut c_void) -> Environment {
     unsafe { (*data.cast::<ObjectPrefix>()).env }
 }
 
+/// # Safety
+/// DOC-12 §7：data由本crate创建，调用期由拥有对象保持有效。
+// SAFETY: DOC-12 §7，工厂从对象公共前缀取得，用户代码由调用方的ABI边界捕获panic。
+pub unsafe fn object_scope(data: *mut c_void, metadata: CborValue) -> Result<Object> {
+    // SAFETY: DOC-12 §7，公共前缀与对象保持同一生命周期。
+    let scope = unsafe { &*data.cast::<ObjectPrefix>() }
+        .scope
+        .clone()
+        .ok_or_else(|| Error::new(3, "对象提供普通接口"))?;
+    scope(metadata)
+}
+
 // SAFETY: DOC-12 §7，vtable把本蹦床与ObjectData<T>配套。
 unsafe extern "C" fn clone_object<T: ?Sized + Send + Sync + 'static>(
     data: *mut c_void,
@@ -311,10 +350,11 @@ unsafe extern "C" fn clone_object<T: ?Sized + Send + Sync + 'static>(
     // SAFETY: DOC-12 §5、§7，输出槽有效，保留匹配T的完整虚表原始指针。
     unsafe {
         boundary(source.prefix.env, out, err, || {
-            Object::new(
+            Object::create(
                 source.value.clone(),
                 source.prefix.vtable,
                 source.prefix.env,
+                source.prefix.scope.clone(),
             )
             .map(Object::into_raw)
         })

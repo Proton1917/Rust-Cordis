@@ -1,8 +1,13 @@
+//! DOC-16 §5–§9、DOC-15 §6.4：核心与执行宿主共用的方法数据。
+//! 资源所有权由根refs声明；应用值与持久状态放在对应子字段中。
 use crate::{CodecError, Value};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
 pub const OBJECT_TAG: u64 = 60000;
+pub use cordis_types::Isolation;
+pub type Interception = cordis_types::Interception<Value>;
+pub type ContextOptions = cordis_types::ContextOptions<Value>;
 
 /// 资源值使用CBOR应用标签，普通业务整数继续按整数编码。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -62,6 +67,7 @@ pub fn payload_refs(value: &Value) -> Result<Vec<u64>, CodecError> {
 }
 
 /// 状态与诊断保存普通数据，运行时对象在新上下文中通过get取得。
+/// DOC-11 §5、DOC-16 §6：状态与诊断以普通数据保存，资源由新上下文重新取得。
 pub fn persistent_value(value: &Value) -> Result<(), CodecError> {
     let mut pending = vec![value];
     while let Some(value) = pending.pop() {
@@ -195,6 +201,8 @@ pub struct Provide {
     pub interface: String,
     pub object: u64,
     pub methods: Vec<String>,
+    #[serde(default)]
+    pub scoped: bool,
     pub refs: Vec<u64>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -311,4 +319,49 @@ pub struct Log {
     pub context: u64,
     pub level: u32,
     pub message: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ContextDerive {
+    pub context: u64,
+    #[serde(default)]
+    pub isolate: Vec<Isolation>,
+    #[serde(default)]
+    pub intercept: Vec<Interception>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+/// ADR-0025、DOC-16 §8：返回派生视图编号及其独立资源租约。
+pub struct ContextDerived {
+    pub context: u64,
+    pub object: u64,
+    pub refs: Vec<u64>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+/// DOC-15 §6.4：子组件名称在调用方插件的当前描述符内解析。
+pub struct PluginRequest {
+    pub context: u64,
+    pub component: String,
+    pub config: Value,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct PluginResult {
+    pub instance: u64,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct LibraryStatus {
+    pub libraries: Vec<cordis_types::LibraryInfo>,
+    pub retired_images: u64,
+}
+
+/// DOC-11 SW-9：候选确认后的清理错误携带该次事务的提交事实，运行时据此持久化部署。
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ReplacementFailure {
+    pub group: String,
+    pub plugin: Option<String>,
+    pub committed: bool,
+    pub cause: Value,
 }

@@ -2,8 +2,8 @@ use cordis::{Clock, Context, FiberState, Spawn, Task};
 use cordis_supervisor::{
     PeerOptions,
     manager::{
-        Arguments, CallContext, GroupSpec, InstanceSpec, LocalService, Manager, ManagerOptions,
-        RestartPolicy,
+        Arguments, CallContext, GroupSpec, InstanceSpec, LocalReply, LocalService, Manager,
+        ManagerOptions, RestartPolicy,
     },
 };
 use cordis_up::{
@@ -115,7 +115,7 @@ impl LocalService for Control {
         context: &'a CallContext,
         method: &'a str,
         args: &'a Arguments,
-    ) -> HandlerFuture<'a, Result<Value, WireError>> {
+    ) -> HandlerFuture<'a, Result<LocalReply, WireError>> {
         Box::pin(async move {
             let (phase, value) = match method {
                 "ready" => {
@@ -146,7 +146,7 @@ impl LocalService for Control {
                 at: Instant::now(),
             });
             self.changed.send_modify(|revision| *revision += 1);
-            Ok(Value::Null)
+            Ok(Value::Null.into())
         })
     }
 }
@@ -238,6 +238,18 @@ async fn setup(options: ManagerOptions) -> (Manager, Arc<Control>) {
     (manager, control)
 }
 async fn invoke(ready: &Ready, method: &str, args: Vec<Value>) -> Value {
+    try_invoke(ready, method, args)
+        .await
+        .unwrap_or_else(|error| {
+            panic!(
+                "invoke {method}, context {}, connection {}: {error:?}",
+                ready.context,
+                ready.object.peer().id()
+            )
+        })
+}
+
+async fn try_invoke(ready: &Ready, method: &str, args: Vec<Value>) -> Result<Value, WireError> {
     let result = ready
         .object
         .peer()
@@ -251,19 +263,55 @@ async fn invoke(ready: &Ready, method: &str, args: Vec<Value>) -> Value {
             }),
             Duration::from_secs(10),
         )
-        .await
-        .unwrap_or_else(|error| {
-            panic!(
-                "invoke {method}, context {}, connection {}: {error:?}",
-                ready.context,
-                ready.object.peer().id()
-            )
-        });
-    result
+        .await?;
+    Ok(result
         .value()
         .deserialized::<payload::InvokeResult>()
         .unwrap()
-        .value
+        .value)
+}
+
+async fn core_call<T: serde::Serialize>(ready: &Ready, method: &str, params: &T) -> Value {
+    invoke(ready, "core", vec![method.into(), encoded(params)]).await
+}
+
+async fn derive(
+    ready: &Ready,
+    context: u64,
+    options: payload::ContextOptions,
+) -> payload::ContextDerived {
+    core_call(
+        ready,
+        "context_derive",
+        &payload::ContextDerive {
+            context,
+            isolate: options.isolate,
+            intercept: options.intercept,
+        },
+    )
+    .await
+    .deserialized()
+    .unwrap()
+}
+
+async fn context_retired(ready: &Ready, context: u64) {
+    tokio::time::timeout(Duration::from_secs(3), async {
+        loop {
+            match try_invoke(
+                ready,
+                "core",
+                vec!["config".into(), encoded(&payload::Context { context })],
+            )
+            .await
+            {
+                Err(problem) if problem.code == 4 => break,
+                Err(problem) => panic!("unexpected context error: {problem}"),
+                Ok(_) => tokio::task::yield_now().await,
+            }
+        }
+    })
+    .await
+    .expect("context retirement notification");
 }
 async fn until(duration: Duration, condition: impl Fn() -> bool) {
     tokio::time::timeout(duration, async {
@@ -690,6 +738,380 @@ async fn registration_and_metadata_quotas_recover_after_cleanup() {
             .unwrap()
             .code,
         8
+    );
+    manager.shutdown().await.unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn derived_scopes_cache_actual_binding_and_own_child_lifetime() {
+    let (manager, control) = setup(options()).await;
+    manager
+        .attach_group(group("subject", "v1", "manager-fixture", no_restart()))
+        .await
+        .unwrap();
+    let mut config = configuration(10);
+    config
+        .as_map_mut()
+        .unwrap()
+        .push(("scoped".into(), true.into()));
+    manager
+        .mount(
+            instance("b", "subject", "manager-fixture", "b", config),
+            None,
+        )
+        .await
+        .unwrap()
+        .settled()
+        .await
+        .unwrap();
+    manager
+        .mount(
+            instance("a", "subject", "manager-fixture", "a", configuration(10)),
+            None,
+        )
+        .await
+        .unwrap()
+        .settled()
+        .await
+        .unwrap();
+    let provider = control.ready_after("b", 0).await;
+    let consumer = control.ready_after("a", 0).await;
+    let first = derive(
+        &consumer,
+        consumer.context,
+        payload::ContextOptions {
+            isolate: vec![payload::Isolation {
+                interface: "fixture.independent@1".into(),
+                realm: None,
+            }],
+            intercept: vec![payload::Interception {
+                interface: "fixture.counter@1".into(),
+                meta: Value::Map(vec![
+                    ("prefix".into(), "old".into()),
+                    ("limit".into(), 3u64.into()),
+                ]),
+            }],
+        },
+    )
+    .await;
+    let nested = derive(
+        &consumer,
+        first.context,
+        payload::ContextOptions {
+            isolate: Vec::new(),
+            intercept: vec![payload::Interception {
+                interface: "fixture.counter@1.0".into(),
+                meta: Value::Map(vec![("prefix".into(), "new".into())]),
+            }],
+        },
+    )
+    .await;
+    let first_get: payload::GetResult = core_call(
+        &consumer,
+        "get",
+        &payload::Get {
+            context: nested.context,
+            interface: "fixture.counter@1.0".into(),
+        },
+    )
+    .await
+    .deserialized()
+    .unwrap();
+    let second_get: payload::GetResult = core_call(
+        &consumer,
+        "get",
+        &payload::Get {
+            context: nested.context,
+            interface: "fixture.counter@1.0".into(),
+        },
+    )
+    .await
+    .deserialized()
+    .unwrap();
+    assert_eq!(
+        first_get.local.as_ref().unwrap().object,
+        second_get.local.as_ref().unwrap().object
+    );
+    let result: payload::InvokeResult = core_call(
+        &consumer,
+        "invoke",
+        &payload::Invoke {
+            object: first_get.object,
+            method: "meta".into(),
+            args: Vec::new(),
+            refs: Vec::new(),
+        },
+    )
+    .await
+    .deserialized()
+    .unwrap();
+    assert_eq!(
+        result.value,
+        Value::Map(vec![
+            ("prefix".into(), "new".into()),
+            ("limit".into(), 3u64.into())
+        ])
+    );
+    let result: payload::PluginResult = core_call(
+        &consumer,
+        "plugin",
+        &payload::PluginRequest {
+            context: nested.context,
+            component: "independent".into(),
+            config: configuration(42),
+        },
+    )
+    .await
+    .deserialized()
+    .unwrap();
+    let child_name = format!("a/independent:{}", result.instance);
+    let child = control.ready_after(&child_name, 0).await;
+    assert_eq!(integer(&invoke(&child, "get", Vec::new()).await), 42);
+    invoke(&consumer, "release-object", vec![nested.object.into()]).await;
+    invoke(&consumer, "release-object", vec![first.object.into()]).await;
+    assert!(
+        core_call(
+            &consumer,
+            "is_current",
+            &payload::Context {
+                context: nested.context
+            }
+        )
+        .await
+        .as_bool()
+        .unwrap()
+    );
+    manager.dispose("a").await.unwrap();
+    context_retired(&provider, nested.context).await;
+    assert_eq!(
+        try_invoke(&child, "get", Vec::new())
+            .await
+            .unwrap_err()
+            .code,
+        4
+    );
+    manager.shutdown().await.unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn named_realms_share_bindings_and_separate_other_instances() {
+    let (manager, control) = setup(options()).await;
+    manager
+        .attach_group(group("subject", "v1", "manager-fixture", no_restart()))
+        .await
+        .unwrap();
+    let view = |name: &str| {
+        manager
+            .derive_context(
+                &manager.context(),
+                &payload::ContextOptions {
+                    isolate: vec![payload::Isolation {
+                        interface: "fixture.counter@1".into(),
+                        realm: Some(name.into()),
+                    }],
+                    intercept: Vec::new(),
+                },
+            )
+            .unwrap()
+    };
+    manager
+        .mount_in(
+            view("blue"),
+            instance(
+                "b-blue",
+                "subject",
+                "manager-fixture",
+                "b",
+                configuration(11),
+            ),
+            None,
+        )
+        .await
+        .unwrap()
+        .settled()
+        .await
+        .unwrap();
+    manager
+        .mount_in(
+            view("green"),
+            instance(
+                "b-green",
+                "subject",
+                "manager-fixture",
+                "b",
+                configuration(22),
+            ),
+            None,
+        )
+        .await
+        .unwrap()
+        .settled()
+        .await
+        .unwrap();
+    manager
+        .mount_in(
+            view("blue"),
+            instance("a", "subject", "manager-fixture", "a", configuration(0)),
+            None,
+        )
+        .await
+        .unwrap()
+        .settled()
+        .await
+        .unwrap();
+    let consumer = control.ready_after("a", 0).await;
+    assert_eq!(integer(&invoke(&consumer, "get", Vec::new()).await), 11);
+    let before = consumer.context;
+    manager.dispose("b-green").await.unwrap();
+    assert_eq!(
+        manager
+            .snapshot()
+            .instances
+            .iter()
+            .find(|instance| instance.name == "a")
+            .unwrap()
+            .context,
+        Some(before)
+    );
+    manager.shutdown().await.unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn released_view_registration_recycles_and_effect_keeps_its_context() {
+    let (manager, control) = setup(ManagerOptions {
+        max_registrations_per_context: 8,
+        ..options()
+    })
+    .await;
+    manager
+        .attach_group(group("subject", "v1", "manager-fixture", no_restart()))
+        .await
+        .unwrap();
+    manager
+        .mount(
+            instance("b", "subject", "manager-fixture", "b", configuration(10)),
+            None,
+        )
+        .await
+        .unwrap()
+        .settled()
+        .await
+        .unwrap();
+    let ready = control.ready_after("b", 0).await;
+    for _ in 0..3 {
+        let view = derive(&ready, ready.context, payload::ContextOptions::default()).await;
+        invoke(&ready, "release-object", vec![view.object.into()]).await;
+        context_retired(&ready, view.context).await;
+    }
+    let view = derive(&ready, ready.context, payload::ContextOptions::default()).await;
+    let effect: payload::EffectHandle = invoke(&ready, "view-effect", vec![view.context.into()])
+        .await
+        .deserialized()
+        .unwrap();
+    invoke(&ready, "release-object", vec![view.object.into()]).await;
+    assert!(
+        core_call(
+            &ready,
+            "is_current",
+            &payload::Context {
+                context: view.context
+            }
+        )
+        .await
+        .as_bool()
+        .unwrap()
+    );
+    core_call(&ready, "effect_dispose", &effect).await;
+    core_call(&ready, "effect_release", &effect).await;
+    context_retired(&ready, view.context).await;
+    manager.shutdown().await.unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn selected_checkpoint_detach_and_shutdown_freeze_use_real_process_state() {
+    let (manager, control) = setup(options()).await;
+    let subject = manager
+        .attach_group(group(
+            "subject",
+            "v1",
+            "manager-fixture",
+            RestartPolicy::default(),
+        ))
+        .await
+        .unwrap();
+    manager
+        .attach_group(group("other", "v1", "other-plugin", no_restart()))
+        .await
+        .unwrap();
+    manager
+        .mount(
+            instance("b", "subject", "manager-fixture", "b", configuration(10)),
+            None,
+        )
+        .await
+        .unwrap()
+        .settled()
+        .await
+        .unwrap();
+    manager
+        .mount(
+            instance(
+                "independent",
+                "other",
+                "other-plugin",
+                "independent",
+                configuration(40),
+            ),
+            None,
+        )
+        .await
+        .unwrap()
+        .settled()
+        .await
+        .unwrap();
+    let provider = control.ready_after("b", 0).await;
+    let independent = control.ready_after("independent", 0).await;
+    let states = manager.checkpoint_instances(&["b".into()]).await.unwrap();
+    assert_eq!(states.keys().collect::<Vec<_>>(), vec!["b"]);
+    assert_eq!(integer(&states["b"].data), 10);
+    assert_eq!(
+        integer(&invoke(&provider, "add", vec![2u64.into()]).await),
+        12
+    );
+    manager.detach_group("subject").await.unwrap();
+    assert!(
+        manager
+            .snapshot()
+            .groups
+            .iter()
+            .all(|group| group.name != "subject")
+    );
+    assert!(
+        manager
+            .snapshot()
+            .instances
+            .iter()
+            .all(|instance| instance.name != "b")
+    );
+    assert_eq!(
+        nix::sys::signal::kill(
+            nix::unistd::Pid::from_raw(subject.pid.unwrap() as i32),
+            None
+        ),
+        Err(nix::errno::Errno::ESRCH)
+    );
+    assert_eq!(
+        integer(&invoke(&independent, "add", vec![2u64.into()]).await),
+        42
+    );
+    let states = manager.export_shutdown().await.unwrap();
+    assert_eq!(integer(&states["independent"].data), 42);
+    assert_eq!(
+        try_invoke(&independent, "add", vec![1u64.into()])
+            .await
+            .unwrap_err()
+            .code,
+        4
     );
     manager.shutdown().await.unwrap();
 }

@@ -29,6 +29,6 @@ pub use generic::{
     decode_arguments, decode_value, from_value, generic_object, make_invoke_future, option_some,
     option_take, to_value,
 };
-pub use host::{HostClient, State};
-pub use object::{Object, object_arc, object_data, object_environment};
+pub use host::{DerivedContext, HostClient, State};
+pub use object::{Object, ScopeFactory, object_arc, object_data, object_environment, object_scope};
 pub use raw::*;

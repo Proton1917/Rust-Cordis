@@ -426,28 +426,18 @@ pub fn expand(identity: Identity, mut item: ItemTrait) -> syn::Result<TokenStrea
 
         #[doc(hidden)]
         #[doc = "DOC-12 §7、§11：对象所有者保持服务实现、虚表及其库租约，直到最后一份代理引用释放。"]
-        #visibility struct #proxy { object: ::cordis_sdk::__private::abi::Object }
+        #visibility struct #proxy { object: ::std::sync::Arc<::cordis_sdk::__private::abi::Object> }
 
         impl #name for #proxy { #(#proxy_methods)* }
-
-        impl AsRef<dyn #name> for #proxy {
-            fn as_ref(&self) -> &(dyn #name + 'static) { self }
-        }
-
-        impl ::cordis_sdk::Proxy<dyn #name> for #proxy {
-            fn object(&self) -> &::cordis_sdk::__private::abi::Object { &self.object }
-        }
 
         impl ::cordis_sdk::Interface for dyn #name {
             const INTERFACE: &'static str = #full_name;
             const MAJOR: u32 = #major;
             const MINOR: u32 = #minor;
             const METHOD_COUNT: usize = #method_count;
-            type Proxy = #proxy;
-
-            fn proxy(object: ::cordis_sdk::__private::abi::Object) -> ::cordis_sdk::Result<Self::Proxy> {
+            fn proxy(object: ::std::sync::Arc<::cordis_sdk::__private::abi::Object>) -> ::cordis_sdk::Result<::std::sync::Arc<Self>> {
                 ::cordis_sdk::__private::check_interface(&object, #full_name)?;
-                Ok(#proxy { object })
+                Ok(::std::sync::Arc::new(#proxy { object }))
             }
 
             #[doc = "DOC-12 §7：生成实现把接口值与完整静态虚表配对，虚表指针保留全部方法槽的有效范围。"]
@@ -460,6 +450,24 @@ pub fn expand(identity: Identity, mut item: ItemTrait) -> syn::Result<TokenStrea
                         value,
                         ::std::ptr::from_ref(&#module::VTABLE).cast::<::cordis_sdk::__private::abi::ObjectHeader>(),
                         environment,
+                    )
+                }
+            }
+
+            #[doc = "DOC-12 §7：原对象保留类型化表，作用域工厂在同一库中构造类型化视图对象。"]
+            fn scoped_object(
+                value: ::std::sync::Arc<Self>,
+                scope: ::std::sync::Arc<dyn Fn(::cordis_sdk::__private::abi::CborValue) -> ::cordis_sdk::Result<::std::sync::Arc<Self>> + Send + Sync>,
+                environment: ::cordis_sdk::__private::abi::Environment,
+            ) -> ::cordis_sdk::Result<::cordis_sdk::__private::abi::Object> {
+                let factory = ::std::sync::Arc::new(move |metadata| Self::object(scope(metadata)?, environment));
+                // SAFETY: DOC-12 §7，完整作用域虚表与Arc<dyn当前接口>配套，工厂同属源侧库。
+                unsafe {
+                    ::cordis_sdk::__private::abi::Object::new_scoped(
+                        value,
+                        ::std::ptr::from_ref(&#module::SCOPED_VTABLE).cast::<::cordis_sdk::__private::abi::ObjectHeader>(),
+                        environment,
+                        factory,
                     )
                 }
             }
@@ -485,9 +493,39 @@ pub fn expand(identity: Identity, mut item: ItemTrait) -> syn::Result<TokenStrea
                 #(#fields,)*
             };
 
+            pub(super) static SCOPED_VTABLE: VTable = VTable {
+                header: ::cordis_sdk::__private::abi::ObjectHeader::for_type::<dyn #name>(
+                    ::std::mem::size_of::<VTable>(), 1, #full_name,
+                ).with_dispatch(&SCOPED_METHODS, invoke, invoke_async),
+                #(#fields,)*
+            };
+
             static METHODS: [::cordis_sdk::__private::abi::AbiStr; #method_count] = [
                 #(::cordis_sdk::__private::abi::AbiStr::new(#method_names)),*
             ];
+            static SCOPED_METHODS: [::cordis_sdk::__private::abi::AbiStr; #method_count + 1] = [
+                #(::cordis_sdk::__private::abi::AbiStr::new(#method_names),)*
+                ::cordis_sdk::__private::abi::AbiStr::new("cordis.scope"),
+            ];
+
+            #[doc = "# Safety"]
+            #[doc = "DOC-12 §7：data来自本接口对象，args借用覆盖当前调用；返回视图的资源引用由结果缓冲拥有。"]
+            // SAFETY: DOC-12 §7，保留方法读取源侧作用域工厂并编码拥有视图。
+            unsafe fn bind_scope(__cordis_data: *mut ::std::ffi::c_void, args: ::cordis_sdk::__private::abi::AbiBytes)
+                -> ::cordis_sdk::Result<::cordis_sdk::__private::abi::Buf>
+            {
+                // SAFETY: DOC-12 §5，args在当前入口期间保持有效。
+                let values = ::cordis_sdk::__private::abi::decode_arguments(unsafe { args.as_slice() })?;
+                let [metadata]: [::cordis_sdk::__private::abi::CborValue; 1] = values.try_into()
+                    .map_err(|_| ::cordis_sdk::Error::new(2, "cordis.scope需要一个元数据参数"))?;
+                // SAFETY: DOC-12 §7，数据前缀及其工厂由当前对象保持有效。
+                let environment = unsafe { ::cordis_sdk::__private::abi::object_environment(__cordis_data) };
+                // SAFETY: DOC-12 §7，工厂调用仍处于invoke的panic边界内。
+                let object = unsafe { ::cordis_sdk::__private::abi::object_scope(__cordis_data, metadata) }?;
+                let mut encoder = ::cordis_sdk::__private::abi::CborEncoder::new(environment);
+                let value = encoder.export(object)?;
+                encoder.finish(value)
+            }
 
             #[doc = "# Safety"]
             #[doc = "DOC-12 §5、§7.3：data 来自本接口的对象，method 与 args 覆盖调用期，out 和 err 为有效输出槽；参数资源在返回前导入，结果缓冲持有所导出的资源引用。"]
@@ -504,6 +542,10 @@ pub fn expand(identity: Identity, mut item: ItemTrait) -> syn::Result<TokenStrea
                 let operation = || {
                     // SAFETY: DOC-12 §5，方法名称借用覆盖当前入口调用。
                     match unsafe { __cordis_method.as_str() }? {
+                        "cordis.scope" => {
+                            // SAFETY: DOC-12 §7，当前通用入口持有对象和调用期参数。
+                            unsafe { bind_scope(__cordis_data, __cordis_args) }.map(::cordis_sdk::__private::abi::Buf::into_raw)
+                        }
                         #(#synchronous)*
                         _ => Err(::cordis_sdk::Error::new(3, "接口方法不存在")),
                     }
@@ -527,6 +569,12 @@ pub fn expand(identity: Identity, mut item: ItemTrait) -> syn::Result<TokenStrea
                 let operation = || {
                     // SAFETY: DOC-12 §5，方法名称借用覆盖当前入口调用。
                     match unsafe { __cordis_method.as_str() }? {
+                        "cordis.scope" => {
+                            // SAFETY: DOC-12 §7，视图在返回Future前完成绑定，结果缓冲保留其资源引用。
+                            let result = unsafe { bind_scope(__cordis_data, __cordis_args) }?;
+                            ::cordis_sdk::__private::abi::make_invoke_future(async move { Ok(result) }, __cordis_environment)
+                                .map(::cordis_sdk::__private::abi::InvokeFuture::into_raw)
+                        }
                         #(#asynchronous)*
                         _ => Err(::cordis_sdk::Error::new(3, "接口方法不存在")),
                     }

@@ -1,3 +1,5 @@
+//! DOC-15 CP-4、CP-6：监管配置、部署记录、失败报告与接口版本的边界表示。
+
 use super::{Result, error};
 use crate::PeerOptions;
 use cordis_up::{Value, payload};
@@ -40,6 +42,7 @@ pub struct ManagerOptions {
     pub invoke_timeout: Duration,
     pub swap_timeout: Duration,
     pub confirm: Duration,
+    pub retired_image_limit: u64,
 }
 
 impl Default for ManagerOptions {
@@ -56,6 +59,7 @@ impl Default for ManagerOptions {
             invoke_timeout: Duration::from_secs(30),
             swap_timeout: Duration::from_secs(30),
             confirm: Duration::from_secs(10),
+            retired_image_limit: 20,
         }
     }
 }
@@ -83,63 +87,12 @@ impl From<&cordis_up::WireError> for Failure {
     }
 }
 
-#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
-pub enum LogOrigin {
-    Protocol,
-    Stderr,
-}
-#[derive(Clone, Debug, Serialize)]
-pub struct LogRecord {
-    pub origin: LogOrigin,
-    pub connection: u64,
-    pub context: u64,
-    pub instance: String,
-    pub level: u32,
-    pub message: String,
-}
+pub use cordis_types::{LogOrigin, LogRecord};
 pub type LogSink = std::sync::Arc<dyn Fn(LogRecord) + Send + Sync>;
-
-#[derive(Clone, Debug, Serialize)]
-pub struct GroupSnapshot {
-    pub name: String,
-    pub connection: Option<u64>,
-    pub pid: Option<u32>,
-    pub state: String,
-    pub restarts: u32,
-    pub plugins: Vec<payload::Plugin>,
-    pub error: Option<Failure>,
-}
-
-#[derive(Clone, Debug, Serialize)]
-pub struct InstanceSnapshot {
-    pub name: String,
-    pub group: String,
-    pub plugin: String,
-    pub component: String,
-    pub state: String,
-    pub context: Option<u64>,
-    pub revision: Option<u64>,
-    pub bindings: Vec<u64>,
-    pub error: Option<Failure>,
-}
-
-#[derive(Clone, Debug, Serialize)]
-pub struct ReplaceReport {
-    pub group: String,
-    pub previous_connection: u64,
-    pub candidate_connection: u64,
-    pub affected_instances: usize,
-    pub succeeded: bool,
-    pub rolled_back: bool,
-    pub failure: Option<Failure>,
-}
-
-#[derive(Clone, Debug, Serialize)]
-pub struct Snapshot {
-    pub groups: Vec<GroupSnapshot>,
-    pub instances: Vec<InstanceSnapshot>,
-    pub last_replace: Vec<ReplaceReport>,
-}
+pub type GroupSnapshot = cordis_types::GroupInfo<payload::Plugin, Failure>;
+pub type InstanceSnapshot = cordis_types::InstanceInfo<Failure>;
+pub type ReplaceReport = cordis_types::GroupReplaceReport<Failure>;
+pub type Snapshot = cordis_types::ProcessSnapshot<payload::Plugin, Failure>;
 
 #[derive(Clone, Debug)]
 pub(super) struct Interface {
@@ -149,6 +102,19 @@ pub(super) struct Interface {
 }
 
 impl Interface {
+    pub fn key(name: &str) -> Result<String> {
+        let version = name
+            .rsplit_once('@')
+            .ok_or_else(|| error(2, "接口需要名称和版本"))?
+            .1;
+        if version.contains('.') {
+            Self::parse(name).map(|interface| interface.key)
+        } else {
+            Self::parse(&format!("{name}.0")).map(|interface| interface.key)
+        }
+    }
+
+    /// DOC-11 §3：解析接口名和主次版本，格式错误在描述符或请求边界返回。
     pub fn parse(full: &str) -> Result<Self> {
         let (name, version) = full
             .rsplit_once('@')

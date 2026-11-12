@@ -7,11 +7,14 @@ members = [
     "crates/cordis-sdk-macros",
     "crates/cordis-up",
     "crates/cordis-supervisor",
+    "crates/cordis-types",
+    "crates/cordis-process",
+    "crates/cordis-host",
     "plugins/kv-api",
     "plugins/kv-mem",
     "plugins/counter",
 ]
-exclude = ["target/tmp", "crates/cordis-up/fuzz", "crates/cordis-supervisor/fixtures/process-plugin", "crates/cordis-supervisor/fixtures/manager-plugin"]
+exclude = ["target/tmp", "crates/cordis-up/fuzz", "crates/cordis-supervisor/fixtures/process-plugin", "crates/cordis-supervisor/fixtures/manager-plugin", "crates/cordis-host/tests/fixtures", "crates/cordis-host/tests/driver"]
 resolver = "3"
 
 [workspace.package]
@@ -41,6 +44,8 @@ cordis-abi = { path = "crates/cordis-abi" }
 cordis-sdk = { path = "crates/cordis-sdk" }
 cordis-sdk-macros = { path = "crates/cordis-sdk-macros" }
 cordis-up = { path = "crates/cordis-up" }
+cordis-types = { path = "crates/cordis-types" }
+cordis-process = { path = "crates/cordis-process" }
 kv-api = { path = "plugins/kv-api" }
 kv-mem = { path = "plugins/kv-mem" }
 counter = { path = "plugins/counter" }

@@ -10,10 +10,13 @@ license.workspace = true
 [dependencies]
 cordis.workspace = true
 cordis-up.workspace = true
+cordis-types.workspace = true
+cordis-process.workspace = true
 tokio = { workspace = true, features = ["process", "io-util", "signal"] }
-nix.workspace = true
-rustix.workspace = true
 serde.workspace = true
 parking_lot.workspace = true
 futures-util.workspace = true
 semver.workspace = true
+
+[dev-dependencies]
+nix.workspace = true

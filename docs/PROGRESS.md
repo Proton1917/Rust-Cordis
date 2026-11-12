@@ -6,11 +6,11 @@
 
 | 项 | 值 |
 |---|---|
-| 最近完成的里程碑 | `M10` |
-| 进行中的里程碑 | 第二阶段 M11 |
-| 下一步 | 接入 cordis-host；完成组内库替换、资源型参数、任务/线程与进程故障验证；按 ADR-0025 实现派生上下文、Scoped 与子组件；通过 M11 退出条件后冻结 ABI |
+| 最近完成的里程碑 | `M11` |
+| 进行中的里程碑 | 第二阶段 M12 |
+| 下一步 | 接入 cordis-runtime、cordis-dev 与 watch；完成原生部署、管理叠加层、原快照回滚、检查点与三项产品解析器 fuzz 验收 |
 | 阻塞项 | 无；用户已恢复执行 |
-| 最后更新 | 2026-11-12（Asia/Shanghai），M10 验收 |
+| 最后更新 | 2026-11-12（Asia/Shanghai），M11 验收 |
 
 ## 环境
 
@@ -19,7 +19,7 @@
 | Rust 工具链 | 1.96.0 stable，`aarch64-apple-darwin` | 2026-11-11 `rustc --version` |
 | Miri 工具链 | nightly 1.102.0-nightly（3ef0c22cd 2026-11-11）；miri 与 rust-src 已安装 | M8 的 12 条边界行为与布局比较通过；sysroot 位于 target/miri-sysroot |
 | `UPSTREAM` | `cordis/`，commit `261c5fdae6edb54e7ed4f071024f530acd18903b` | 2026-11-11 `git -C cordis log -1` |
-| Python | `conda run -n base python`（仅用于 `tools/conformance.py`） | 项目约定 |
+| Python | `conda run -n base python`，执行项目辅助检查 | 项目约定 |
 | 依赖版本 | slotmap 1.1.1；parking_lot 0.13.0；futures-core / futures-util 0.3.34；thiserror 2.0.21；serde 1.0.229；serde_json 1.0.154；tokio 1.54.1 | M0：逐项 `cargo search <crate> --limit 1`；workspace 固定版本，按模块调用引入 crate |
 | 硬件 | Apple Silicon；14 个逻辑处理器；48 GiB 内存 | `sysctl -n hw.memsize hw.logicalcpu` |
 
@@ -244,6 +244,38 @@
 - 真实行为：核心统一决定依赖与清理顺序；事件回调可通过同连接调用服务；失败替换恢复旧状态；取消等待保持事务完成；SIGKILL 后撤回服务并继承最近快照；五次指数退避后停止重启；额度释放后继续登记。前端转发与派生组合按 DOC-15 保留对应阶段范围。
 - 资源回收：ADR-0027 使用安全 waitid 的 NOWAIT 观察，单一任务在保有 PID 时发送组信号，再由 Child.wait 唯一回收。自然退出、SIGKILL 及存活后代清理均通过；僵尸组 EPERM 在回收后以只读组查询确认为空。
 - 遗留：M11 基础宿主候选及 M12 前置解析候选继续按下表接入，构建缓存保留。
+
+### M11 原生插件宿主、组合接口与热替换
+
+- commit：本节所在的 `M11: 实现原生宿主与组合热替换并冻结 ABI` 提交。
+- Y-1：`cargo fmt --all --check` 通过；Host 的安全注释位置修正后由 rustfmt 格式化对应文件。
+- Y-2：`cargo clippy --workspace --all-targets -- -D warnings` 通过，11.92 秒；随后补充提交事实边界，受影响的 supervisor 定向 clippy 通过，2.06 秒。
+- Y-3：242 条运行测试与 2 条文档测试通过。首轮工作区测试通过内核与 ABI 的 213 条运行测试后，在 Host 安全注释位置审计处失败；修正后审计 1 条通过，其余工作区包的 28 条运行测试和内核 2 条文档测试全部通过，复用前段有效结果。命令与完整输出分别在 target/m11-tests.log、target/m11-audit.log、target/m11-tests-remaining.log、target/m11-doc-tests.log。`cargo build --workspace` 通过，1.80 秒。
+- 原生验收：正式 `crates/cordis-host/tests/native.rs` 自行构建 fixtures 与 Rust 1.85 使用方，55.04 秒通过 13 个真实场景：同组 typed 与跨组通用调用 100→102、两种分组中的 Scoped/隔离/子组件、8 线程换库与状态 137、失败回滚/不兼容拒绝、旧租约归零、固定 21 次阈值重启，以及服务 panic、apply panic、abort、真实内存段错误、栈溢出、进程退出、死循环隔离。致命故障后的依赖方转 Pending，其他分组纪元保持。
+- Y-4：`conda run -n base python tools/conformance.py check --through M6` 通过，177 条处置保持 8 条移植、166 条改写、3 条不适用。
+- Y-5：`conda run -n base python tools/unsafe_audit.py` 通过，0.43 秒。核心监管产品依赖与 ABI/SDK 分离；Host 产品依赖与内核分离，记录在 target/m11-core-dependencies.txt 与 target/m11-host-dependencies.txt。
+- Y-6：`MIRI_SYSROOT="$PWD/target/miri-sysroot" TMPDIR="$PWD/target/tmp" cargo +nightly miri test -p cordis-abi` 通过，13 条边界行为 3.41 秒，布局比较 0.94 秒。
+- Y-7：AbiContext 与 28 槽 HostV1 的布局已生成，原生工作区与 Miri 中的布局比较通过；DOC-12 冻结为 v1.0。
+- Y-8：下表按 `conda run -n base python tools/source_lines.py` 统计。cloc 2.10 使用 Rust 注释规则，排除空行、普通注释与文档注释；代码和注释共行时归代码。参数 `--skip-uniqueness` 逐文件计数，`--sdir=target/tmp` 保持中间文件在工作区。supervisor 的组合、组内换库和原快照回滚接口经职责拆分后为 4562 代码行，按 ADR-0030 将目标/上限调整为 4500/5500，交设计方复核。UP/1 和 Host 高于各自目标，低于上限。
+- Y-9：DOC-12/13/16、ADR-0012/0026/0028–0030、README 和当前状态已同步；设计方新增项目规则随提交保存。
+- Y-10：提交主题 `M11: 实现原生宿主与组合热替换并冻结 ABI`，推送至 origin/main。
+- 设计细化：Service 使用共享接口对象与 ABI 对象，Rust 1.85 原始 Service 跨 await 场景及 watch 的自然 async 函数构建通过；运行时与 SDK 共用 cordis-types。cordis-process 统一进程组生命周期与受限子进程探测。
+- 生命周期观察点：按 T-LIF-8、S-FBR-12/13，父实例 dispose 完成时全部子实例已结束，私有域服务已撤回；顶层效应逆序启动并发清理。原生验收以实例完成与服务回收为判据。
+- 状态提交：手动恢复接口保存 SW-5 的原快照；替换错误的外层 committed 由核心事务独立持有，插件错误置于 cause，运行时据此维持已切换部署与持久化的一致性。
+- 遗留：M12 运行时、watch 与脚手架候选继续集成；构建缓存保留供后续里程碑使用。
+
+| crate | 代码行 / 总行 |
+|---|---:|
+| cordis | 4222 / 5101 |
+| cordis-abi | 2285 / 2700 |
+| cordis-host | 2345 / 2602 |
+| cordis-process | 374 / 410 |
+| cordis-sdk | 687 / 793 |
+| cordis-sdk-macros | 1179 / 1280 |
+| cordis-supervisor | 4562 / 4912 |
+| cordis-testkit | 161 / 181 |
+| cordis-types | 156 / 177 |
+| cordis-up | 1613 / 1752 |
 
 ## 第二阶段候选与恢复记录
 

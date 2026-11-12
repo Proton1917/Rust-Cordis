@@ -1,0 +1,25 @@
+[package]
+name = "loader-fixture"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[features]
+version2 = []
+apply-fails = []
+apply-panics = []
+method-panics = []
+incompatible = []
+export-fails = []
+resources = []
+scoped = []
+
+[dependencies]
+cordis-sdk.workspace = true
+loader-fixture-api.workspace = true
+serde.workspace = true
+nix = { version = "=0.31.3", features = ["signal"] }

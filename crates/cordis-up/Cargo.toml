@@ -9,6 +9,7 @@ license.workspace = true
 
 [dependencies]
 serde.workspace = true
+cordis-types.workspace = true
 ciborium.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["rt", "io-util", "sync", "time", "macros"] }

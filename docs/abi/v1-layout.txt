@@ -29,6 +29,9 @@ AbiObject size=24 align=8
   data=0
   vtable=8
   library=16
+AbiContext size=32 align=8
+  context=0
+  lease=8
 ObjectHeader size=88 align=8
   size=0
   kind=8
@@ -68,7 +71,7 @@ ExporterVTable size=104 align=8
   header=0
   export=88
   thaw=96
-HostV1 size=216 align=8
+HostV1 size=232 align=8
   size=0
   log=8
   now=16
@@ -96,6 +99,8 @@ HostV1 size=216 align=8
   object_import=192
   object_release=200
   effect_release=208
+  context_derive=216
+  plugin=224
 PluginV1 size=112 align=8
   size=0
   abi_major=8

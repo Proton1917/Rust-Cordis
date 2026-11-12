@@ -34,6 +34,7 @@ fn layout() -> String {
     record!(AbiError, code, message, detail);
     record!(AbiState, schema, version, reserved, data);
     record!(AbiObject, data, vtable, library);
+    record!(AbiContext, context, lease);
     record!(
         ObjectHeader,
         size,
@@ -83,7 +84,9 @@ fn layout() -> String {
         object_export,
         object_import,
         object_release,
-        effect_release
+        effect_release,
+        context_derive,
+        plugin
     );
     record!(
         PluginV1,

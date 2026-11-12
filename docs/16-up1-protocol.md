@@ -4,7 +4,7 @@
 |---|---|
 | 文档编号 | `DOC-16` |
 | 状态 | UP/1 候选规范（2026-11-12） |
-| 依据 | `DOC-15`；`ADR-0018`–`ADR-0024` |
+| 依据 | `DOC-15`；`ADR-0018`–`ADR-0025`、`ADR-0028` |
 | 实现 | `cordis-up` 的消息编解码与双向连接；`cordis-supervisor` 的进程监管和核心适配 |
 | 读者 | 核心、原生宿主、通用插件 SDK 与转发插件的实现者 |
 
@@ -92,6 +92,7 @@ CBOR 采用 RFC 8949 的类型。文本为 UTF-8；数组保持顺序；映射�
 | 6 | 截止时间到达 |
 | 7 | 调用被取消 |
 | 8 | 连接或上下文额度耗尽 |
+| 9 | 管理方法或来源路径的权限不足 |
 | 1000 及以上 | 接口定义的业务错误 |
 
 ## 5 编号与握手
@@ -101,7 +102,7 @@ CBOR 采用 RFC 8949 的类型。文本为 UTF-8；数组保持顺序；映射�
 | 请求 `id` | 每个请求发送端 | 两个方向分别单调分配；响应查找接收方自己发出的请求表 |
 | `process` | 核心 | 当前连接世代；进程重启或重新打开转发通道时分配新值 |
 | 实例身份 | 核心内核 | 替换期间保留实例身份，由配置实例名定位 |
-| `context` | 核心 | 每次 `apply` 单独分配，覆盖该次加载及其资源清理 |
+| `context` | 核心 | `apply` 分配基础视图，`context_derive` 分配派生视图；同一加载的全部视图共享纪元与清理过程 |
 | `scope` | 核心 | 一次效应体执行期间有效；清理和事件回调使用 `0` 表示该字段为空 |
 | `effect` | 核心 | 外部效应控制句柄；每条连接单调分配 |
 | 对象、回调、导出器 `object` | 出口表所在发送端 | 每条连接独立的单调出口编号，持有与释放规则见 §6 |
@@ -150,6 +151,14 @@ CBOR 采用 RFC 8949 的类型。文本为 UTF-8；数组保持顺序；映射�
 
 `is_current` 请求由核心读取目标状态。目标失效后返回 `false`，而上下文仍可完成清理。上下文退役后，访问返回 `code = 4`。`release_context` 的参数为 `{context: u64}`，方向为核心到宿主。宿主据此收束该上下文的事件通知任务并移除本地数据；请求式 `apply` 与清理按核心生命周期完成。
 
+`context_derive` 在已有视图上应用隔离域和拦截元数据。`isolate` 的每项为 `{interface: String, realm: Option<String>}`，名称相同的 `realm` 在一个核心中共享；`realm = null` 创建独立域。`intercept` 的每项为 `{interface: String, meta: Value}`，元数据为普通持久化值。两类接口名均接受 `<名称>@<主版本>` 和 `<名称>@<主版本>.<次版本>`，按主版本服务键解析。父层与当前层均为映射时，当前层逐字段覆盖同名键并保留其余父层键；其他值由当前层覆盖。
+
+派生成功返回 `ContextDerived`，其中 `object` 是 `cordis.context-view@1.0` 资源，方法表为空、`local = null`，通过 §6 的持有和 `release` 规则管理。服务、效应、监听器和子组件保留自己登记时的视图；最后持有者释放后回收相应记录。加载纪元结束时统一撤回各派生视图，外部资源随后访问返回 `code = 4`。回调中的 `context` 使用实际登记视图编号。
+
+`plugin` 从调用方当前加载所使用的插件描述符中选择组件，并使用同一原生库编号或通用插件连接执行。子组件通过调用方的上下文挂载，父效应负责完整清理。配置先经过该组件的 `resolve`，挂载成功返回核心分配的子实例编号。
+
+父实例的 `dispose` 完成时，全部子实例均已结束，私有域的服务与效应均已撤回。顶层效应沿 S-FBR-12、S-FBR-13 按逆序启动并发清理；实例完成以生命周期等待结果为观察点，单个父级回调属于其中一项效应。
+
 同组替换的依赖顺序由核心维持。A 注入同组 B 时，替换 B 先使核心中的 A 进入清理，A 的清理响应结束后 B 完成卸载；新 B 激活后，核心重新加载 A。A 再次 `get` 所得的本地位置指向新 B 的对象。宿主按照这些指令操作其资源表。
 
 ## 8 消息字段与结果
@@ -161,8 +170,10 @@ CBOR 采用 RFC 8949 的类型。文本为 UTF-8；数组保持顺序；映射�
 | `hello` | C→H request | `protocol: u32, process: u64, group: String` | `Describe` |
 | `resolve` | C→H request | `plugin, component: String, library: Option<u64>, config: Value` | `null` |
 | `apply` | C→H request | `plugin, component: String, library: Option<u64>, context: u64, config: Value, inherited: Option<State>` | `null` |
-| `provide` | H→C request | `context: u64, interface: String, object: u64, methods: Vec<String>, refs: Vec<u64>` | `null` |
+| `provide` | H→C request | `context: u64, interface: String, object: u64, methods: Vec<String>, scoped: bool, refs: Vec<u64>` | `null` |
 | `get` | H→C request | `context: u64, interface: String` | `GetResult` |
+| `context_derive` | H→C request | `context: u64, isolate: Vec<Isolation>, intercept: Vec<Interception>` | `ContextDerived` |
+| `plugin` | H→C request | `context: u64, component: String, config: Value` | `{instance: u64}` |
 | `object_info` | 双向 request | `object: u64` | `ObjectInfo` |
 | `invoke` | 双向 request | `object: u64, method: String, args: Vec<Value>, refs: Vec<u64>` | `InvokeResult` |
 | `effect` | H→C request | `context: u64, label: String, body: u64, asynchronous: bool, refs: Vec<u64>` | `{effect: u64}` |
@@ -195,8 +206,11 @@ CBOR 采用 RFC 8949 的类型。文本为 UTF-8；数组保持顺序；映射�
 | `InvokeResult` | `value: Value, refs: Vec<u64>` |
 | `ValueResult` | `value: Value`，承载配置或导出的普通状态值 |
 | `State` | `schema: String, version: u32, data: Value` |
+| `ContextDerived` | `context: u64, object: u64, refs: Vec<u64>` |
 
 `get` 按调用上下文的依赖声明和已提交视图选择服务，`refs` 包含返回对象持有权。`local.process` 为对象所在连接世代，`local.object` 为该宿主已有的出口记录。核心向同组原生调用方提供该位置，使其克隆本地 ABI 对象。`object_info` 查询已经持有的对象元数据，返回值保持借用性质。
+
+`provide.scoped` 缺省为 `false`。提供方声明 `scoped = true` 且使用方视图带有非空元数据时，核心向该提供对象调用 `cordis.scope(meta)`，结果为相同接口的资源对象。核心按使用方视图和实际服务绑定缓存该结果，并返回对象所在宿主的本地位置；同组原生调用继续使用类型化方法表。元数据为 `null` 或空映射时直接返回原对象。视图回收时释放缓存中的对象持有权。
 
 `invoke` 的原生接收端统一调用 `Object::invoke_async`，该入口同时执行接口定义中的同步与异步方法。
 
@@ -221,6 +235,8 @@ CBOR 采用 RFC 8949 的类型。文本为 UTF-8；数组保持顺序；映射�
 准备阶段装载指定副本并复制描述符，返回宿主分配的库编号。核心使用该编号执行候选的 `resolve`，完成兼容检查及状态准备后选择激活、实例替换或回滚。激活更新宿主的资源映射；实例与依赖状态由核心内核更新。
 
 退役结果报告实际租约数、库句柄关闭状态、静止耗时和累积旧映像数。核心根据报告、截止时间及 `DOC-15` 的分组策略决定后续操作。原生组的有状态重启由核心导出状态、建立新连接、继承状态并终止旧进程。
+
+替换报告的 `committed` 表示 SW-8 已确认候选且部署已切换，`succeeded` 表示后续清理也已完成。替换管理错误的 `detail` 由核心统一封装为 `{group, plugin: Option<String>, committed: bool, cause: Value}`；提交值由本次核心事务持有，插件诊断置于 `cause`。运行时据该次错误的提交事实发布部署叠加层，并把清理错误交回调用者。
 
 ## 10 截止时间、取消与退出
 

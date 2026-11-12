@@ -45,6 +45,7 @@ struct Config {
     apply_ms: u64,
     invalid: bool,
     metadata_size: usize,
+    scoped: bool,
     refs: Vec<u64>,
 }
 impl Default for Config {
@@ -55,6 +56,7 @@ impl Default for Config {
             apply_ms: 0,
             invalid: false,
             metadata_size: 0,
+            scoped: false,
             refs: Vec::new(),
         }
     }
@@ -120,9 +122,15 @@ struct Session {
     events: [AtomicU64; 2],
     cycles: AtomicU64,
     alive: AtomicBool,
+    retained: Mutex<HashMap<u64, RemoteObject>>,
 }
 
 enum Resource {
+    Scoped {
+        session: Weak<Session>,
+        interface: String,
+        meta: Value,
+    },
     Service {
         session: Weak<Session>,
         interface: String,
@@ -205,7 +213,18 @@ impl Shared {
     }
     fn methods(session: &Session) -> Vec<String> {
         let mut methods = [
-            "get", "add", "version", "observed", "events", "emit", "cycles", "quota",
+            "get",
+            "add",
+            "version",
+            "observed",
+            "events",
+            "emit",
+            "cycles",
+            "quota",
+            "core",
+            "release-object",
+            "view-effect",
+            "cordis.scope",
         ]
         .map(str::to_owned)
         .to_vec();
@@ -431,6 +450,7 @@ impl Shared {
             events: [AtomicU64::new(0), AtomicU64::new(0)],
             cycles: AtomicU64::new(0),
             alive: AtomicBool::new(true),
+            retained: Mutex::new(HashMap::new()),
         });
         self.contexts.lock().insert(session.id, session.clone());
         self.trace(&session, "apply-start", Value::Null).await?;
@@ -494,6 +514,7 @@ impl Shared {
                 interface: interface.into(),
                 object,
                 methods: Self::methods(&session),
+                scoped: session.config.scoped,
                 refs: vec![object],
             })?),
             Duration::from_secs(5),
@@ -635,6 +656,16 @@ impl Shared {
     }
     async fn invoke(self: &Arc<Self>, request: payload::Invoke) -> Result<Value> {
         let resource = self.object(request.object)?;
+        if let Resource::Scoped { session, meta, .. } = resource.as_ref() {
+            let session = session
+                .upgrade()
+                .ok_or_else(|| WireError::new(4, "scoped context retired"))?;
+            return match request.method.as_str() {
+                "meta" => Ok(meta.clone()),
+                "get" => Ok(session.counter.read()?.into()),
+                _ => Err(WireError::new(3, "unknown scoped method")),
+            };
+        }
         let Resource::Service { session, .. } = resource.as_ref() else {
             return Err(WireError::new(2, "object is not a service"));
         };
@@ -645,6 +676,48 @@ impl Shared {
             return Err(WireError::new(4, "service context retired"));
         }
         match request.method.as_str() {
+            "core" => {
+                let (method, params): (String, Value) = decode(&Value::Array(request.args))?;
+                let response = session
+                    .peer
+                    .request(&method, params, Duration::from_secs(5))
+                    .await?;
+                let retained = cordis_up::payload::payload_refs(response.value())
+                    .map_err(|problem| WireError::new(2, problem.to_string()))?
+                    .into_iter()
+                    .map(|id| response.import(id).map(|object| (id, object)))
+                    .collect::<Result<Vec<_>>>()?;
+                session.retained.lock().extend(retained);
+                Ok(response.value().clone())
+            }
+            "release-object" => {
+                let (id,): (u64,) = decode(&Value::Array(request.args))?;
+                let removed = session.retained.lock().remove(&id);
+                drop(removed);
+                Ok(Value::Null)
+            }
+            "view-effect" => {
+                let (context,): (u64,) = decode(&Value::Array(request.args))?;
+                let (body, offer) = self.offer(Resource::Body {
+                    session: session.clone(),
+                    cycle: true,
+                });
+                let response = session
+                    .peer
+                    .request(
+                        "effect",
+                        offer.outgoing(value(&payload::Effect {
+                            context,
+                            label: "derived-effect".into(),
+                            body,
+                            asynchronous: false,
+                            refs: vec![body],
+                        })?),
+                        Duration::from_secs(5),
+                    )
+                    .await?;
+                Ok(response.value().clone())
+            }
             "get" if session.role == "a" => {
                 let dependency = session
                     .dependency
@@ -781,22 +854,49 @@ impl Handler for Program {
                     shared.callback(decode(input.value())?).await?;
                     Value::Null
                 }
-                "invoke" => value(&payload::InvokeResult {
-                    value: shared.invoke(decode(input.value())?).await?,
-                    refs: Vec::new(),
-                })?,
+                "invoke" => {
+                    let request: payload::Invoke = decode(input.value())?;
+                    if request.method == "cordis.scope" {
+                        let resource = shared.object(request.object)?;
+                        let Resource::Service { session, interface } = resource.as_ref() else {
+                            return Err(WireError::new(2, "scoped provider required"));
+                        };
+                        let (meta,): (Value,) = decode(&Value::Array(request.args))?;
+                        let (object, offer) = shared.offer(Resource::Scoped {
+                            session: session.clone(),
+                            interface: interface.clone(),
+                            meta,
+                        });
+                        return Ok(offer.outgoing(value(&payload::InvokeResult {
+                            value: ObjectRef(object).into(),
+                            refs: vec![object],
+                        })?));
+                    }
+                    value(&payload::InvokeResult {
+                        value: shared.invoke(request).await?,
+                        refs: Vec::new(),
+                    })?
+                }
                 "object_info" => {
                     let request: payload::ObjectInfoRequest = decode(input.value())?;
                     let resource = shared.object(request.object)?;
-                    let Resource::Service { session, interface } = resource.as_ref() else {
-                        return Err(WireError::new(2, "service metadata required"));
+                    let (session, interface) = match resource.as_ref() {
+                        Resource::Service { session, interface }
+                        | Resource::Scoped {
+                            session, interface, ..
+                        } => (session, interface),
+                        _ => return Err(WireError::new(2, "service metadata required")),
                     };
                     let session = session
                         .upgrade()
                         .ok_or_else(|| WireError::new(4, "context retired"))?;
                     value(&payload::ObjectInfo {
                         interface: interface.clone(),
-                        methods: Shared::methods(&session),
+                        methods: if matches!(resource.as_ref(), Resource::Scoped { .. }) {
+                            vec!["get".into(), "meta".into()]
+                        } else {
+                            Shared::methods(&session)
+                        },
                         local: None,
                     })?
                 }

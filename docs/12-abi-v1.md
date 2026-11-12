@@ -3,7 +3,7 @@
 | 项 | 内容 |
 |---|---|
 | 文档编号 | `DOC-12` |
-| 状态 | 候选 v1.0（2026-11-12）；M11 的真实跨库测试通过后冻结，见 DOC-15 §6.2 |
+| 状态 | 已冻结 v1.0（2026-11-12）；M11 真实跨库、Rust 1.85、组合接口与故障隔离验收通过 |
 | 读者 | 实现者；为其他语言编写插件绑定的人 |
 | 输入 | `DOC-15` 公理 `Q0`；`DOC-10` 的 `Q3`、`Q4`；`DOC-11` 的插件模型；`ADR-0010`、`ADR-0012`、`ADR-0018`、`ADR-0019` |
 | 输出 | 平台约定、入口与握手、基本类型布局、所有权规则、错误与 panic 规则、对象与虚表、异步约定、宿主虚表、插件描述符、租约、兼容规则 |
@@ -66,6 +66,7 @@ ABI v1 连接同一 `cordis-host` 进程中的宿主与原生插件，以及组�
 | `AbiOption<T>` | `is_some: u8, value: MaybeUninit<T>` | 可选值 |
 | `AbiError` | `code: u32, message: AbiBuf, detail: AbiBuf` | 错误。`message` 为 UTF-8 文本；`detail` 为可选的自描述编码数据（§7.3） |
 | `AbiObject` | `data: *mut c_void, vtable: *const ObjectHeader, library: LibraryId` | 拥有的对象引用（§7）。`library` 为实现代码所在的库，由创建对象的一侧填写 |
+| `AbiContext` | `context: u64, lease: AbiObject` | 派生上下文编号与一份拥有的视图租约 |
 | `LibraryId` | `u64` | 宿主为每个装载的库分配的编号，0 保留给宿主自身 |
 | `AbiUnit` | `reserved: u8`，值为 0 | 单位结果 |
 | `AbiState` | `schema: AbiBuf, version: u32, reserved: u32, data: AbiBuf` | 拥有的状态块，reserved 为 0 |
@@ -75,7 +76,7 @@ ABI v1 连接同一 `cordis-host` 进程中的宿主与原生插件，以及组�
 ## 5 所有权与内存
 
 1. 借用类型（`AbiStr`、`AbiBytes`、指针参数）只在本次调用期间有效。被调用侧需要保留时自行复制。
-2. 拥有类型（`AbiBuf`、`AbiError`、`AbiObject`、`AbiFuture`、`AbiWaker`）的释放由分配它的一侧提供的函数完成：`AbiBuf.free`，或对象虚表中的 `drop`。接收方用完后调用该函数，不调用自己的分配器。
+2. 拥有类型（`AbiBuf`、`AbiError`、`AbiObject`、`AbiFuture`、`AbiWaker`）的释放由分配它的一侧提供的函数完成：`AbiBuf.free`，或对象虚表中的 `drop`。接收方用完后调用该函数，不调用自己的分配器。`AbiContext` 的拥有字段为 lease，接收方按对象规则释放它。
 3. 通过 `out` 参数写出的拥有类型，所有权转给调用方。函数返回 `AbiStatus` 非 0 时，`out` 不被写入，错误的所有权转给调用方。
 4. 一个拥有值恰好被释放一次。拥有输入从进入被调函数起由被调方接管；成功、失败与 panic 均由其清理。蹦床先为全部拥有输入建立 RAII，再解码内容。`AbiOption<T>` 的标志为 0 时载荷保持未初始化，为 1 时载荷是有效的 T；接管时依此结构契约处理所有权。
 5. 拥有值在创建时取得 `library` 的租约，跨边界转交移动该租约。释放函数仅释放资源，调用方等待其返回后再调用 `lease_release`。库 0 的租约操作直接成功。
@@ -124,7 +125,9 @@ AbiStatus method(void *data, <参数...>, <返回值 out 指针>, AbiError *err)
 
 次版本追加的方法排在末尾。调用方在调用第 `i` 个方法前检查 `size >= sizeof(ObjectHeader) + (i + 1) * 8`，不满足时返回 `code = 3`，不读取越界内存。
 
-接口调用方先读取 flags。位 0 为 1 时按上述方法槽调用；位 0 为 0 时按方法名进入 invoke 或 invoke_async。方法名表反映该接口已提供的方法，类型化表与通用入口采用同一方法顺序和语义。
+接口调用方先读取 flags。位 0 为 1 时按上述方法槽调用；位 0 为 0 时按方法名进入 invoke 或 invoke_async。接口声明的方法按同一顺序出现在名称表与类型化表中，两个入口保持相同行为。
+
+Scoped 提供方在名称表末尾追加保留方法 `cordis.scope`，其通用入口接受一个元数据值并返回视图对象的资源引用。类型化表继续按接口 trait 的方法声明排布。基对象和视图对象都可以提供类型化表，视图在提供方所在宿主中创建。Rust 安全包装将可选作用域工厂保存在对象的源侧数据中，克隆对象同时保留工厂；保留方法的参数转换、工厂调用与结果编码处于 ABI panic 边界内。
 
 ### 7.3 参数与返回值的编码
 
@@ -236,7 +239,7 @@ struct WakerVTable {
 | 6 | `defer(scope: u64, cleanup: AbiObject, err) -> AbiStatus` | 在效应作用域中登记同步清理 | `EffectScope::defer` |
 | 7 | `defer_async(scope, cleanup, err) -> AbiStatus` | 登记异步清理 | `EffectScope::defer_async` |
 | 8 | `is_current(ctx, out: *mut u8, err)` | 当前纪元是否仍有效 | `Context::is_current` |
-| 9 | `provide(ctx, interface: AbiStr, value: AbiObject, err) -> AbiStatus` | 提供接口实现，登记为效应 | `ctx.provide`（命名键，`K-2`） |
+| 9 | `provide(ctx, interface: AbiStr, value: AbiObject, scoped: u8, err) -> AbiStatus` | 提供接口实现并登记效应；scoped 为 1 时支持 cordis.scope，0 表示普通提供方 | `ctx.provide`（命名键，`K-2`） |
 | 10 | `get(ctx, interface: AbiStr, out: *mut AbiObject, err) -> AbiStatus` | 取得已注入接口的实现 | `ctx.get`（命名键） |
 | 11 | `on(ctx, event: AbiStr, listener: AbiObject, err) -> AbiStatus` | 登记事件监听器，登记为效应 | `ctx.on`（命名事件） |
 | 12 | `emit(ctx, event: AbiStr, payload: AbiBytes, err) -> AbiStatus` | 同步派发事件，载荷为 CBOR | `ctx.emit` |
@@ -253,8 +256,12 @@ struct WakerVTable {
 | 23 | `object_import(id: u64, out: *mut AbiObject, err)` | 克隆资源表中的对象 | 宿主资源表 |
 | 24 | `object_release(id: u64, err)` | 移出并释放资源表引用 | 宿主资源表 |
 | 25 | `effect_release(effect: u64, err)` | 释放 SDK 外部效应句柄记录；实际效应由 dispose 或所属实例停用恢复 | 核心效应句柄表 |
+| 26 | `context_derive(ctx, options: AbiBytes, out: *mut AbiContext, err)` | options 为包含 isolate/intercept 数组的 CBOR；返回派生编号与视图租约 | `isolate_named`、`intercept_named` |
+| 27 | `plugin(ctx, component: AbiStr, config: AbiBytes, out: *mut AbiFuture, err)` | 在给定视图中装入调用方插件自己的组件；Future 成功值为 u64 实例编号 | 组件装载 |
 
-M11 冻结前按确认的契约调整此表，调整后同步更新本节和布局记录。冻结后的追加位于表尾，并提升 HostV1 的次版本（size 增大）。
+`context_derive` 返回的租约由 SDK Context 的共享拥有引用持有，最后一份 Context 释放时按对象规则归还。已登记效应及其他注册资源分别保持其视图，父加载纪元结束后派生上下文一同退役。基础 Context 继续使用核心加载纪元的生命周期。给效应体和线程构造 Context 的 SDK 回调捕获登记时的 Context，保持同一视图编号及租约。`plugin` 的配置在入口返回前复制，子实例归属于调用方的效应，实例编号作为标识返回。
+
+HostV1 在 M11 冻结时包含 28 个槽位，布局保存于 `docs/abi/v1-layout.txt`。后续追加位于表尾，并提升 HostV1 的次版本（size 增大）。
 
 ## 10 插件描述符 `PluginV1`
 

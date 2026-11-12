@@ -1,3 +1,7 @@
+//! DOC-11 SW-6、DOC-15 CP-3–CP-6：加载纪元、远端效应与回调资源的所有权。
+//!
+//! 原生和进程插件共用内核效应顺序；回调持有登记视图，发送失败与清理都归还对应租约。
+
 use super::metadata::{MetadataLease, RetainedError};
 use super::*;
 use cordis::{Effect, EffectScope};
@@ -28,18 +32,17 @@ pub(super) struct RemoteComponent {
     pub inject: Vec<(Interface, bool)>,
     pub provides: Vec<Interface>,
     pub connection: Connection,
+    pub source: Arc<payload::Describe>,
+    pub _source_metadata: Arc<MetadataLease>,
     pub _metadata: Arc<MetadataLease>,
 }
 
-pub(super) struct ContextEntry {
-    pub generation: Weak<Generation>,
-    pub view: Context,
-}
 #[derive(Clone)]
 pub(super) struct ViewLease {
     pub id: u64,
     pub context: Context,
     pub generation: Arc<Generation>,
+    pub record: Arc<ViewRecord>,
 }
 impl Deref for ViewLease {
     type Target = Generation;
@@ -68,7 +71,8 @@ pub(super) struct Generation {
     registrations: Arc<AtomicUsize>,
     max_registrations: usize,
     pub core: Weak<Core>,
-    pub handles: Mutex<Vec<u64>>,
+    pub handles: Mutex<HashMap<u64, Weak<ViewRecord>>>,
+    pub _base: Arc<ViewRecord>,
 }
 
 impl Generation {
@@ -78,10 +82,9 @@ impl Generation {
     pub fn active(&self) -> Result<()> {
         if self.is_current()
             && self.component.connection.is_alive()
-            && self
-                .core
-                .upgrade()
-                .is_some_and(|core| !core.stopping.load(Ordering::Acquire))
+            && self.core.upgrade().is_some_and(|core| {
+                !core.stopping.load(Ordering::Acquire) && !core.exported.load(Ordering::Acquire)
+            })
         {
             Ok(())
         } else {
@@ -111,42 +114,15 @@ impl Drop for Registration {
 
 impl Drop for Generation {
     fn drop(&mut self) {
+        for view in self.handles.get_mut().values().filter_map(Weak::upgrade) {
+            view.retire();
+        }
         if let Some(core) = self.core.upgrade() {
-            let contexts = {
-                let mut contexts = core.contexts.lock();
-                self.handles
-                    .get_mut()
-                    .iter()
-                    .filter_map(|id| contexts.remove(id))
-                    .collect::<Vec<_>>()
-            };
-            let views = {
-                let mut views = core.scoped_views.lock();
-                self.handles
-                    .get_mut()
-                    .iter()
-                    .filter_map(|id| views.remove(id))
-                    .collect::<Vec<_>>()
-            };
-            drop((contexts, views));
             let mut effects = core.effects.lock();
             for id in self.effects.get_mut().keys() {
                 effects
                     .records
                     .remove(&(self.component.connection.id(), *id));
-            }
-        }
-        for id in self.handles.get_mut().iter() {
-            let notification = value(&payload::Context { context: *id });
-            if let Err(problem) = notification.and_then(|params| {
-                self.component
-                    .connection
-                    .try_notify("release_context", params)
-            }) && let Some(core) = self.core.upgrade()
-            {
-                core.context
-                    .logger()
-                    .warn(saved_error(&problem).to_string());
             }
         }
     }
@@ -156,6 +132,8 @@ pub(super) struct Binding {
     pub interface: Interface,
     pub route: Arc<Route>,
     pub generation: Option<Arc<Generation>>,
+    pub scoped: bool,
+    pub _view: Option<Arc<ViewRecord>>,
     pub _registration: Option<Arc<Registration>>,
     pub _metadata: Option<Arc<MetadataLease>>,
 }
@@ -235,6 +213,7 @@ impl Drop for EffectDelivery {
     }
 }
 
+/// DOC-11 SW-6：描述符生成内核定义，最低次版本谓词参与实际依赖解析。
 pub(super) fn definition(core: Weak<Core>, component: Arc<RemoteComponent>) -> ComponentDef {
     let mut inject = Inject::new();
     for (interface, required) in &component.inject {
@@ -264,69 +243,93 @@ pub(super) fn definition(core: Weak<Core>, component: Arc<RemoteComponent>) -> C
                     core.upgrade()
                         .ok_or_else(|| cordis::Error::new("核心生命周期已结束"))?,
                 );
-                let id = manager.id();
-                let generation = Arc::new(Generation {
-                    id,
-                    epoch: context.fiber().epoch(),
-                    context: context.clone(),
-                    instance: configuration.instance.clone(),
-                    component,
-                    exporter: Mutex::new(None),
-                    config: configuration.config,
-                    inherited: configuration.instance.inherited.lock().take(),
-                    effects: Mutex::new(HashMap::new()),
-                    registrations: Arc::new(AtomicUsize::new(0)),
-                    max_registrations: manager.0.options.max_registrations_per_context,
-                    core: Arc::downgrade(&manager.0),
-                    handles: Mutex::new(vec![id]),
-                });
-                *generation.instance.error.lock() = None;
-                *generation.instance.current.lock() = Arc::downgrade(&generation);
-                manager.0.contexts.lock().insert(
-                    generation.id,
-                    ContextEntry {
-                        generation: Arc::downgrade(&generation),
-                        view: context.clone(),
-                    },
-                );
-                let keeper = generation.clone();
-                context.effect("remote-context", move |scope| {
-                    scope.defer(move || {
-                        drop(keeper);
-                        Ok(())
+                let generation = manager.create_generation(context, component, configuration)?;
+                manager
+                    .apply_generation(&generation)
+                    .await
+                    .map_err(|problem| {
+                        let retained = manager.keep_error(&generation, problem.clone());
+                        *generation.instance.error.lock() = Some(retained);
+                        kernel(problem)
                     })
-                })?;
-                let request = payload::Apply {
-                    plugin: generation.component.plugin.clone(),
-                    component: generation.component.info.name.clone(),
-                    library: generation.component.library,
-                    context: generation.id,
-                    config: generation.config.clone(),
-                    inherited: generation.inherited.clone(),
-                };
-                let result = match value(&request) {
-                    Ok(params) => manager
-                        .lifecycle_request(
-                            &generation.component.connection,
-                            "apply",
-                            params,
-                            manager.0.options.apply_timeout,
-                        )
-                        .await
-                        .and_then(|output| decode::<()>(output.value())),
-                    Err(problem) => Err(problem),
-                };
-                result.map_err(|problem| {
-                    let retained = manager.keep_error(&generation, problem.clone());
-                    *generation.instance.error.lock() = Some(retained);
-                    kernel(problem)
-                })
             }
         },
     )
 }
 
 impl Manager {
+    /// DOC-15 §6.4：建立基础视图与纪元记录，内核效应保持其整个清理期的寿命。
+    fn create_generation(
+        &self,
+        context: Context,
+        component: Arc<RemoteComponent>,
+        configuration: Configuration,
+    ) -> cordis::Result<Arc<Generation>> {
+        let id = self.id();
+        let generation = Arc::new_cyclic(|weak| {
+            let base = Arc::new(ViewRecord::new(
+                id,
+                context.clone(),
+                weak.clone(),
+                self,
+                component.connection.clone(),
+                None,
+            ));
+            Generation {
+                id,
+                epoch: context.fiber().epoch(),
+                context: context.clone(),
+                instance: configuration.instance.clone(),
+                component,
+                exporter: Mutex::new(None),
+                config: configuration.config,
+                inherited: configuration.instance.inherited.lock().take(),
+                effects: Mutex::new(HashMap::new()),
+                registrations: Arc::new(AtomicUsize::new(0)),
+                max_registrations: self.0.options.max_registrations_per_context,
+                core: Arc::downgrade(&self.0),
+                handles: Mutex::new(HashMap::from([(id, Arc::downgrade(&base))])),
+                _base: base,
+            }
+        });
+        *generation.instance.error.lock() = None;
+        *generation.instance.current.lock() = Arc::downgrade(&generation);
+        self.0
+            .contexts
+            .lock()
+            .insert(generation.id, Arc::downgrade(&generation._base));
+        let keeper = generation.clone();
+        context.effect("remote-context", move |scope| {
+            scope.defer(move || {
+                drop(keeper);
+                Ok(())
+            })
+        })?;
+        Ok(generation)
+    }
+
+    /// DOC-11 SW-7、CP-4：发送一次加载请求，状态与错误由当前纪元的调用者保存。
+    async fn apply_generation(&self, generation: &Generation) -> Result<()> {
+        let request = payload::Apply {
+            plugin: generation.component.plugin.clone(),
+            component: generation.component.info.name.clone(),
+            library: generation.component.library,
+            context: generation.id,
+            config: generation.config.clone(),
+            inherited: generation.inherited.clone(),
+        };
+        let output = self
+            .lifecycle_request(
+                &generation.component.connection,
+                "apply",
+                value(&request)?,
+                self.0.options.apply_timeout,
+            )
+            .await?;
+        decode(output.value())
+    }
+
+    /// DOC-15 CP-4：效应体使用加载时限，逆变换使用清理时限，保持登记视图编号。
     pub(super) async fn callback(
         &self,
         view: &ViewLease,
@@ -351,6 +354,7 @@ impl Manager {
         decode(output.value())
     }
 
+    /// DOC-16 效应协议：登记额度后执行效应体，返回句柄的发送失败沿 RAII 回收。
     pub(super) async fn create_effect(
         &self,
         generation: ViewLease,
@@ -373,39 +377,7 @@ impl Manager {
                 .ok_or_else(|| error(8, "效应编号空间已耗尽"))?;
             id
         };
-        let actual = registration.clone();
-        let actual_metadata = metadata.clone();
-        let manager = self.clone();
-        let current = generation.clone();
-        let failures = Arc::new(Mutex::new(Vec::new()));
-        let failed = failures.clone();
-        let effect = generation
-            .context
-            .effect_async(label, move |scope| async move {
-                let retained = current.clone();
-                scope.defer(move || {
-                    drop((retained, actual, actual_metadata));
-                    Ok(())
-                })?;
-                let scope = ScopeGuard::new(&manager, current, scope, failed.clone());
-                manager
-                    .callback(&scope.record.view, &callback, scope.id)
-                    .await
-                    .map_err(|problem| {
-                        failed
-                            .lock()
-                            .push(manager.keep_error(&scope.record.view, problem.clone()));
-                        kernel(problem)
-                    })
-            })
-            .map_err(kernel_error)?;
-        let record = Arc::new(RemoteEffect {
-            generation: Arc::downgrade(&generation.generation),
-            effect,
-            failures,
-            _registration: registration,
-            _metadata: metadata,
-        });
+        let record = self.start_effect(&generation, label, callback, registration, metadata)?;
         if !asynchronous {
             record.effect.settled().await.map_err(|problem| {
                 record
@@ -433,6 +405,51 @@ impl Manager {
         ))
     }
 
+    /// DOC-15 CP-5、S-FBR-12：内核驱动效应体，回调持有原视图并把错误保存在该效应上。
+    fn start_effect(
+        &self,
+        generation: &ViewLease,
+        label: String,
+        callback: RemoteObject,
+        registration: Arc<Registration>,
+        metadata: Arc<MetadataLease>,
+    ) -> Result<Arc<RemoteEffect>> {
+        let actual = registration.clone();
+        let actual_metadata = metadata.clone();
+        let manager = self.clone();
+        let current = generation.clone();
+        let failures = Arc::new(Mutex::new(Vec::new()));
+        let failed = failures.clone();
+        let effect = generation
+            .context
+            .effect_async(label, move |scope| async move {
+                let retained = current.clone();
+                scope.defer(move || {
+                    drop((retained, actual, actual_metadata));
+                    Ok(())
+                })?;
+                let scope = ScopeGuard::new(&manager, current, scope, failed.clone());
+                manager
+                    .callback(&scope.record.view, &callback, scope.id)
+                    .await
+                    .map_err(|problem| {
+                        failed
+                            .lock()
+                            .push(manager.keep_error(&scope.record.view, problem.clone()));
+                        kernel(problem)
+                    })
+            })
+            .map_err(kernel_error)?;
+        Ok(Arc::new(RemoteEffect {
+            generation: Arc::downgrade(&generation.generation),
+            effect,
+            failures,
+            _registration: registration,
+            _metadata: metadata,
+        }))
+    }
+
+    /// DOC-16 效应协议：作用域归属校验后登记逆变换，父效应保持回调及额度寿命。
     pub(super) fn defer(&self, connection: u64, scope: u64, callback: RemoteObject) -> Result<()> {
         let scope = self
             .0
@@ -465,6 +482,7 @@ impl Manager {
             .map_err(kernel_error)
     }
 
+    /// DOC-15 CP-4：等待指定远端效应稳定或清理，返回最初的插件错误。
     pub(super) async fn effect_wait(&self, connection: u64, id: u64, dispose: bool) -> Result<()> {
         let record = self
             .0
@@ -496,6 +514,7 @@ impl Manager {
         })
     }
 
+    /// DOC-16 资源协议：归还外部效应句柄，实际效应由所属内核纪元继续管理。
     pub(super) fn effect_release(&self, connection: u64, id: u64) -> Result<()> {
         let record = {
             let mut effects = self.0.effects.lock();

@@ -557,7 +557,7 @@ fn retired_host_consumes_owned_inputs_while_returning_a_context_error() {
         std::ptr::from_ref(&SERVICE_VTABLE).cast(),
         released.clone(),
     );
-    let result = env.host().provide(38, "prefix@1.0", object);
+    let result = env.host().provide(38, "prefix@1.0", object, false);
     assert_eq!(result.err().unwrap().code(), 4);
     assert_eq!(released.load(Ordering::SeqCst), 1);
     assert_eq!(support::counts(env).active, 0);

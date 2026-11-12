@@ -423,8 +423,11 @@ impl Backend for Loopback {
         self.record(8);
         Ok(self.instance(ctx)?.current.load(Ordering::Acquire))
     }
-    fn provide(&self, ctx: u64, interface: &str, value: Object) -> Result<()> {
+    fn provide(&self, ctx: u64, interface: &str, value: Object, scoped: bool) -> Result<()> {
         self.record(9);
+        if scoped {
+            return Err(Error::new(3, "上下文绑定能力缺席"));
+        }
         let instance = self.instance(ctx)?;
         let (key, _) = version(interface)?;
         let mut services = instance.services.lock().unwrap();
@@ -612,5 +615,15 @@ impl Backend for Loopback {
     fn effect_release(&self, id: u64) -> Result<()> {
         self.record(25);
         self.release_effect_handle(id)
+    }
+
+    fn context_derive(&self, context: u64, _options: &[u8]) -> Result<cordis_abi::DerivedContext> {
+        self.instance(context)?;
+        Err(Error::new(3, "上下文派生能力缺席"))
+    }
+
+    fn plugin(&self, context: u64, _component: &str, _config: &[u8]) -> Result<RemoteFuture<u64>> {
+        self.instance(context)?;
+        Err(Error::new(3, "组件目录缺席"))
     }
 }

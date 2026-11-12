@@ -330,3 +330,36 @@ async fn natural_exit_reaps_the_group_and_its_descendants() {
         );
     }
 }
+
+// 探测命令读取完整输出，并在输出超额或超时时完成组清理后报告错误。
+#[tokio::test]
+async fn capture_reports_output_limits_and_deadlines() {
+    let cwd = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let output = cordis_supervisor::run_capture(
+        &[
+            "/usr/bin/printf".into(),
+            "%s".into(),
+            "cordis descriptor".into(),
+        ],
+        cwd,
+        Duration::from_secs(3),
+        64,
+    )
+    .await
+    .unwrap();
+    assert_eq!(output, b"cordis descriptor");
+    let error =
+        cordis_supervisor::run_capture(&["/usr/bin/yes".into()], cwd, Duration::from_secs(3), 32)
+            .await
+            .unwrap_err();
+    assert_eq!(error.code, 8, "{error}");
+    let error = cordis_supervisor::run_capture(
+        &["/bin/sleep".into(), "60".into()],
+        cwd,
+        Duration::from_millis(30),
+        32,
+    )
+    .await
+    .unwrap_err();
+    assert_eq!(error.code, 6);
+}

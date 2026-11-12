@@ -1,3 +1,5 @@
+//! CP-2、CP-8、ADR-0021：通过Serde访问器实现CBOR输入预算。
+//! 同步解码的预算由作用域守卫恢复；错误保留解析、额度和尾随数据类别。
 use crate::{Message, OBJECT_TAG, Value};
 use serde::de::{self, DeserializeSeed, EnumAccess, MapAccess, SeqAccess, VariantAccess, Visitor};
 use std::{
@@ -6,6 +8,7 @@ use std::{
     io::{Cursor, Write},
 };
 
+/// DOC-16 §3：单次值图的预算；帧上限同时约束输入与编码输出。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Limits {
     pub max_frame: usize,
@@ -57,6 +60,7 @@ thread_local! {
     static DECODE_LIMITS: Cell<Limits> = const { Cell::new(Limits::DEFAULT) };
 }
 
+/// CP-8：错误返回和展开均恢复此前预算，隔离同线程的后续解码。
 struct DecodeScope(Limits);
 impl DecodeScope {
     fn enter(limits: Limits) -> Self {
@@ -110,6 +114,43 @@ pub fn encode(message: &Message, limits: &Limits) -> Result<Vec<u8>, CodecError>
     Ok(writer.bytes)
 }
 
+/// CP-8：持久状态和接口值复用同一集合、深度与节点预算。
+pub fn decode_value(bytes: &[u8], limits: &Limits) -> Result<Value, CodecError> {
+    #[derive(serde::Deserialize)]
+    struct LimitedValue(#[serde(deserialize_with = "standalone_value")] Value);
+    limits.validate()?;
+    if bytes.len() > limits.max_frame {
+        return Err(CodecError::Limit("max_frame"));
+    }
+    let _scope = DecodeScope::enter(*limits);
+    let mut reader = Cursor::new(bytes);
+    let value: LimitedValue =
+        ciborium::de::from_reader_with_recursion_limit(&mut reader, limits.max_depth)
+            .map_err(|problem| CodecError::Cbor(problem.to_string()))?;
+    if reader.position() as usize != bytes.len() {
+        return Err(CodecError::TrailingBytes);
+    }
+    Ok(value.0)
+}
+
+/// CP-8、DOC-16 §2：编码独立状态值，超限在持久化之前返回错误。
+pub fn encode_value(value: &Value, limits: &Limits) -> Result<Vec<u8>, CodecError> {
+    limits.validate()?;
+    validate_value(value, limits, 0)?;
+    let mut writer = LimitedWriter {
+        bytes: Vec::new(),
+        limit: limits.max_frame,
+    };
+    ciborium::ser::into_writer(value, &mut writer)
+        .map_err(|problem| CodecError::Cbor(problem.to_string()))?;
+    Ok(writer.bytes)
+}
+
+fn standalone_value<'de, D: de::Deserializer<'de>>(deserializer: D) -> Result<Value, D::Error> {
+    bounded(deserializer, 0)
+}
+
+/// DOC-16 §4：验证消息编号、方法名与错误码的基本协议形状。
 fn envelope(message: &Message) -> Result<(), CodecError> {
     match message {
         Message::Request { id: 0, .. } | Message::Response { id: 0, .. } => {
@@ -130,6 +171,7 @@ fn envelope(message: &Message) -> Result<(), CodecError> {
     }
 }
 
+/// CP-8：编码前按实际值图计量；overhead计入所属消息包络的嵌套层级。
 fn validate_value(value: &Value, limits: &Limits, overhead: usize) -> Result<(), CodecError> {
     let mut pending = vec![(value, overhead)];
     let mut count = 0;
@@ -173,6 +215,7 @@ fn validate_value(value: &Value, limits: &Limits, overhead: usize) -> Result<(),
     Ok(())
 }
 
+/// CP-2：序列化写入过程中执行字节上限，避免先产生完整超额缓冲。
 struct LimitedWriter {
     bytes: Vec<u8>,
     limit: usize,
@@ -203,6 +246,7 @@ pub(crate) fn detail<'de, D: de::Deserializer<'de>>(deserializer: D) -> Result<V
     bounded(deserializer, 4)
 }
 
+/// CP-8：根值建立共享节点预算，子访问器沿同一预算递减。
 fn bounded<'de, D: de::Deserializer<'de>>(
     deserializer: D,
     depth: usize,
@@ -241,6 +285,7 @@ impl Budget {
     }
 }
 
+/// CP-8：每个子值进入解码前消费预算，集合扩展先判定其许可。
 struct Node<'a> {
     budget: &'a mut Budget,
     depth: usize,
@@ -399,6 +444,7 @@ impl<'de> Visitor<'de> for Tagged<'_> {
     }
 }
 
+/// DOC-16 §6：资源标签的载荷为非零编号；普通CBOR标签保留原语义。
 fn resource_tag(tag: u64, value: &Value) -> Result<(), String> {
     if tag == OBJECT_TAG
         && value

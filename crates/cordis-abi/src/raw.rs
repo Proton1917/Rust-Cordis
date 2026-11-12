@@ -165,6 +165,12 @@ pub struct AbiObject {
 }
 
 #[repr(C)]
+pub struct AbiContext {
+    pub context: u64,
+    pub lease: AbiObject,
+}
+
+#[repr(C)]
 pub struct ObjectHeader {
     pub size: u64,
     pub kind: u32,
@@ -260,7 +266,7 @@ pub struct HostV1 {
     pub defer: unsafe extern "C" fn(u64, AbiObject, *mut AbiError) -> AbiStatus,
     pub defer_async: unsafe extern "C" fn(u64, AbiObject, *mut AbiError) -> AbiStatus,
     pub is_current: unsafe extern "C" fn(u64, *mut u8, *mut AbiError) -> AbiStatus,
-    pub provide: unsafe extern "C" fn(u64, AbiStr, AbiObject, *mut AbiError) -> AbiStatus,
+    pub provide: unsafe extern "C" fn(u64, AbiStr, AbiObject, u8, *mut AbiError) -> AbiStatus,
     pub get: unsafe extern "C" fn(u64, AbiStr, *mut AbiObject, *mut AbiError) -> AbiStatus,
     pub on: unsafe extern "C" fn(u64, AbiStr, AbiObject, *mut AbiError) -> AbiStatus,
     pub emit: unsafe extern "C" fn(u64, AbiStr, AbiBytes, *mut AbiError) -> AbiStatus,
@@ -279,6 +285,10 @@ pub struct HostV1 {
     pub object_import: unsafe extern "C" fn(u64, *mut AbiObject, *mut AbiError) -> AbiStatus,
     pub object_release: unsafe extern "C" fn(u64, *mut AbiError) -> AbiStatus,
     pub effect_release: unsafe extern "C" fn(u64, *mut AbiError) -> AbiStatus,
+    pub context_derive:
+        unsafe extern "C" fn(u64, AbiBytes, *mut AbiContext, *mut AbiError) -> AbiStatus,
+    pub plugin:
+        unsafe extern "C" fn(u64, AbiStr, AbiBytes, *mut AbiFuture, *mut AbiError) -> AbiStatus,
 }
 
 pub type Apply = unsafe extern "C" fn(u64, AbiBytes, *mut AbiFuture, *mut AbiError) -> AbiStatus;

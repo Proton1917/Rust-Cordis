@@ -75,7 +75,7 @@ pub static HOST: HostV1 = HostV1 {
     defer,
     defer_async: defer,
     is_current,
-    provide: owned_object,
+    provide,
     get,
     on: owned_object,
     emit,
@@ -92,7 +92,44 @@ pub static HOST: HostV1 = HostV1 {
     object_import,
     object_release,
     effect_release,
+    context_derive,
+    plugin,
 };
+
+// SAFETY: DOC-12 §5、§9，provide转交对象，错误槽有效。
+unsafe extern "C" fn provide(
+    ctx: u64,
+    name: AbiStr,
+    value: AbiObject,
+    _: u8,
+    err: *mut AbiError,
+) -> AbiStatus {
+    // SAFETY: DOC-12 §5，沿同一拥有输入协议在退役上下文释放对象。
+    unsafe { owned_object(ctx, name, value, err) }
+}
+
+// SAFETY: DOC-12 §9，out和err为规定的输出槽，输入只在调用期间借用。
+unsafe extern "C" fn context_derive(
+    _: u64,
+    _: AbiBytes,
+    out: *mut AbiContext,
+    err: *mut AbiError,
+) -> AbiStatus {
+    // SAFETY: DOC-12 §6，退役上下文返回code4，结果槽保持原状。
+    unsafe { boundary(host_environment(), out, err, retired) }
+}
+
+// SAFETY: DOC-12 §9，out和err为规定的输出槽，输入只在调用期间借用。
+unsafe extern "C" fn plugin(
+    _: u64,
+    _: AbiStr,
+    _: AbiBytes,
+    out: *mut AbiFuture,
+    err: *mut AbiError,
+) -> AbiStatus {
+    // SAFETY: DOC-12 §6，退役上下文返回code4，结果槽保持原状。
+    unsafe { boundary(host_environment(), out, err, retired) }
+}
 
 // SAFETY: DOC-12 §9，message是调用期借用，err为可写槽。
 unsafe extern "C" fn log(ctx: u64, level: u32, message: AbiStr, err: *mut AbiError) -> AbiStatus {
