@@ -1,0 +1,19 @@
+[package]
+name = "cordis-abi"
+description = "Stable C ABI and ownership wrappers for Cordis native plugins."
+version.workspace = true
+edition = "2024"
+rust-version = "1.85"
+publish.workspace = true
+license.workspace = true
+
+[features]
+test-support = []
+
+[dependencies]
+serde.workspace = true
+ciborium.workspace = true
+
+[dev-dependencies]
+syn.workspace = true
+proc-macro2.workspace = true

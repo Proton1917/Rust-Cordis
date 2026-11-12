@@ -82,7 +82,7 @@ plugins/*、fixtures/* ─→ cordis-sdk ─→ cordis-abi
 - 提供插件侧的安全包装：把 Rust 闭包、`Future`、trait 对象包装成 `AbiObject`/`AbiFuture` 的泛型蹦床函数；panic 捕获；`AbiBuf` 的分配与释放。
 - 提供宿主侧的安全包装：把收到的 `AbiObject`/`AbiFuture` 包装成持有租约的 Rust 值，`Drop` 时调用对方的 `drop` 并归还租约。
 - 布局测试：对每个类型输出大小、对齐、字段偏移到 `docs/abi/v1-layout.txt`，测试比较生成结果与文件。
-- 不依赖其他 crate（`serde`、`ciborium` 除外，用于 §7.3 的编码辅助）。
+- 运行时依赖为 `serde`、`ciborium`；源码审计使用开发依赖 `syn`、`proc-macro2`（`ADR-0015`）。
 
 ### 3.2 `cordis-sdk`
 
@@ -98,7 +98,7 @@ plugins/*、fixtures/* ─→ cordis-sdk ─→ cordis-abi
 | `#[event(name = "message", version = "1.0")]` | 事件结构体（serde） | `Event` 实现 |
 | `export_plugin!(name, version, components = [...])` | 组件类型列表 | `CORDIS_PLUGIN_ABI`、`cordis_plugin_v1`、静态描述符 |
 
-宏生成的代码中的 `unsafe` 只能出现在调用 `cordis-abi` 公开的 `unsafe fn` 的固定形态中（规则 `B-2`）。
+宏生成的 `unsafe` 使用固定模板：调用 `cordis-abi` 公开的 unsafe 函数、按接口声明调用 C 函数指针、实现 C 蹦床、导出符号属性以及持有静态 ABI 表的 Send/Sync 实现。模板的 SAFETY 依据同时保存在宏源码与生成的文档注释中（规则 `B-2`）。
 
 ### 3.4 `cordis-loader`
 
@@ -231,7 +231,7 @@ impl Component for Counter {
 | 编号 | 规则 |
 |---|---|
 | `B-1` | 内核 crate 继续遵守第一阶段的 `A-1`–`A-12`，不使用 `unsafe`，不依赖 tokio |
-| `B-2` | `unsafe` 只出现在 `cordis-abi`、`cordis-loader` 与宏生成的固定代码形态中。每个 `unsafe` 块或 `unsafe fn` 前一行有 `// SAFETY:` 注释，说明依赖的 `DOC-12` 条款。`cordis-abi` 与 `cordis-loader` 开启 `#![deny(unsafe_op_in_unsafe_fn)]` |
+| `B-2` | `unsafe` 位于 `cordis-abi`、`cordis-loader` 与宏生成的固定代码形态。每个 unsafe 块、函数、impl、extern 块和属性前一行有 `// SAFETY:` 注释，说明依赖的 `DOC-12` 条款；宏源码中的对应模板保存该注释并生成 SAFETY 文档注释。允许模板调用经长度检查的 C 函数指针、建立 ABI 对象、生成蹦床与导出符号。源码审计使用 syn 解析。`cordis-abi` 与 `cordis-loader` 开启 `#![deny(unsafe_op_in_unsafe_fn)]` |
 | `B-3` | 跨插件边界只出现 `DOC-12` 的类型（`Q3`）。`cordis-sdk` 的公开接口中不出现内核类型 |
 | `B-4` | 每个跨边界函数在被调用侧捕获 panic（`DOC-12` §6） |
 | `B-5` | 宿主侧每个收到的对象都包装为持有租约的值（`DOC-12` §11） |

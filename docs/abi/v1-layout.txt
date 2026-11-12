@@ -1,0 +1,168 @@
+Cordis ABI 1.0; 64-bit little-endian
+AbiStatus size=4 align=4
+LibraryId size=8 align=8
+AbiStr size=16 align=8
+  ptr=0
+  len=8
+AbiBytes size=16 align=8
+  ptr=0
+  len=8
+AbiBuf size=40 align=8
+  ptr=0
+  len=8
+  cap=16
+  free=24
+  library=32
+AbiUnit size=1 align=1
+  reserved=0
+AbiError size=88 align=8
+  code=0
+  message=8
+  detail=48
+AbiState size=88 align=8
+  schema=0
+  version=40
+  reserved=44
+  data=48
+AbiObject size=24 align=8
+  data=0
+  vtable=8
+  library=16
+ObjectHeader size=48 align=8
+  size=0
+  kind=8
+  reserved=12
+  interface=16
+  clone=32
+  drop=40
+AbiFuture size=24 align=8
+  data=0
+  vtable=8
+  library=16
+FutureVTable size=24 align=8
+  size=0
+  poll=8
+  drop=16
+AbiWaker size=24 align=8
+  data=0
+  vtable=8
+  library=16
+WakerVTable size=32 align=8
+  clone=0
+  wake=8
+  wake_by_ref=16
+  drop=24
+SyncCallbackVTable size=56 align=8
+  header=0
+  call=48
+AsyncCallbackVTable size=56 align=8
+  header=0
+  call=48
+ExporterVTable size=64 align=8
+  header=0
+  export=48
+  thaw=56
+HostV1 size=184 align=8
+  size=0
+  log=8
+  now=16
+  sleep=24
+  spawn=32
+  effect=40
+  effect_async=48
+  defer=56
+  defer_async=64
+  is_current=72
+  provide=80
+  get=88
+  on=96
+  emit=104
+  emit_async=112
+  export_state=120
+  inherited_state=128
+  config=136
+  spawn_thread=144
+  lease_acquire=152
+  lease_release=160
+  effect_settled=168
+  effect_dispose=176
+PluginV1 size=112 align=8
+  size=0
+  abi_major=8
+  abi_minor=12
+  panic_unwind=16
+  format=17
+  reserved=18
+  name=24
+  version=40
+  sdk_version=56
+  build_info=72
+  components=88
+  component_count=96
+  release=104
+ComponentV1 size=112 align=8
+  size=0
+  name=8
+  inject=24
+  inject_count=32
+  provides=40
+  provides_count=48
+  listens=56
+  listens_count=64
+  state_schema=72
+  state_version_min=88
+  state_version_max=92
+  apply=96
+  resolve=104
+DependencyV1 size=24 align=8
+  interface=0
+  required=16
+  reserved=17
+AbiOption<u8> size=2 align=1
+  is_some=0
+  value=1
+AbiOption<i8> size=2 align=1
+  is_some=0
+  value=1
+AbiOption<u16> size=4 align=2
+  is_some=0
+  value=2
+AbiOption<i16> size=4 align=2
+  is_some=0
+  value=2
+AbiOption<u32> size=8 align=4
+  is_some=0
+  value=4
+AbiOption<i32> size=8 align=4
+  is_some=0
+  value=4
+AbiOption<u64> size=16 align=8
+  is_some=0
+  value=8
+AbiOption<i64> size=16 align=8
+  is_some=0
+  value=8
+AbiOption<f32> size=8 align=4
+  is_some=0
+  value=4
+AbiOption<f64> size=16 align=8
+  is_some=0
+  value=8
+AbiOption<AbiStr> size=24 align=8
+  is_some=0
+  value=8
+AbiOption<AbiBytes> size=24 align=8
+  is_some=0
+  value=8
+AbiOption<AbiBuf> size=48 align=8
+  is_some=0
+  value=8
+AbiOption<AbiObject> size=32 align=8
+  is_some=0
+  value=8
+AbiOption<AbiState> size=96 align=8
+  is_some=0
+  value=8
+AbiOption<AbiUnit> size=2 align=1
+  is_some=0
+  value=1

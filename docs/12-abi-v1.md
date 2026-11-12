@@ -3,7 +3,7 @@
 | 项 | 内容 |
 |---|---|
 | 文档编号 | `DOC-12` |
-| 状态 | 草案。`M8` 结束时冻结为 ABI v1，此后布局不再改变（§12） |
+| 状态 | 已冻结 v1.0（2026-11-12）；后续兼容规则见 §12 |
 | 读者 | 实现者；为其他语言编写插件绑定的人 |
 | 输入 | `DOC-10` 公理 `Q3`、`Q4`、`Q8`；`DOC-11` 的插件模型；`ADR-0010`、`ADR-0012` |
 | 输出 | 平台约定、入口与握手、基本类型布局、所有权规则、错误与 panic 规则、对象与虚表、异步约定、宿主虚表、插件描述符、租约、兼容规则 |
@@ -60,11 +60,13 @@
 | `AbiStatus` | `u32`：`0` 成功，`1` 失败（错误写入调用方提供的 `*mut AbiError`），`2` 被调用侧发生 panic（错误同样写出） | 每个可失败函数的返回值 |
 | `AbiStr` | `ptr: *const u8, len: u64` | 借用的字符串，仅在调用期间有效 |
 | `AbiBytes` | `ptr: *const u8, len: u64` | 借用的字节串，仅在调用期间有效 |
-| `AbiBuf` | `ptr: *mut u8, len: u64, cap: u64, free: Option<extern "C" fn(ptr: *mut u8, len: u64, cap: u64)>` | 拥有的字节缓冲。`free` 为空表示无需释放（空缓冲或静态数据） |
+| `AbiBuf` | `ptr: *mut u8, len: u64, cap: u64, free: Option<extern "C" fn(ptr: *mut u8, len: u64, cap: u64, err: *mut AbiError) -> AbiStatus>, library: LibraryId` | 拥有的字节缓冲及其租约。`free` 为空时数据为静态数据或空值，调用方仍归还对应租约 |
 | `AbiOption<T>` | `is_some: u8, value: MaybeUninit<T>` | 可选值 |
 | `AbiError` | `code: u32, message: AbiBuf, detail: AbiBuf` | 错误。`message` 为 UTF-8 文本；`detail` 为可选的自描述编码数据（§7.3） |
 | `AbiObject` | `data: *mut c_void, vtable: *const ObjectHeader, library: LibraryId` | 拥有的对象引用（§7）。`library` 为实现代码所在的库，由创建对象的一侧填写 |
 | `LibraryId` | `u64` | 宿主为每个装载的库分配的编号，0 保留给宿主自身 |
+| `AbiUnit` | `reserved: u8`，值为 0 | 单位结果 |
+| `AbiState` | `schema: AbiBuf, version: u32, reserved: u32, data: AbiBuf` | 拥有的状态块，reserved 为 0 |
 
 `AbiError.code` 取值：`1` 一般错误，`2` 无效参数，`3` 版本不足（调用超出提供方次版本的方法），`4` 对象已失效（实例已停用），`5` panic，`6` 超时，`7` 被取消。`1000` 以上留给接口自定义。
 
@@ -73,13 +75,15 @@
 1. 借用类型（`AbiStr`、`AbiBytes`、指针参数）只在本次调用期间有效。被调用侧需要保留时自行复制。
 2. 拥有类型（`AbiBuf`、`AbiError`、`AbiObject`、`AbiFuture`、`AbiWaker`）的释放由分配它的一侧提供的函数完成：`AbiBuf.free`，或对象虚表中的 `drop`。接收方用完后调用该函数，不调用自己的分配器。
 3. 通过 `out` 参数写出的拥有类型，所有权转给调用方。函数返回 `AbiStatus` 非 0 时，`out` 不被写入，错误的所有权转给调用方。
-4. 一个拥有值恰好被释放一次。
+4. 一个拥有值恰好被释放一次。拥有输入从进入被调函数起由被调方接管；成功、失败与 panic 均由其清理。蹦床先为全部拥有输入建立 RAII，再解码内容。`AbiOption<T>` 的标志为 0 时载荷保持未初始化，为 1 时载荷是有效的 T；接管时依此结构契约处理所有权。
+5. 拥有值在创建时取得 `library` 的租约，跨边界转交移动该租约。释放函数仅释放资源，调用方等待其返回后再调用 `lease_release`。库 0 的租约操作直接成功。
 
 ## 6 错误与 panic
 
 1. 每个跨边界函数的实现都在函数体外层捕获 panic，转换为 `AbiStatus = 2` 与 `code = 5` 的 `AbiError`。展开不得越过边界。
 2. 插件必须以 `panic = "unwind"` 编译（`DOC-11` `PR-8`），描述符字段 `panic_unwind` 为 `1`。
 3. 宿主收到插件 panic 时，按内核的规则处理：发生在 `apply` 中时实例进入 `Failed`；发生在服务方法中时调用方收到错误；发生在效应清理中时记录错误并继续其余清理。
+4. clone、drop、free、Waker、描述符 release 与 Host 函数都遵循本节。释放阶段的 panic 错误可使用空 message/detail 和 code 5。Rust Drop 与 Wake 经 Host `log(ctx=0)` 报告错误；显式释放返回 Result。
 
 ## 7 对象与虚表
 
@@ -93,12 +97,12 @@ struct ObjectHeader {
     uint32_t  kind;          // 1 接口实现，2 同步回调，3 异步回调，4 状态导出器
     uint32_t  reserved;      // 0
     AbiStr    interface;     // 接口标识 "kv@1.3"；回调为空串
-    AbiObject (*clone)(void *data);
-    void      (*drop)(void *data);
+    AbiStatus (*clone)(void *data, AbiObject *out, AbiError *err);
+    AbiStatus (*drop)(void *data, AbiError *err);
 };
 ```
 
-`clone` 产生一份新的拥有引用，`drop` 释放一份。对象内部的引用计数由实现方维护。
+`clone` 产生一份新的拥有引用，`drop` 释放一份。对象内部的引用计数由实现方维护。`vtable` 原始指针从完整静态虚表对象派生，其来源覆盖 `size` 声明的全部字节；克隆保留此原始指针。Rust 的 `ObjectHeader` 引用用于读取首部，方法槽沿完整虚表原始指针访问。
 
 ### 7.2 方法与追加
 
@@ -123,8 +127,31 @@ AbiStatus method(void *data, <参数...>, <返回值 out 指针>, AbiError *err)
 | `Option<T>`，`T` 为以上类型 | `AbiOption<T>` |
 | 其他实现 `serde::Serialize + DeserializeOwned` 的类型 | `AbiBuf`，内容为 CBOR（RFC 8949）编码 |
 | `Result<T>` | 方法返回 `AbiStatus`，成功值写入 out 指针，错误写入 `AbiError` |
+| `()` | `AbiUnit` |
 
 选用 CBOR 的理由见 `ADR-0010`：它是公开标准，自描述，字段按名称编码，追加带默认值的字段不破坏旧读取方（`DOC-11` §3.2 第 2 条）。
+
+`AbiStr` 与 `AbiBytes` 用于借用输入；字符串和字节结果分别使用 `String` 与 `Vec<u8>` 的拥有形式。异步方法在入口返回前复制借用参数，Future 持有复制结果和接口实现。
+
+### 7.4 回调
+
+```c
+struct SyncCallbackVTable {
+    struct ObjectHeader header;
+    AbiStatus (*call)(void *data, uint64_t ctx, uint64_t scope, AbiBytes payload, AbiError *err);
+};
+struct AsyncCallbackVTable {
+    struct ObjectHeader header;
+    AbiStatus (*call)(void *data, uint64_t ctx, uint64_t scope, AbiBytes payload, struct AbiFuture *out, AbiError *err);
+};
+struct ExporterVTable {
+    struct ObjectHeader header;
+    AbiStatus (*export)(void *data, AbiBuf *out, AbiError *err);
+    AbiStatus (*thaw)(void *data, AbiError *err);
+};
+```
+
+同步与异步回调分别使用 kind 2、3，状态导出器使用 kind 4。效应体收到所属 ctx 和有效 scope；清理、事件、线程收到所属 ctx 及 scope 0。事件 payload 是本次派发的 CBOR 字节，其余回调使用空 payload。异步回调返回单位结果的 Future。状态导出器在 export 时冻结写入，导出失败或替换中止时宿主调用所有相关导出器的 thaw。回调克隆保持同一闭包状态；效应体与清理按一次调用契约执行，事件监听器可重复执行。
 
 ## 8 异步
 
@@ -136,9 +163,9 @@ struct AbiFuture {                 // 不使用 ObjectHeader，单独定义
 };
 struct FutureVTable {
     uint64_t  size;
-    // 返回 0 表示 Pending；1 表示 Ready，结果写入 out；2 表示 Ready 且失败，错误写入 err
-    uint32_t (*poll)(void *data, const struct AbiWaker *waker, void *out, AbiError *err);
-    void     (*drop)(void *data);
+    // 成功时 out_state 为 0（Pending）或 1（Ready）；Ready 时写出 out
+    AbiStatus (*poll)(void *data, const struct AbiWaker *waker, void *out, uint32_t *out_state, AbiError *err);
+    AbiStatus (*drop)(void *data, AbiError *err);
 };
 struct AbiWaker {
     void *data;
@@ -146,10 +173,10 @@ struct AbiWaker {
     LibraryId library;             // 由宿主创建的唤醒器为 0
 };
 struct WakerVTable {
-    struct AbiWaker (*clone)(void *data);
-    void (*wake)(void *data);          // 消耗该引用
-    void (*wake_by_ref)(void *data);
-    void (*drop)(void *data);
+    AbiStatus (*clone)(void *data, struct AbiWaker *out, AbiError *err);
+    AbiStatus (*wake)(void *data, AbiError *err);          // 消耗该引用
+    AbiStatus (*wake_by_ref)(void *data, AbiError *err);
+    AbiStatus (*drop)(void *data, AbiError *err);
 };
 ```
 
@@ -157,33 +184,37 @@ struct WakerVTable {
 2. 未完成即 `drop` 表示取消。实现方保证取消后不再访问 `waker`。
 3. `AbiWaker` 由轮询方提供。实现方保存唤醒器时必须 `clone`。
 4. 轮询 `AbiFuture` 的始终是宿主的执行器。插件不运行自己的执行器来轮询宿主交给它的 Future（`DOC-11` `PR-3` 所述的自有运行时只用于插件内部的 tokio 接口）。
+5. 同一 Future 的 poll 与 drop 串行执行，Future 具有 Send 语义；Waker 的各项操作支持跨线程。poll 失败时 Future 进入终结状态，结果槽保持原状；调用方随后释放 Future。
+6. out 的具体类型由产生 Future 的方法约定，与同步方法的成功返回映射相同。apply、spawn、sleep、异步回调及效应操作均返回 `AbiUnit`。组件 apply 与异步效应遵循 A-7，运行至完成或协作结束后进行生命周期清理。
 
 ## 9 宿主虚表 `HostV1`
 
-宿主虚表以 `size: u64` 开头，其后为函数指针，按下表顺序排列。`ctx` 为宿主分配的上下文句柄（`u64`），在对应实例的效应回调期间以及实例存活期间有效；实例停用后使用句柄的调用返回 `code = 4`。
+宿主虚表以 `size: u64` 开头，其后为函数指针，按下表顺序排列。所有函数返回 `AbiStatus`，表中的 err 类型均为 `*mut AbiError`。ctx、scope、effect 为 u64。ctx 按加载纪元分配，保留至该纪元的 apply、任务、线程及效应清理结束；清理期间 get 继续读取 committed 依赖，config、日志、时钟、sleep 和事件调用继续有效。`is_current` 表达目标纪元是否有效。纪元结束后句柄退役，调用返回 code 4。scope 在效应体执行期间有效，effect 保留至所属纪元清理结束。ctx 0 保留给 log 的库级诊断。
 
 | 序号 | 函数 | 作用 | 对应内核接口 |
 |---|---|---|---|
-| 0 | `log(ctx, level: u32, message: AbiStr)` | 写日志 | `ctx.logger()` |
-| 1 | `now(ctx) -> u64` | 宿主时间，纳秒 | `Clock::now` |
-| 2 | `sleep(ctx, nanos: u64) -> AbiFuture` | 计时等待 | `Clock::sleep` |
+| 0 | `log(ctx, level: u32, message: AbiStr, err)` | 写日志；level：0 Error、1 Warn、2 Info、3 Debug。Drop/Wake 故障使用 0 | `ctx.logger()` |
+| 1 | `now(ctx, out: *mut u64, err)` | 宿主时间，纳秒 | `Clock::now` |
+| 2 | `sleep(ctx, nanos: u64, out: *mut AbiFuture, err)` | 计时等待 | `Clock::sleep` |
 | 3 | `spawn(ctx, task: AbiFuture, err) -> AbiStatus` | 派发归属当前效应的任务（`PR-1`） | `effect_async` |
 | 4 | `effect(ctx, label: AbiStr, body: AbiObject, out: *mut u64, err) -> AbiStatus` | 登记同步效应，`body` 为同步回调，收到效应作用域句柄 | `ctx.effect` |
 | 5 | `effect_async(ctx, label, body, out, err) -> AbiStatus` | 登记异步效应 | `ctx.effect_async` |
 | 6 | `defer(scope: u64, cleanup: AbiObject, err) -> AbiStatus` | 在效应作用域中登记同步清理 | `EffectScope::defer` |
 | 7 | `defer_async(scope, cleanup, err) -> AbiStatus` | 登记异步清理 | `EffectScope::defer_async` |
-| 8 | `is_current(ctx) -> u8` | 当前纪元是否仍有效 | `Context::is_current` |
+| 8 | `is_current(ctx, out: *mut u8, err)` | 当前纪元是否仍有效 | `Context::is_current` |
 | 9 | `provide(ctx, interface: AbiStr, value: AbiObject, err) -> AbiStatus` | 提供接口实现，登记为效应 | `ctx.provide`（命名键，`K-2`） |
 | 10 | `get(ctx, interface: AbiStr, out: *mut AbiObject, err) -> AbiStatus` | 取得已注入接口的实现 | `ctx.get`（命名键） |
 | 11 | `on(ctx, event: AbiStr, listener: AbiObject, err) -> AbiStatus` | 登记事件监听器，登记为效应 | `ctx.on`（命名事件） |
 | 12 | `emit(ctx, event: AbiStr, payload: AbiBytes, err) -> AbiStatus` | 同步派发事件，载荷为 CBOR | `ctx.emit` |
-| 13 | `emit_async(ctx, event, payload) -> AbiFuture` | 异步并行派发 | `ctx.parallel` |
+| 13 | `emit_async(ctx, event: AbiStr, payload: AbiBytes, out: *mut AbiFuture, err)` | 异步并行派发 | `ctx.parallel` |
 | 14 | `export_state(ctx, schema: AbiStr, version: u32, exporter: AbiObject, err) -> AbiStatus` | 登记状态导出器（`DOC-11` §5），登记为效应 | 运行时 |
-| 15 | `inherited_state(ctx, out_schema: *mut AbiBuf, out_version: *mut u32, out_data: *mut AbiBuf) -> u8` | 读取继承状态，没有时返回 0 | 运行时 |
-| 16 | `config(ctx, out: *mut AbiBuf)` | 读取实例配置，CBOR | `Fiber::config` |
+| 15 | `inherited_state(ctx, out: *mut AbiOption<AbiState>, err)` | 读取继承状态 | 运行时 |
+| 16 | `config(ctx, out: *mut AbiBuf, err)` | 读取实例配置，CBOR | `Fiber::config` |
 | 17 | `spawn_thread(ctx, name: AbiStr, body: AbiObject, err) -> AbiStatus` | 创建归属当前效应的系统线程（`PR-2`） | 运行时 |
-| 18 | `lease_acquire(library: LibraryId)` | 增加租约（§11） | 装载器 |
-| 19 | `lease_release(library: LibraryId)` | 减少租约 | 装载器 |
+| 18 | `lease_acquire(library: LibraryId, err)` | 增加租约（§11） | 装载器 |
+| 19 | `lease_release(library: LibraryId, err)` | 减少租约 | 装载器 |
+| 20 | `effect_settled(effect, out: *mut AbiFuture, err)` | 等待效应体完成 | `Effect::settled` |
+| 21 | `effect_dispose(effect, out: *mut AbiFuture, err)` | 释放效应并等待清理 | `Effect::dispose` |
 
 `M8` 可以在冻结前调整此表的签名与顺序，调整后同步更新本节和布局记录。冻结后只能在末尾追加，并提升 `HostV1` 的次版本（`size` 增大）。
 
@@ -203,7 +234,7 @@ struct PluginV1 {
     AbiStr   build_info;          // 编译器版本、目标三元组，供诊断
     const struct ComponentV1 *components;
     uint64_t component_count;
-    void (*release)(const struct PluginV1 *self);
+    AbiStatus (*release)(const struct PluginV1 *self, AbiError *err);
 };
 struct ComponentV1 {
     uint64_t size;
@@ -225,6 +256,8 @@ struct DependencyV1 {
 };
 ```
 
+`components` 指向 `component_count` 条连续组件记录。每条记录的 `size` 是该记录的完整字节数，至少为 v1.0 的 `sizeof(ComponentV1)`，并为 `alignof(ComponentV1)` 的整数倍。读取方先读取并验证 `size`，再把记录前缀解释为 `ComponentV1`；下一条记录位于当前地址加 `size` 字节处。组件表原始指针的来源覆盖整张记录表。Rust 绑定通过 `component_at` 共享此读取协议，追加字段的记录由原实现方保留至描述符释放。
+
 装载器的校验：
 
 1. `abi_major` 受支持，`size` 不小于 v1.0 的结构大小。
@@ -235,9 +268,9 @@ struct DependencyV1 {
 ## 11 租约
 
 1. 装载器为每个装载的库分配 `LibraryId` 和一个原子计数。
-2. 任何持有某库代码指针或数据指针的值（`AbiObject`、`AbiFuture`、`AbiWaker`、已登记的回调与清理函数），在存在期间持有该库的一份租约。
-3. 宿主从插件接收此类值时，在宿主侧的包装中获取一份租约，包装被释放时归还。
-4. 插件把从宿主取得的另一插件的对象再 `clone` 时，SDK 调用 `lease_acquire` 获取新租约；`drop` 时调用 `lease_release`。
+2. 任何持有某库代码指针或数据指针的拥有值（`AbiBuf`、`AbiObject`、`AbiFuture`、`AbiWaker`、回调与清理函数），创建时取得该库的一份租约。
+3. 接收方安全包装接管拥有值及其既有租约。clone 创建新资源引用并取得新租约；转交移动既有引用与租约。
+4. 释放时调用方在 free/drop/wake 返回后归还租约。调用方保持整个边界调用期间的库引用。lease_release 调整计数；装载器在相关调用返回后调度物理卸载。描述符与其组件函数由装载器持有的库租约覆盖。
 5. 库的组件全部停用且计数为 0 时，该库的代码进入静止状态。之后是否关闭库由 `ADR-0012` 规定。
 
 ## 12 兼容规则与变更流程

@@ -6,18 +6,18 @@
 
 | 项 | 值 |
 |---|---|
-| 最近完成的里程碑 | `M7` |
-| 进行中的里程碑 | 第二阶段 M8 |
-| 下一步 | 接入 ABI 候选及开发依赖，完成边界行为测试、Miri、布局记录与安全审计后冻结 v1.0 |
+| 最近完成的里程碑 | `M8` |
+| 进行中的里程碑 | 第二阶段 M9 |
+| 下一步 | 接入 SDK、过程宏、kv-api、kv-mem、counter；执行回环宿主及兼容用例，完成 M9 的 Y-1–Y-10 |
 | 阻塞项 | 无；用户已恢复执行 |
-| 最后更新 | 2026-11-11（UTC−08:00），M7 验收 |
+| 最后更新 | 2026-11-12（Asia/Shanghai），M8 验收 |
 
 ## 环境
 
 | 项 | 值 | 来源 |
 |---|---|---|
 | Rust 工具链 | 1.96.0 stable，`aarch64-apple-darwin` | 2026-11-11 `rustc --version` |
-| Miri 工具链 | nightly 1.102.0-nightly（3ef0c22cd 2026-11-11）；miri 与 rust-src 已安装 | 本轮授权的 rustup 安装结果；实际 Miri 验收在 M8 |
+| Miri 工具链 | nightly 1.102.0-nightly（3ef0c22cd 2026-11-11）；miri 与 rust-src 已安装 | M8 的 12 条边界行为与布局比较通过；sysroot 位于 target/miri-sysroot |
 | `UPSTREAM` | `cordis/`，commit `261c5fdae6edb54e7ed4f071024f530acd18903b` | 2026-11-11 `git -C cordis log -1` |
 | Python | `conda run -n base python`（仅用于 `tools/conformance.py`） | 项目约定 |
 | 依赖版本 | slotmap 1.1.1；parking_lot 0.13.0；futures-core / futures-util 0.3.34；thiserror 2.0.21；serde 1.0.229；serde_json 1.0.154；tokio 1.54.1 | M0：逐项 `cargo search <crate> --limit 1`；workspace 固定版本，按模块调用引入 crate |
@@ -193,19 +193,35 @@
 | service.rs | 205 |
 | 合计 | 4903 |
 
+### M8 ABI v1.0
+
+- commit：本节所在的 `M8: 冻结原生插件 ABI v1.0` 提交。
+- Y-1：`cargo fmt --all --check` 通过。
+- Y-2：`cargo clippy --workspace --all-targets -- -D warnings` 通过。
+- Y-3：`cargo test --workspace` 通过，207 条运行测试、2 条文档测试。最终描述符 fixture 的指针发布调整与布局基准读取调整分别通过定向测试；其余结果复用。`cargo build`、`cargo +1.85.0 build -p cordis-abi` 通过。
+- Y-4：`conda run -n base python tools/conformance.py check --through M6` 通过，177 条处置保持 8 条移植、166 条改写、3 条不适用。
+- Y-5：源码审计通过。syn 与 proc-macro2 位于 ABI 的开发依赖；审计覆盖 unsafe 块、函数、impl、extern 块、属性和宏模板的紧邻 SAFETY 注释。
+- Y-6：`cargo +nightly miri test -p cordis-abi` 的行为与布局目标通过，按失败修复范围分别执行并复用成功结果。12 条边界行为覆盖所有权、源侧释放、租约、跨线程唤醒、取消、错误与 panic、回调和描述符扩展；审计测试通过 `cfg(not(miri))` 留在原生执行。运行环境使用工作区内 MIRI_SYSROOT 与 TMPDIR。
+- Y-7：`cargo test -p cordis-abi --test layout` 通过。布局记录包括 HostV1 的 22 个槽和全部 ABI 类型；Miri 通过编译期嵌入的同一基准逐字段比较。
+- Y-8：内核 4903 行、testkit 181 行、ABI 2127 行。ABI 高于 1500 行目标、低于 2500 行上限；拥有值、错误、Future/Waker、描述符和回环测试支持分别维护源侧资源所有权。
+- Y-9：已记录验证结果、Miri 工具链及 M9 入口；DOC-12 状态为已冻结 v1.0。
+- Y-10：提交主题 `M8: 冻结原生插件 ABI v1.0`，推送至 `origin/main`。
+- 设计决定：ADR-0015 规定统一错误通道、创建时取得租约、释放回调返回后归还租约、清理期上下文、状态导出解冻及组件 size 步进。
+- 遗留：M9、M10 候选按下表继续接入，构建缓存保留。
+
 ## 第二阶段候选与恢复记录
 
 用户设置的 10 分钟计时于 2026-11-12 02:40:22 UTC 到期后暂停，随后按用户指令恢复。设计提交为 `478b3a4`，包含用户指定的序号和完整字节比对方案。M7 已完成验收，后续候选继续按下表接入。
 
 | 工作项 | 保存位置与实际状态 | 恢复入口 |
 |---|---|---|
-| M8 协议 | 正式草稿修改在 `docs/12-abi-v1.md`、`docs/13-runtime-architecture.md`，新增 `docs/adr/0015-abi-ownership-and-errors.md` | 三文件属于 M8，M7 提交按路径选择暂存 |
-| M8 实现 | `target/abi-m8/`：ABI 类型、错误、环境、缓冲、对象、Future/Waker、回调、Host 22 槽、描述符、布局和审计候选 | 候选独立 manifest 的 `cargo check` 通过，10.13 秒、0 警告；接入正式 crate 后补行为测试、Miri、布局生成/比对、源码审计和 Rust 1.85 构建 |
-| M9 实现 | `target/sdk-m9/`：SDK、过程宏、kv-api、kv-mem、counter 候选 | ABI 冻结后接入并编译，补回环宿主、接口次版本及事件字段兼容测试，更新 SDK 草图 |
+| M8 协议与实现 | `crates/cordis-abi/`、DOC-12、ADR-0015、`docs/abi/v1-layout.txt`、安全审计工具 | 已通过本节记录的行为、Miri、布局和 Rust 1.85 验证 |
+| M9 实现 | `target/sdk-m9/`：SDK、过程宏、kv-api、kv-mem、counter 候选，正在迁入正式目录 | 回环宿主用例已在候选通过，覆盖 22 个 Host 槽、接口次版本、事件字段兼容与状态继承；正式接入后执行 M9 退出条件 |
+| M10 实现 | `target/loader-m10/`；内核增补在候选内核与 kernel.patch | 真实动态库装载、替换、回滚、8 线程调用、字节验证门、状态文件及资源生命周期用例通过；按 ADR-0016 接入内核增补 |
 
 M8 候选保留独立 `[workspace]` 以便隔离编译，正式接入时改为根工作区成员及依赖继承。候选解析版本为 serde 1.0.229、ciborium 0.2.2、syn 2.0.119、proc-macro2 1.0.107、quote 1.0.47；审计解析器归开发依赖。SDK、ABI、宏及示例插件的 MSRV 保持 1.85，实际跨编译器验收在 AC-8。
 
-后续还需按 ADR 记录命令行、版本及 JSON 文件解析所需的成熟依赖与内置接口依赖方向，再实现装载器、运行时、验证门和 AC-1–AC-9。已查询 clap 4.6.7、semver 1.0.28、toml 1.2.1、libloading 0.9.0 的元数据；notify 查询返回预发布版本，正式接入时选稳定版本。
+后续设计已写在工作区 ADR-0016、ADR-0017，随对应里程碑纳入提交。依赖版本候选为 clap 4.6.7、semver 1.0.28、toml 1.2.1、libloading 0.9.0、notify 8.2.0。M11 运行时候选位于 `target/runtime-m11/`。
 
 当前保留 `target/` 中的候选源码及缓存，继续后续里程碑。
 
@@ -232,6 +248,7 @@ M8 候选保留独立 `[workspace]` 以便隔离编译，正式接入时改为�
 - 2026-11-11（UTC−08:00）：第二阶段按用户决定采用单调序号路径与完整字节比较；验证门保存已验证库副本，印记记录副本路径、套件及断言结果。DOC-11、DOC-13、DOC-14、ADR-0012 已同步。
 - 2026-11-11（UTC−08:00）：按 DOC-10 §8 统一导出冻结语义：SW-1–SW-4 保持实例与绑定，SW-5 可逆冻结，导出失败解冻。kv-mem/kv-file 使用共同逻辑插件名 kv、组件名 kv-store，使 AC-2 满足同名替换输入。K-5 已在 940650c 实现。
 - 2026-11-11（UTC−08:00）：M8 冻结前补齐 ABI 的释放错误通道、缓冲租约、异步结果和回调签名，形成 ADR-0015 后实现；M9 接口宏通过 trait/impl 的 async 方法转换提供 dyn 接口，接口 crate 保持普通 Rust 库。
+- 2026-11-12（Asia/Shanghai）：Miri 确认完整虚表指针需要覆盖方法槽，描述符释放前结束受保护借用，组件表指针从最终分配位置发布；相应修复后的 12 条边界用例通过。布局测试采用编译期基准，适配 Miri 文件隔离。
 
 - 2026-11-11：`DSP-03` 包含 `root.on`，其嵌套效应归属、元信息树与逆序释放属于 M1；事件表登记与移除在 M2 接入。依据 `dispose.spec.ts:37-74`。
 - 2026-11-11（UTC−08:00）：`CMP-10` 在挂载后立即释放根，仍执行一次子组件加载；卸载调用逆变换前的调度让步决定该顺序。已按 `fiber.ts:495-499` 补正 S-FBR-12 并恢复原始测试触发。
