@@ -29,10 +29,10 @@ pub use logger::{
     ExporterOptions, LogLevel, LogMessage, LogValue, Logger, LoggerKey, LoggerMeta, WeakFiber,
 };
 pub use reflect::{
-    InternalGet, InternalService, InternalSet, ServiceAccess, ServiceChange, ServiceValue,
+    AnyArc, InternalGet, InternalService, InternalSet, ServiceAccess, ServiceChange, ServiceValue,
 };
 pub use registry::{
     Component, ComponentDef, ComponentId, Config, Inject, InternalReplace, RawConfig, Registry,
     ValidationError, ValidationIssue,
 };
-pub use service::{Merge, Provision, Scoped, ServiceKey};
+pub use service::{Merge, NamedProvision, Provision, Scoped, ServiceKey};

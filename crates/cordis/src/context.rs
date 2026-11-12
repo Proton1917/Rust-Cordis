@@ -76,8 +76,8 @@ pub(crate) enum Layer {
     Root,
     Fiber,
     Extend(TypeId, Arc<dyn Any + Send + Sync>),
-    Isolate(TypeId, Realm),
-    Intercept(TypeId, Arc<dyn Any + Send + Sync>),
+    Isolate(Arc<str>, Realm),
+    Intercept(Arc<str>, Arc<dyn Any + Send + Sync>),
 }
 
 impl Context {
@@ -134,21 +134,31 @@ impl Context {
     /// S-CTX-3、T-COE-7：派生键的隔离视图。
     /// `K` 在返回视图中解析到 `realm`，其余服务键继续继承原有域。
     pub fn isolate<K: ServiceKey>(&self, realm: Realm) -> Self {
-        self.derive(Layer::Isolate(TypeId::of::<K>(), realm))
+        self.isolate_named(K::NAME, realm)
+    }
+
+    /// K-2、T-COE-7：按名称派生隔离视图，覆盖该服务的解析域。
+    pub fn isolate_named(&self, name: impl Into<Arc<str>>, realm: Realm) -> Self {
+        self.derive(Layer::Isolate(name.into(), realm))
     }
 
     /// 返回当前视图对服务键 `K` 解析出的隔离域。
     pub fn realm<K: ServiceKey>(&self) -> Realm {
-        self.resolve_realm(TypeId::of::<K>())
+        self.resolve_realm(K::NAME)
     }
 
-    pub(crate) fn resolve_realm(&self, key: TypeId) -> Realm {
+    /// 返回当前视图对运行时名称解析出的隔离域。
+    pub fn realm_named(&self, name: &str) -> Realm {
+        self.resolve_realm(name)
+    }
+
+    pub(crate) fn resolve_realm(&self, key: &str) -> Realm {
         let mut scope = Some(&self.scope);
         while let Some(node) = scope {
-            if let Layer::Isolate(k, realm) = node.layer
-                && key == k
+            if let Layer::Isolate(k, realm) = &node.layer
+                && key == k.as_ref()
             {
-                return realm;
+                return *realm;
             }
             scope = node.parent.as_ref();
         }
@@ -158,7 +168,26 @@ impl Context {
     /// S-CTX-4、T-COE-11、T-COE-13：保留拦截层，访问时合并。
     /// 返回附加 `meta` 的派生视图，合并顺序由 `K::Meta::merge` 定义。
     pub fn intercept<K: ServiceKey>(&self, meta: K::Meta) -> Self {
-        self.derive(Layer::Intercept(TypeId::of::<K>(), Arc::new(meta)))
+        self.intercept_named(K::NAME, Arc::new(meta))
+    }
+
+    /// K-2、T-COE-11：为命名服务附加元数据层，后层覆盖前层。
+    pub fn intercept_named(&self, name: impl Into<Arc<str>>, meta: crate::AnyArc) -> Self {
+        self.derive(Layer::Intercept(name.into(), meta))
+    }
+
+    /// K-2、T-COE-10：从最近声明开始，取使用点最内层的命名元数据。
+    pub fn named_meta(&self, name: &str) -> Option<crate::AnyArc> {
+        let mut scope = Some(&self.scope);
+        while let Some(node) = scope {
+            if let Layer::Intercept(key, value) = &node.layer
+                && key.as_ref() == name
+            {
+                return Some(value.clone());
+            }
+            scope = node.parent.as_ref();
+        }
+        crate::reflect::injected_value(self, name)
     }
 
     pub(crate) fn merge_meta<K: ServiceKey>(&self, initial: K::Meta) -> K::Meta {
@@ -166,7 +195,7 @@ impl Context {
         let mut scope = Some(&self.scope);
         while let Some(node) = scope {
             if let Layer::Intercept(key, value) = &node.layer
-                && *key == TypeId::of::<K>()
+                && key.as_ref() == K::NAME
             {
                 layers.push(
                     value

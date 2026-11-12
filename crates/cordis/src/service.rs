@@ -18,7 +18,8 @@ impl Merge for () {
 
 /// T-COE-1：以独立键类型关联服务值、访问元数据和可读名称。
 ///
-/// 内核以键类型的 `TypeId` 区分服务，以隔离域区分同一键的绑定。
+/// 内核以 `NAME` 解析服务，以隔离域区分同一键的绑定。
+/// 首次提供登记键类型，随后同名的其他键类型或命名提供返回冲突。
 /// 每个键的值通过 `Arc<Self::Value>` 提供，读取时返回相同值类型的 `Scoped<Self>`。
 pub trait ServiceKey: 'static {
     /// 服务名称，供错误消息、效应标签和服务通知使用。
@@ -135,15 +136,13 @@ impl<K: ServiceKey> fmt::Debug for Scoped<K> {
 /// 克隆句柄共享同一绑定及其效应。释放由 `dispose` 或所属纤程卸载触发；
 /// 已提交消费者清理期间，撤回的绑定记录继续保留，供该次加载完成清理。
 pub struct Provision<K: ServiceKey> {
-    pub(crate) effect: Effect,
-    pub(crate) binding: ImplId,
+    pub(crate) inner: NamedProvision,
     pub(crate) marker: PhantomData<fn() -> K>,
 }
 impl<K: ServiceKey> Clone for Provision<K> {
     fn clone(&self) -> Self {
         Self {
-            effect: self.effect.clone(),
-            binding: self.binding,
+            inner: self.inner.clone(),
             marker: PhantomData,
         }
     }
@@ -151,13 +150,13 @@ impl<K: ServiceKey> Clone for Provision<K> {
 impl<K: ServiceKey> Provision<K> {
     /// 返回登记服务的效应句柄，供 `EffectScope::adopt` 组合释放顺序。
     pub fn effect(&self) -> Effect {
-        self.effect.clone()
+        self.inner.effect()
     }
     /// S-SVC-2：立即开始撤回绑定，返回等待消费者清理和绑定记录释放的任务。
     ///
     /// 撤回会通知同域消费者重新解析依赖；重复调用共享同次释放结果。
     pub fn dispose(&self) -> Task<Result> {
-        self.effect.dispose()
+        self.inner.dispose()
     }
     /// 将当前绑定的值替换为 `value`，成功返回 `()`。
     ///
@@ -166,12 +165,40 @@ impl<K: ServiceKey> Provision<K> {
     /// 可用性条件变化后，通过 `notify` 重新评估消费者依赖。
     #[track_caller]
     pub fn set(&self, value: Arc<K::Value>) -> Result {
-        crate::reflect::set::<K>(&self.effect.kernel, self.binding, value)
+        self.inner.set(Arc::new(value))
     }
     /// S-SVC-5：按本绑定的键和隔离域重新检查当前服务及消费者依赖。
     ///
     /// 检查在锁外调用可用性谓词，随后推进纤程调和并派发 `InternalService`。
     /// 绑定记录已经回收时，调用直接结束。
+    pub fn notify(&self) {
+        self.inner.notify();
+    }
+}
+
+/// K-2、S-SVC-10：命名服务绑定的修改、通知与撤回句柄。
+#[derive(Clone)]
+pub struct NamedProvision {
+    pub(crate) effect: Effect,
+    pub(crate) binding: ImplId,
+    pub(crate) name: Arc<str>,
+}
+
+impl NamedProvision {
+    /// 返回服务登记效应，供父效应组合释放顺序。
+    pub fn effect(&self) -> Effect {
+        self.effect.clone()
+    }
+    /// S-SVC-2：撤回绑定并等待已提交消费者清理结束。
+    pub fn dispose(&self) -> Task<Result> {
+        self.effect.dispose()
+    }
+    /// S-SVC-10：替换绑定的原始值，保留绑定身份及消费者纪元。
+    #[track_caller]
+    pub fn set(&self, value: crate::AnyArc) -> Result {
+        crate::reflect::set(&self.effect.kernel, self.binding, value, self.name.clone())
+    }
+    /// S-SVC-5：按当前名称和隔离域重新解析依赖并发送服务通知。
     pub fn notify(&self) {
         crate::reflect::notify_binding(&self.effect.kernel, self.binding);
     }

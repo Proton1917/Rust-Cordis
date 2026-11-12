@@ -1,8 +1,8 @@
 //! 绑定存储、访问中介与依赖通知。
 
 use crate::{
-    Context, Error, Event, FiberState, Provision, Realm, Result, Scoped, ServiceKey, SyncKind,
-    Task, WaterfallKind,
+    Context, Error, Event, FiberState, NamedProvision, Provision, Realm, Result, Scoped,
+    ServiceKey, SyncKind, Task, WaterfallKind,
     context::{Layer, Scope},
     kernel::{FiberId, ImplId, Kernel, State},
 };
@@ -16,17 +16,18 @@ use std::{
     task::{Poll, Waker},
 };
 
-pub(crate) type AnyValue = Arc<dyn Any + Send + Sync>;
+/// K-2、K-3：由宿主持有的类型擦除服务值、事件载荷或元数据。
+pub type AnyArc = Arc<dyn Any + Send + Sync>;
 type Check = Arc<dyn Fn() -> bool + Send + Sync>;
 
 /// S-SVC-5：服务通知携带的名称与通知时的实时绑定。
 #[derive(Clone)]
 pub struct ServiceChange {
-    /// 发生通知的服务名称，与 `ServiceKey::NAME` 相同。
-    pub name: &'static str,
+    /// 发生通知的服务名称，供类型化键和命名键共用。
+    pub name: Arc<str>,
     /// 当前键和隔离域的实时值；绑定存在时为 `Some`，缺失时为 `None`。
     ///
-    /// 类型擦除层保存 `Arc<K::Value>`，可用 `downcast_ref::<Arc<K::Value>>()` 读取。
+    /// 类型化提供保存 `Arc<K::Value>` 擦除层，命名提供保存传入的原始 `AnyArc`。
     pub value: Option<Arc<dyn Any + Send + Sync>>,
 }
 /// S-SVC-5：提供、撤回及提供方可用状态变化时派发的同步服务通知。
@@ -50,13 +51,13 @@ impl Event for InternalService {
 pub struct ServiceAccess {
     /// 读取时为请求上下文，修改时为提供该绑定的上下文。
     pub context: Context,
-    /// 目标服务的 `ServiceKey::NAME`。
-    pub name: &'static str,
+    /// 目标服务的拥有型名称。
+    pub name: Arc<str>,
 }
 /// `InternalGet` 返回的类型擦除服务值及其提供点。
 #[derive(Clone)]
 pub struct ServiceValue {
-    /// 保存 `Arc<K::Value>` 的类型擦除层，读取端按键 `K` 恢复内部 `Arc`。
+    /// 类型化提供保存 `Arc<K::Value>` 擦除层，命名提供保存原始 `AnyArc`。
     pub value: Arc<dyn Any + Send + Sync>,
     /// 提供该值的上下文，用于返回句柄的 `definition` 和后续依赖解析。
     pub definition: Context,
@@ -92,11 +93,10 @@ impl Event for InternalSet {
 
 pub(crate) struct ImplData {
     pub uid: u64,
-    pub key: TypeId,
-    pub name: &'static str,
+    pub key: Arc<str>,
     pub realm: Realm,
     pub scope: Arc<Scope>,
-    pub value: AnyValue,
+    pub value: AnyArc,
     pub check: Option<Check>,
     pub dependents: HashSet<FiberId>,
     pub waiters: Vec<Waker>,
@@ -134,49 +134,77 @@ impl Context {
         value: Arc<K::Value>,
         check: Option<Check>,
     ) -> Result<Provision<K>> {
-        let key = TypeId::of::<K>();
-        let realm = self.resolve_realm(key);
+        Ok(Provision {
+            inner: self.provide_value(
+                K::NAME.into(),
+                Some(TypeId::of::<K>()),
+                Arc::new(value),
+                check,
+            )?,
+            marker: PhantomData,
+        })
+    }
+
+    /// K-2、T-COE-2：按名称提供原始拥有型值，返回修改、通知与撤回句柄。
+    /// 同名键的首次提供方式保持固定，类型化提供与命名提供冲突时返回错误。
+    #[track_caller]
+    pub fn provide_named(
+        &self,
+        name: impl Into<Arc<str>>,
+        value: AnyArc,
+    ) -> Result<NamedProvision> {
+        self.provide_value(name.into(), None, value, None)
+    }
+
+    #[track_caller]
+    fn provide_value(
+        &self,
+        key: Arc<str>,
+        kind: Option<TypeId>,
+        value: AnyArc,
+        check: Option<Check>,
+    ) -> Result<NamedProvision> {
+        let realm = self.resolve_realm(&key);
+        let name = key.clone();
         let owner = self.scope.fiber;
         let scope = self.scope.clone();
         let kernel = self.kernel.clone();
         let location = Location::caller();
         let slot = Arc::new(std::sync::OnceLock::new());
         let result = slot.clone();
-        let effect = self.effect(format!("ctx.provide(\"{}\")", K::NAME), move |fx| {
+        let effect = self.effect(format!("ctx.provide(\"{}\")", key), move |fx| {
             let (id, active) = {
                 let mut state = kernel.state.lock();
-                if state.names.get(K::NAME).is_some_and(|old| *old != key) {
+                if state.names.get(&key).is_some_and(|old| *old != kind) {
                     return Err(Error::new(format!(
                         "service name \"{}\" belongs to another key",
-                        K::NAME
+                        key
                     ))
                     .at(location));
                 }
-                if let Some(old) = state.store.get(&(key, realm)) {
+                if let Some(old) = state.store.get(&(key.clone(), realm)) {
                     let provider = state.impls[*old].scope.fiber;
                     let name = crate::fiber::name_locked(&state, provider);
                     return Err(Error::new(format!(
                         "service \"{}\" has been registered at <{}>",
-                        K::NAME,
-                        name
+                        key, name
                     ))
                     .at(location));
                 }
-                state.names.insert(K::NAME, key);
+                state.names.insert(key.clone(), kind);
                 state.impl_counter += 1;
                 let uid = state.impl_counter;
                 let id = state.impls.insert(ImplData {
                     uid,
-                    key,
-                    name: K::NAME,
+                    key: key.clone(),
                     realm,
                     scope,
-                    value: Arc::new(value),
+                    value,
                     check,
                     dependents: HashSet::new(),
                     waiters: Vec::new(),
                 });
-                state.store.insert((key, realm), id);
+                state.store.insert((key.clone(), realm), id);
                 state.fibers[owner].provisions.push(id);
                 (id, state.fibers[owner].state == FiberState::Active)
             };
@@ -190,14 +218,14 @@ impl Context {
                 }
             })?;
             if active {
-                notify(&kernel, key, realm);
+                notify(&kernel, &key, realm);
             }
             Ok(())
         })?;
-        Ok(Provision {
+        Ok(NamedProvision {
             effect,
             binding: *slot.get().expect("provision initialized"),
-            marker: PhantomData,
+            name,
         })
     }
 
@@ -209,15 +237,7 @@ impl Context {
     /// 调用会同步派发 `InternalGet`，用户中间件在内核锁外执行。
     #[track_caller]
     pub fn get<K: ServiceKey>(&self) -> Result<Scoped<K>> {
-        let context = self.clone();
-        let location = Location::caller();
-        let resolved = self.waterfall::<InternalGet>(
-            ServiceAccess {
-                context: self.clone(),
-                name: K::NAME,
-            },
-            move || context.get_value::<K>().map_err(|error| error.at(location)),
-        )?;
+        let resolved = self.get_service(K::NAME.into())?;
         let value = resolved
             .value
             .downcast_ref::<Arc<K::Value>>()
@@ -231,13 +251,32 @@ impl Context {
         })
     }
 
-    fn get_value<K: ServiceKey>(&self) -> Result<ServiceValue> {
+    /// K-2、T-CTX-2：按名称读取经授权的实际类型擦除存储值。
+    /// 类型化提供的值保留 `Arc<K::Value>` 擦除层；命名提供保留传入的 `AnyArc`。
+    #[track_caller]
+    pub fn get_named(&self, name: impl Into<Arc<str>>) -> Result<AnyArc> {
+        self.get_service(name.into()).map(|resolved| resolved.value)
+    }
+
+    #[track_caller]
+    fn get_service(&self, name: Arc<str>) -> Result<ServiceValue> {
+        let context = self.clone();
+        let location = Location::caller();
+        self.waterfall::<InternalGet>(
+            ServiceAccess {
+                context: self.clone(),
+                name: name.clone(),
+            },
+            move || context.get_value(&name).map_err(|error| error.at(location)),
+        )
+    }
+
+    fn get_value(&self, key: &Arc<str>) -> Result<ServiceValue> {
         let state = self.kernel.state.lock();
-        let key = TypeId::of::<K>();
         let located = if state.fibers[self.scope.fiber].parent_scope.is_none() {
             state
                 .store
-                .get(&(key, self.resolve_realm(key)))
+                .get(&(key.clone(), self.resolve_realm(key)))
                 .copied()
                 .map(|id| (None, Some(id)))
         } else {
@@ -248,16 +287,15 @@ impl Context {
             Some((Some(_), None)) => {
                 return Err(Error::new(format!(
                     "cannot get required service \"{}\" in inactive context",
-                    K::NAME
+                    key
                 ))
                 .at(Location::caller()));
             }
             _ => {
-                return Err(Error::new(format!(
-                    "cannot get property \"{}\" without inject",
-                    K::NAME
-                ))
-                .at(Location::caller()));
+                return Err(
+                    Error::new(format!("cannot get property \"{}\" without inject", key))
+                        .at(Location::caller()),
+                );
             }
         };
         Ok(ServiceValue {
@@ -276,10 +314,13 @@ impl Context {
     /// 可用性谓词由生命周期依赖解析执行。
     pub fn lookup<K: ServiceKey>(&self) -> Option<Scoped<K>> {
         let state = self.kernel.state.lock();
-        let key = TypeId::of::<K>();
-        let id = *state.store.get(&(key, self.resolve_realm(key)))?;
-        (state.fibers[state.impls[id].scope.fiber].state == FiberState::Active)
-            .then(|| scoped::<K>(&state, id, self.clone()))
+        let key: Arc<str> = K::NAME.into();
+        let id = *state.store.get(&(key, self.resolve_realm(K::NAME)))?;
+        if state.fibers[state.impls[id].scope.fiber].state == FiberState::Active {
+            scoped::<K>(&state, id, self.clone())
+        } else {
+            None
+        }
     }
 
     /// 返回共享内核中全部隔离域的当前绑定总数。
@@ -290,13 +331,12 @@ impl Context {
     }
 }
 
-fn scoped<K: ServiceKey>(state: &State, id: ImplId, caller: Context) -> Scoped<K> {
+fn scoped<K: ServiceKey>(state: &State, id: ImplId, caller: Context) -> Option<Scoped<K>> {
     let value = state.impls[id]
         .value
-        .downcast_ref::<Arc<K::Value>>()
-        .expect("service value follows key")
+        .downcast_ref::<Arc<K::Value>>()?
         .clone();
-    Scoped {
+    Some(Scoped {
         value,
         definition: Context {
             kernel: caller.kernel.clone(),
@@ -304,33 +344,36 @@ fn scoped<K: ServiceKey>(state: &State, id: ImplId, caller: Context) -> Scoped<K
         },
         requester: caller.clone(),
         caller,
-    }
+    })
 }
 
 pub(crate) fn injected_meta<K: ServiceKey>(context: &Context) -> K::Meta {
-    let metadata = {
+    injected_value(context, K::NAME)
+        .and_then(|value| value.downcast_ref::<K::Meta>().cloned())
+        .unwrap_or_default()
+}
+
+pub(crate) fn injected_value(context: &Context, name: &str) -> Option<AnyArc> {
+    {
         let state = context.kernel.state.lock();
-        locate(&state, &context.scope, TypeId::of::<K>())
+        locate(&state, &context.scope, name)
             .and_then(|(fiber, _)| fiber)
             .and_then(|id| {
                 state.fibers[id]
                     .inject
                     .entries
                     .iter()
-                    .find(|entry| entry.key == TypeId::of::<K>())
-                    .map(|entry| entry.meta.clone())
+                    .find(|entry| entry.key.as_ref() == name)
+                    .and_then(|entry| entry.meta.clone())
             })
-    };
-    metadata
-        .and_then(|value| value.downcast_ref::<K::Meta>().cloned())
-        .unwrap_or_default()
+    }
 }
 
 /// S-SVC-6、S-SVC-9：同域自供优先，隔离层截断祖先规格查找。
 pub(crate) fn locate(
     state: &State,
     start: &Arc<Scope>,
-    key: TypeId,
+    key: &str,
 ) -> Option<(Option<FiberId>, Option<ImplId>)> {
     let realm = scope_realm(start, key);
     let mut cursor = start.clone();
@@ -341,20 +384,29 @@ pub(crate) fn locate(
             state
                 .impls
                 .get(**id)
-                .is_some_and(|binding| binding.key == key && binding.realm == realm)
+                .is_some_and(|binding| binding.key.as_ref() == key && binding.realm == realm)
         }) {
             return Some((None, Some(*id)));
         }
         while !matches!(cursor.layer, Layer::Fiber | Layer::Root) || cursor.fiber != fiber_id {
-            if matches!(cursor.layer, Layer::Isolate(k, _) if k == key) {
+            if matches!(&cursor.layer, Layer::Isolate(k, _) if k.as_ref() == key) {
                 return None;
             }
             cursor = cursor.parent.clone()?;
         }
-        if let Some((_, binding)) = fiber.committed.iter().find(|(name, _)| *name == key) {
+        if let Some((_, binding)) = fiber
+            .committed
+            .iter()
+            .find(|(name, _)| name.as_ref() == key)
+        {
             return Some((Some(fiber_id), Some(*binding)));
         }
-        if fiber.inject.entries.iter().any(|entry| entry.key == key) {
+        if fiber
+            .inject
+            .entries
+            .iter()
+            .any(|entry| entry.key.as_ref() == key)
+        {
             return Some((Some(fiber_id), None));
         }
         let parent = fiber.parent_scope.as_ref()?;
@@ -363,13 +415,13 @@ pub(crate) fn locate(
     }
 }
 
-fn scope_realm(start: &Arc<Scope>, key: TypeId) -> Realm {
+fn scope_realm(start: &Arc<Scope>, key: &str) -> Realm {
     let mut scope = Some(start);
     while let Some(node) = scope {
-        if let Layer::Isolate(k, realm) = node.layer
-            && k == key
+        if let Layer::Isolate(k, realm) = &node.layer
+            && k.as_ref() == key
         {
-            return realm;
+            return *realm;
         }
         scope = node.parent.as_ref();
     }
@@ -377,7 +429,7 @@ fn scope_realm(start: &Arc<Scope>, key: TypeId) -> Realm {
 }
 
 #[track_caller]
-pub(crate) fn set<K: ServiceKey>(kernel: &Arc<Kernel>, id: ImplId, value: Arc<K::Value>) -> Result {
+pub(crate) fn set(kernel: &Arc<Kernel>, id: ImplId, value: AnyArc, name: Arc<str>) -> Result {
     let scope = kernel
         .state
         .lock()
@@ -385,31 +437,29 @@ pub(crate) fn set<K: ServiceKey>(kernel: &Arc<Kernel>, id: ImplId, value: Arc<K:
         .get(id)
         .map(|binding| binding.scope.clone());
     let Some(scope) = scope else {
-        return Err(Error::new(format!(
-            "cannot set property \"{}\" without provide",
-            K::NAME
-        ))
-        .at(Location::caller()));
+        return Err(
+            Error::new(format!("cannot set property \"{}\" without provide", name))
+                .at(Location::caller()),
+        );
     };
     let context = Context {
         kernel: kernel.clone(),
         scope,
     };
     let kernel = kernel.clone();
-    let value: AnyValue = Arc::new(value);
     context.waterfall::<InternalSet>(
         (
             ServiceAccess {
                 context: context.clone(),
-                name: K::NAME,
+                name: name.clone(),
             },
             value.clone(),
         ),
-        move || replace_value(&kernel, id, value.clone(), K::NAME),
+        move || replace_value(&kernel, id, value.clone(), &name),
     )
 }
 
-fn replace_value(kernel: &Arc<Kernel>, id: ImplId, value: AnyValue, name: &'static str) -> Result {
+fn replace_value(kernel: &Arc<Kernel>, id: ImplId, value: AnyArc, name: &str) -> Result {
     let old = {
         let mut state = kernel.state.lock();
         let Some(binding) = state.impls.get(id) else {
@@ -418,7 +468,7 @@ fn replace_value(kernel: &Arc<Kernel>, id: ImplId, value: AnyValue, name: &'stat
                 name
             )));
         };
-        if state.store.get(&(binding.key, binding.realm)) != Some(&id) {
+        if state.store.get(&(binding.key.clone(), binding.realm)) != Some(&id) {
             return Err(Error::new(format!(
                 "cannot set property \"{}\" without provide",
                 name
@@ -435,13 +485,13 @@ fn withdraw(kernel: &Arc<Kernel>, id: ImplId) -> Task {
     let (key, realm) = {
         let mut state = kernel.state.lock();
         let binding = &state.impls[id];
-        let pair = (binding.key, binding.realm);
+        let pair = (binding.key.clone(), binding.realm);
         if state.store.get(&pair) == Some(&id) {
             state.store.remove(&pair);
         }
         pair
     };
-    notify(kernel, key, realm);
+    notify(kernel, &key, realm);
     let kernel = kernel.clone();
     let mut yielded = false;
     Box::pin(poll_fn(move |cx| {
@@ -476,14 +526,14 @@ pub(crate) fn notify_binding(kernel: &Arc<Kernel>, id: ImplId) {
         .lock()
         .impls
         .get(id)
-        .map(|value| (value.key, value.realm));
+        .map(|value| (value.key.clone(), value.realm));
     if let Some((key, realm)) = pair {
-        notify(kernel, key, realm);
+        notify(kernel, &key, realm);
     }
 }
 
 /// T-COE-4、T-COE-5、S-SVC-5：只刷新同域内声明了变化键的纤程。
-fn notify(kernel: &Arc<Kernel>, key: TypeId, realm: Realm) {
+fn notify(kernel: &Arc<Kernel>, key: &Arc<str>, realm: Realm) {
     let fibers = {
         let state = kernel.state.lock();
         state
@@ -491,7 +541,7 @@ fn notify(kernel: &Arc<Kernel>, key: TypeId, realm: Realm) {
             .iter()
             .filter_map(|(id, fiber)| {
                 let scope = fiber.scope.as_ref()?;
-                (fiber.inject.entries.iter().any(|entry| entry.key == key)
+                (fiber.inject.entries.iter().any(|entry| &entry.key == key)
                     && scope_realm(scope, key) == realm)
                     .then(|| (id, scope.clone()))
             })
@@ -507,15 +557,10 @@ fn notify(kernel: &Arc<Kernel>, key: TypeId, realm: Realm) {
             .values()
             .find(|fiber| fiber.parent_scope.is_none())
             .expect("root fiber exists");
-        let name = state
-            .impls
-            .values()
-            .find(|binding| binding.key == key)
-            .expect("notified binding retained")
-            .name;
+        let name = key.clone();
         let value = state
             .store
-            .get(&(key, realm))
+            .get(&(key.clone(), realm))
             .map(|id| state.impls[*id].value.clone());
         (
             root.scope
@@ -543,7 +588,7 @@ pub(crate) fn refresh(kernel: &Arc<Kernel>, id: FiberId) {
     refresh_keys(kernel, id, None);
 }
 
-fn refresh_keys(kernel: &Arc<Kernel>, id: FiberId, key: Option<TypeId>) {
+fn refresh_keys(kernel: &Arc<Kernel>, id: FiberId, key: Option<&Arc<str>>) {
     let candidates = {
         let state = kernel.state.lock();
         let fiber = &state.fibers[id];
@@ -556,9 +601,9 @@ fn refresh_keys(kernel: &Arc<Kernel>, id: FiberId, key: Option<TypeId>) {
             .entries
             .iter()
             .enumerate()
-            .filter(|(_, entry)| key.is_none_or(|key| entry.key == key))
+            .filter(|(_, entry)| key.is_none_or(|key| &entry.key == key))
             .map(|(index, entry)| {
-                let pair = (entry.key, scope_realm(scope, entry.key));
+                let pair = (entry.key.clone(), scope_realm(scope, &entry.key));
                 let binding = state.store.get(&pair).copied();
                 let active = binding.is_some_and(|binding| {
                     state.fibers[state.impls[binding].scope.fiber].state == FiberState::Active
@@ -635,7 +680,7 @@ pub(crate) fn commit_locked(state: &mut State, id: FiberId) {
         .entries
         .iter()
         .zip(&fiber.bindings)
-        .filter_map(|(entry, binding)| binding.map(|id| (entry.key, id)))
+        .filter_map(|(entry, binding)| binding.map(|id| (entry.key.clone(), id)))
         .collect::<Vec<_>>();
     for (_, binding) in &bindings {
         let binding = &mut state.impls[*binding];
@@ -697,12 +742,12 @@ pub(crate) fn status_changed(kernel: &Arc<Kernel>, id: FiberId) {
             .iter()
             .filter_map(|id| {
                 let binding = &state.impls[*id];
-                let pair = (binding.key, binding.realm);
+                let pair = (binding.key.clone(), binding.realm);
                 (state.store.get(&pair) == Some(id)).then_some(pair)
             })
             .collect::<Vec<_>>()
     };
     for (key, realm) in pairs {
-        notify(kernel, key, realm);
+        notify(kernel, &key, realm);
     }
 }

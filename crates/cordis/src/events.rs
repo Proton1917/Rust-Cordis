@@ -1,7 +1,7 @@
 //! 类型化事件、可回退监听器与快照派发。
 
 use crate::{
-    Context, Effect, Error, Result, Task,
+    AnyArc, Context, Effect, Error, Result, Task,
     context::Scope,
     kernel::{EffectId, Kernel},
 };
@@ -81,6 +81,36 @@ struct SyncCallback<E: Event>(SyncListener<E>);
 struct AsyncCallback<E: Event>(AsyncListener<E>);
 struct WaterfallCallback<E: WaterfallEvent>(WaterfallListener<E>);
 
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub(crate) enum EventId {
+    Typed(TypeId),
+    Named(Arc<str>, bool),
+}
+
+impl EventId {
+    fn of<E: Event>() -> Self {
+        Self::Typed(TypeId::of::<E>())
+    }
+    fn is_named(&self) -> bool {
+        matches!(self, Self::Named(..))
+    }
+}
+
+struct NamedSync;
+impl Event for NamedSync {
+    const NAME: &'static str = "";
+    type Args = AnyArc;
+    type Output = Error;
+    type Kind = SyncKind;
+}
+struct NamedAsync;
+impl Event for NamedAsync {
+    const NAME: &'static str = "";
+    type Args = AnyArc;
+    type Output = AnyArc;
+    type Kind = AsyncKind;
+}
+
 pub(crate) struct Hook {
     scope: Arc<Scope>,
     callback: Arc<dyn Any + Send + Sync>,
@@ -118,19 +148,24 @@ pub struct ListenerRegistration {
     /// 发起登记的上下文，同时决定效应归属。
     pub context: Context,
     /// 事件声明的可读名称。
-    pub name: &'static str,
+    pub name: Arc<str>,
     /// 原始登记选项。
     pub options: EventOptions,
     /// 本次请求是否在首次调用前撤销登记。
     pub once: bool,
-    event: TypeId,
+    event: EventId,
     callback: Arc<dyn Any + Send + Sync>,
 }
 
 impl ListenerRegistration {
     /// 判断请求的事件身份是否为 `E`。
     pub fn is<E: Event>(&self) -> bool {
-        self.event == TypeId::of::<E>()
+        self.event == EventId::of::<E>()
+    }
+
+    /// K-3：返回本次请求是否采用命名事件入口。
+    pub fn is_named(&self) -> bool {
+        self.event.is_named()
     }
 
     /// 类型匹配时取得同步监听器，否则返回 `None`。
@@ -179,20 +214,25 @@ pub struct Dispatch {
     /// 本次调用采用的派发方式。
     pub mode: DispatchMode,
     /// 被派发事件的可读名称。
-    pub name: &'static str,
+    pub name: Arc<str>,
     /// 发起派发的上下文。
     pub context: Context,
     /// 本次派发是否携带过滤器。
     pub filtered: bool,
     /// 参数的拥有型快照，可通过 `args::<E>` 按事件类型读取。
     pub args: Arc<dyn Any + Send + Sync>,
-    event: TypeId,
+    event: EventId,
 }
 
 impl Dispatch {
     /// 判断被派发的事件身份是否为 `E`。
     pub fn is<E: Event>(&self) -> bool {
-        self.event == TypeId::of::<E>()
+        self.event == EventId::of::<E>()
+    }
+
+    /// K-3：命名派发的 `args` 保存传入的原始 `AnyArc` 载荷。
+    pub fn is_named(&self) -> bool {
+        self.event.is_named()
     }
 
     /// 事件类型匹配时返回参数引用，否则返回 `None`。
@@ -324,15 +364,94 @@ impl Context {
         options: EventOptions,
         once: bool,
     ) -> Result<Effect> {
+        self.listen_event(EventId::of::<E>(), E::NAME.into(), callback, options, once)
+    }
+
+    /// K-3、S-EVT-1：按运行时名称登记同步监听器。
+    #[track_caller]
+    pub fn on_named(
+        &self,
+        name: impl Into<Arc<str>>,
+        callback: impl Fn(&AnyArc) -> Result<Option<AnyArc>> + Send + Sync + 'static,
+    ) -> Result<Effect> {
+        self.on_named_with(name, callback, EventOptions::default())
+    }
+
+    /// 按给定选项登记命名同步监听器。
+    #[track_caller]
+    pub fn on_named_with(
+        &self,
+        name: impl Into<Arc<str>>,
+        callback: impl Fn(&AnyArc) -> Result<Option<AnyArc>> + Send + Sync + 'static,
+        options: EventOptions,
+    ) -> Result<Effect> {
+        let name = name.into();
+        self.listen_event(
+            EventId::Named(name.clone(), false),
+            name,
+            Arc::new(SyncCallback::<NamedSync>(Arc::new(move |args| {
+                callback(args).err()
+            }))),
+            options,
+            false,
+        )
+    }
+
+    /// S-EVT-9、K-3：在首次调用前撤销命名同步监听器，支持递归派发。
+    #[track_caller]
+    pub fn once_named(
+        &self,
+        name: impl Into<Arc<str>>,
+        callback: impl Fn(&AnyArc) -> Result<Option<AnyArc>> + Send + Sync + 'static,
+    ) -> Result<Effect> {
+        let name = name.into();
+        self.listen_event(
+            EventId::Named(name.clone(), false),
+            name,
+            Arc::new(SyncCallback::<NamedSync>(Arc::new(move |args| {
+                callback(args).err()
+            }))),
+            EventOptions::default(),
+            true,
+        )
+    }
+
+    /// K-3、S-EVT-5：登记命名异步监听器，任务由派发调用方等待。
+    #[track_caller]
+    pub fn on_named_async(
+        &self,
+        name: impl Into<Arc<str>>,
+        callback: impl Fn(AnyArc) -> Task<Result<Option<AnyArc>>> + Send + Sync + 'static,
+        options: EventOptions,
+    ) -> Result<Effect> {
+        let name = name.into();
+        self.listen_event(
+            EventId::Named(name.clone(), true),
+            name,
+            Arc::new(AsyncCallback::<NamedAsync>(Arc::new(callback))),
+            options,
+            false,
+        )
+    }
+
+    #[track_caller]
+    fn listen_event(
+        &self,
+        event: EventId,
+        name: Arc<str>,
+        callback: AnyArc,
+        options: EventOptions,
+        once: bool,
+    ) -> Result<Effect> {
         if !self.kernel.state.lock().fibers[self.scope.fiber].alive {
             return Err(Error::inactive().at(std::panic::Location::caller()));
         }
         let request = ListenerRegistration {
             context: self.clone(),
-            name: E::NAME,
+            name,
             options,
             once,
-            event: TypeId::of::<E>(),
+            event,
             callback,
         };
         if let Some(effect) = self.bail::<InternalListener>(&request) {
@@ -355,7 +474,19 @@ impl Context {
             });
             {
                 let mut state = request.context.kernel.state.lock();
-                let hooks = state.hooks.entry(request.event).or_default();
+                let named = request.event.is_named();
+                if state
+                    .event_names
+                    .get(&request.name)
+                    .is_some_and(|old| *old != named)
+                {
+                    return Err(Error::new(format!(
+                        "event name \"{}\" belongs to another key",
+                        request.name
+                    )));
+                }
+                state.event_names.insert(request.name, named);
+                let hooks = state.hooks.entry(request.event.clone()).or_default();
                 if hook.options.prepend {
                     hooks.insert(0, hook.clone());
                 } else {
@@ -395,21 +526,38 @@ impl Context {
         args: &E::Args,
         filter: Option<&dyn Fn(&Context) -> bool>,
     ) -> Vec<Arc<Hook>> {
-        if !E::NAME.starts_with("internal/") {
+        self.event_snapshot_key(
+            EventId::of::<E>(),
+            E::NAME.into(),
+            mode,
+            || Arc::new(args.clone()),
+            filter,
+        )
+    }
+
+    fn event_snapshot_key(
+        &self,
+        event: EventId,
+        name: Arc<str>,
+        mode: DispatchMode,
+        args: impl FnOnce() -> AnyArc,
+        filter: Option<&dyn Fn(&Context) -> bool>,
+    ) -> Vec<Arc<Hook>> {
+        if !name.starts_with("internal/") {
             let observed = self
                 .kernel
                 .state
                 .lock()
                 .hooks
-                .contains_key(&TypeId::of::<InternalDispatch>());
+                .contains_key(&EventId::of::<InternalDispatch>());
             if observed {
                 self.emit::<InternalDispatch>(&Dispatch {
                     mode,
-                    name: E::NAME,
+                    name,
                     context: self.clone(),
                     filtered: filter.is_some(),
-                    args: Arc::new(args.clone()),
-                    event: TypeId::of::<E>(),
+                    args: args(),
+                    event: event.clone(),
                 });
             }
         }
@@ -418,7 +566,7 @@ impl Context {
             .state
             .lock()
             .hooks
-            .get(&TypeId::of::<E>())
+            .get(&event)
             .cloned()
             .unwrap_or_default();
         if let Some(filter) = filter {
@@ -444,7 +592,28 @@ impl Context {
         args: &E::Args,
         filter: Option<&dyn Fn(&Context) -> bool>,
     ) {
-        for hook in self.event_snapshot::<E>(DispatchMode::Emit, args, filter) {
+        self.emit_hooks::<E>(
+            self.event_snapshot::<E>(DispatchMode::Emit, args, filter),
+            args,
+        );
+    }
+
+    /// K-3、S-EVT-4：同步派发命名事件，首个监听器错误交回调用方。
+    pub fn emit_named(&self, name: impl Into<Arc<str>>, args: &AnyArc) -> Result {
+        let name = name.into();
+        let hooks = self.event_snapshot_key(
+            EventId::Named(name.clone(), false),
+            name,
+            DispatchMode::Emit,
+            || args.clone(),
+            None,
+        );
+        self.bail_hooks::<NamedSync>(hooks, args)
+            .map_or(Ok(()), Err)
+    }
+
+    fn emit_hooks<E: SyncEvent>(&self, hooks: Vec<Arc<Hook>>, args: &E::Args) {
+        for hook in hooks {
             if hook.claim(&self.kernel) {
                 (hook
                     .callback
@@ -466,7 +635,14 @@ impl Context {
         args: &E::Args,
         filter: Option<&dyn Fn(&Context) -> bool>,
     ) -> Option<E::Output> {
-        for hook in self.event_snapshot::<E>(DispatchMode::Bail, args, filter) {
+        self.bail_hooks::<E>(
+            self.event_snapshot::<E>(DispatchMode::Bail, args, filter),
+            args,
+        )
+    }
+
+    fn bail_hooks<E: SyncEvent>(&self, hooks: Vec<Arc<Hook>>, args: &E::Args) -> Option<E::Output> {
+        for hook in hooks {
             if hook.claim(&self.kernel)
                 && let Some(value) = (hook
                     .callback
@@ -493,6 +669,28 @@ impl Context {
         filter: Option<&dyn Fn(&Context) -> bool>,
     ) -> Task<Result> {
         let hooks = self.event_snapshot::<E>(DispatchMode::Parallel, &args, filter);
+        self.parallel_hooks::<E>(hooks, args, E::NAME.into())
+    }
+
+    /// K-3、S-EVT-5：并发等待命名事件的异步监听器，汇总全部错误。
+    pub fn parallel_named(&self, name: impl Into<Arc<str>>, args: AnyArc) -> Task<Result> {
+        let name = name.into();
+        let hooks = self.event_snapshot_key(
+            EventId::Named(name.clone(), true),
+            name.clone(),
+            DispatchMode::Parallel,
+            || args.clone(),
+            None,
+        );
+        self.parallel_hooks::<NamedAsync>(hooks, args, name)
+    }
+
+    fn parallel_hooks<E: AsyncEvent>(
+        &self,
+        hooks: Vec<Arc<Hook>>,
+        args: E::Args,
+        name: Arc<str>,
+    ) -> Task<Result> {
         let kernel = self.kernel.clone();
         Box::pin(async move {
             let results = join_all(hooks.into_iter().map(|hook| {
@@ -522,7 +720,7 @@ impl Context {
             } else {
                 let mut error = Error::new(format!(
                     "one or more listeners of event \"{}\" failed",
-                    E::NAME
+                    name
                 ));
                 error.causes = causes;
                 Err(error)
@@ -598,7 +796,7 @@ impl Context {
             .state
             .lock()
             .hooks
-            .get(&TypeId::of::<E>())
+            .get(&EventId::of::<E>())
             .map_or(0, Vec::len)
     }
 }

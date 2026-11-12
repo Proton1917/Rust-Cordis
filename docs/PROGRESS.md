@@ -6,17 +6,18 @@
 
 | 项 | 值 |
 |---|---|
-| 最近完成的里程碑 | `M6` |
-| 进行中的里程碑 | 第二阶段 M7 |
-| 下一步 | 执行 DOC-14 M7：宿主拥有名称、命名服务与事件、旧定义闭包释放 |
-| 阻塞项 | 无 |
-| 最后更新 | 2026-11-11（UTC−08:00），第二阶段设计 |
+| 最近完成的里程碑 | `M7` |
+| 进行中的里程碑 | 第二阶段 M8 |
+| 下一步 | 接入 ABI 候选及开发依赖，完成边界行为测试、Miri、布局记录与安全审计后冻结 v1.0 |
+| 阻塞项 | 无；用户已恢复执行 |
+| 最后更新 | 2026-11-11（UTC−08:00），M7 验收 |
 
 ## 环境
 
 | 项 | 值 | 来源 |
 |---|---|---|
 | Rust 工具链 | 1.96.0 stable，`aarch64-apple-darwin` | 2026-11-11 `rustc --version` |
+| Miri 工具链 | nightly 1.102.0-nightly（3ef0c22cd 2026-11-11）；miri 与 rust-src 已安装 | 本轮授权的 rustup 安装结果；实际 Miri 验收在 M8 |
 | `UPSTREAM` | `cordis/`，commit `261c5fdae6edb54e7ed4f071024f530acd18903b` | 2026-11-11 `git -C cordis log -1` |
 | Python | `conda run -n base python`（仅用于 `tools/conformance.py`） | 项目约定 |
 | 依赖版本 | slotmap 1.1.1；parking_lot 0.13.0；futures-core / futures-util 0.3.34；thiserror 2.0.21；serde 1.0.229；serde_json 1.0.154；tokio 1.54.1 | M0：逐项 `cargo search <crate> --limit 1`；workspace 固定版本，按模块调用引入 crate |
@@ -158,6 +159,55 @@
 | registry.rs | 539 |
 | service.rs | 178 |
 | 合计 | 4483 |
+
+## 第二阶段里程碑
+
+### M7 跨编译边界的内核入口
+
+- commit：本节所在的 `M7: 实现拥有型名称与命名插件入口` 提交。
+- Y-1：`cargo fmt --all --check` 通过。
+- Y-2：`cargo clippy --workspace --all-targets -- -D warnings` 通过。
+- Y-3：`cargo test --workspace` 通过，193 条运行测试与 2 条文档测试；10 条新用例覆盖 K-1–K-4，8 线程 1000 轮压力测试组耗时 3.03 秒。`cargo build` 通过。
+- Y-4：`conda run -n base python tools/conformance.py check --through M6` 通过，177 条处置保持 8 条移植、166 条改写、3 条不适用。
+- Y-5–Y-7：按 DOC-14 从 M8 开始执行。
+- Y-8：内核 4903 行，testkit 181 行。内核高于 4800 行目标、低于 6000 行上限；新增行主要用于命名事件入口、共享派发辅助函数和运行时名称所有权。
+- Y-9：已更新当前状态、接口细化与模块行数。
+- Y-10：提交主题 `M7: 实现拥有型名称与命名插件入口`，推送至 `origin/main`。
+- 设计落实：服务按名称统一解析，提供登记保留 typed/named 冲突；命名元数据后层覆盖；类型化事件保留 TypeId 身份，命名同步/异步族各自派发。同步命名回调通过 Result 传播业务错误。
+- K-4：别名保存 ComponentId → ComponentId，终点定义表保留当前目标；连续三次替换的旧闭包 Weak 释放与旧别名重新挂载均通过。
+- 遗留：M8 草案与候选继续按依赖顺序接入，当前保留构建缓存。
+
+| 内核模块 | M7 行数 |
+|---|---:|
+| context.rs | 251 |
+| effect.rs | 506 |
+| error.rs | 67 |
+| events.rs | 856 |
+| fiber.rs | 1034 |
+| kernel.rs | 155 |
+| lib.rs | 38 |
+| list.rs | 57 |
+| logger.rs | 415 |
+| reflect.rs | 753 |
+| registry.rs | 566 |
+| service.rs | 205 |
+| 合计 | 4903 |
+
+## 第二阶段候选与恢复记录
+
+用户设置的 10 分钟计时于 2026-11-12 02:40:22 UTC 到期后暂停，随后按用户指令恢复。设计提交为 `478b3a4`，包含用户指定的序号和完整字节比对方案。M7 已完成验收，后续候选继续按下表接入。
+
+| 工作项 | 保存位置与实际状态 | 恢复入口 |
+|---|---|---|
+| M8 协议 | 正式草稿修改在 `docs/12-abi-v1.md`、`docs/13-runtime-architecture.md`，新增 `docs/adr/0015-abi-ownership-and-errors.md` | 三文件属于 M8，M7 提交按路径选择暂存 |
+| M8 实现 | `target/abi-m8/`：ABI 类型、错误、环境、缓冲、对象、Future/Waker、回调、Host 22 槽、描述符、布局和审计候选 | 候选独立 manifest 的 `cargo check` 通过，10.13 秒、0 警告；接入正式 crate 后补行为测试、Miri、布局生成/比对、源码审计和 Rust 1.85 构建 |
+| M9 实现 | `target/sdk-m9/`：SDK、过程宏、kv-api、kv-mem、counter 候选 | ABI 冻结后接入并编译，补回环宿主、接口次版本及事件字段兼容测试，更新 SDK 草图 |
+
+M8 候选保留独立 `[workspace]` 以便隔离编译，正式接入时改为根工作区成员及依赖继承。候选解析版本为 serde 1.0.229、ciborium 0.2.2、syn 2.0.119、proc-macro2 1.0.107、quote 1.0.47；审计解析器归开发依赖。SDK、ABI、宏及示例插件的 MSRV 保持 1.85，实际跨编译器验收在 AC-8。
+
+后续还需按 ADR 记录命令行、版本及 JSON 文件解析所需的成熟依赖与内置接口依赖方向，再实现装载器、运行时、验证门和 AC-1–AC-9。已查询 clap 4.6.7、semver 1.0.28、toml 1.2.1、libloading 0.9.0 的元数据；notify 查询返回预发布版本，正式接入时选稳定版本。
+
+当前保留 `target/` 中的候选源码及缓存，继续后续里程碑。
 
 ## 公开接口清单
 

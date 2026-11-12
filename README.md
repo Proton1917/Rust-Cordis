@@ -142,7 +142,7 @@ conda run -n base python tools/conformance.py check   # 校验一致性矩阵
 | `M5` | 拦截、调用方句柄、日志、替换 |
 | `M6` | 收尾：示例、多线程压力测试、接口冻结 |
 
-`M0`–`M6` 及并发评审修复已提交，公开接口已完成 M6 验收。各里程碑的执行结果和接口清单记录在 `docs/PROGRESS.md`。
+`M0`–`M7` 及并发评审修复已提交，第二阶段正在推进 ABI、SDK 与动态装载。各里程碑的执行结果和接口清单记录在 `docs/PROGRESS.md`。
 
 ## 范围外
 

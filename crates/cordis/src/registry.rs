@@ -30,9 +30,8 @@ pub struct Inject {
 
 #[derive(Clone)]
 pub(crate) struct Dependency {
-    pub key: TypeId,
-    pub name: &'static str,
-    pub meta: RawConfig,
+    pub key: Arc<str>,
+    pub meta: Option<RawConfig>,
 }
 
 impl Inject {
@@ -45,29 +44,39 @@ impl Inject {
         self.with_meta::<K>(K::Meta::default())
     }
     /// 加入服务键 `K`，以 `meta` 作为组件访问该服务时的声明元数据。
-    pub fn with_meta<K: ServiceKey>(mut self, meta: K::Meta) -> Self {
-        let entry = Dependency {
-            key: TypeId::of::<K>(),
-            name: K::NAME,
-            meta: Arc::new(meta),
-        };
+    pub fn with_meta<K: ServiceKey>(self, meta: K::Meta) -> Self {
+        self.named_entry(K::NAME.into(), Some(Arc::new(meta)))
+    }
+    /// 按声明顺序返回各服务键的名称。
+    pub fn names(&self) -> Vec<&str> {
+        self.entries
+            .iter()
+            .map(|entry| entry.key.as_ref())
+            .collect()
+    }
+    /// 读取键 `K` 的声明元数据；规格中缺少该键时返回 `None`。
+    pub fn metadata<K: ServiceKey>(&self) -> Option<&K::Meta> {
+        self.entries
+            .iter()
+            .find(|entry| entry.key.as_ref() == K::NAME)
+            .and_then(|entry| entry.meta.as_ref()?.downcast_ref())
+    }
+    /// K-2：按运行时名称声明依赖，名称与类型化键共享解析空间。
+    pub fn with_named(self, name: impl Into<Arc<str>>) -> Self {
+        self.named_entry(name.into(), None)
+    }
+    /// T-COE-10、K-2：按名称声明依赖及其拥有型元数据。
+    pub fn with_named_meta(self, name: impl Into<Arc<str>>, meta: crate::AnyArc) -> Self {
+        self.named_entry(name.into(), Some(meta))
+    }
+    fn named_entry(mut self, key: Arc<str>, meta: Option<RawConfig>) -> Self {
+        let entry = Dependency { key, meta };
         if let Some(old) = self.entries.iter_mut().find(|old| old.key == entry.key) {
             *old = entry;
         } else {
             self.entries.push(entry);
         }
         self
-    }
-    /// 按声明顺序返回各服务键的名称。
-    pub fn names(&self) -> Vec<&'static str> {
-        self.entries.iter().map(|entry| entry.name).collect()
-    }
-    /// 读取键 `K` 的声明元数据；规格中缺少该键时返回 `None`。
-    pub fn metadata<K: ServiceKey>(&self) -> Option<&K::Meta> {
-        self.entries
-            .iter()
-            .find(|entry| entry.key == TypeId::of::<K>())
-            .and_then(|entry| entry.meta.downcast_ref())
     }
 }
 
@@ -165,7 +174,7 @@ type Apply = dyn Fn(Context, RawConfig) -> Task<Result> + Send + Sync;
 #[derive(Clone)]
 pub struct ComponentDef {
     pub(crate) id: ComponentId,
-    pub(crate) name: &'static str,
+    pub(crate) name: Arc<str>,
     pub(crate) inject: Inject,
     pub(crate) resolve: Arc<Resolve>,
     pub(crate) apply: Arc<Apply>,
@@ -176,7 +185,7 @@ impl ComponentDef {
     pub fn of<C: Component>() -> Self {
         Self {
             id: ComponentId::Type(TypeId::of::<C>()),
-            name: C::NAME,
+            name: C::NAME.into(),
             inject: C::inject(),
             resolve: Arc::new(|raw| {
                 let raw = raw
@@ -200,7 +209,7 @@ impl ComponentDef {
     ///
     /// `name` 决定组件名称，`inject` 声明依赖，`apply` 接收实例上下文及配置副本。
     /// 每次构造分配一个新的组件身份。
-    pub fn new<R, F, Fut>(name: &'static str, inject: Inject, apply: F) -> Self
+    pub fn new<R, F, Fut>(name: impl Into<Arc<str>>, inject: Inject, apply: F) -> Self
     where
         R: Clone + Send + Sync + 'static,
         F: Fn(Context, R) -> Fut + Send + Sync + 'static,
@@ -215,7 +224,7 @@ impl ComponentDef {
     /// `name` 与 `inject` 给出名称和依赖规格；每次构造分配一个新的组件身份。
     /// 解析错误通过实例的等待任务返回，并保留 [`ValidationError`] 的问题列表。
     pub fn validated<R, C, V, F, Fut>(
-        name: &'static str,
+        name: impl Into<Arc<str>>,
         inject: Inject,
         resolve: V,
         apply: F,
@@ -230,7 +239,7 @@ impl ComponentDef {
         static NEXT: AtomicU64 = AtomicU64::new(1);
         Self {
             id: ComponentId::Closure(NEXT.fetch_add(1, Ordering::Relaxed)),
-            name,
+            name: name.into(),
             inject,
             resolve: Arc::new(move |raw| {
                 let raw = raw
@@ -255,8 +264,8 @@ impl ComponentDef {
         self.id
     }
     /// 返回该定义保存的名称；空字符串表示实例继承祖先名称。
-    pub fn name(&self) -> &'static str {
-        self.name
+    pub fn name(&self) -> &str {
+        &self.name
     }
 }
 
@@ -276,10 +285,9 @@ impl crate::Event for InternalReplace {
     type Kind = crate::SyncKind;
 }
 
-fn forward(state: &State, component: &ComponentDef) -> ComponentDef {
-    let mut target = component.clone();
-    while let Some(next) = state.aliases.get(&target.id) {
-        target = next.clone();
+fn forward(state: &State, mut target: ComponentId) -> ComponentId {
+    while let Some(next) = state.aliases.get(&target) {
+        target = *next;
     }
     target
 }
@@ -316,14 +324,14 @@ impl Registry {
     /// 查询 `component` 经别名解析后的运行时是否仍有登记实例。
     pub fn contains(&self, component: &ComponentDef) -> bool {
         let state = self.ctx.kernel.state.lock();
-        state.runtimes.contains_key(&forward(&state, component).id)
+        state.runtimes.contains_key(&forward(&state, component.id))
     }
     /// 返回 `component` 经别名解析后已登记的定义；目标运行时缺席时返回 `None`。
     pub fn get(&self, component: &ComponentDef) -> Option<ComponentDef> {
         let state = self.ctx.kernel.state.lock();
         state
             .runtimes
-            .get(&forward(&state, component).id)
+            .get(&forward(&state, component.id))
             .map(|runtime| runtime.component.clone())
     }
     /// 返回目标运行时的实例句柄快照，`component` 按别名链解析。
@@ -333,7 +341,7 @@ impl Registry {
         let state = self.ctx.kernel.state.lock();
         state
             .runtimes
-            .get(&forward(&state, component).id)
+            .get(&forward(&state, component.id))
             .map(|runtime| {
                 runtime
                     .fibers
@@ -353,13 +361,13 @@ impl Registry {
     /// 将某个定义再次作为 `next` 会解除它自身的转发关系。
     /// 旧运行时缺席时返回空列表，同时登记新的转发关系。
     pub fn replace(&self, old: &ComponentDef, next: &ComponentDef) -> Vec<Fiber> {
-        let (fibers, old_runtime, old_alias, old_target_alias, previous) = {
+        let (fibers, old_runtime, old_definitions, previous) = {
             let mut state = self.ctx.kernel.state.lock();
-            let source = forward(&state, old);
-            let old_target_alias = state.aliases.remove(&next.id);
+            let source = forward(&state, old.id);
+            state.aliases.remove(&next.id);
             let fibers = state
                 .runtimes
-                .get(&source.id)
+                .get(&source)
                 .map(|runtime| {
                     runtime
                         .fibers
@@ -368,14 +376,28 @@ impl Registry {
                         .collect::<Vec<_>>()
                 })
                 .unwrap_or_default();
-            let (old_runtime, old_alias) = if source.id != next.id {
-                (
-                    state.runtimes.remove(&source.id),
-                    state.aliases.insert(source.id, next.clone()),
-                )
+            let old_runtime = if source != next.id {
+                state.aliases.insert(source, next.id);
+                state.runtimes.remove(&source)
             } else {
-                (None, None)
+                None
             };
+            let mut old_definitions = Vec::new();
+            if state.aliases.values().any(|id| *id == next.id) {
+                old_definitions.extend(state.definitions.insert(next.id, next.clone()));
+            }
+            let retired: Vec<_> = state
+                .definitions
+                .keys()
+                .copied()
+                .filter(|id| {
+                    state.aliases.contains_key(id)
+                        || !state.aliases.values().any(|target| target == id)
+                })
+                .collect();
+            for id in retired {
+                old_definitions.extend(state.definitions.remove(&id));
+            }
             if !fibers.is_empty() {
                 state
                     .runtimes
@@ -395,14 +417,14 @@ impl Registry {
                     runtime.fibers.push(fiber.id);
                 }
                 let data = &mut state.fibers[fiber.id];
-                data.name = next.name;
+                data.name = next.name.clone();
                 let component = data.component.replace(next.clone());
                 let inject = std::mem::replace(&mut data.inject, next.inject.clone());
                 previous.push((component, inject));
             }
-            (fibers, old_runtime, old_alias, old_target_alias, previous)
+            (fibers, old_runtime, old_definitions, previous)
         };
-        drop((old_runtime, old_alias, old_target_alias, previous));
+        drop((old_runtime, old_definitions, previous));
         for fiber in &fibers {
             if let Err(payload) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 fiber.context().emit::<InternalReplace>(fiber)
@@ -462,7 +484,12 @@ impl Context {
             if !state.fibers[self.scope.fiber].alive {
                 return Err(Error::inactive().at(location));
             }
-            let component = forward(&state, component);
+            let target = forward(&state, component.id);
+            let component = if target == component.id {
+                component.clone()
+            } else {
+                state.definitions[&target].clone()
+            };
             let id = state.fibers.insert(FiberData::child(
                 self.scope.clone(),
                 component.clone(),

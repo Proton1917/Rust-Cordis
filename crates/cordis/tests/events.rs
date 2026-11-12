@@ -878,7 +878,7 @@ fn internal_dispatch_observes_public_events() {
         observed
             .lock()
             .unwrap()
-            .push((dispatch.mode, dispatch.name, dispatch.filtered));
+            .push((dispatch.mode, dispatch.name.clone(), dispatch.filtered));
         if dispatch.is::<Number>() {
             assert_eq!(dispatch.args::<Number>(), Some(&7));
             assert_eq!(dispatch.context.extension::<i32>().as_deref(), Some(&42));
@@ -894,7 +894,12 @@ fn internal_dispatch_observes_public_events() {
     host.finish(source.serial::<AsyncNumber>(9)).unwrap();
     source.waterfall::<Water>(1, || Ok(2)).unwrap();
     assert_eq!(
-        observations.lock().unwrap().as_slice(),
+        observations
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|(mode, name, filtered)| (*mode, name.as_ref(), *filtered))
+            .collect::<Vec<_>>(),
         [
             (DispatchMode::Emit, "custom-event", true),
             (DispatchMode::Bail, "custom-event", false),

@@ -11,7 +11,6 @@ use futures_util::{
     future::{join_all, poll_fn},
 };
 use std::{
-    any::TypeId,
     fmt,
     panic::{AssertUnwindSafe, Location, catch_unwind},
     sync::{Arc, Weak},
@@ -59,11 +58,11 @@ pub(crate) struct FiberData {
     pub scope: Option<Arc<Scope>>,
     pub canonical_scope: Weak<Scope>,
     pub component: Option<ComponentDef>,
-    pub name: &'static str,
+    pub name: Arc<str>,
     pub config: RawConfig,
     pub inject: Inject,
     pub bindings: Vec<Option<ImplId>>,
-    pub committed: Vec<(TypeId, ImplId)>,
+    pub committed: Vec<(Arc<str>, ImplId)>,
     pub provisions: Vec<ImplId>,
     pub revision: u64,
     pub target: Epoch,
@@ -90,7 +89,7 @@ impl FiberData {
             scope: None,
             canonical_scope: Weak::new(),
             component: None,
-            name: "",
+            name: "".into(),
             config: Arc::new(()),
             inject: Inject::new(),
             bindings: Vec::new(),
@@ -128,7 +127,7 @@ impl FiberData {
             parent_scope: Some(parent),
             bindings: vec![None; component.inject.entries.len()],
             inject: component.inject.clone(),
-            name: component.name,
+            name: component.name.clone(),
             component: Some(component),
             config,
             target: Epoch::Inactive,
@@ -787,7 +786,7 @@ pub(crate) fn name_locked(state: &State, mut id: FiberId) -> String {
     loop {
         let data = &state.fibers[id];
         if !data.name.is_empty() {
-            return data.name.into();
+            return data.name.to_string();
         }
         let Some(parent) = &data.parent_scope else {
             return "root".into();
