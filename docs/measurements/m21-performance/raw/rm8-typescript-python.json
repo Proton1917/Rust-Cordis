@@ -1,0 +1,1037 @@
+{
+  "label": "typescript-to-python",
+  "socket": "process",
+  "provider": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/m21-prepare-55981-0/providers/typescript",
+  "candidate": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/m21-prepare-55981-0/providers/python",
+  "samples": 1,
+  "pause_ms": 126,
+  "rpc_wall_us": 181729,
+  "harness_wall_ns": 241936333,
+  "state_bytes": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33,
+    34,
+    35,
+    36,
+    37,
+    38,
+    39,
+    40,
+    41,
+    42,
+    43,
+    44,
+    45,
+    46,
+    47,
+    48,
+    49,
+    50,
+    51,
+    52,
+    53,
+    54,
+    55,
+    56,
+    57,
+    58,
+    59,
+    60,
+    61,
+    62,
+    63
+  ],
+  "replacement": {
+    "group": "store",
+    "previous_connection": 3,
+    "candidate_connection": 9,
+    "affected_instances": 2,
+    "pause_ms": 126,
+    "committed": true,
+    "succeeded": true,
+    "rolled_back": false,
+    "failure": null
+  },
+  "before": {
+    "core_version": "0.1.0",
+    "pid": 63631,
+    "groups": [
+      {
+        "name": "admin",
+        "connection": 1,
+        "pid": 63632,
+        "state": "running",
+        "restarts": 0,
+        "plugins": [
+          {
+            "name": "fixture-admin",
+            "version": "0.1.0",
+            "sdk_version": "0.1.0",
+            "build_info": "real UP1 process",
+            "format": 2,
+            "library": null,
+            "components": [
+              {
+                "name": "admin",
+                "inject": [
+                  {
+                    "interface": "cordis.manage@1.0",
+                    "required": true
+                  },
+                  {
+                    "interface": "cordis.runtime@1.1",
+                    "required": true
+                  }
+                ],
+                "provides": [],
+                "listens": [],
+                "state_schema": "",
+                "state_version_min": 1,
+                "state_version_max": 1
+              }
+            ]
+          }
+        ],
+        "error": null
+      },
+      {
+        "name": "kv-client",
+        "connection": 2,
+        "pid": 63633,
+        "state": "running",
+        "restarts": 0,
+        "plugins": [
+          {
+            "name": "fixture-kv-client",
+            "version": "0.1.0",
+            "sdk_version": "0.1.0",
+            "build_info": "real UP1 process",
+            "format": 2,
+            "library": null,
+            "components": [
+              {
+                "name": "kv-client",
+                "inject": [
+                  {
+                    "interface": "kv@1.0",
+                    "required": true
+                  }
+                ],
+                "provides": [],
+                "listens": [],
+                "state_schema": "",
+                "state_version_min": 1,
+                "state_version_max": 1
+              }
+            ]
+          }
+        ],
+        "error": null
+      },
+      {
+        "name": "store",
+        "connection": 3,
+        "pid": 63668,
+        "state": "running",
+        "restarts": 0,
+        "plugins": [
+          {
+            "name": "kv",
+            "version": "0.1.0",
+            "sdk_version": "0.1.0",
+            "build_info": "TypeScript UP/1 SDK",
+            "format": 2,
+            "library": null,
+            "components": [
+              {
+                "name": "kv-store",
+                "inject": [],
+                "provides": [
+                  "kv@1.0"
+                ],
+                "listens": [],
+                "state_schema": "kv.snapshot",
+                "state_version_min": 1,
+                "state_version_max": 1
+              }
+            ]
+          }
+        ],
+        "error": null
+      }
+    ],
+    "instances": [
+      {
+        "name": "admin",
+        "plugin": "fixture-admin",
+        "component": "admin",
+        "state": "active",
+        "revision": 0,
+        "bindings": [
+          3,
+          2
+        ],
+        "error": null,
+        "group": "admin",
+        "context": 4,
+        "reference": "installed-1"
+      },
+      {
+        "name": "kv-client",
+        "plugin": "fixture-kv-client",
+        "component": "kv-client",
+        "state": "active",
+        "revision": 0,
+        "bindings": [
+          6
+        ],
+        "error": null,
+        "group": "kv-client",
+        "context": 7,
+        "reference": "installed-2"
+      },
+      {
+        "name": "store",
+        "plugin": "kv",
+        "component": "kv-store",
+        "state": "active",
+        "revision": 0,
+        "bindings": [],
+        "error": null,
+        "group": "store",
+        "context": 6,
+        "reference": "installed-3"
+      }
+    ],
+    "last_replace": [],
+    "phase": "running",
+    "configuration_error": null,
+    "instance_errors": {},
+    "plugin_errors": {},
+    "overrides": [],
+    "sources": [
+      {
+        "reference": "admin",
+        "name": "fixture-admin",
+        "version": "0.1.0",
+        "source": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/m21-replace-63612-0/run/typescript-to-python/plugins/admin",
+        "directory": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/m21-replace-63612-0/run/typescript-to-python/plugins/admin",
+        "entry": {
+          "socket": "process",
+          "protocol": 1,
+          "command": [
+            "/Users/gordongauerk/Projects/Rust-cordis/target/test-artifacts/phase3-programs-55981-0/cordis-runtime-fixture",
+            "admin",
+            "v1"
+          ],
+          "restart": {
+            "max": 5,
+            "backoff_ms": 500
+          }
+        },
+        "web": null,
+        "descriptor": null
+      },
+      {
+        "reference": "installed-1",
+        "name": "fixture-admin",
+        "version": "0.1.0",
+        "source": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/m21-replace-63612-0/run/typescript-to-python/plugins/installed-1",
+        "directory": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/m21-replace-63612-0/run/typescript-to-python/plugins/installed-1",
+        "entry": {
+          "socket": "process",
+          "protocol": 1,
+          "command": [
+            "/Users/gordongauerk/Projects/Rust-cordis/target/test-artifacts/phase3-programs-55981-0/cordis-runtime-fixture",
+            "admin",
+            "v1"
+          ],
+          "restart": {
+            "max": 5,
+            "backoff_ms": 500
+          }
+        },
+        "web": null,
+        "descriptor": {
+          "name": "fixture-admin",
+          "version": "0.1.0",
+          "sdk_version": "0.1.0",
+          "build_info": "real UP1 process",
+          "format": 2,
+          "library": null,
+          "components": [
+            {
+              "name": "admin",
+              "inject": [
+                {
+                  "interface": "cordis.manage@1.0",
+                  "required": true
+                },
+                {
+                  "interface": "cordis.runtime@1.1",
+                  "required": true
+                }
+              ],
+              "provides": [],
+              "listens": [],
+              "state_schema": "",
+              "state_version_min": 1,
+              "state_version_max": 1
+            }
+          ]
+        }
+      },
+      {
+        "reference": "installed-2",
+        "name": "fixture-kv-client",
+        "version": "0.1.0",
+        "source": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/m21-replace-63612-0/run/typescript-to-python/plugins/installed-2",
+        "directory": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/m21-replace-63612-0/run/typescript-to-python/plugins/installed-2",
+        "entry": {
+          "socket": "process",
+          "protocol": 1,
+          "command": [
+            "/Users/gordongauerk/Projects/Rust-cordis/target/test-artifacts/phase3-programs-55981-0/cordis-runtime-fixture",
+            "kv-client",
+            "v1"
+          ],
+          "restart": {
+            "max": 5,
+            "backoff_ms": 500
+          }
+        },
+        "web": null,
+        "descriptor": {
+          "name": "fixture-kv-client",
+          "version": "0.1.0",
+          "sdk_version": "0.1.0",
+          "build_info": "real UP1 process",
+          "format": 2,
+          "library": null,
+          "components": [
+            {
+              "name": "kv-client",
+              "inject": [
+                {
+                  "interface": "kv@1.0",
+                  "required": true
+                }
+              ],
+              "provides": [],
+              "listens": [],
+              "state_schema": "",
+              "state_version_min": 1,
+              "state_version_max": 1
+            }
+          ]
+        }
+      },
+      {
+        "reference": "installed-3",
+        "name": "kv",
+        "version": "0.1.0",
+        "source": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/m21-replace-63612-0/run/typescript-to-python/plugins/installed-3",
+        "directory": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/m21-replace-63612-0/run/typescript-to-python/plugins/installed-3",
+        "entry": {
+          "socket": "process",
+          "protocol": 1,
+          "command": [
+            "node",
+            "dist/main.js"
+          ],
+          "restart": {
+            "max": 0,
+            "backoff_ms": 500
+          }
+        },
+        "web": null,
+        "descriptor": {
+          "name": "kv",
+          "version": "0.1.0",
+          "sdk_version": "0.1.0",
+          "build_info": "TypeScript UP/1 SDK",
+          "format": 2,
+          "library": null,
+          "components": [
+            {
+              "name": "kv-store",
+              "inject": [],
+              "provides": [
+                "kv@1.0"
+              ],
+              "listens": [],
+              "state_schema": "kv.snapshot",
+              "state_version_min": 1,
+              "state_version_max": 1
+            }
+          ]
+        }
+      },
+      {
+        "reference": "kv-client",
+        "name": "fixture-kv-client",
+        "version": "0.1.0",
+        "source": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/m21-replace-63612-0/run/typescript-to-python/plugins/kv-client",
+        "directory": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/m21-replace-63612-0/run/typescript-to-python/plugins/kv-client",
+        "entry": {
+          "socket": "process",
+          "protocol": 1,
+          "command": [
+            "/Users/gordongauerk/Projects/Rust-cordis/target/test-artifacts/phase3-programs-55981-0/cordis-runtime-fixture",
+            "kv-client",
+            "v1"
+          ],
+          "restart": {
+            "max": 5,
+            "backoff_ms": 500
+          }
+        },
+        "web": null,
+        "descriptor": null
+      },
+      {
+        "reference": "store",
+        "name": "kv",
+        "version": "0.1.0",
+        "source": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/m21-replace-63612-0/run/typescript-to-python/plugins/store",
+        "directory": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/m21-replace-63612-0/run/typescript-to-python/plugins/store",
+        "entry": {
+          "socket": "process",
+          "protocol": 1,
+          "command": [
+            "node",
+            "dist/main.js"
+          ],
+          "restart": {
+            "max": 0,
+            "backoff_ms": 500
+          }
+        },
+        "web": null,
+        "descriptor": null
+      }
+    ],
+    "last_batch": [],
+    "libraries": [],
+    "last_swap": [],
+    "available_plugins": [
+      {
+        "reference": "admin",
+        "name": "fixture-admin",
+        "version": "0.1.0",
+        "path": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/m21-replace-63612-0/run/typescript-to-python/plugins/admin",
+        "components": []
+      },
+      {
+        "reference": "installed-1",
+        "name": "fixture-admin",
+        "version": "0.1.0",
+        "path": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/m21-replace-63612-0/run/typescript-to-python/plugins/installed-1",
+        "components": [
+          {
+            "name": "admin",
+            "inject": [
+              {
+                "interface": "cordis.manage@1.0",
+                "required": true
+              },
+              {
+                "interface": "cordis.runtime@1.1",
+                "required": true
+              }
+            ],
+            "provides": [],
+            "listens": [],
+            "state_schema": "",
+            "state_version_min": 1,
+            "state_version_max": 1
+          }
+        ]
+      },
+      {
+        "reference": "installed-2",
+        "name": "fixture-kv-client",
+        "version": "0.1.0",
+        "path": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/m21-replace-63612-0/run/typescript-to-python/plugins/installed-2",
+        "components": [
+          {
+            "name": "kv-client",
+            "inject": [
+              {
+                "interface": "kv@1.0",
+                "required": true
+              }
+            ],
+            "provides": [],
+            "listens": [],
+            "state_schema": "",
+            "state_version_min": 1,
+            "state_version_max": 1
+          }
+        ]
+      },
+      {
+        "reference": "installed-3",
+        "name": "kv",
+        "version": "0.1.0",
+        "path": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/m21-replace-63612-0/run/typescript-to-python/plugins/installed-3",
+        "components": [
+          {
+            "name": "kv-store",
+            "inject": [],
+            "provides": [
+              "kv@1.0"
+            ],
+            "listens": [],
+            "state_schema": "kv.snapshot",
+            "state_version_min": 1,
+            "state_version_max": 1
+          }
+        ]
+      },
+      {
+        "reference": "kv-client",
+        "name": "fixture-kv-client",
+        "version": "0.1.0",
+        "path": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/m21-replace-63612-0/run/typescript-to-python/plugins/kv-client",
+        "components": []
+      },
+      {
+        "reference": "store",
+        "name": "kv",
+        "version": "0.1.0",
+        "path": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/m21-replace-63612-0/run/typescript-to-python/plugins/store",
+        "components": []
+      }
+    ]
+  },
+  "after": {
+    "core_version": "0.1.0",
+    "pid": 63631,
+    "groups": [
+      {
+        "name": "admin",
+        "connection": 1,
+        "pid": 63632,
+        "state": "running",
+        "restarts": 0,
+        "plugins": [
+          {
+            "name": "fixture-admin",
+            "version": "0.1.0",
+            "sdk_version": "0.1.0",
+            "build_info": "real UP1 process",
+            "format": 2,
+            "library": null,
+            "components": [
+              {
+                "name": "admin",
+                "inject": [
+                  {
+                    "interface": "cordis.manage@1.0",
+                    "required": true
+                  },
+                  {
+                    "interface": "cordis.runtime@1.1",
+                    "required": true
+                  }
+                ],
+                "provides": [],
+                "listens": [],
+                "state_schema": "",
+                "state_version_min": 1,
+                "state_version_max": 1
+              }
+            ]
+          }
+        ],
+        "error": null
+      },
+      {
+        "name": "kv-client",
+        "connection": 2,
+        "pid": 63633,
+        "state": "running",
+        "restarts": 0,
+        "plugins": [
+          {
+            "name": "fixture-kv-client",
+            "version": "0.1.0",
+            "sdk_version": "0.1.0",
+            "build_info": "real UP1 process",
+            "format": 2,
+            "library": null,
+            "components": [
+              {
+                "name": "kv-client",
+                "inject": [
+                  {
+                    "interface": "kv@1.0",
+                    "required": true
+                  }
+                ],
+                "provides": [],
+                "listens": [],
+                "state_schema": "",
+                "state_version_min": 1,
+                "state_version_max": 1
+              }
+            ]
+          }
+        ],
+        "error": null
+      },
+      {
+        "name": "store",
+        "connection": 9,
+        "pid": 63673,
+        "state": "running",
+        "restarts": 0,
+        "plugins": [
+          {
+            "name": "kv",
+            "version": "0.1.0",
+            "sdk_version": "0.1.0",
+            "build_info": "Python UP/1 SDK",
+            "format": 2,
+            "library": null,
+            "components": [
+              {
+                "name": "kv-store",
+                "inject": [],
+                "provides": [
+                  "kv@1.0"
+                ],
+                "listens": [],
+                "state_schema": "kv.snapshot",
+                "state_version_min": 1,
+                "state_version_max": 1
+              }
+            ]
+          }
+        ],
+        "error": null
+      }
+    ],
+    "instances": [
+      {
+        "name": "admin",
+        "plugin": "fixture-admin",
+        "component": "admin",
+        "state": "active",
+        "revision": 0,
+        "bindings": [
+          3,
+          2
+        ],
+        "error": null,
+        "group": "admin",
+        "context": 4,
+        "reference": "installed-1"
+      },
+      {
+        "name": "kv-client",
+        "plugin": "fixture-kv-client",
+        "component": "kv-client",
+        "state": "active",
+        "revision": 0,
+        "bindings": [
+          9
+        ],
+        "error": null,
+        "group": "kv-client",
+        "context": 11,
+        "reference": "installed-2"
+      },
+      {
+        "name": "store",
+        "plugin": "kv",
+        "component": "kv-store",
+        "state": "active",
+        "revision": 1,
+        "bindings": [],
+        "error": null,
+        "group": "store",
+        "context": 10,
+        "reference": "installed-4"
+      }
+    ],
+    "last_replace": [
+      {
+        "group": "store",
+        "previous_connection": 3,
+        "candidate_connection": 9,
+        "affected_instances": 2,
+        "pause_ms": 126,
+        "committed": true,
+        "succeeded": true,
+        "rolled_back": false,
+        "failure": null
+      }
+    ],
+    "phase": "running",
+    "configuration_error": null,
+    "instance_errors": {},
+    "plugin_errors": {},
+    "overrides": [
+      "store"
+    ],
+    "sources": [
+      {
+        "reference": "admin",
+        "name": "fixture-admin",
+        "version": "0.1.0",
+        "source": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/m21-replace-63612-0/run/typescript-to-python/plugins/admin",
+        "directory": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/m21-replace-63612-0/run/typescript-to-python/plugins/admin",
+        "entry": {
+          "socket": "process",
+          "protocol": 1,
+          "command": [
+            "/Users/gordongauerk/Projects/Rust-cordis/target/test-artifacts/phase3-programs-55981-0/cordis-runtime-fixture",
+            "admin",
+            "v1"
+          ],
+          "restart": {
+            "max": 5,
+            "backoff_ms": 500
+          }
+        },
+        "web": null,
+        "descriptor": null
+      },
+      {
+        "reference": "installed-1",
+        "name": "fixture-admin",
+        "version": "0.1.0",
+        "source": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/m21-replace-63612-0/run/typescript-to-python/plugins/installed-1",
+        "directory": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/m21-replace-63612-0/run/typescript-to-python/plugins/installed-1",
+        "entry": {
+          "socket": "process",
+          "protocol": 1,
+          "command": [
+            "/Users/gordongauerk/Projects/Rust-cordis/target/test-artifacts/phase3-programs-55981-0/cordis-runtime-fixture",
+            "admin",
+            "v1"
+          ],
+          "restart": {
+            "max": 5,
+            "backoff_ms": 500
+          }
+        },
+        "web": null,
+        "descriptor": {
+          "name": "fixture-admin",
+          "version": "0.1.0",
+          "sdk_version": "0.1.0",
+          "build_info": "real UP1 process",
+          "format": 2,
+          "library": null,
+          "components": [
+            {
+              "name": "admin",
+              "inject": [
+                {
+                  "interface": "cordis.manage@1.0",
+                  "required": true
+                },
+                {
+                  "interface": "cordis.runtime@1.1",
+                  "required": true
+                }
+              ],
+              "provides": [],
+              "listens": [],
+              "state_schema": "",
+              "state_version_min": 1,
+              "state_version_max": 1
+            }
+          ]
+        }
+      },
+      {
+        "reference": "installed-2",
+        "name": "fixture-kv-client",
+        "version": "0.1.0",
+        "source": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/m21-replace-63612-0/run/typescript-to-python/plugins/installed-2",
+        "directory": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/m21-replace-63612-0/run/typescript-to-python/plugins/installed-2",
+        "entry": {
+          "socket": "process",
+          "protocol": 1,
+          "command": [
+            "/Users/gordongauerk/Projects/Rust-cordis/target/test-artifacts/phase3-programs-55981-0/cordis-runtime-fixture",
+            "kv-client",
+            "v1"
+          ],
+          "restart": {
+            "max": 5,
+            "backoff_ms": 500
+          }
+        },
+        "web": null,
+        "descriptor": {
+          "name": "fixture-kv-client",
+          "version": "0.1.0",
+          "sdk_version": "0.1.0",
+          "build_info": "real UP1 process",
+          "format": 2,
+          "library": null,
+          "components": [
+            {
+              "name": "kv-client",
+              "inject": [
+                {
+                  "interface": "kv@1.0",
+                  "required": true
+                }
+              ],
+              "provides": [],
+              "listens": [],
+              "state_schema": "",
+              "state_version_min": 1,
+              "state_version_max": 1
+            }
+          ]
+        }
+      },
+      {
+        "reference": "installed-3",
+        "name": "kv",
+        "version": "0.1.0",
+        "source": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/m21-replace-63612-0/run/typescript-to-python/plugins/installed-3",
+        "directory": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/m21-replace-63612-0/run/typescript-to-python/plugins/installed-3",
+        "entry": {
+          "socket": "process",
+          "protocol": 1,
+          "command": [
+            "node",
+            "dist/main.js"
+          ],
+          "restart": {
+            "max": 0,
+            "backoff_ms": 500
+          }
+        },
+        "web": null,
+        "descriptor": {
+          "name": "kv",
+          "version": "0.1.0",
+          "sdk_version": "0.1.0",
+          "build_info": "TypeScript UP/1 SDK",
+          "format": 2,
+          "library": null,
+          "components": [
+            {
+              "name": "kv-store",
+              "inject": [],
+              "provides": [
+                "kv@1.0"
+              ],
+              "listens": [],
+              "state_schema": "kv.snapshot",
+              "state_version_min": 1,
+              "state_version_max": 1
+            }
+          ]
+        }
+      },
+      {
+        "reference": "installed-4",
+        "name": "kv",
+        "version": "0.1.0",
+        "source": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/m21-replace-63612-0/run/typescript-to-python/plugins/installed-4",
+        "directory": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/m21-replace-63612-0/run/typescript-to-python/plugins/installed-4",
+        "entry": {
+          "socket": "process",
+          "protocol": 1,
+          "command": [
+            "python",
+            "-B",
+            "-m",
+            "kv_py"
+          ],
+          "restart": {
+            "max": 5,
+            "backoff_ms": 500
+          }
+        },
+        "web": null,
+        "descriptor": null
+      },
+      {
+        "reference": "kv-client",
+        "name": "fixture-kv-client",
+        "version": "0.1.0",
+        "source": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/m21-replace-63612-0/run/typescript-to-python/plugins/kv-client",
+        "directory": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/m21-replace-63612-0/run/typescript-to-python/plugins/kv-client",
+        "entry": {
+          "socket": "process",
+          "protocol": 1,
+          "command": [
+            "/Users/gordongauerk/Projects/Rust-cordis/target/test-artifacts/phase3-programs-55981-0/cordis-runtime-fixture",
+            "kv-client",
+            "v1"
+          ],
+          "restart": {
+            "max": 5,
+            "backoff_ms": 500
+          }
+        },
+        "web": null,
+        "descriptor": null
+      },
+      {
+        "reference": "store",
+        "name": "kv",
+        "version": "0.1.0",
+        "source": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/m21-replace-63612-0/run/typescript-to-python/plugins/store",
+        "directory": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/m21-replace-63612-0/run/typescript-to-python/plugins/store",
+        "entry": {
+          "socket": "process",
+          "protocol": 1,
+          "command": [
+            "node",
+            "dist/main.js"
+          ],
+          "restart": {
+            "max": 0,
+            "backoff_ms": 500
+          }
+        },
+        "web": null,
+        "descriptor": null
+      }
+    ],
+    "last_batch": [],
+    "libraries": [],
+    "last_swap": [],
+    "available_plugins": [
+      {
+        "reference": "admin",
+        "name": "fixture-admin",
+        "version": "0.1.0",
+        "path": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/m21-replace-63612-0/run/typescript-to-python/plugins/admin",
+        "components": []
+      },
+      {
+        "reference": "installed-1",
+        "name": "fixture-admin",
+        "version": "0.1.0",
+        "path": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/m21-replace-63612-0/run/typescript-to-python/plugins/installed-1",
+        "components": [
+          {
+            "name": "admin",
+            "inject": [
+              {
+                "interface": "cordis.manage@1.0",
+                "required": true
+              },
+              {
+                "interface": "cordis.runtime@1.1",
+                "required": true
+              }
+            ],
+            "provides": [],
+            "listens": [],
+            "state_schema": "",
+            "state_version_min": 1,
+            "state_version_max": 1
+          }
+        ]
+      },
+      {
+        "reference": "installed-2",
+        "name": "fixture-kv-client",
+        "version": "0.1.0",
+        "path": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/m21-replace-63612-0/run/typescript-to-python/plugins/installed-2",
+        "components": [
+          {
+            "name": "kv-client",
+            "inject": [
+              {
+                "interface": "kv@1.0",
+                "required": true
+              }
+            ],
+            "provides": [],
+            "listens": [],
+            "state_schema": "",
+            "state_version_min": 1,
+            "state_version_max": 1
+          }
+        ]
+      },
+      {
+        "reference": "installed-3",
+        "name": "kv",
+        "version": "0.1.0",
+        "path": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/m21-replace-63612-0/run/typescript-to-python/plugins/installed-3",
+        "components": [
+          {
+            "name": "kv-store",
+            "inject": [],
+            "provides": [
+              "kv@1.0"
+            ],
+            "listens": [],
+            "state_schema": "kv.snapshot",
+            "state_version_min": 1,
+            "state_version_max": 1
+          }
+        ]
+      },
+      {
+        "reference": "installed-4",
+        "name": "kv",
+        "version": "0.1.0",
+        "path": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/m21-replace-63612-0/run/typescript-to-python/plugins/installed-4",
+        "components": []
+      },
+      {
+        "reference": "kv-client",
+        "name": "fixture-kv-client",
+        "version": "0.1.0",
+        "path": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/m21-replace-63612-0/run/typescript-to-python/plugins/kv-client",
+        "components": []
+      },
+      {
+        "reference": "store",
+        "name": "kv",
+        "version": "0.1.0",
+        "path": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/m21-replace-63612-0/run/typescript-to-python/plugins/store",
+        "components": []
+      }
+    ]
+  }
+}

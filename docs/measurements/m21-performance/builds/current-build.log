@@ -1,0 +1,9 @@
+    Updating crates.io index
+     Locking 25 packages to latest Rust 1.85 compatible versions
+   Compiling scoped-tls v1.0.1
+   Compiling cordis-sdk v0.1.0 (/Users/gordongauerk/Projects/Rust-cordis/crates/cordis-sdk)
+   Compiling cordis-sdk-macros v0.1.0 (/Users/gordongauerk/Projects/Rust-cordis/crates/cordis-sdk-macros)
+   Compiling cordis-types v0.1.0 (/Users/gordongauerk/Projects/Rust-cordis/crates/cordis-types)
+   Compiling cordis-abi v0.1.0 (/Users/gordongauerk/Projects/Rust-cordis/crates/cordis-abi)
+   Compiling direct-benchmark-current v0.1.0 (/Users/gordongauerk/Projects/Rust-cordis/benchmarks/direct-call/current)
+    Finished `release` profile [optimized] target(s) in 5.31s

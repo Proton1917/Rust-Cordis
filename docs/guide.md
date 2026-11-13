@@ -268,9 +268,32 @@ target/release/cordis pack \
 
 生成的 `target/pack-demo/applications/cordis-demo.app` 从自身位置读取部署配置，窗口通过 `cordis.web@1.0` 取得 HTTP 启动页。HTTP 的 `assets` 可指定静态目录；同时把该相对路径加入 `pack.assets`，页面资源便随发布包交付。状态默认保存到用户 `Library/Application Support/org.cordis.cordis-demo`，也可以通过 `pack.state_dir` 指定包外绝对目录；安装的新插件和宿主缓存分别位于该状态目录的 `plugins/` 与 `.cordis/lib/`。
 
-`--sign` 指定本机签名身份并启用 hardened runtime，`--allow-third-party` 为宿主设置第三方库装载权限。启用 `require_verified` 的部署在签名改变库字节后重新执行原契约套件，验证副本及真实结果一起发布。`pack.runtimes` 与 `pack.runtime_paths` 可附带独立 Python/Node 目录并改写进程命令；完整语言运行时发布包的验收安排在 M21。配置、签名及可移动验证副本的规则见 [ADR-0036](adr/0036-release-packaging.md)。
+`--sign` 指定本机签名身份并启用 hardened runtime，`--allow-third-party` 为宿主设置第三方库装载权限。启用 `require_verified` 的部署在签名改变库字节后重新执行原契约套件，验证副本及真实结果一起发布。配置、签名及可移动验证副本的规则见 [ADR-0036](adr/0036-release-packaging.md)。
 
 `pack --target-dir <目录>` 指定复用的 Cargo 编译目录，缺省为部署项目的 `target/`；相对目录以部署项目为基准。
+
+### 附带独立 Python 与 Node
+
+将与目标系统及 CPU 匹配的完整 Python、Node 发行目录分别放入项目的 vendor/python、vendor/node。运行时根目录提供 bin/python3、bin/node，连同标准库、原生扩展、动态库和许可证一起参与装配。插件的 Python 依赖、TypeScript 构建结果和生产 npm 依赖在打包前准备。
+
+```toml
+[pack]
+name = "script-app"
+version = "0.1.0"
+runtimes = ["python", "node"]
+
+[pack.runtime_paths]
+python = "vendor/python"
+node = "vendor/node"
+```
+
+```bash
+cordis pack --project . --target aarch64-apple-darwin --out dist --sign -
+```
+
+打包器保持发行目录内链接的归属，改写插件清单中的解释器命令，使程序从包内 runtimes 启动。签名按实际解释器入口分配权限，先处理深层 Mach-O，再处理程序和外层 Bundle。Node 使用 JIT 权限；ad-hoc 身份还为 Python/Node 设置装载包内原生扩展所需的权限。规则见 [ADR-0043](adr/0043-bundled-script-runtimes.md)。
+
+实际发布验收采用 Python 3.12.16、Node 22.23.5 与 ad-hoc 签名 tar 包。移动解开后的 Python 加载包内 CBOR 扩展和 SSL，Node 加载原生 CBOR 模块并执行动态代码，两组 KV 服务完成读写并有序退出。[运行记录](measurements/m21-script-runtimes.json)保存实际版本、路径、签名与进程结果。
 
 ## WIT 接口生成
 

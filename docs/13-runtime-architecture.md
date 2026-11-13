@@ -179,6 +179,8 @@
 
 cordis-dev 提供 new、new-plugin、verify、pack 和 idl gen。原生描述符由 cordis-host --describe 读取；验证由独立 cordis run 部署执行；模板与 M15 skill 共用。`tooling` 统一开发工具的运行程序发现、受控子进程与描述符探测，`receipts` 保存真实契约结果和验证副本。打包模块从 Cargo 结构化输出取得目标产物，生成部署配置、运行时相对命令、归档或 Bundle，并按签名后的实际字节处理验证印记。`cordis-idl` 使用 wit-parser 解析 WIT，共用类型模型与传输约定生成三种语言的接口、数据类型和调用方代理；kv-api 的源码由 kv.wit 生成。开发工具使用协议数据和子进程，产品依赖与内核、ABI、SDK 分离。
 
+完整 Python/Node 运行时按 ADR-0043 由 pack 装配。解释器入口的真实路径同时参与启动命令改写与签名角色选择；嵌套原生扩展在外层程序与 Bundle 之前签署。Node 的 JIT 与 ad-hoc 运行时装载权限属于独立解释器，核心维持既有权限。
+
 ### 3.6 `cordis-contract`
 
 - 复用 SDK 的内置接口 `cordis.contract@1`：`report(name, passed, message)`、`finish()`、`stage()`、`request_state_roundtrip()`。

@@ -1,0 +1,9 @@
+[pack]
+name = "cordis-app"
+version = "0.1.0"
+identifier = "org.cordis.app"
+runtimes = ["python", "node"]
+
+[pack.runtime_paths]
+python = "vendor/python"
+node = "vendor/node"

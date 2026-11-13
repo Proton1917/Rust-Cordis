@@ -1,0 +1,17 @@
+     Locking 1 package to latest Rust 1.96 compatible version
+      Adding cordis-routing v0.1.0 (/Users/gordongauerk/Projects/Rust-cordis/crates/cordis-routing)
+   Compiling parking_lot_core v0.10.0
+   Compiling semver v1.0.28
+   Compiling futures-macro v0.3.34
+   Compiling tokio v1.54.1
+   Compiling clap_derive v4.6.7
+   Compiling parking_lot v0.13.0
+   Compiling futures-util v0.3.34
+   Compiling clap v4.6.7
+   Compiling cordis v0.1.0 (/Users/gordongauerk/Projects/Rust-cordis/crates/cordis)
+   Compiling cordis-up v0.1.0 (/Users/gordongauerk/Projects/Rust-cordis/crates/cordis-up)
+   Compiling cordis-process v0.1.0 (/Users/gordongauerk/Projects/Rust-cordis/crates/cordis-process)
+   Compiling cordis-routing v0.1.0 (/Users/gordongauerk/Projects/Rust-cordis/crates/cordis-routing)
+   Compiling cordis-supervisor v0.1.0 (/Users/gordongauerk/Projects/Rust-cordis/crates/cordis-supervisor)
+   Compiling cordis-direct-call-benchmark v0.1.0 (/Users/gordongauerk/Projects/Rust-cordis/benchmarks/direct-call/driver)
+    Finished `release` profile [optimized] target(s) in 7.08s

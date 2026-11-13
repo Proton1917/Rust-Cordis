@@ -1,0 +1,26 @@
+    Updating crates.io index
+     Locking 23 packages to latest Rust 1.85 compatible versions
+   Compiling proc-macro2 v1.0.107
+   Compiling unicode-ident v1.0.27
+   Compiling quote v1.0.47
+   Compiling serde_core v1.0.229
+   Compiling zerocopy v0.8.63
+   Compiling serde v1.0.229
+   Compiling cfg-if v1.0.5
+   Compiling ciborium-io v0.2.2
+   Compiling zmij v1.0.23
+   Compiling serde_json v1.0.154
+   Compiling cordis-sdk v0.1.0 (/Users/gordongauerk/Projects/Rust-cordis/target/direct-call-baseline/crates/cordis-sdk)
+   Compiling itoa v1.0.19
+   Compiling memchr v2.8.3
+   Compiling syn v2.0.119
+   Compiling syn v3.0.10
+   Compiling serde_derive v1.0.229
+   Compiling zerocopy-derive v0.8.63
+   Compiling cordis-sdk-macros v0.1.0 (/Users/gordongauerk/Projects/Rust-cordis/target/direct-call-baseline/crates/cordis-sdk-macros)
+   Compiling half v2.7.1
+   Compiling ciborium-ll v0.2.2
+   Compiling ciborium v0.2.2
+   Compiling cordis-abi v0.1.0 (/Users/gordongauerk/Projects/Rust-cordis/target/direct-call-baseline/crates/cordis-abi)
+   Compiling direct-benchmark-baseline v0.1.0 (/Users/gordongauerk/Projects/Rust-cordis/benchmarks/direct-call/baseline)
+    Finished `release` profile [optimized] target(s) in 9.15s

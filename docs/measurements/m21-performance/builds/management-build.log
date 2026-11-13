@@ -1,0 +1,23 @@
+   Compiling proc-macro2 v1.0.107
+   Compiling libc v0.2.191
+   Compiling smallvec v1.16.5
+   Compiling quote v1.0.47
+   Compiling syn v3.0.10
+   Compiling syn v2.0.119
+   Compiling parking_lot_core v0.10.0
+   Compiling parking_lot v0.13.0
+   Compiling zerocopy-derive v0.8.63
+   Compiling serde_derive v1.0.229
+   Compiling thiserror-impl v2.0.21
+   Compiling tokio-macros v2.7.2
+   Compiling tokio v1.54.1
+   Compiling thiserror v2.0.21
+   Compiling zerocopy v0.8.63
+   Compiling serde v1.0.229
+   Compiling cordis-types v0.1.0 (/Users/gordongauerk/Projects/Rust-cordis/crates/cordis-types)
+   Compiling half v2.7.1
+   Compiling ciborium-ll v0.2.2
+   Compiling ciborium v0.2.2
+   Compiling cordis-up v0.1.0 (/Users/gordongauerk/Projects/Rust-cordis/crates/cordis-up)
+   Compiling cordis-runtime-fixture v0.1.0 (/Users/gordongauerk/Projects/Rust-cordis/crates/cordis-runtime/fixtures/plugin)
+    Finished `release` profile [optimized] target(s) in 6.09s

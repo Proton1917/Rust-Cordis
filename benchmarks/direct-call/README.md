@@ -4,26 +4,14 @@ RM-9 比较 M9 提交 `dc93da1` 的类型化调用与当前 SDK。两个 consume
 
 固定执行 9 轮，每轮预热 10000 次，再计时 100000 次；两种实现逐轮交替顺序。预定判据为当前/基准的中位数比值至多 1.05、最大值比值至多 1.15。完整样本保存至结果文件，测量到固定轮次即结束。
 
-在仓库根目录准备历史源码和产物：
+在仓库根目录使用共用测量驱动。历史源码由 Git 取得，程序、两个 consumer 和 provider 统一进入当前编译根的 shared 目录：
 
 ```bash
-mkdir -p target/direct-call-baseline
-git archive dc93da1 | tar -x -C target/direct-call-baseline
-cargo +1.85.0 build --release --manifest-path benchmarks/direct-call/baseline/Cargo.toml --target-dir target/direct-call/baseline
-cargo +1.85.0 build --release --manifest-path benchmarks/direct-call/current/Cargo.toml --target-dir target/direct-call/current
-cargo +1.85.0 build --release --manifest-path crates/cordis-host/tests/fixtures/Cargo.toml -p loader-fixture --target-dir target/direct-call/provider
-cargo build --release -p cordis-host --target-dir target/direct-call/host
-cargo build --release --manifest-path benchmarks/direct-call/driver/Cargo.toml --target-dir target/direct-call/driver
+build_root="${CARGO_TARGET_DIR:-$PWD/target}"
+cargo run --manifest-path benchmarks/multilanguage/driver/Cargo.toml \
+  --target-dir "$build_root/shared" -- direct
 ```
 
-确认其他编译与压力任务已结束后执行：
+测量前结束本次其他编译和压力任务，并与同机协作任务协调运行窗口。驱动使用平台动态库扩展名，生成独立结果目录，成功后由 TestGuard 归档原始样本与日志。已准备的宿主和对照工具可分别通过 CORDIS_M21_TOOLS、CORDIS_M21_DIRECT_TOOLS 指定，计时阶段复用这些快照。
 
-```bash
-target/direct-call/driver/release/cordis-direct-call-benchmark \
-  --host target/direct-call/host/release/cordis-host \
-  --provider target/direct-call/provider/release/libloader_fixture.dylib \
-  --settings benchmarks/direct-call/settings.json \
-  --output target/direct-call/result
-```
-
-Linux 将设置文件和命令中的动态库后缀改为 `.so`。输出目录由本次测量创建，保留既有结果。M14 的已执行样本在 `docs/measurements/m14-direct-call.json`；其中各轮耗时呈下降趋势，报告预定判据的结果和全部样本，时延差异按该次测量条件解释。
+M14 的样本在 `docs/measurements/m14-direct-call.json`。M21 保留负载重叠的首轮与停载重测的全部数据；两次都观察到前几轮时延较高，完整样本及既定比值共同解释该次结果。预热长度和交替采样方式属于后续独立研究，当前入口保持原轮次和判据。

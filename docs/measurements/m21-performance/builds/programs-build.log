@@ -1,0 +1,97 @@
+   Compiling libc v0.2.191
+   Compiling smallvec v1.16.5
+   Compiling stable_deref_trait v1.2.1
+   Compiling scopeguard v1.2.0
+   Compiling pin-project-lite v0.2.17
+   Compiling thiserror v2.0.21
+   Compiling bytes v1.12.1
+   Compiling writeable v0.6.4
+   Compiling litemap v0.8.3
+   Compiling icu_properties_data v2.1.2
+   Compiling icu_normalizer_data v2.1.1
+   Compiling syn v3.0.10
+   Compiling utf8parse v0.2.2
+   Compiling version_check v0.9.5
+   Compiling cfg_aliases v0.2.2
+   Compiling lock_api v0.5.0
+   Compiling futures-task v0.3.34
+   Compiling futures-core v0.3.34
+   Compiling slab v0.4.12
+   Compiling nix v0.31.3
+   Compiling anstyle-parse v1.0.0
+   Compiling semver v1.0.28
+   Compiling colorchoice v1.0.5
+   Compiling anstyle-query v1.1.5
+   Compiling is_terminal_polyfill v1.70.2
+   Compiling slotmap v1.1.1
+   Compiling anstyle v1.0.14
+   Compiling bitflags v2.13.2
+   Compiling rustix v1.1.5
+   Compiling cordis-sdk v0.1.0 (/Users/gordongauerk/Projects/Rust-cordis/crates/cordis-sdk)
+   Compiling clap_lex v1.1.1
+   Compiling anstream v1.0.0
+   Compiling utf_types v1.0.0
+   Compiling heck v0.5.0
+   Compiling strsim v0.11.1
+   Compiling utf8_iter v1.1.0
+   Compiling cordis-sdk-macros v0.1.0 (/Users/gordongauerk/Projects/Rust-cordis/crates/cordis-sdk-macros)
+   Compiling clap_builder v4.6.7
+   Compiling percent-encoding v2.3.2
+   Compiling winnow v1.0.5
+   Compiling serde_spanned v1.1.3
+   Compiling toml_datetime v1.1.3+spec-1.1.0
+   Compiling form_urlencoded v1.2.2
+   Compiling toml_writer v1.2.0+spec-1.1.0
+   Compiling libloading v0.9.0
+   Compiling toml_parser v1.1.5+spec-1.1.0
+   Compiling toml v1.2.1+spec-1.1.0
+   Compiling errno v0.3.15
+   Compiling parking_lot_core v0.10.0
+   Compiling mio v1.2.4
+   Compiling signal-hook-registry v1.4.8
+   Compiling parking_lot v0.13.0
+   Compiling synstructure v0.14.0
+   Compiling serde_derive v1.0.229
+   Compiling zerovec-derive v0.11.7
+   Compiling displaydoc v0.2.7
+   Compiling thiserror-impl v2.0.21
+   Compiling tokio-macros v2.7.2
+   Compiling futures-macro v0.3.34
+   Compiling clap_derive v4.6.7
+   Compiling zerofrom-derive v0.1.8
+   Compiling yoke-derive v0.8.4
+   Compiling tokio v1.54.1
+   Compiling futures-util v0.3.34
+   Compiling zerofrom v0.1.8
+   Compiling clap v4.6.7
+   Compiling yoke v0.8.4
+   Compiling serde v1.0.229
+   Compiling zerovec v0.11.9
+   Compiling zerotrie v0.2.5
+   Compiling cordis v0.1.0 (/Users/gordongauerk/Projects/Rust-cordis/crates/cordis)
+   Compiling ciborium v0.2.2
+   Compiling cordis-types v0.1.0 (/Users/gordongauerk/Projects/Rust-cordis/crates/cordis-types)
+   Compiling cordis-abi v0.1.0 (/Users/gordongauerk/Projects/Rust-cordis/crates/cordis-abi)
+   Compiling tinystr v0.8.5
+   Compiling potential_utf v0.1.6
+   Compiling icu_collections v2.1.1
+   Compiling icu_locale_core v2.1.1
+   Compiling cordis-up v0.1.0 (/Users/gordongauerk/Projects/Rust-cordis/crates/cordis-up)
+   Compiling icu_provider v2.1.1
+   Compiling icu_normalizer v2.1.1
+   Compiling icu_properties v2.1.2
+   Compiling idna_adapter v1.2.1
+   Compiling idna v1.1.0
+   Compiling kv-api v0.1.0 (/Users/gordongauerk/Projects/Rust-cordis/plugins/kv-api)
+   Compiling cordis-routing v0.1.0 (/Users/gordongauerk/Projects/Rust-cordis/crates/cordis-routing)
+   Compiling cordis-process v0.1.0 (/Users/gordongauerk/Projects/Rust-cordis/crates/cordis-process)
+   Compiling cordis-channels v0.1.0 (/Users/gordongauerk/Projects/Rust-cordis/crates/cordis-channels)
+   Compiling cordis-host v0.1.0 (/Users/gordongauerk/Projects/Rust-cordis/crates/cordis-host)
+   Compiling url v2.5.8
+   Compiling cordis-supervisor v0.1.0 (/Users/gordongauerk/Projects/Rust-cordis/crates/cordis-supervisor)
+   Compiling kv-mem-component v0.1.0 (/Users/gordongauerk/Projects/Rust-cordis/plugins/kv-mem-component)
+   Compiling kv-mem v0.1.0 (/Users/gordongauerk/Projects/Rust-cordis/plugins/kv-mem)
+   Compiling kv-file v0.1.0 (/Users/gordongauerk/Projects/Rust-cordis/plugins/kv-file)
+   Compiling cordis-web-deployment v0.1.0 (/Users/gordongauerk/Projects/Rust-cordis/crates/cordis-web-deployment)
+   Compiling cordis-runtime v0.1.0 (/Users/gordongauerk/Projects/Rust-cordis/crates/cordis-runtime)
+    Finished `release` profile [optimized] target(s) in 15.19s

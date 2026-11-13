@@ -183,11 +183,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "cordis-routing"
+version = "0.1.0"
+dependencies = [
+ "cordis-up",
+ "parking_lot",
+ "semver",
+ "serde",
+]
+
+[[package]]
 name = "cordis-supervisor"
 version = "0.1.0"
 dependencies = [
  "cordis",
  "cordis-process",
+ "cordis-routing",
  "cordis-types",
  "cordis-up",
  "futures-util",

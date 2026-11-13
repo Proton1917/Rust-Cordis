@@ -81,6 +81,9 @@ flowchart TB
 | 网页与全栈替换 | 两页独立状态保留，Rust→Python 后端切换与坏前端候选回退通过；三语言提供方撤回使页面 Pending，插回后恢复 | [M20 浏览器验收](docs/measurements/m20-web-acceptance.json) |
 | 页面故障隔离 | 超大帧、畸形 CBOR、嵌套转发及 128 个并发调用只关闭故障页；健康页面和核心身份保持 | M20 AU-15 |
 | 通道解析 | 固定 1800 秒模糊测试，实际 1801 秒、1,663,834 次输入，退出 0 | [M20 UP/1](docs/measurements/m20-up1-fuzz.json) |
+| 跨进程完整调用 | 原生 Rust→Rust / Python / TypeScript 各 10000 次，64 字节 get 的中位数 124.833 / 116.875 / 81.375 µs，99 分位 237.750 / 146.125 / 175.084 µs | [M21 RM-7](docs/measurements/m21-performance/README.md) |
+| 第三阶段同组调用 | 原正式实现停载轮中位数 19.36792 ns，基线 20.22250 ns；比值 0.95774，通过原 1.05 判据，首轮负载重叠结果与全部样本一并保留 | M21 RM-9 |
+| 完整解释器发布 | 移动后的签名 tar 包运行 Python 3.12.16、Node 22.23.5 与原生 CBOR 扩展，真实 KV 调用及所有进程退出通过 | [M21 发布记录](docs/measurements/m21-script-runtimes.json) |
 | 上游一致性 | 177 条上游用例：8 条移植、166 条改写、3 条不适用，每个里程碑重新校验 | [一致性矩阵](docs/04-conformance.md) |
 
 ## 快速开始
@@ -122,7 +125,7 @@ cordis run
 | `crates/cordis-abi` | 2407 | ABI v1.0 的布局与调用约定；`unsafe` 只出现在 ABI、原生宿主和 SDK 宏中，位置由审计测试约束 |
 | `crates/cordis-sdk`、`cordis-sdk-macros` | 2216 | Rust 插件 SDK 与过程宏 |
 | `crates/cordis-idl` | 2324 | WIT 解析与三语言绑定生成 |
-| `crates/cordis-dev` | 2278 | 开发工具：`new`、`new-plugin`、`idl gen`、`verify`、`pack` |
+| `crates/cordis-dev` | 2308 | 开发工具：`new`、`new-plugin`、`idl gen`、`verify`、`pack` |
 | `sdks/python` | 838 | Python SDK |
 | `sdks/typescript` | 1369 | 共用 SDK 1163 行、网页宿主 206 行，统计各自 src |
 | `plugins/` | | `watch`、`console-log`、`http`、`window`，`kv-mem`、`kv-file`、`kv-py`、`kv-ts`、`counter`、`counter-py`，以及接口与契约 crate `kv-api`、`kv-contract`、`web-api`、`forward-api`、`window-api` |
@@ -152,7 +155,7 @@ cordis run
 | | M18 | Python SDK 与跨插口双向替换 | 完成 |
 | | M19 | TypeScript SDK、`kv-ts`、`new-plugin --ts` | 完成 |
 | | M20 | 前端插件与全栈插件：WebSocket 转发、页面子实例、网页宿主 `cordis-web` | 完成 |
-| | M21 | 多语言全栈总验收 | 验收进行中 |
+| | M21 | 多语言全栈总验收、完整 Python/Node 发布包与插件编写手册 | 完成 |
 
 每个里程碑一个提交，须通过格式、clippy、全部测试（M18 时 307 条）、177 条一致性矩阵、`unsafe` 审计和行数预算检查。逐项记录见 [PROGRESS](docs/PROGRESS.md)，各阶段验收摘要见 [使用指南](docs/guide.md#里程碑验收摘要m0m18)。
 

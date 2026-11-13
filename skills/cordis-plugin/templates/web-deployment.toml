@@ -1,0 +1,5 @@
+[instance.http]
+plugin = "http"
+group = "http"
+forwarder = true
+config = { listen = "127.0.0.1:0" }

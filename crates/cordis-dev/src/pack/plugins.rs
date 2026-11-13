@@ -25,10 +25,10 @@ pub async fn assemble(
     plan: &mut Plan,
     artifacts: &Artifacts,
     deployment: &Path,
+    runtime_root: &BTreeMap<String, PathBuf>,
     app_binaries: Option<&Path>,
 ) -> Result<Vec<Native>> {
     let requested = requested(&plan.configuration)?;
-    let runtime_root = runtimes(plan, deployment)?;
     let plugin_dir = plan
         .configuration
         .get("runtime")
@@ -51,7 +51,7 @@ pub async fn assemble(
                 artifacts,
                 &original,
                 &root,
-                &runtime_root,
+                runtime_root,
                 app_binaries,
             )
             .await?
@@ -234,7 +234,7 @@ fn assets(source: &Path, destination: &Path, manifest: &Table) -> Result<()> {
 }
 
 /// DOC-15 §12.2：运行时来源显式声明，解释器入口在复制时确认。
-fn runtimes(plan: &Plan, deployment: &Path) -> Result<BTreeMap<String, PathBuf>> {
+pub(super) fn runtimes(plan: &Plan, deployment: &Path) -> Result<BTreeMap<String, PathBuf>> {
     let selected = plan
         .settings
         .get("runtimes")

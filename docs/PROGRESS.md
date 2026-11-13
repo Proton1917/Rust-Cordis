@@ -6,15 +6,19 @@
 
 | 项 | 值 |
 |---|---|
-| 最近完成的实现与检查 | M20：网页宿主、页面隔离、全栈替换与回退、三语言服务依赖、浏览器故障隔离与脚手架 |
-| 当前里程碑 | M20 退出检查通过，接续 M21 总验收 |
-| 当前验证 | 工作区 323 条运行用例与 2 条文档用例分段通过；8 条真实浏览器场景通过；177 条矩阵、unsafe 审计、fmt 与 clippy 通过 |
-| 下一步 | 整合 target/phase3-acceptance/m21 的 ADR-0043、真实 Python/Node 打包、跨语言总验收与 skill 候选；执行固定 RM-7/8/9，完成 M21 退出检查并提交推送 |
-| M21 并行安排 | m20_routing 正执行 release 测量准备与固定测量；m17_cache_cleanup 核对 M21 skill 与最新网页 API。主会话整合及提交，编译根保持 target、agent-shared、agent-cleanup 三处 |
-| 验收资料 | docs/measurements/m20-web-acceptance.json、m20-workspace-tests.json、m20-up1-fuzz.json；网页状态与操作见 docs/design/flow/index.html |
-| 文档交付 | README 更新路线图、组成与实测表；完整用法进入 docs/guide.md；解释页和独立 HTML 已同步。M21 详细步骤继续写入 guide |
+| 最近完成的实现与检查 | M21：三语言总验收、完整 Python/Node 签名发布包、RM-7/8/9 与插件编写 skill |
+| 当前里程碑 | M21 退出检查通过，第三阶段验收完成 |
+| 当前验证 | cargo test --workspace 一次通过：325 条运行用例与 2 条文档用例；全量负载期间 native 另连续五轮，各 14 条通过；fmt、clippy 与布局、unsafe 审计通过 |
+| 下一步 | M0–M21 交付范围已完成；后续独立事项为静态分派候选和测量方法研究 |
+| M20 评审跟进 | segmentation_fault_isolates_group 的等待修正及五轮稳定性验收已完成；supervisor 保持 5480/5500 代码行 |
+| M21 性能结果 | RM-7 三方向各 10000 次，RM-8 三次替换完成。RM-9 首轮中位数比 1.07711183；停载重测中位数比 0.95774113、最大值比 0.90793525，满足原 1.05/1.15 判据。完整样本与测量条件并列归档 |
+| 后续事项 | ADR-0045 静态分派候选保持暂停，保存在 target/phase3-acceptance/m21/rm9-candidate 与 rm9-analysis。两轮前 1–4 轮偏高、比值相差约 12%；预热长度与交替采样方法留作独立研究 |
+| 清理 | 用户授权清理已执行，target 从 60G 降至 30G；代理编译根、主编译 incremental 和旧里程碑二进制已释放。具体路径与空间实测见 M21 小节 |
+| 并行安排 | 两个 Astra/high 子代理已完成测量、skill 和解释页任务，运行进程均已退出；主会话沿默认 target/debug 与 target/shared 保留编译缓存 |
+| 验收资料 | docs/measurements/m21-acceptance.md 汇总 AU-1–AU-18；性能、语言、完整运行时和 native 稳定性另有原始 JSON。网页状态与操作见 docs/design/flow/index.html |
+| 文档交付 | README 三张表、guide、DOC-13/15、ADR-0043、skill、解释页与独立 HTML 已同步 |
 | 窗口界面验收 | AU-17 已归档；用户运行记录为恢复 802 ms，截图、Cmd-Q、检查点与进程退出通过 |
-| 最后更新 | 2026-11-13（Asia/Shanghai），M20 退出结果与 M21 接续 |
+| 最后更新 | 2026-11-13（Asia/Shanghai），M21 验收、性能与清理结果 |
 
 ## 环境
 
@@ -655,6 +659,74 @@ cargo test --manifest-path target/m17-review/source/Cargo.toml -p cordis --doc
 | TypeScript SDK / 网页宿主 | 1163/1261；206/231 |
 | 核心九个 crate 合计 | 18910 / 21151 |
 
+### M21 三语言验收、独立运行时发布与插件手册
+
+- 交付：完整 Python/Node 运行时目录进入发布包，命令指向包内实际解释器入口；深层 Mach-O、程序及外层 Bundle 按顺序签名。Node 使用 JIT 权限，ad-hoc Python/Node 具有装入包内原生扩展所需的权限。职责与依据见 ADR-0043。
+- AU-3–AU-6：Rust、Python、TypeScript 提供方与跨语言使用方同核运行；新增 Python→TypeScript、TypeScript→Python 真实字节服务调用，结合已有四方向覆盖六个方向。同一 Rust counter 持续写入时，提供方依次由 Rust、Python、TypeScript 接续，状态和计数保持。三种 KV 各通过原生 kv-contract 的 8 项断言。原始场景汇入 [跨语言调用](measurements/m21-language-cross.json)与[连续迁移](measurements/m21-language-migration.json)。
+- AU-12：完整 Python 3.12.16 与 Node 22.23.5 的 ad-hoc 签名 tar 包，移动解开后实际执行 Python _cbor2/SSL、Node 原生 CBOR 扩展及动态代码；两种 KV 读写、签名校验与全部进程退出通过。[运行时发布结果](measurements/m21-script-runtimes.json)来自本次 workspace 的正式用例。冷缓存准备分支另实际下载 51,157,421 字节，解开后与已有来源逐文件字节及链接比较通过，重复输入随后释放。Developer ID 路径按同团队规则实现，本次真实签名身份为 ad-hoc。
+- AU-1 稳定性修复：设计方在 M20 全量负载中观察到 segmentation_fault_isolates_group 一次失败。其原 200 ms invoke 截止时间会发 cancel，调度拥堵时故障调用可能在实际触发前被取消；改为沿既有 20 秒场景总预算，spin 仍执行 3 次 200 ms 连续超时。故障前订阅 InternalStatus 并读取 fiber.state()，等待连接 EOF、依赖 Pending 通知及 settled，再检查分组退役；两段 1 ms 轮询已移除。13:48:44–13:49:40 UTC 完整 native 固定连续五轮，每轮 14 条全部通过，五轮全程处于同一次 workspace 负载内。[稳定性记录](measurements/m21-native-stability.json)保存每轮命令、时间、退出码与交叠区间。
+- Y-1：`cargo fmt --all --check` 通过，`target/m21-fmt.log`。
+- Y-2：`cargo clippy --workspace --all-targets -- -D warnings` 通过，16.66 秒，`target/m21-clippy.log`；独立测量 driver 的 clippy 通过，5.26 秒，`target/m21-measurement-driver-clippy.log`。正式 probe 的 release 构建通过，4.21 秒，`target/m21-formal-probe-build.log`。
+- Y-3：`cargo test --workspace` 一次完整通过，325 条运行用例与 2 条文档用例，共 327 条，460.772 秒，退出 0。运行区间为 2026-11-13 13:48:44.014–13:56:24.788 UTC；原日志在 `target/phase3-acceptance/m21/native-stability/evidence/20261113T134844Z/workspace.log`。完整发布包及语言夹具均由测试自动构建、安装依赖并运行，成功现场由 TestGuard 归档。
+- Y-4：内核与用例矩阵保持 M20 的正式源，复用其 177 条通过结果：8 条移植、166 条改写、3 条不适用，`target/m20-conformance.log`。
+- Y-5：本次 workspace 的 unsafe 审计通过。核心九个 crate 及其依赖声明保持 M20，复用 `target/m20-core-dependencies.txt` 的 Q0 结果与 `target/m20-host-dependencies.txt` 的宿主依赖结果。
+- Y-6：ABI 实现、生产宏及布局文件保持 M17 的已验源，复用 13 条 Miri 边界用例及布局比较，nightly 版本见环境表。Y-7：本次 workspace 的 ABI 布局用例通过，冻结版本为 v1.0。
+- Y-8：沿 `cloc 2.10 --skip-uniqueness` 分别统计 crate/src 与 SDK 源目录，报告代码行 / 总行；完整表见下方。cordis-dev 增至 2308 / 2532；supervisor 5480 / 5923、runtime 5313 / 5839，均处于 5500 代码行上限内；核心九个 crate 合计 18910 / 21151。超过目标的职责沿 M20 的生命周期、事务、部署、协议预算及语言接口生成说明。
+- Y-9：AU-1–AU-18 覆盖与复用源码范围见[第三阶段验收](measurements/m21-acceptance.md)。README 的路线图、组成和实测表，guide、DOC-13/15、ADR-0043、skill 与解释页已同步。解释页受影响进度区的桌面与移动截图已查看，page_errors=[]；证据为 `target/m21-evidence/explainer/progress-desktop.png`、`progress-mobile.png` 和 `result.json`。
+- Y-10：提交主题 `M21: 完成三语言验收与独立运行时发布`，推送目标 origin/main。
+- skill：保留 Rust 接口、效应、资源、状态和契约指南，新增 Python、TypeScript、网页/全栈、打包及模板来源章节。模板复用 cordis-dev 维护源；skill-creator 的 quick_validate 通过，Rust 模板继续由 workspace 编译验证，脚本语言和网页模板由真实 SDK、脚手架及网页用例覆盖。Codex 用户 skill 链接继续指向仓库目录。
+- 提交前清理：两个子代理结束后，进程及打开文件查询确认目录空闲，释放 target/agent-cleanup、target/agent-shared、target/debug/incremental；M20 及以前目录中逐个识别的 Mach-O、ELF、静态库副本和 window-m16 的 Swift 模块缓存共形成 612 项删除记录。`du -sh target` 为 60G→30G，目录占用减少 31,761,160 KiB；文件系统可用空间同期实测增加 31,625,617,408 字节。完整删除清单及前后数值为[清理记录](measurements/m21-cleanup.json)。日志、JSON、截图与语料原位保留，引用证据迁移项为 0；review-fix、review-m3、review-m4、Miri、claude-edits 及 M21 原始样本和暂停候选保持。
+- AU-17 目录：`target/window-tests/recovery-51816` 按“用户 2026-11-13 授权删除”（6990ee77）整体移除，删除前确认该 app 与 cordis 相关进程均已退出。正式结果保存在 `docs/measurements/m16-au17-user.json`；window-m16 的 inspect-window、Swift/Python/zsh 脚本、用户结果与截图继续保留。后续执行构建时沿默认 target/debug 与 target/shared 重建所需产物。
+
+RM-7 的原生调用方和提供方位于不同分组，计时覆盖请求、处理、复制及结果释放；每向固定 10000 次。RM-8 三个方向各执行一次，pause 沿 ADR-0035 从事务准备计至受影响实例全部 Active。环境为 Apple M4 Pro、14 个逻辑 CPU、48 GiB 内存、macOS 27.2 arm64、Rust 1.96.0 release，直接调用 consumer/provider 使用 Rust 1.85.0。完整原始 JSON 和构建日志见[性能记录](measurements/m21-performance/README.md)。
+
+| 指标 | 中位数 / 99 分位，或替换停顿 |
+|---|---:|
+| RM-7 Rust→Rust（跨分组） | 124.833 / 237.750 µs |
+| RM-7 Rust→Python | 116.875 / 146.125 µs |
+| RM-7 Rust→TypeScript | 81.375 / 175.084 µs |
+| RM-8 kv-mem→kv-file | 215 ms |
+| RM-8 Python→TypeScript | 362 ms |
+| RM-8 TypeScript→Python | 126 ms |
+
+| RM-9 窗口 | 基线 / 当前中位数 | 中位数比 | 最大值比 | 原判据 |
+|---|---:|---:|---:|---|
+| 首轮，与设计方全量复核重叠 | 19.14959 / 20.62625 ns | 1.07711183 | 0.89729184 | 中位数比超过 1.05 |
+| 各方停止构建及测试后的重测 | 20.22250 / 19.36792 ns | 0.95774113 | 0.90793525 | 满足 1.05 / 1.15 |
+
+RM-9 两次均为每实现固定 9 轮、每轮预热 10000 次、计量 100000 次。首轮于 13:06 UTC 结束，与设计方持续至 13:10 UTC 的全量复核重叠；按 45fa107f 的新负载证据协调停载，原正式实现于 13:39:54 UTC 重测一次，原快照、轮次及判据保持。两次前 1–4 轮均偏高，两个窗口的中位数比相差约 12%，大于 5% 判据宽度，记录为短预热、短测量窗口的已知局限。两轮原始样本完整保留；预热长度和交替采样方法列为后续独立研究。按 745fc7dd，ADR-0045 静态分派候选保存在 `target/phase3-acceptance/m21/rm9-candidate` 与 `rm9-analysis`，状态为暂停，正式 SDK 与 Service 沿既有实现。
+
+| crate 或 SDK | 代码行 / 总行 |
+|---|---:|
+| cordis | 4230 / 5112 |
+| cordis-abi | 2407 / 2846 |
+| cordis-sdk | 789 / 915 |
+| cordis-sdk-macros | 1427 / 1558 |
+| cordis-up | 1628 / 1773 |
+| cordis-supervisor | 5480 / 5923 |
+| cordis-routing | 580 / 660 |
+| cordis-channels | 250 / 277 |
+| cordis-web-deployment | 850 / 918 |
+| cordis-runtime | 5313 / 5839 |
+| cordis-host | 2719 / 3007 |
+| cordis-dev | 2308 / 2532 |
+| cordis-idl | 2324 / 2466 |
+| cordis-process | 374 / 410 |
+| cordis-types | 205 / 239 |
+| cordis-testkit | 502 / 571 |
+| cordis-contract | 31 / 47 |
+| console-log | 465 / 515 |
+| cordis-watch | 578 / 622 |
+| cordis-http | 823 / 892 |
+| cordis-window | 943 / 1020 |
+| web-api / forward-api / window-api | 25/32；17/21；11/17 |
+| kv-api / kv-contract / kv-file | 23/37；56/66；129/142 |
+| kv-mem / kv-mem-component | 6/9；67/80 |
+| counter / counter-component | 6/9；75/85 |
+| Python SDK | 838 / 987 |
+| TypeScript SDK / 网页宿主 | 1163/1261；206/231 |
+| 核心九个 crate 合计 | 18910 / 21151 |
+
 ## 第二阶段候选与恢复记录
 
 用户设置的 10 分钟计时于 2026-11-12 02:40:22 UTC 到期后暂停，随后按用户指令恢复。设计提交为 `478b3a4`，包含用户指定的序号和完整字节比对方案。M7 已完成验收，后续候选继续按下表接入。
@@ -673,7 +745,7 @@ M8 候选保留独立 `[workspace]` 以便隔离编译，正式接入时改为�
 
 后续设计按 ADR-0016–0021 与已确认 DOC-15 执行。依赖版本候选为 clap 4.6.7、semver 1.0.28、toml 1.2.1、libloading 0.9.0、notify 8.2.0、nix 0.31.3；模糊测试使用 libfuzzer-sys 0.4.13。
 
-当前保留 `target/` 中的候选源码及缓存，继续后续里程碑。
+上述候选的源码、日志、语料及验收资料按引用保留，可重建程序与缓存已按 M21 清理记录释放。
 
 ## 公开接口清单
 
@@ -695,6 +767,9 @@ M8 候选保留独立 `[workspace]` 以便隔离编译，正式接入时改为�
 
 实现过程中得到的、文档里没有的结论记在这里，每条写明日期、结论、依据（源码位置或用例编号）。需要改变 `DOC-01` 条款或 `DOC-02` 规则的结论另写 ADR，这里只留一行指向它。
 
+- 2026-11-13（Asia/Shanghai）：完整独立 Python/Node 发布包按 ADR-0043 设置解释器权限和签名顺序，真实包内扩展、JIT、KV 服务与退出通过。原生故障测试改为状态通知及连接结束驱动，全量负载期间五轮各 14 条通过，见 M21 稳定性记录。
+- 2026-11-13（Asia/Shanghai）：RM-9 首轮与评审全量负载重叠，停载重测保持原正式实现与原判据并通过；两轮原始样本并列保存。前期轮次偏高和比值约 12% 变动记为方法局限，ADR-0045 静态分派与测量方法研究保持后续独立事项。
+- 2026-11-13（Asia/Shanghai）：M21 提交前按 e5e4f5cd、6990ee77 完成 612 项缓存与旧二进制清理，`du -sh target` 60G→30G，目录占用减少 31,761,160 KiB，文件系统可用空间实测增加 31,625,617,408 字节；记录为 `docs/measurements/m21-cleanup.json`。window-recovery 目录已按“用户 2026-11-13 授权删除”释放，AU-17 归档结果和截图保留。
 - 2026-11-13（Asia/Shanghai）：M20 页面使用 Context 扩展的命名空间隔离显式命名域，前后端事务共同保存页面状态；生命周期稳定检查按实际 Instance 身份处理退役页面，失败 Owner 通过恢复序号重新激活。ADR-0041 与八个浏览器场景记录对应结构与行为。
 - 2026-11-13（Asia/Shanghai）：配置移除提供方产生的 Pending 是有效部署状态，版本替换继续沿 SW-7 检查 Active；两者共享提交与恢复流程，判据见 ADR-0044。设计方指出的 PIP_REQUIRE_VIRTUALENV 环境依赖由公共 testkit 安装函数处理，三处真实场景已通过。
 

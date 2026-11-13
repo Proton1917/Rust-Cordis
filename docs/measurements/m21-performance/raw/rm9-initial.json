@@ -1,0 +1,177 @@
+{
+  "baseline_commit": "dc93da1",
+  "baseline_library": "/Users/gordongauerk/Projects/Rust-cordis/target/test-artifacts/phase3-direct-55981-1/libdirect_benchmark_baseline.dylib",
+  "current_library": "/Users/gordongauerk/Projects/Rust-cordis/target/test-artifacts/phase3-direct-55981-1/libdirect_benchmark_current.dylib",
+  "builds": [
+    {
+      "group": "baseline",
+      "plugin": "loader-fixture",
+      "information": "rustc 1.85.0 (4d91de4e4 2025-02-17) aarch64-apple-darwin"
+    },
+    {
+      "group": "baseline",
+      "plugin": "direct-benchmark",
+      "information": "rustc 1.85.0 (4d91de4e4 2025-02-17) aarch64-apple-darwin"
+    },
+    {
+      "group": "current",
+      "plugin": "loader-fixture",
+      "information": "rustc 1.85.0 (4d91de4e4 2025-02-17) aarch64-apple-darwin"
+    },
+    {
+      "group": "current",
+      "plugin": "direct-benchmark",
+      "information": "rustc 1.85.0 (4d91de4e4 2025-02-17) aarch64-apple-darwin"
+    }
+  ],
+  "profile": "release opt-level=3",
+  "warmup_per_round": 10000,
+  "iterations_per_round": 100000,
+  "expected_rounds_per_implementation": 9,
+  "baseline_median_ns": 19.14959,
+  "current_median_ns": 20.62625,
+  "median_ratio": 1.077111833725944,
+  "maximum_ratio": 0.8972918426062436,
+  "paired_ratios": [
+    0.8972918426062436,
+    1.1791546266585726,
+    1.6146978430496233,
+    1.404869951236985,
+    0.9512763395357197,
+    1.0062915457659305,
+    1.1359806099869199,
+    1.204686809172236,
+    0.9563306577320977
+  ],
+  "median_ratio_limit": 1.05,
+  "maximum_ratio_limit": 1.15,
+  "failure": "中位数比值Some(1.077111833725944)应满足预定上限1.05",
+  "samples": [
+    {
+      "implementation": "baseline",
+      "round": 1,
+      "iterations": 100000,
+      "elapsed_ns": 4610958,
+      "last_value": 100
+    },
+    {
+      "implementation": "current",
+      "round": 1,
+      "iterations": 100000,
+      "elapsed_ns": 4137375,
+      "last_value": 100
+    },
+    {
+      "implementation": "current",
+      "round": 2,
+      "iterations": 100000,
+      "elapsed_ns": 3399208,
+      "last_value": 100
+    },
+    {
+      "implementation": "baseline",
+      "round": 2,
+      "iterations": 100000,
+      "elapsed_ns": 2882750,
+      "last_value": 100
+    },
+    {
+      "implementation": "baseline",
+      "round": 3,
+      "iterations": 100000,
+      "elapsed_ns": 1832541,
+      "last_value": 100
+    },
+    {
+      "implementation": "current",
+      "round": 3,
+      "iterations": 100000,
+      "elapsed_ns": 2959000,
+      "last_value": 100
+    },
+    {
+      "implementation": "current",
+      "round": 4,
+      "iterations": 100000,
+      "elapsed_ns": 2831750,
+      "last_value": 100
+    },
+    {
+      "implementation": "baseline",
+      "round": 4,
+      "iterations": 100000,
+      "elapsed_ns": 2015667,
+      "last_value": 100
+    },
+    {
+      "implementation": "baseline",
+      "round": 5,
+      "iterations": 100000,
+      "elapsed_ns": 1924958,
+      "last_value": 100
+    },
+    {
+      "implementation": "current",
+      "round": 5,
+      "iterations": 100000,
+      "elapsed_ns": 1831167,
+      "last_value": 100
+    },
+    {
+      "implementation": "current",
+      "round": 6,
+      "iterations": 100000,
+      "elapsed_ns": 1852625,
+      "last_value": 100
+    },
+    {
+      "implementation": "baseline",
+      "round": 6,
+      "iterations": 100000,
+      "elapsed_ns": 1841042,
+      "last_value": 100
+    },
+    {
+      "implementation": "baseline",
+      "round": 7,
+      "iterations": 100000,
+      "elapsed_ns": 1768333,
+      "last_value": 100
+    },
+    {
+      "implementation": "current",
+      "round": 7,
+      "iterations": 100000,
+      "elapsed_ns": 2008792,
+      "last_value": 100
+    },
+    {
+      "implementation": "current",
+      "round": 8,
+      "iterations": 100000,
+      "elapsed_ns": 2062625,
+      "last_value": 100
+    },
+    {
+      "implementation": "baseline",
+      "round": 8,
+      "iterations": 100000,
+      "elapsed_ns": 1712167,
+      "last_value": 100
+    },
+    {
+      "implementation": "baseline",
+      "round": 9,
+      "iterations": 100000,
+      "elapsed_ns": 1914959,
+      "last_value": 100
+    },
+    {
+      "implementation": "current",
+      "round": 9,
+      "iterations": 100000,
+      "elapsed_ns": 1831334,
+      "last_value": 100
+    }
+  ]
+}

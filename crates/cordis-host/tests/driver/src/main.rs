@@ -3,7 +3,9 @@
 mod allocation;
 
 use clap::Parser;
-use cordis::{Clock, Context, EventOptions, FiberState, InternalService, Spawn, Task};
+use cordis::{
+    Clock, Context, EventOptions, Fiber, FiberState, InternalService, InternalStatus, Spawn, Task,
+};
 use cordis_supervisor::{
     PeerOptions,
     manager::{
@@ -1011,7 +1013,13 @@ async fn faults(artifacts: &Artifacts, fault: &str) -> Result<()> {
                     "服务panic后宿主应继续调用其他方法",
                 )?;
             } else {
+                let mut changed = observe_state(&manager.context(), &dependent)?;
                 let attempts = if fault == "spin" { 3 } else { 1 };
+                let deadline = if fault == "spin" {
+                    Duration::from_millis(200)
+                } else {
+                    Duration::from_secs(20)
+                };
                 for _ in 0..attempts {
                     let request = Value::serialized(&payload::Invoke {
                         object: service.id(),
@@ -1022,39 +1030,25 @@ async fn faults(artifacts: &Artifacts, fault: &str) -> Result<()> {
                     check(
                         service
                             .peer()
-                            .request("invoke", request, Duration::from_millis(200))
+                            .request("invoke", request, deadline)
                             .await
                             .is_err(),
                         "原生故障调用应失败",
                     )?;
                 }
-                tokio::time::timeout(Duration::from_secs(5), async {
-                    loop {
-                        if manager
-                            .snapshot()
-                            .groups
-                            .iter()
-                            .any(|group| group.name == name && group.state == "failed")
-                        {
-                            break;
-                        }
-                        tokio::time::sleep(Duration::from_millis(1)).await;
-                    }
-                })
-                .await
-                .map_err(|_| std::io::Error::other("故障分组应被核心回收"))?;
-                tokio::time::timeout(Duration::from_secs(5), async {
-                    while dependent.state() != FiberState::Pending {
-                        tokio::time::sleep(Duration::from_millis(1)).await;
-                    }
-                })
-                .await
-                .map_err(|_| {
-                    std::io::Error::other(format!(
-                        "故障分组的跨组依赖方应转为Pending，实际{:?}",
-                        dependent.state()
-                    ))
-                })?;
+                service.peer().closed().await;
+                changed
+                    .wait_for(|state| *state == FiberState::Pending)
+                    .await?;
+                dependent.settled().await?;
+                check(
+                    manager
+                        .snapshot()
+                        .groups
+                        .iter()
+                        .any(|group| group.name == name && group.state == "failed"),
+                    "故障分组应被核心回收",
+                )?;
             }
             drop(service);
             manager.dispose("dependent").await?;
@@ -1076,6 +1070,22 @@ async fn faults(artifacts: &Artifacts, fault: &str) -> Result<()> {
     result?;
     cleanup.map_err(|_| std::io::Error::other("故障场景清理超过10秒"))??;
     Ok(())
+}
+
+/// AU-1、CP-6：故障触发前订阅真实状态，退出及依赖回收沿通知完成，使用场景总截止时间。
+fn observe_state(
+    context: &Context,
+    fiber: &Fiber,
+) -> Result<tokio::sync::watch::Receiver<FiberState>> {
+    let (changed, observed) = tokio::sync::watch::channel(fiber.state());
+    let target = fiber.clone();
+    context.on::<InternalStatus>(move |(fiber, _)| {
+        if *fiber == target {
+            changed.send_replace(fiber.state());
+        }
+        None
+    })?;
+    Ok(observed)
 }
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 2)]

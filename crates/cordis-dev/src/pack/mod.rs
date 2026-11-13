@@ -67,10 +67,12 @@ pub async fn run(options: Options) -> Result<()> {
     let (binaries, deployment) = layout(&destination, options.app)?;
     fs::copy(&plan.core, binaries.join("cordis"))?;
     fs::copy(&plan.host, binaries.join("cordis-host"))?;
+    let runtimes = plugins::runtimes(&plan, &deployment)?;
     let native = plugins::assemble(
         &mut plan,
         &artifacts,
         &deployment,
+        &runtimes,
         options.app.then_some(binaries.as_path()),
     )
     .await?;
@@ -80,7 +82,7 @@ pub async fn run(options: Options) -> Result<()> {
         platform::bundle(&plan, &destination)?;
     }
     let code = platform::code_files(&destination, plan.platform)?;
-    signing::sign(&plan, &options, &destination, &binaries, &code).await?;
+    signing::sign(&plan, &options, &destination, &binaries, &runtimes, &code).await?;
     plugins::verification(&plan, &artifacts, &deployment, &native).await?;
     service(&plan, &binaries, &deployment)?;
     signing::finish(&plan, &options, &destination, &code).await?;

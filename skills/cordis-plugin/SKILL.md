@@ -1,35 +1,38 @@
 ---
 name: cordis-plugin
-description: 编写、验证和部署 Cordis Rust 原生插件、共享接口与接口契约套件，处理效应清理、服务注入、状态继承和运行中的插件替换。
+description: 编写、验证和部署 Cordis Rust、Python、TypeScript 与网页插件，处理共享接口、效应清理、状态继承、运行中替换和附带解释器的发布包。
 ---
 
 # Cordis 插件
 
-使用 `cordis-sdk` 实现插件，交付可独立编译的动态库及对应部署配置。核心通过 UP/1 管理生命周期，原生代码在 `cordis-host` 中执行；同组原生服务可以直接走 ABI 类型化方法表。
+核心通过 UP/1 管理组件的依赖、加载、效应和替换。Rust 动态库在 cordis-host 中运行；Python 与 Node 插件以独立进程接入；浏览器组件经 HTTP 插件转发的 WebSocket 接入同一个核心。组件通过 Context 声明资源归属与状态导出，核心按这些声明执行清理和迁移。
 
-先检查项目的 Cargo 依赖和 `cordis.toml`，沿用既有接口及 SDK 修订。`cordis version` 显示核心版本，`cordis-dev version` 显示开发工具支持范围。原生插件和接口库支持 Rust 1.85；核心和开发工具使用仓库固定的工具链。
+先检查当前项目的 cordis.toml、插件清单和 SDK 修订。`cordis version` 显示核心版本，`cordis-dev version` 显示开发工具支持范围。沿用项目现有接口与语言选择；新的公开接口通过 WIT 或共享 Rust 接口 crate 管理。
 
-## 工作入口
+## 选择入口
 
-- 新项目使用 `cordis new demo`，在项目中使用 `cordis new-plugin hello --rust`。
-- 插件名采用小写字母开头的小写字母、数字和短横线；生成的逻辑插件名、组件名与部署引用共用该名称。
-- 构建插件使用 `cargo build --target-dir target`，产物与生成配置的 `target/debug` 对应，也适用于设置了全局 `CARGO_TARGET_DIR` 的环境。
-- 新服务把接口 trait 和数据类型放进独立接口 crate；提供方与使用方共同依赖它。先读 [Rust 接口](references/rust-api.md)。
-- 有任务、线程、文件、监听器或可变状态时，读 [资源与状态](references/resources-state.md)，把运行中的行为和清理一起实现。
-- 编写契约或部署替换时，读 [验证与部署](references/verification-deployment.md)。
+新项目用 `cordis new demo`，插件名采用小写字母开头的小写字母、数字和短横线。生成插件时选择后端语言，并按需求加入网页部分：
 
-## 插件的组成
+| 命令 | 组件形态 | 按需阅读 |
+|---|---|---|
+| `cordis new-plugin hello --rust` | Rust 原生插件 | [Rust 接口](references/rust-api.md) |
+| `cordis new-plugin hello --python` | Python 进程插件 | [Python 插件](references/python.md) |
+| `cordis new-plugin hello --ts` | Node 中的 TypeScript 插件 | [TypeScript 插件](references/typescript.md) |
+| `cordis new-plugin hello --web` | 浏览器组件 | [网页与全栈插件](references/web.md) |
+| `cordis new-plugin hello --rust --web` | Rust 后端与浏览器组件 | 同上；后端也可选择 `--python`、`--ts` |
 
-实现 `Component`，声明 `NAME`、可反序列化的 `Config`，并在 `inject`、`provides`、`listens` 中列出使用的接口和事件。`resolve` 校验配置，`apply` 执行本次激活；原生库通过 `export_plugin!` 导出组件。库的 Cargo `crate-type` 包含 `cdylib`，panic 策略保持 `unwind`。
+创建项目与插件由 cordis-dev 的现有脚手架完成。[模板来源](references/templates.md) 说明共用模板与生成路径。Rust 原生插件和接口库支持 Rust 1.85，Python SDK 使用 Python 3.11 及以上，TypeScript 进程 SDK 使用 Node 22 及以上。
 
-接口用 `#[interface(name = "名称", version = "主版本.次版本")]` 声明，接口实现再加 `#[interface]`。提供服务使用 `ctx.provide::<dyn I>(Arc::new(实现))`，取得服务使用 `ctx.get::<dyn I>()`。访问前声明注入关系；必需服务缺席时，核心让实例保持 `Pending`，服务可用后继续加载。
+## 生命周期与接口
 
-替换需要保持逻辑插件名、组件名以及所提供接口的主版本；兼容演进在末尾追加方法并提升次版本。配置通过实例条目传入，宿主分组由 `group` 指定，上下文配置分组使用 `scope`。
+组件声明名称、配置、必需或可选依赖、所提供服务、监听事件和状态版本。配置检查放在 resolve，激活行为放在 apply。必需服务缺席时，核心把组件保持为 Pending；服务恢复后继续加载。
+
+使用 Context 取得和提供服务，通过效应取得资源并登记清理；后台工作与其取消、等待共同归属该效应。需要状态迁移时声明状态模式，在导出时冻结写入，在激活时读取继承状态。[资源与状态](references/resources-state.md) 保留 Rust 的具体写法，各语言章节给出对应 API。
+
+服务方法、事件和资源参数按接口声明编码。通过 `cordis idl gen` 从同一 WIT 生成 Rust、Python 或 TypeScript 绑定，提供方和使用方共同维护该定义。替换保持逻辑插件名、组件名及服务接口主版本；兼容追加方法时提升接口次版本。
 
 ## 运行与交付
 
-启动 `cordis run` 后，以 `cordis status` 检查实例、库、错误和替换报告。使用真实消费者调用服务，确认行为、清理和状态继承；需要契约验证时运行 `cordis verify`。替换前后比较实际业务状态，并确认依赖方已重建。
+用 `cordis run` 启动部署，以 `cordis status` 观察实例和替换报告，并通过真实使用方确认服务行为、清理和状态继承。watch 将同一防抖窗口中的变化提交为完整批次；管理授权写在基础 cordis.toml 的 grants。票据与最终结果的判断见[验证与部署](references/verification-deployment.md)。
 
-`watch` 的构建变化通过管理接口提交为完整批次；管理授权写在基础 `cordis.toml` 的 `grants`。新版本失败时恢复原版本、原配置和原状态。持久数据保存在 `ctx.data_dir()` 返回的目录中，访问该目录前声明 `cordis.data-dir@1` 依赖。
-
-交付源码、构建与运行命令、使用的 SDK 修订和实际行为验证结果。核心程序与插件分别交付，插件仓库保存自己的源码和配置。
+原生契约套件、进程提供方的契约部署和故障回退沿既有验证入口执行。发布应用时阅读[打包与独立运行时](references/packaging.md)，按目标平台准备实际运行文件、解释器、依赖及签名材料。交付记录说明使用的 SDK 修订、构建和运行命令、实际行为与验证范围。

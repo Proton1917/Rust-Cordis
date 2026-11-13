@@ -1,6 +1,6 @@
 {
-  "baseline": "target/direct-call/baseline/release/libdirect_benchmark_baseline.dylib",
-  "current": "target/direct-call/current/release/libdirect_benchmark_current.dylib",
+  "baseline": "target/shared/release/libdirect_benchmark_baseline.dylib",
+  "current": "target/shared/release/libdirect_benchmark_current.dylib",
   "rounds": 9,
   "warmup": 10000,
   "iterations": 100000,

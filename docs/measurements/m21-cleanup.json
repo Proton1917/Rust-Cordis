@@ -1,0 +1,3197 @@
+{
+  "authorization": "e5e4f5cd",
+  "started_utc": "2026-11-13T14:26:17.246019+00:00",
+  "target_before_kib": 63372428,
+  "target_before_human": "60G\t/Users/gordongauerk/Projects/Rust-cordis/target",
+  "filesystem_free_before": 1203086020608,
+  "deleted": [
+    {
+      "path": "target/agent-shared",
+      "du_kib": 5077236,
+      "kind": "confirmed-cargo-cache"
+    },
+    {
+      "path": "target/agent-cleanup",
+      "du_kib": 11268816,
+      "kind": "confirmed-cargo-cache"
+    },
+    {
+      "path": "target/debug/incremental",
+      "du_kib": 19642968,
+      "kind": "confirmed-cargo-cache"
+    },
+    {
+      "path": "target/loader-m10/target/native-fixtures/abort.dylib",
+      "bytes": 1443416,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/loader-m10/target/native-fixtures/method-panics.dylib",
+      "bytes": 1581864,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/loader-m10/target/native-fixtures/apply-fails.dylib",
+      "bytes": 1582008,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/loader-m10/target/native-fixtures/incompatible.dylib",
+      "bytes": 1581944,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/loader-m10/target/native-fixtures/resources.dylib",
+      "bytes": 1582904,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/loader-m10/target/native-fixtures/bad-abi.dylib",
+      "bytes": 16800,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/loader-m10/target/native-fixtures/v1.dylib",
+      "bytes": 1581976,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/loader-m10/target/native-fixtures/consumer.dylib",
+      "bytes": 1391664,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/loader-m10/target/native-fixtures/v2.dylib",
+      "bytes": 1581960,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/loader-m10/target/native-fixtures/export-fails.dylib",
+      "bytes": 1581960,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/loader-m10/target/native-fixtures/apply-panics.dylib",
+      "bytes": 1560072,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/loader-m10/target/test-runs/swap-75884-6/.cordis/lib/loader-consumer-2.dylib",
+      "bytes": 1388416,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/loader-m10/target/test-runs/swap-75884-6/.cordis/lib/loader-fixture-3.dylib",
+      "bytes": 1091992,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/loader-m10/target/test-runs/swap-75884-6/.cordis/lib/loader-fixture-1.dylib",
+      "bytes": 1091944,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/loader-m10/target/test-runs/rollback-76401-1/.cordis/lib/loader-consumer-2.dylib",
+      "bytes": 1388416,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/loader-m10/target/test-runs/rollback-76401-1/.cordis/lib/loader-fixture-4.dylib",
+      "bytes": 1091992,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/loader-m10/target/test-runs/rollback-76401-1/.cordis/lib/loader-fixture-3.dylib",
+      "bytes": 1091960,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/loader-m10/target/test-runs/rollback-76401-1/.cordis/lib/loader-fixture-1.dylib",
+      "bytes": 1091944,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/loader-m10/target/test-runs/resources-77047-1/.cordis/lib/loader-fixture-1.dylib",
+      "bytes": 1575496,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/loader-m10/target/test-runs/runtime-adapters-79588-1/.cordis/lib/candidate-4.dylib",
+      "bytes": 16800,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/loader-m10/target/test-runs/runtime-adapters-79588-1/.cordis/lib/loader-fixture-2.dylib",
+      "bytes": 1581960,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/loader-m10/target/test-runs/runtime-adapters-79588-1/.cordis/lib/loader-fixture-3.dylib",
+      "bytes": 1582904,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/loader-m10/target/test-runs/runtime-adapters-79588-1/.cordis/lib/loader-fixture-1.dylib",
+      "bytes": 1581976,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/loader-m10/target/test-runs/export-failure-76680-2/.cordis/lib/loader-fixture-2.dylib",
+      "bytes": 1091992,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/loader-m10/target/test-runs/export-failure-76680-2/.cordis/lib/loader-fixture-1.dylib",
+      "bytes": 1091672,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/loader-m10/target/test-runs/rollback-76680-1/.cordis/lib/loader-consumer-2.dylib",
+      "bytes": 1388416,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/loader-m10/target/test-runs/rollback-76680-1/.cordis/lib/loader-fixture-4.dylib",
+      "bytes": 1091992,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/loader-m10/target/test-runs/rollback-76680-1/.cordis/lib/loader-fixture-3.dylib",
+      "bytes": 1091960,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/loader-m10/target/test-runs/rollback-76680-1/.cordis/lib/loader-fixture-1.dylib",
+      "bytes": 1091944,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/loader-m10/target/test-runs/rollback-76680-1/.cordis/lib/loader-fixture-5.dylib",
+      "bytes": 952328,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/loader-m10/target/test-runs/concurrent-75884-1/.cordis/lib/loader-fixture-2.dylib",
+      "bytes": 1091992,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/loader-m10/target/test-runs/concurrent-75884-1/.cordis/lib/loader-fixture-1.dylib",
+      "bytes": 1091944,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/loader-m10/target/test-runs/method-panic-75884-3/.cordis/lib/loader-fixture-1.dylib",
+      "bytes": 1091992,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/loader-m10/target/test-runs/contract-execution-75884-7/.cordis/lib/loader-consumer-2.dylib",
+      "bytes": 1388416,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/loader-m10/target/test-runs/contract-execution-75884-7/.cordis/lib/loader-fixture-1.dylib",
+      "bytes": 1091944,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/loader-m10/target/test-runs/runtime-adapters-80602-1/.cordis/lib/candidate-4.dylib",
+      "bytes": 16800,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/loader-m10/target/test-runs/runtime-adapters-80602-1/.cordis/lib/loader-fixture-2.dylib",
+      "bytes": 1581960,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/loader-m10/target/test-runs/runtime-adapters-80602-1/.cordis/lib/loader-fixture-3.dylib",
+      "bytes": 1582904,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/loader-m10/target/test-runs/runtime-adapters-80602-1/.cordis/lib/loader-fixture-1.dylib",
+      "bytes": 1581976,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/loader-m10/target/test-runs/abi-75884-2/.cordis/lib/candidate-2.dylib",
+      "bytes": 1033176,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/loader-m10/target/test-runs/abi-75884-2/.cordis/lib/candidate-1.dylib",
+      "bytes": 16800,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/loader-m10/target/test-runs/rollback-75884-4/.cordis/lib/loader-consumer-2.dylib",
+      "bytes": 1388416,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/loader-m10/target/test-runs/rollback-75884-4/.cordis/lib/loader-fixture-4.dylib",
+      "bytes": 1091992,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/loader-m10/target/test-runs/rollback-75884-4/.cordis/lib/loader-fixture-3.dylib",
+      "bytes": 1091960,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/loader-m10/target/test-runs/rollback-75884-4/.cordis/lib/loader-fixture-1.dylib",
+      "bytes": 1091944,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/loader-m10/target/test-runs/verified-75884-8/.cordis/candidate.dylib",
+      "bytes": 1091992,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/loader-m10/target/test-runs/verified-75884-8/.cordis/verified/verified-1.dylib",
+      "bytes": 1091944,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/loader-m10/target/test-runs/verified-75884-8/.cordis/lib/candidate-2.dylib",
+      "bytes": 1091992,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/loader-m10/target/test-runs/verified-75884-8/.cordis/lib/loader-fixture-1.dylib",
+      "bytes": 1091944,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/loader-m10/target/test-runs/swap-81868-1/.cordis/lib/loader-consumer-2.dylib",
+      "bytes": 1391664,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/loader-m10/target/test-runs/swap-81868-1/.cordis/lib/loader-fixture-3.dylib",
+      "bytes": 1581960,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/loader-m10/target/test-runs/swap-81868-1/.cordis/lib/loader-fixture-1.dylib",
+      "bytes": 1581976,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/loader-m10/target/test-runs/restore-75884-5/.cordis/lib/loader-fixture-2.dylib",
+      "bytes": 1091992,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/loader-m10/target/test-runs/restore-75884-5/.cordis/lib/loader-fixture-1.dylib",
+      "bytes": 1091944,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/m18-tools/cordis",
+      "bytes": 21576968,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m11/artifacts/counter.dylib",
+      "bytes": 1234016,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m11/artifacts/extra.dylib",
+      "bytes": 1685736,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m11/artifacts/probe-v1.dylib",
+      "bytes": 1685896,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m11/artifacts/kv-file.dylib",
+      "bytes": 1481312,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m11/artifacts/console.dylib",
+      "bytes": 1052088,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m11/artifacts/probe-v2.dylib",
+      "bytes": 1685784,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m11/test-data/process-83963-1794467850544521000/plugins/store.dylib",
+      "bytes": 1481312,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m11/test-data/process-83963-1794467850544521000/plugins/counter.dylib",
+      "bytes": 1234016,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m11/test-data/process-83963-1794467850544521000/plugins/extra.dylib",
+      "bytes": 1685736,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m11/test-data/process-83963-1794467850544521000/plugins/console.dylib",
+      "bytes": 1052088,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m11/test-data/process-83963-1794467850544521000/plugins/probe.dylib",
+      "bytes": 1685784,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m11/test-data/process-83963-1794467850544521000/.cordis/lib/runtime-extra-6.dylib",
+      "bytes": 1685736,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m11/test-data/process-83963-1794467850544521000/.cordis/lib/kv-4.dylib",
+      "bytes": 1481312,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m11/test-data/process-83963-1794467850544521000/.cordis/lib/counter-8.dylib",
+      "bytes": 1234016,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m11/test-data/process-83963-1794467850544521000/.cordis/lib/runtime-probe-10.dylib",
+      "bytes": 1685784,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m11/test-data/process-83963-1794467850544521000/.cordis/lib/runtime-probe-3.dylib",
+      "bytes": 1685896,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m11/test-data/process-83963-1794467850544521000/.cordis/lib/counter-2.dylib",
+      "bytes": 1234016,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m11/test-data/process-83963-1794467850544521000/.cordis/lib/runtime-probe-5.dylib",
+      "bytes": 1685784,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m11/test-data/process-83963-1794467850544521000/.cordis/lib/kv-9.dylib",
+      "bytes": 1481312,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m11/test-data/process-83963-1794467850544521000/.cordis/lib/console-log-1.dylib",
+      "bytes": 1052088,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m11/test-data/process-83963-1794467850544521000/.cordis/lib/runtime-extra-11.dylib",
+      "bytes": 1685736,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m11/test-data/process-83963-1794467850544521000/.cordis/lib/console-log-7.dylib",
+      "bytes": 1052088,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/m14-benchmark/build/variants/provider-v1.dylib",
+      "bytes": 794944,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/m14-benchmark/build/native-run-91905/baseline/lib/direct-benchmark-2.dylib",
+      "bytes": 564512,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/m14-benchmark/build/native-run-91905/baseline/lib/loader-fixture-1.dylib",
+      "bytes": 794944,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/m14-benchmark/build/native-run-91905/current/lib/direct-benchmark-2.dylib",
+      "bytes": 566128,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/m14-benchmark/build/native-run-91905/current/lib/loader-fixture-1.dylib",
+      "bytes": 794944,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/python-m18/evidence/python-consumer-event-version/plugins/installed-3.dylib",
+      "bytes": 1709760,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/python-m18/evidence/python-consumer-event-version/plugins/libkv_mem.dylib",
+      "bytes": 1709760,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/python-m18/evidence/python-consumer-event-version/.cordis/lib/kv/kv-1.dylib",
+      "bytes": 1709760,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/python-m18/evidence/python-consumer-event-version/.cordis/lib/discovery/kv-2.dylib",
+      "bytes": 1709760,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/python-m18/evidence/python-consumer-event-version/.cordis/lib/discovery/kv-1.dylib",
+      "bytes": 1709760,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/python-m18/evidence/migration-logical-name/plugins/installed-4.dylib",
+      "bytes": 1709760,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/python-m18/evidence/migration-logical-name/plugins/installed-3.dylib",
+      "bytes": 1497216,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/python-m18/evidence/migration-logical-name/plugins/libcounter.dylib",
+      "bytes": 1497216,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/python-m18/evidence/migration-logical-name/plugins/libkv_mem.dylib",
+      "bytes": 1709760,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/python-m18/evidence/migration-logical-name/.cordis/lib/kv/kv-1.dylib",
+      "bytes": 1709760,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/python-m18/evidence/migration-logical-name/.cordis/lib/discovery/kv-4.dylib",
+      "bytes": 1709760,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/python-m18/evidence/migration-logical-name/.cordis/lib/discovery/kv-2.dylib",
+      "bytes": 1709760,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/python-m18/evidence/migration-logical-name/.cordis/lib/discovery/kv-5.dylib",
+      "bytes": 1709760,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/python-m18/evidence/migration-logical-name/.cordis/lib/discovery/counter-3.dylib",
+      "bytes": 1497216,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/python-m18/evidence/migration-logical-name/.cordis/lib/discovery/counter-1.dylib",
+      "bytes": 1497216,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/python-m18/evidence/migration-logical-name/.cordis/lib/counter/counter-1.dylib",
+      "bytes": 1497216,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/python-m18/evidence/bin/libkv_contract.dylib",
+      "bytes": 1438056,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/python-m18/evidence/bin/cordis-dev",
+      "bytes": 19038344,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/python-m18/evidence/bin/cordis-runtime-fixture",
+      "bytes": 5118472,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/python-m18/evidence/bin/cordis",
+      "bytes": 21576968,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/python-m18/evidence/bin/libcounter.dylib",
+      "bytes": 1497216,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/python-m18/evidence/bin/cordis-host",
+      "bytes": 11307712,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/python-m18/evidence/bin/libkv_mem.dylib",
+      "bytes": 1709760,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/python-m18/evidence/kv-contract/plugins/libkv_contract.dylib",
+      "bytes": 1438056,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/python-m18/evidence/kv-contract/plugins/installed-2.dylib",
+      "bytes": 1438056,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/python-m18/evidence/kv-contract/.cordis/lib/discovery/kv-contract-2.dylib",
+      "bytes": 1438056,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/python-m18/evidence/kv-contract/.cordis/lib/discovery/kv-contract-1.dylib",
+      "bytes": 1438056,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/python-m18/evidence/kv-contract/.cordis/lib/kv-contract/kv-contract-2.dylib",
+      "bytes": 1438056,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/python-m18/evidence/kv-contract/.cordis/lib/kv-contract/kv-contract-1.dylib",
+      "bytes": 1438056,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/python-m18/evidence/python-provider-event-version/plugins/installed-1.dylib",
+      "bytes": 1497216,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/python-m18/evidence/python-provider-event-version/plugins/libcounter.dylib",
+      "bytes": 1497216,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/python-m18/evidence/python-provider-event-version/.cordis/lib/discovery/counter-2.dylib",
+      "bytes": 1497216,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/python-m18/evidence/python-provider-event-version/.cordis/lib/discovery/counter-1.dylib",
+      "bytes": 1497216,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/python-m18/evidence/python-provider-event-version/.cordis/lib/counter/counter-1.dylib",
+      "bytes": 1497216,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/python-m18/evidence/python-provider/plugins/installed-1.dylib",
+      "bytes": 1497216,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/python-m18/evidence/python-provider/plugins/libcounter.dylib",
+      "bytes": 1497216,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/python-m18/evidence/python-provider/.cordis/lib/discovery/counter-2.dylib",
+      "bytes": 1497216,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/python-m18/evidence/python-provider/.cordis/lib/discovery/counter-1.dylib",
+      "bytes": 1497216,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/python-m18/evidence/python-provider/.cordis/lib/counter/counter-1.dylib",
+      "bytes": 1497216,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/python-m18/evidence/migration-cross-socket-fixed/plugins/installed-4.dylib",
+      "bytes": 1709760,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/python-m18/evidence/migration-cross-socket-fixed/plugins/installed-3.dylib",
+      "bytes": 1497216,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/python-m18/evidence/migration-cross-socket-fixed/plugins/libcounter.dylib",
+      "bytes": 1497216,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/python-m18/evidence/migration-cross-socket-fixed/plugins/libkv_mem.dylib",
+      "bytes": 1709760,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/python-m18/evidence/migration-cross-socket-fixed/.cordis/lib/kv/kv-2.dylib",
+      "bytes": 1709760,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/python-m18/evidence/migration-cross-socket-fixed/.cordis/lib/kv/kv-3.dylib",
+      "bytes": 1709760,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/python-m18/evidence/migration-cross-socket-fixed/.cordis/lib/kv/kv-1.dylib",
+      "bytes": 1709760,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/python-m18/evidence/migration-cross-socket-fixed/.cordis/lib/discovery/kv-4.dylib",
+      "bytes": 1709760,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/python-m18/evidence/migration-cross-socket-fixed/.cordis/lib/discovery/kv-2.dylib",
+      "bytes": 1709760,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/python-m18/evidence/migration-cross-socket-fixed/.cordis/lib/discovery/kv-5.dylib",
+      "bytes": 1709760,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/python-m18/evidence/migration-cross-socket-fixed/.cordis/lib/discovery/counter-3.dylib",
+      "bytes": 1497216,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/python-m18/evidence/migration-cross-socket-fixed/.cordis/lib/discovery/counter-1.dylib",
+      "bytes": 1497216,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/python-m18/evidence/migration-cross-socket-fixed/.cordis/lib/counter/counter-1.dylib",
+      "bytes": 1497216,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/python-m18/evidence/migration/plugins/installed-4.dylib",
+      "bytes": 1709760,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/python-m18/evidence/migration/plugins/installed-3.dylib",
+      "bytes": 1497216,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/python-m18/evidence/migration/plugins/libcounter.dylib",
+      "bytes": 1497216,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/python-m18/evidence/migration/plugins/libkv_mem.dylib",
+      "bytes": 1709760,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/python-m18/evidence/migration/.cordis/lib/kv/kv-1.dylib",
+      "bytes": 1709760,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/python-m18/evidence/migration/.cordis/lib/discovery/kv-4.dylib",
+      "bytes": 1709760,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/python-m18/evidence/migration/.cordis/lib/discovery/kv-2.dylib",
+      "bytes": 1709760,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/python-m18/evidence/migration/.cordis/lib/discovery/counter-3.dylib",
+      "bytes": 1497216,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/python-m18/evidence/migration/.cordis/lib/discovery/counter-1.dylib",
+      "bytes": 1497216,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/python-m18/evidence/migration/.cordis/lib/counter/counter-1.dylib",
+      "bytes": 1497216,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/typescript-m19/evidence/typescript-consumer/plugins/installed-2.dylib",
+      "bytes": 1709760,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/typescript-m19/evidence/typescript-consumer/plugins/libkv_mem.dylib",
+      "bytes": 1709760,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/typescript-m19/evidence/typescript-consumer/.cordis/lib/kv/kv-1.dylib",
+      "bytes": 1709760,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/typescript-m19/evidence/typescript-consumer/.cordis/lib/discovery/kv-2.dylib",
+      "bytes": 1709760,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/typescript-m19/evidence/typescript-consumer/.cordis/lib/discovery/kv-1.dylib",
+      "bytes": 1709760,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/typescript-m19/evidence/contract/plugins/libkv_contract.dylib",
+      "bytes": 1438056,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/typescript-m19/evidence/contract/plugins/installed-2.dylib",
+      "bytes": 1438056,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/typescript-m19/evidence/contract/.cordis/lib/discovery/kv-contract-2.dylib",
+      "bytes": 1438056,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/typescript-m19/evidence/contract/.cordis/lib/discovery/kv-contract-1.dylib",
+      "bytes": 1438056,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/typescript-m19/evidence/contract/.cordis/lib/kv-contract/kv-contract-2.dylib",
+      "bytes": 1438056,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/typescript-m19/evidence/contract/.cordis/lib/kv-contract/kv-contract-1.dylib",
+      "bytes": 1438056,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/typescript-m19/evidence/rollback-thaw/plugins/installed-3.dylib",
+      "bytes": 1497216,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/typescript-m19/evidence/rollback-thaw/plugins/libcounter.dylib",
+      "bytes": 1497216,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/typescript-m19/evidence/rollback-thaw/.cordis/lib/discovery/counter-2.dylib",
+      "bytes": 1497216,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/typescript-m19/evidence/rollback-thaw/.cordis/lib/discovery/counter-1.dylib",
+      "bytes": 1497216,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/typescript-m19/evidence/rollback-thaw/.cordis/lib/counter/counter-1.dylib",
+      "bytes": 1497216,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/typescript-m19/evidence/rollback-thaw/sources/libkv_mem.dylib",
+      "bytes": 1709760,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/typescript-m19/evidence/bin/libkv_contract.dylib",
+      "bytes": 1438056,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/typescript-m19/evidence/bin/cordis-dev",
+      "bytes": 19038344,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/typescript-m19/evidence/bin/cordis-runtime-fixture",
+      "bytes": 5118472,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/typescript-m19/evidence/bin/cordis",
+      "bytes": 21576968,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/typescript-m19/evidence/bin/libcounter.dylib",
+      "bytes": 1497216,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/typescript-m19/evidence/bin/cordis-host",
+      "bytes": 11307712,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/typescript-m19/evidence/bin/libkv_mem.dylib",
+      "bytes": 1709760,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/typescript-m19/evidence/migration-logical-kv/plugins/installed-4.dylib",
+      "bytes": 1709760,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/typescript-m19/evidence/migration-logical-kv/plugins/installed-3.dylib",
+      "bytes": 1497216,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/typescript-m19/evidence/migration-logical-kv/plugins/libcounter.dylib",
+      "bytes": 1497216,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/typescript-m19/evidence/migration-logical-kv/plugins/libkv_mem.dylib",
+      "bytes": 1709760,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/typescript-m19/evidence/migration-logical-kv/.cordis/lib/kv/kv-1.dylib",
+      "bytes": 1709760,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/typescript-m19/evidence/migration-logical-kv/.cordis/lib/discovery/kv-4.dylib",
+      "bytes": 1709760,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/typescript-m19/evidence/migration-logical-kv/.cordis/lib/discovery/kv-2.dylib",
+      "bytes": 1709760,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/typescript-m19/evidence/migration-logical-kv/.cordis/lib/discovery/kv-5.dylib",
+      "bytes": 1709760,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/typescript-m19/evidence/migration-logical-kv/.cordis/lib/discovery/counter-3.dylib",
+      "bytes": 1497216,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/typescript-m19/evidence/migration-logical-kv/.cordis/lib/discovery/counter-1.dylib",
+      "bytes": 1497216,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/typescript-m19/evidence/migration-logical-kv/.cordis/lib/counter/counter-1.dylib",
+      "bytes": 1497216,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/typescript-m19/evidence/migration-logical-kv/sources/libkv_mem.dylib",
+      "bytes": 1709760,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/typescript-m19/evidence/rollback-thaw-api/plugins/installed-3.dylib",
+      "bytes": 1497216,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/typescript-m19/evidence/rollback-thaw-api/plugins/libcounter.dylib",
+      "bytes": 1497216,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/typescript-m19/evidence/rollback-thaw-api/.cordis/lib/discovery/counter-2.dylib",
+      "bytes": 1497216,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/typescript-m19/evidence/rollback-thaw-api/.cordis/lib/discovery/counter-1.dylib",
+      "bytes": 1497216,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/typescript-m19/evidence/rollback-thaw-api/.cordis/lib/counter/counter-1.dylib",
+      "bytes": 1497216,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/typescript-m19/evidence/rollback-thaw-api/sources/libkv_mem.dylib",
+      "bytes": 1709760,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/typescript-m19/evidence/typescript-provider/plugins/installed-1.dylib",
+      "bytes": 1497216,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/typescript-m19/evidence/typescript-provider/plugins/libcounter.dylib",
+      "bytes": 1497216,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/typescript-m19/evidence/typescript-provider/.cordis/lib/discovery/counter-2.dylib",
+      "bytes": 1497216,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/typescript-m19/evidence/typescript-provider/.cordis/lib/discovery/counter-1.dylib",
+      "bytes": 1497216,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/typescript-m19/evidence/typescript-provider/.cordis/lib/counter/counter-1.dylib",
+      "bytes": 1497216,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/typescript-m19/evidence/migration-cross-socket/plugins/installed-4.dylib",
+      "bytes": 1709760,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/typescript-m19/evidence/migration-cross-socket/plugins/installed-3.dylib",
+      "bytes": 1497216,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/typescript-m19/evidence/migration-cross-socket/plugins/libcounter.dylib",
+      "bytes": 1497216,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/typescript-m19/evidence/migration-cross-socket/plugins/libkv_mem.dylib",
+      "bytes": 1709760,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/typescript-m19/evidence/migration-cross-socket/.cordis/lib/kv/kv-2.dylib",
+      "bytes": 1709760,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/typescript-m19/evidence/migration-cross-socket/.cordis/lib/kv/kv-1.dylib",
+      "bytes": 1709760,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/typescript-m19/evidence/migration-cross-socket/.cordis/lib/discovery/kv-4.dylib",
+      "bytes": 1709760,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/typescript-m19/evidence/migration-cross-socket/.cordis/lib/discovery/kv-2.dylib",
+      "bytes": 1709760,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/typescript-m19/evidence/migration-cross-socket/.cordis/lib/discovery/kv-5.dylib",
+      "bytes": 1709760,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/typescript-m19/evidence/migration-cross-socket/.cordis/lib/discovery/counter-3.dylib",
+      "bytes": 1497216,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/typescript-m19/evidence/migration-cross-socket/.cordis/lib/discovery/counter-1.dylib",
+      "bytes": 1497216,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/typescript-m19/evidence/migration-cross-socket/.cordis/lib/counter/counter-1.dylib",
+      "bytes": 1497216,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/typescript-m19/evidence/migration-cross-socket/sources/libkv_mem.dylib",
+      "bytes": 1709760,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/typescript-m19/evidence/rollback/plugins/installed-3.dylib",
+      "bytes": 1497216,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/typescript-m19/evidence/rollback/plugins/libcounter.dylib",
+      "bytes": 1497216,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/typescript-m19/evidence/rollback/.cordis/lib/discovery/counter-2.dylib",
+      "bytes": 1497216,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/typescript-m19/evidence/rollback/.cordis/lib/discovery/counter-1.dylib",
+      "bytes": 1497216,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/typescript-m19/evidence/rollback/.cordis/lib/counter/counter-1.dylib",
+      "bytes": 1497216,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/typescript-m19/evidence/rollback/sources/libkv_mem.dylib",
+      "bytes": 1709760,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/typescript-m19/evidence/migration/plugins/installed-4.dylib",
+      "bytes": 1709760,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/typescript-m19/evidence/migration/plugins/installed-3.dylib",
+      "bytes": 1497216,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/typescript-m19/evidence/migration/plugins/libcounter.dylib",
+      "bytes": 1497216,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/typescript-m19/evidence/migration/plugins/libkv_mem.dylib",
+      "bytes": 1709760,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/typescript-m19/evidence/migration/.cordis/lib/kv/kv-1.dylib",
+      "bytes": 1709760,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/typescript-m19/evidence/migration/.cordis/lib/discovery/kv-4.dylib",
+      "bytes": 1709760,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/typescript-m19/evidence/migration/.cordis/lib/discovery/kv-2.dylib",
+      "bytes": 1709760,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/typescript-m19/evidence/migration/.cordis/lib/discovery/counter-3.dylib",
+      "bytes": 1497216,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/typescript-m19/evidence/migration/.cordis/lib/discovery/counter-1.dylib",
+      "bytes": 1497216,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/typescript-m19/evidence/migration/.cordis/lib/counter/counter-1.dylib",
+      "bytes": 1497216,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/typescript-m19/evidence/migration/sources/libkv_mem.dylib",
+      "bytes": 1709760,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/typescript-m19/source/sdks/typescript/cordis-sdk/node_modules/@cbor-extract/cbor-extract-darwin-arm64/node.abi137.node",
+      "bytes": 52336,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/typescript-m19/source/sdks/typescript/cordis-sdk/node_modules/@cbor-extract/cbor-extract-darwin-arm64/node.napi.node",
+      "bytes": 52272,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m12/examples/deploy/cordis",
+      "bytes": 6280800,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m12/examples/deploy/cordis-host",
+      "bytes": 10443408,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m12/examples/deploy/plugins/libconsole_log.dylib",
+      "bytes": 490560,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m12/examples/deploy/plugins/installed-2.dylib",
+      "bytes": 592336,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m12/examples/deploy/plugins/libkv_file.dylib",
+      "bytes": 701200,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m12/examples/deploy/plugins/installed-3.dylib",
+      "bytes": 701200,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m12/examples/deploy/plugins/installed-1.dylib",
+      "bytes": 490560,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m12/examples/deploy/plugins/libcounter.dylib",
+      "bytes": 592336,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m12/examples/deploy/.cordis/lib/discovery/console-log-48278-7.dylib",
+      "bytes": 490560,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m12/examples/deploy/.cordis/lib/discovery/kv-41568-3.dylib",
+      "bytes": 701200,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m12/examples/deploy/.cordis/lib/discovery/console-log-41565-1.dylib",
+      "bytes": 490560,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m12/examples/deploy/.cordis/lib/discovery/kv-48277-6.dylib",
+      "bytes": 701200,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m12/examples/deploy/.cordis/lib/discovery/counter-48279-8.dylib",
+      "bytes": 592336,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m12/examples/deploy/.cordis/lib/discovery/counter-48276-5.dylib",
+      "bytes": 592336,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m12/examples/deploy/.cordis/lib/discovery/counter-41567-2.dylib",
+      "bytes": 592336,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m12/examples/deploy/.cordis/lib/discovery/console-log-48274-4.dylib",
+      "bytes": 490560,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m12/examples/deploy/.cordis/lib/discovery/kv-48280-9.dylib",
+      "bytes": 701200,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m12/examples/deploy/.cordis/lib/logs/console-log-48282-2.dylib",
+      "bytes": 490560,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m12/examples/deploy/.cordis/lib/logs/console-log-41570-1.dylib",
+      "bytes": 490560,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m12/examples/deploy/.cordis/lib/application/counter-48281-3.dylib",
+      "bytes": 592336,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m12/examples/deploy/.cordis/lib/application/counter-41569-1.dylib",
+      "bytes": 592336,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m12/examples/deploy/.cordis/lib/application/kv-48281-4.dylib",
+      "bytes": 701200,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m12/examples/deploy/.cordis/lib/application/kv-41569-2.dylib",
+      "bytes": 701200,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m12/build/console-live/plugins/libconsole_log.dylib",
+      "bytes": 1867480,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m12/build/console-live/plugins/installed-4.dylib",
+      "bytes": 1957880,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m12/build/console-live/plugins/libconsole_emitter.dylib",
+      "bytes": 1957880,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m12/build/console-live/plugins/installed-2.dylib",
+      "bytes": 950136,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m12/build/console-live/plugins/installed-3.dylib",
+      "bytes": 1867480,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m12/build/console-live/plugins/installed-1.dylib",
+      "bytes": 1855976,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m12/build/console-live/.cordis/lib/messages/console-emitter-2.dylib",
+      "bytes": 950136,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m12/build/console-live/.cordis/lib/messages/console-emitter-4.dylib",
+      "bytes": 1957880,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m12/build/console-live/.cordis/lib/messages/console-emitter-3.dylib",
+      "bytes": 1957880,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m12/build/console-live/.cordis/lib/messages/console-emitter-1.dylib",
+      "bytes": 950136,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m12/build/console-live/.cordis/lib/discovery/console-log-24.dylib",
+      "bytes": 1867480,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m12/build/console-live/.cordis/lib/discovery/console-log-9.dylib",
+      "bytes": 1867480,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m12/build/console-live/.cordis/lib/discovery/console-emitter-19.dylib",
+      "bytes": 950136,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m12/build/console-live/.cordis/lib/discovery/console-log-20.dylib",
+      "bytes": 1867480,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m12/build/console-live/.cordis/lib/discovery/console-emitter-22.dylib",
+      "bytes": 1957880,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m12/build/console-live/.cordis/lib/discovery/console-emitter-25.dylib",
+      "bytes": 1957880,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m12/build/console-live/.cordis/lib/discovery/console-log-18.dylib",
+      "bytes": 1855976,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m12/build/console-live/.cordis/lib/discovery/console-log-8.dylib",
+      "bytes": 1867480,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m12/build/console-live/.cordis/lib/discovery/console-emitter-21.dylib",
+      "bytes": 1957880,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m12/build/console-live/.cordis/lib/discovery/console-log-23.dylib",
+      "bytes": 1867480,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m12/build/console-live/.cordis/lib/discovery/console-log-2.dylib",
+      "bytes": 1855976,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m12/build/console-live/.cordis/lib/discovery/console-emitter-10.dylib",
+      "bytes": 950136,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m12/build/console-live/.cordis/lib/discovery/console-emitter-12.dylib",
+      "bytes": 950136,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m12/build/console-live/.cordis/lib/discovery/console-emitter-6.dylib",
+      "bytes": 950136,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m12/build/console-live/.cordis/lib/discovery/console-log-16.dylib",
+      "bytes": 1867480,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m12/build/console-live/.cordis/lib/discovery/console-emitter-14.dylib",
+      "bytes": 1957880,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m12/build/console-live/.cordis/lib/discovery/console-emitter-4.dylib",
+      "bytes": 950136,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m12/build/console-live/.cordis/lib/discovery/console-log-11.dylib",
+      "bytes": 1855976,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m12/build/console-live/.cordis/lib/discovery/console-emitter-1.dylib",
+      "bytes": 950136,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m12/build/console-live/.cordis/lib/discovery/console-log-3.dylib",
+      "bytes": 1855976,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m12/build/console-live/.cordis/lib/discovery/console-log-13.dylib",
+      "bytes": 1867480,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m12/build/console-live/.cordis/lib/discovery/console-log-5.dylib",
+      "bytes": 1855976,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m12/build/console-live/.cordis/lib/discovery/console-emitter-7.dylib",
+      "bytes": 950136,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m12/build/console-live/.cordis/lib/discovery/console-emitter-17.dylib",
+      "bytes": 1957880,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m12/build/console-live/.cordis/lib/discovery/console-log-15.dylib",
+      "bytes": 1867480,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m12/build/console-live/.cordis/lib/logs/console-log-2.dylib",
+      "bytes": 1867480,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m12/build/console-live/.cordis/lib/logs/console-log-4.dylib",
+      "bytes": 1867480,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m12/build/console-live/.cordis/lib/logs/console-log-1.dylib",
+      "bytes": 1855976,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/runtime-m12/build/console-live/.cordis/lib/logs/console-log-3.dylib",
+      "bytes": 1867480,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/http-restart-default/plugins/libcordis_http.dylib",
+      "bytes": 10448232,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/http-restart-default/plugins/installed-2.dylib",
+      "bytes": 10448232,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/http-restart-default/.cordis/lib/discovery/http-2.dylib",
+      "bytes": 10448232,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/http-restart-default/.cordis/lib/discovery/http-1.dylib",
+      "bytes": 10448232,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/http-restart-default/.cordis/lib/http/http-2.dylib",
+      "bytes": 10448232,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/http-restart-default/.cordis/lib/http/http-1.dylib",
+      "bytes": 10448232,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/tools-current/libcordis_http.dylib",
+      "bytes": 10448936,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/tools-current/cordis-dev",
+      "bytes": 19720536,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/tools-current/cordis-runtime-fixture",
+      "bytes": 5106968,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/tools-current/cordis",
+      "bytes": 25161736,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/tools-current/cordis-host",
+      "bytes": 11694992,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/tools-current/libkv_mem.dylib",
+      "bytes": 1740944,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/bootstrap/plugins/libcordis_http.dylib",
+      "bytes": 9898424,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/bin/libcordis_http.dylib",
+      "bytes": 9567720,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/bin/cordis",
+      "bytes": 25086984,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/bin/cordis-host",
+      "bytes": 11331824,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/tools-recovery/libcordis_http.dylib",
+      "bytes": 10478552,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/tools-recovery/cordis-dev",
+      "bytes": 19812616,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/tools-recovery/cordis-runtime-fixture",
+      "bytes": 5106968,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/tools-recovery/cordis",
+      "bytes": 25139976,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/tools-recovery/cordis-host",
+      "bytes": 11661264,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/tools-recovery/libkv_mem.dylib",
+      "bytes": 1727232,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/bootstrap-host-runtime/plugins/libcordis_http.dylib",
+      "bytes": 9567720,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/bootstrap-host-runtime/plugins/installed-1.dylib",
+      "bytes": 9567720,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/bootstrap-host-runtime/.cordis/lib/discovery/http-2.dylib",
+      "bytes": 9567720,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/bootstrap-host-runtime/.cordis/lib/discovery/http-1.dylib",
+      "bytes": 9567720,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/bootstrap-host-runtime/.cordis/lib/http/http-1.dylib",
+      "bytes": 9567720,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/dependencies-first/plugins/libcordis_http.dylib",
+      "bytes": 10448936,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/dependencies-first/plugins/installed-2.dylib",
+      "bytes": 10448936,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/dependencies-first/plugins/installed-5.dylib",
+      "bytes": 1727232,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/dependencies-first/plugins/libkv_mem.dylib",
+      "bytes": 1727232,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/dependencies-first/.cordis/lib/kv/kv-1.dylib",
+      "bytes": 1727232,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/dependencies-first/.cordis/lib/discovery/kv-4.dylib",
+      "bytes": 1727232,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/dependencies-first/.cordis/lib/discovery/kv-2.dylib",
+      "bytes": 1727232,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/dependencies-first/.cordis/lib/discovery/kv-5.dylib",
+      "bytes": 1727232,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/dependencies-first/.cordis/lib/discovery/http-3.dylib",
+      "bytes": 10448936,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/dependencies-first/.cordis/lib/discovery/http-1.dylib",
+      "bytes": 10448936,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/dependencies-first/.cordis/lib/http/http-1.dylib",
+      "bytes": 10448936,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/tools-integrated/libcordis_http.dylib",
+      "bytes": 10448232,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/tools-integrated/cordis-dev",
+      "bytes": 19720536,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/tools-integrated/cordis-runtime-fixture",
+      "bytes": 5106968,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/tools-integrated/cordis",
+      "bytes": 25133288,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/tools-integrated/cordis-host",
+      "bytes": 11694992,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/tools-integrated/libkv_mem.dylib",
+      "bytes": 1740944,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/fullstack-first/plugins/libcordis_http.dylib",
+      "bytes": 10478552,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/fullstack-first/plugins/installed-2.dylib",
+      "bytes": 10478552,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/fullstack-first/plugins/installed-4/libkv_mem.dylib",
+      "bytes": 1727232,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/fullstack-first/plugins/store/libkv_mem.dylib",
+      "bytes": 1727232,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/fullstack-first/.cordis/lib/kv/kv-1.dylib",
+      "bytes": 1727232,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/fullstack-first/.cordis/lib/discovery/kv-4.dylib",
+      "bytes": 1727232,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/fullstack-first/.cordis/lib/discovery/kv-2.dylib",
+      "bytes": 1727232,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/fullstack-first/.cordis/lib/discovery/http-3.dylib",
+      "bytes": 10478552,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/fullstack-first/.cordis/lib/discovery/http-1.dylib",
+      "bytes": 10478552,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/fullstack-first/.cordis/lib/http/http-1.dylib",
+      "bytes": 10478552,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/dependency-reconfigured-tools/libcordis_http.dylib",
+      "bytes": 10448936,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/dependency-reconfigured-tools/cordis-dev",
+      "bytes": 19812616,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/dependency-reconfigured-tools/cordis-runtime-fixture",
+      "bytes": 5106968,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/dependency-reconfigured-tools/cordis",
+      "bytes": 25167752,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/dependency-reconfigured-tools/cordis-host",
+      "bytes": 11694992,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/dependency-reconfigured-tools/libkv_mem.dylib",
+      "bytes": 1727232,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/bootstrap-listen/plugins/libcordis_http.dylib",
+      "bytes": 9567720,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/bootstrap-listen/plugins/installed-1.dylib",
+      "bytes": 9567720,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/bootstrap-listen/.cordis/lib/discovery/http-2.dylib",
+      "bytes": 9567720,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/bootstrap-listen/.cordis/lib/discovery/http-1.dylib",
+      "bytes": 9567720,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/bootstrap-listen/.cordis/lib/http/http-1.dylib",
+      "bytes": 9567720,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/dependencies-reconfigured/plugins/libcordis_http.dylib",
+      "bytes": 10448936,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/dependencies-reconfigured/plugins/installed-2.dylib",
+      "bytes": 10448936,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/dependencies-reconfigured/plugins/installed-5.dylib",
+      "bytes": 1727232,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/dependencies-reconfigured/plugins/libkv_mem.dylib",
+      "bytes": 1727232,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/dependencies-reconfigured/.cordis/lib/kv/kv-2.dylib",
+      "bytes": 1727232,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/dependencies-reconfigured/.cordis/lib/kv/kv-1.dylib",
+      "bytes": 1727232,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/dependencies-reconfigured/.cordis/lib/discovery/kv-4.dylib",
+      "bytes": 1727232,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/dependencies-reconfigured/.cordis/lib/discovery/kv-2.dylib",
+      "bytes": 1727232,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/dependencies-reconfigured/.cordis/lib/discovery/kv-5.dylib",
+      "bytes": 1727232,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/dependencies-reconfigured/.cordis/lib/discovery/http-3.dylib",
+      "bytes": 10448936,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/dependencies-reconfigured/.cordis/lib/discovery/http-1.dylib",
+      "bytes": 10448936,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/dependencies-reconfigured/.cordis/lib/http/http-1.dylib",
+      "bytes": 10448936,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/scaffold-first/plugins/libcordis_http.dylib",
+      "bytes": 10478552,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/scaffold-first/plugins/installed-2.dylib",
+      "bytes": 10478552,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/scaffold-first/.cordis/lib/discovery/http-2.dylib",
+      "bytes": 10478552,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/scaffold-first/.cordis/lib/discovery/http-1.dylib",
+      "bytes": 10478552,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/scaffold-first/.cordis/lib/http/http-1.dylib",
+      "bytes": 10478552,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/bootstrap-chrome/plugins/libcordis_http.dylib",
+      "bytes": 9898424,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/bootstrap-chrome/plugins/installed-1.dylib",
+      "bytes": 9898424,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/bootstrap-chrome/.cordis/lib/discovery/http-2.dylib",
+      "bytes": 9898424,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/bootstrap-chrome/.cordis/lib/discovery/http-1.dylib",
+      "bytes": 9898424,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/bootstrap-chrome/.cordis/lib/http/http-1.dylib",
+      "bytes": 9898424,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/pure-replace-first/plugins/libcordis_http.dylib",
+      "bytes": 10448232,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/pure-replace-first/plugins/installed-2.dylib",
+      "bytes": 10448232,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/pure-replace-first/.cordis/lib/discovery/http-2.dylib",
+      "bytes": 10448232,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/pure-replace-first/.cordis/lib/discovery/http-1.dylib",
+      "bytes": 10448232,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/pure-replace-first/.cordis/lib/http/http-1.dylib",
+      "bytes": 10448232,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/dependency-tools/libcordis_http.dylib",
+      "bytes": 10448936,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/dependency-tools/cordis-dev",
+      "bytes": 19812616,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/dependency-tools/cordis-runtime-fixture",
+      "bytes": 5106968,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/dependency-tools/cordis",
+      "bytes": 25147048,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/dependency-tools/cordis-host",
+      "bytes": 11694992,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/evidence/dependency-tools/libkv_mem.dylib",
+      "bytes": 1727232,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/source/sdks/typescript/node_modules/@cbor-extract/cbor-extract-darwin-arm64/node.abi137.node",
+      "bytes": 52336,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/source/sdks/typescript/node_modules/@cbor-extract/cbor-extract-darwin-arm64/node.napi.node",
+      "bytes": 52272,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/frontend/source/sdks/typescript/node_modules/@esbuild/darwin-arm64/bin/esbuild",
+      "bytes": 9833874,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/examples/source/plugins/kv-dashboard-rust/libkv_mem.dylib",
+      "bytes": 1727200,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/examples/node_modules/@esbuild/darwin-arm64/bin/esbuild",
+      "bytes": 9833874,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/channel-tools/libcordis_http.dylib",
+      "bytes": 10448936,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/channel-tools/cordis-runtime-fixture",
+      "bytes": 5106968,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/channel-tools/cordis",
+      "bytes": 25161736,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/channel-tools/cordis-host",
+      "bytes": 11694992,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/realm-provider-active/plugins/libcordis_http.dylib",
+      "bytes": 10448936,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/realm-provider-active/plugins/installed-2.dylib",
+      "bytes": 10448936,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/realm-provider-active/.cordis/lib/discovery/http-2.dylib",
+      "bytes": 10448936,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/realm-provider-active/.cordis/lib/discovery/http-1.dylib",
+      "bytes": 10448936,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/realm-provider-active/.cordis/lib/http/http-1.dylib",
+      "bytes": 10448936,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/channel-faults/plugins/installed-4.dylib",
+      "bytes": 10448936,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/channel-faults/plugins/libcordis_http.dylib",
+      "bytes": 10448936,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/channel-faults/.cordis/lib/discovery/http-2.dylib",
+      "bytes": 10448936,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/channel-faults/.cordis/lib/discovery/http-1.dylib",
+      "bytes": 10448936,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/channel-faults/.cordis/lib/http/http-1.dylib",
+      "bytes": 10448936,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/batch-owner-recovery/plugins/libcordis_http.dylib",
+      "bytes": 10448936,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/batch-owner-recovery/plugins/installed-2.dylib",
+      "bytes": 10448936,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/batch-owner-recovery/plugins/installed-4/libkv_mem.dylib",
+      "bytes": 1727232,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/batch-owner-recovery/plugins/installed-6/libkv_mem.dylib",
+      "bytes": 1727232,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/batch-owner-recovery/plugins/installed-7/libkv_mem.dylib",
+      "bytes": 1727232,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/batch-owner-recovery/plugins/store/libkv_mem.dylib",
+      "bytes": 1727232,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/batch-owner-recovery/.cordis/lib/kv/kv-4.dylib",
+      "bytes": 1727232,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/batch-owner-recovery/.cordis/lib/kv/kv-2.dylib",
+      "bytes": 1727232,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/batch-owner-recovery/.cordis/lib/kv/kv-3.dylib",
+      "bytes": 1727232,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/batch-owner-recovery/.cordis/lib/kv/kv-1.dylib",
+      "bytes": 1727232,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/batch-owner-recovery/.cordis/lib/discovery/kv-6.dylib",
+      "bytes": 1727232,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/batch-owner-recovery/.cordis/lib/discovery/kv-4.dylib",
+      "bytes": 1727232,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/batch-owner-recovery/.cordis/lib/discovery/kv-2.dylib",
+      "bytes": 1727232,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/batch-owner-recovery/.cordis/lib/discovery/kv-5.dylib",
+      "bytes": 1727232,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/batch-owner-recovery/.cordis/lib/discovery/http-3.dylib",
+      "bytes": 10448936,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/batch-owner-recovery/.cordis/lib/discovery/http-1.dylib",
+      "bytes": 10448936,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/batch-owner-recovery/.cordis/lib/http/http-1.dylib",
+      "bytes": 10448936,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/batch-owner-recovery/sources/batch-store/libkv_mem.dylib",
+      "bytes": 1727232,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/batch-owner-recovery/sources/batch-rejected-store/libkv_mem.dylib",
+      "bytes": 1727232,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/realm-tools/libcordis_http.dylib",
+      "bytes": 10448936,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/realm-tools/cordis-runtime-fixture",
+      "bytes": 5106968,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/realm-tools/cordis",
+      "bytes": 25147048,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/realm-tools/cordis-host",
+      "bytes": 11694992,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/realm-diagnostic/plugins/libcordis_http.dylib",
+      "bytes": 10448936,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/realm-diagnostic/plugins/installed-2.dylib",
+      "bytes": 10448936,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/realm-diagnostic/.cordis/lib/discovery/http-2.dylib",
+      "bytes": 10448936,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/realm-diagnostic/.cordis/lib/discovery/http-1.dylib",
+      "bytes": 10448936,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/realm-diagnostic/.cordis/lib/http/http-1.dylib",
+      "bytes": 10448936,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/realm-controls/plugins/libcordis_http.dylib",
+      "bytes": 10448936,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/realm-controls/plugins/installed-2.dylib",
+      "bytes": 10448936,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/realm-controls/.cordis/lib/discovery/http-2.dylib",
+      "bytes": 10448936,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/realm-controls/.cordis/lib/discovery/http-1.dylib",
+      "bytes": 10448936,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/realm-controls/.cordis/lib/http/http-1.dylib",
+      "bytes": 10448936,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/realm-before/plugins/libcordis_http.dylib",
+      "bytes": 10448936,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/realm-before/plugins/installed-2.dylib",
+      "bytes": 10448936,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/realm-before/.cordis/lib/discovery/http-2.dylib",
+      "bytes": 10448936,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/realm-before/.cordis/lib/discovery/http-1.dylib",
+      "bytes": 10448936,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/realm-before/.cordis/lib/http/http-1.dylib",
+      "bytes": 10448936,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/realm-page-namespace/plugins/libcordis_http.dylib",
+      "bytes": 10448936,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/realm-page-namespace/plugins/installed-2.dylib",
+      "bytes": 10448936,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/realm-page-namespace/.cordis/lib/discovery/http-2.dylib",
+      "bytes": 10448936,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/realm-page-namespace/.cordis/lib/discovery/http-1.dylib",
+      "bytes": 10448936,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/realm-page-namespace/.cordis/lib/http/http-1.dylib",
+      "bytes": 10448936,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/batch-tools/libcordis_http.dylib",
+      "bytes": 10448936,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/batch-tools/cordis-runtime-fixture",
+      "bytes": 5106968,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/batch-tools/cordis",
+      "bytes": 25139976,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/batch-tools/cordis-host",
+      "bytes": 11694992,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/batch-tools/libkv_mem.dylib",
+      "bytes": 1727232,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/batch-retired-child/plugins/libcordis_http.dylib",
+      "bytes": 10448936,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/batch-retired-child/plugins/installed-2.dylib",
+      "bytes": 10448936,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/batch-retired-child/plugins/installed-4/libkv_mem.dylib",
+      "bytes": 1727232,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/batch-retired-child/plugins/installed-6/libkv_mem.dylib",
+      "bytes": 1727232,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/batch-retired-child/plugins/installed-7/libkv_mem.dylib",
+      "bytes": 1727232,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/batch-retired-child/plugins/store/libkv_mem.dylib",
+      "bytes": 1727232,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/batch-retired-child/.cordis/lib/kv/kv-2.dylib",
+      "bytes": 1727232,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/batch-retired-child/.cordis/lib/kv/kv-3.dylib",
+      "bytes": 1727232,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/batch-retired-child/.cordis/lib/kv/kv-1.dylib",
+      "bytes": 1727232,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/batch-retired-child/.cordis/lib/discovery/kv-6.dylib",
+      "bytes": 1727232,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/batch-retired-child/.cordis/lib/discovery/kv-4.dylib",
+      "bytes": 1727232,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/batch-retired-child/.cordis/lib/discovery/kv-2.dylib",
+      "bytes": 1727232,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/batch-retired-child/.cordis/lib/discovery/kv-5.dylib",
+      "bytes": 1727232,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/batch-retired-child/.cordis/lib/discovery/http-3.dylib",
+      "bytes": 10448936,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/batch-retired-child/.cordis/lib/discovery/http-1.dylib",
+      "bytes": 10448936,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/batch-retired-child/.cordis/lib/http/http-1.dylib",
+      "bytes": 10448936,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/batch-retired-child/sources/batch-store/libkv_mem.dylib",
+      "bytes": 1727232,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/batch-retired-child/sources/batch-rejected-store/libkv_mem.dylib",
+      "bytes": 1727232,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/batch-assets/plugins/libcordis_http.dylib",
+      "bytes": 10448936,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/batch-assets/plugins/installed-2.dylib",
+      "bytes": 10448936,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/batch-assets/plugins/installed-4/libkv_mem.dylib",
+      "bytes": 1727232,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/batch-assets/plugins/installed-6/libkv_mem.dylib",
+      "bytes": 1727232,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/batch-assets/plugins/installed-7/libkv_mem.dylib",
+      "bytes": 1727232,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/batch-assets/plugins/store/libkv_mem.dylib",
+      "bytes": 1727232,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/batch-assets/.cordis/lib/kv/kv-2.dylib",
+      "bytes": 1727232,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/batch-assets/.cordis/lib/kv/kv-3.dylib",
+      "bytes": 1727232,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/batch-assets/.cordis/lib/kv/kv-1.dylib",
+      "bytes": 1727232,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/batch-assets/.cordis/lib/discovery/kv-6.dylib",
+      "bytes": 1727232,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/batch-assets/.cordis/lib/discovery/kv-4.dylib",
+      "bytes": 1727232,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/batch-assets/.cordis/lib/discovery/kv-2.dylib",
+      "bytes": 1727232,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/batch-assets/.cordis/lib/discovery/kv-5.dylib",
+      "bytes": 1727232,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/batch-assets/.cordis/lib/discovery/http-3.dylib",
+      "bytes": 10448936,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/batch-assets/.cordis/lib/discovery/http-1.dylib",
+      "bytes": 10448936,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/batch-assets/.cordis/lib/http/http-1.dylib",
+      "bytes": 10448936,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/batch-assets/sources/batch-store/libkv_mem.dylib",
+      "bytes": 1727232,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/batch-assets/sources/batch-rejected-store/libkv_mem.dylib",
+      "bytes": 1727232,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/batch-first/plugins/libcordis_http.dylib",
+      "bytes": 10448936,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/batch-first/plugins/installed-2.dylib",
+      "bytes": 10448936,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/batch-first/plugins/installed-4/libkv_mem.dylib",
+      "bytes": 1727232,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/batch-first/plugins/store/libkv_mem.dylib",
+      "bytes": 1727232,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/batch-first/.cordis/lib/kv/kv-1.dylib",
+      "bytes": 1727232,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/batch-first/.cordis/lib/discovery/kv-4.dylib",
+      "bytes": 1727232,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/batch-first/.cordis/lib/discovery/kv-2.dylib",
+      "bytes": 1727232,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/batch-first/.cordis/lib/discovery/http-3.dylib",
+      "bytes": 10448936,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/batch-first/.cordis/lib/discovery/http-1.dylib",
+      "bytes": 10448936,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/evidence/batch-first/.cordis/lib/http/http-1.dylib",
+      "bytes": 10448936,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/source/target/test-artifacts/manager-fixture-29146-0/cordis-manager-fixture",
+      "bytes": 4824616,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/source/target/test-artifacts/manager-fixture-13932-0/cordis-manager-fixture",
+      "bytes": 4824616,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/source/target/test-artifacts/manager-fixture-51657-0/cordis-manager-fixture",
+      "bytes": 4824616,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/source/target/test-artifacts/manager-fixture-34926-0/cordis-manager-fixture",
+      "bytes": 4824616,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/source/target/test-artifacts/manager-fixture-28904-0/cordis-manager-fixture",
+      "bytes": 4824616,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/source/target/test-artifacts/process-fixture-29584-0/cordis-process-fixture",
+      "bytes": 3974648,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/source/target/test-artifacts/manager-fixture-52054-0/cordis-manager-fixture",
+      "bytes": 4824616,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/source/target/test-artifacts/manager-fixture-37373-0/cordis-manager-fixture",
+      "bytes": 4824616,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/web-m20/routing/source/target/test-artifacts/manager-fixture-38786-0/cordis-manager-fixture",
+      "bytes": 4824616,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/host-m13/sequence-before/candidate-46877-1.dylib",
+      "bytes": 2062040,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/host-m13/sequence-before/loader-fixture-46877-1.dylib",
+      "bytes": 2062040,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/host-m13/sequence-process/loader-fixture-9.dylib",
+      "bytes": 2062040,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/host-m13/sequence-process/loader-fixture-8.dylib",
+      "bytes": 2062040,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/host-m13/sequence-process/loader-fixture-46877-7.dylib",
+      "bytes": 2062040,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/host-m13/sequence-after/loader-fixture-2.dylib",
+      "bytes": 2062040,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/host-m13/sequence-after/loader-fixture-1.dylib",
+      "bytes": 2062040,
+      "kind": "application/x-mach-binary"
+    },
+    {
+      "path": "target/window-tests/recovery-51816",
+      "du_kib": 16632,
+      "kind": "authorized-retired-deliverable",
+      "authorization": "用户 2026-11-13 授权删除，6990ee77"
+    },
+    {
+      "path": "target/window-m16/swift-cache",
+      "du_kib": 80904,
+      "kind": "swift-module-cache",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/au17-user-runs/20261113T012155.226666Z-86595/state/.cordis/lib/kv/kv-1.dylib",
+      "bytes": 654736,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/au17-user-runs/20261113T012155.226666Z-86595/state/.cordis/lib/discovery/window-probe-3.dylib",
+      "bytes": 617616,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/au17-user-runs/20261113T012155.226666Z-86595/state/.cordis/lib/discovery/kv-2.dylib",
+      "bytes": 654736,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/au17-user-runs/20261113T012155.226666Z-86595/state/.cordis/lib/discovery/http-1.dylib",
+      "bytes": 2372128,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/au17-user-runs/20261113T012155.226666Z-86595/state/.cordis/lib/http/http-1.dylib",
+      "bytes": 2372128,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/au17-user-runs/20261113T012155.226666Z-86595/state/.cordis/lib/probe/window-probe-1.dylib",
+      "bytes": 617616,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/au17-user-runs/20261113T021605.891086Z-96800/state/.cordis/lib/kv/kv-1.dylib",
+      "bytes": 654736,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/au17-user-runs/20261113T021605.891086Z-96800/state/.cordis/lib/discovery/window-probe-3.dylib",
+      "bytes": 617616,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/au17-user-runs/20261113T021605.891086Z-96800/state/.cordis/lib/discovery/kv-2.dylib",
+      "bytes": 654736,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/au17-user-runs/20261113T021605.891086Z-96800/state/.cordis/lib/discovery/http-1.dylib",
+      "bytes": 2372128,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/au17-user-runs/20261113T021605.891086Z-96800/state/.cordis/lib/http/http-1.dylib",
+      "bytes": 2372128,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/au17-user-runs/20261113T021605.891086Z-96800/state/.cordis/lib/probe/window-probe-1.dylib",
+      "bytes": 617616,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/au17-user-runs/20261113T021701.346712Z-97183/state/.cordis/lib/kv/kv-1.dylib",
+      "bytes": 654736,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/au17-user-runs/20261113T021701.346712Z-97183/state/.cordis/lib/discovery/window-probe-3.dylib",
+      "bytes": 617616,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/au17-user-runs/20261113T021701.346712Z-97183/state/.cordis/lib/discovery/kv-2.dylib",
+      "bytes": 654736,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/au17-user-runs/20261113T021701.346712Z-97183/state/.cordis/lib/discovery/http-1.dylib",
+      "bytes": 2372128,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/au17-user-runs/20261113T021701.346712Z-97183/state/.cordis/lib/http/http-1.dylib",
+      "bytes": 2372128,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/au17-user-runs/20261113T021701.346712Z-97183/state/.cordis/lib/probe/window-probe-1.dylib",
+      "bytes": 617616,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/au17-user-runs/20261113T015418.818008Z-90846/state/.cordis/lib/kv/kv-1.dylib",
+      "bytes": 654736,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/au17-user-runs/20261113T015418.818008Z-90846/state/.cordis/lib/discovery/window-probe-3.dylib",
+      "bytes": 617616,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/au17-user-runs/20261113T015418.818008Z-90846/state/.cordis/lib/discovery/kv-2.dylib",
+      "bytes": 654736,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/au17-user-runs/20261113T015418.818008Z-90846/state/.cordis/lib/discovery/http-1.dylib",
+      "bytes": 2372128,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/au17-user-runs/20261113T015418.818008Z-90846/state/.cordis/lib/http/http-1.dylib",
+      "bytes": 2372128,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/au17-user-runs/20261113T015418.818008Z-90846/state/.cordis/lib/probe/window-probe-1.dylib",
+      "bytes": 617616,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/au17-user-runs/20261113T021640.217609Z-96999/state/.cordis/lib/kv/kv-1.dylib",
+      "bytes": 654736,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/au17-user-runs/20261113T021640.217609Z-96999/state/.cordis/lib/discovery/window-probe-3.dylib",
+      "bytes": 617616,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/au17-user-runs/20261113T021640.217609Z-96999/state/.cordis/lib/discovery/kv-2.dylib",
+      "bytes": 654736,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/au17-user-runs/20261113T021640.217609Z-96999/state/.cordis/lib/discovery/http-1.dylib",
+      "bytes": 2372128,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/au17-user-runs/20261113T021640.217609Z-96999/state/.cordis/lib/http/http-1.dylib",
+      "bytes": 2372128,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/au17-user-runs/20261113T021640.217609Z-96999/state/.cordis/lib/probe/window-probe-1.dylib",
+      "bytes": 617616,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/app-tools/cordis",
+      "bytes": 7020976,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/app-tools/cordis-host",
+      "bytes": 3127936,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/app-project/dist/CordisWindowAcceptance.app/Contents/MacOS/cordis-window",
+      "bytes": 3040400,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/app-project/dist/CordisWindowAcceptance.app/Contents/MacOS/cordis",
+      "bytes": 6980320,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/app-project/dist/CordisWindowAcceptance.app/Contents/MacOS/cordis-host",
+      "bytes": 3127936,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/app-project/dist/CordisWindowAcceptance.app/Contents/Resources/plugins/plugin-1/libcordis_http.dylib",
+      "bytes": 7230584,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/app-project/dist/CordisWindowAcceptance.app/Contents/Resources/plugins/plugin-3/libwindow_probe.dylib",
+      "bytes": 1479160,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/app-project/dist/CordisWindowAcceptance.app/Contents/Resources/plugins/plugin-2/libkv_mem.dylib",
+      "bytes": 654768,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/app-project/.cordis/lib/discovery/window-probe-3.dylib",
+      "bytes": 1479160,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/app-project/.cordis/lib/discovery/kv-2.dylib",
+      "bytes": 654768,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/app-project/.cordis/lib/discovery/kv-5.dylib",
+      "bytes": 654768,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/app-project/.cordis/lib/discovery/window-probe-6.dylib",
+      "bytes": 1479160,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/app-project/.cordis/lib/discovery/http-4.dylib",
+      "bytes": 7230584,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/app-project/.cordis/lib/discovery/http-1.dylib",
+      "bytes": 7230584,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/app-project/dist-fixed/CordisWindowAcceptance.app/Contents/MacOS/cordis-window",
+      "bytes": 3060784,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/app-project/dist-fixed/CordisWindowAcceptance.app/Contents/MacOS/cordis",
+      "bytes": 6980320,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/app-project/dist-fixed/CordisWindowAcceptance.app/Contents/MacOS/cordis-host",
+      "bytes": 3127936,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/app-project/dist-fixed/CordisWindowAcceptance.app/Contents/Resources/plugins/plugin-1/libcordis_http.dylib",
+      "bytes": 7230584,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/app-project/dist-fixed/CordisWindowAcceptance.app/Contents/Resources/plugins/plugin-3/libwindow_probe.dylib",
+      "bytes": 1479160,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/app-project/dist-fixed/CordisWindowAcceptance.app/Contents/Resources/plugins/plugin-2/libkv_mem.dylib",
+      "bytes": 654768,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/case/plugins/libwindow_probe.dylib",
+      "bytes": 1479160,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/case/plugins/libcordis_http.dylib",
+      "bytes": 7230584,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/case/plugins/installed-2.dylib",
+      "bytes": 1479160,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/case/plugins/installed-3.dylib",
+      "bytes": 654768,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/case/plugins/installed-1.dylib",
+      "bytes": 7230584,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/case/plugins/libkv_mem.dylib",
+      "bytes": 654768,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/case/plugins/installed-4/cordis-window",
+      "bytes": 12077120,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/case/plugins/window/cordis-window",
+      "bytes": 3060784,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/case/.cordis/lib/kv/kv-2.dylib",
+      "bytes": 654768,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/case/.cordis/lib/kv/kv-1.dylib",
+      "bytes": 654768,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/case/.cordis/lib/window-probe/window-probe-1.dylib",
+      "bytes": 1479160,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/case/.cordis/lib/window-probe/window-probe-2.dylib",
+      "bytes": 1479160,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/case/.cordis/lib/discovery/window-probe-3.dylib",
+      "bytes": 1479160,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/case/.cordis/lib/discovery/kv-6.dylib",
+      "bytes": 654768,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/case/.cordis/lib/discovery/window-probe-5.dylib",
+      "bytes": 1479160,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/case/.cordis/lib/discovery/kv-2.dylib",
+      "bytes": 654768,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/case/.cordis/lib/discovery/window-probe-12.dylib",
+      "bytes": 1479160,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/case/.cordis/lib/discovery/kv-11.dylib",
+      "bytes": 654768,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/case/.cordis/lib/discovery/window-probe-13.dylib",
+      "bytes": 1479160,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/case/.cordis/lib/discovery/window-probe-8.dylib",
+      "bytes": 1479160,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/case/.cordis/lib/discovery/http-4.dylib",
+      "bytes": 7230584,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/case/.cordis/lib/discovery/kv-9.dylib",
+      "bytes": 654768,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/case/.cordis/lib/discovery/http-7.dylib",
+      "bytes": 7230584,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/case/.cordis/lib/discovery/http-10.dylib",
+      "bytes": 7230584,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/case/.cordis/lib/discovery/http-1.dylib",
+      "bytes": 7230584,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/case/.cordis/lib/http/http-2.dylib",
+      "bytes": 7230584,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/case/.cordis/lib/http/http-1.dylib",
+      "bytes": 7230584,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/app-state-fixed/.cordis/lib/kv/kv-2.dylib",
+      "bytes": 654768,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/app-state-fixed/.cordis/lib/kv/kv-1.dylib",
+      "bytes": 654768,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/app-state-fixed/.cordis/lib/window-probe/window-probe-1.dylib",
+      "bytes": 1479160,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/app-state-fixed/.cordis/lib/window-probe/window-probe-2.dylib",
+      "bytes": 1479160,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/app-state-fixed/.cordis/lib/discovery/window-probe-3.dylib",
+      "bytes": 1479160,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/app-state-fixed/.cordis/lib/discovery/kv-2.dylib",
+      "bytes": 654768,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/app-state-fixed/.cordis/lib/discovery/kv-5.dylib",
+      "bytes": 654768,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/app-state-fixed/.cordis/lib/discovery/window-probe-6.dylib",
+      "bytes": 1479160,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/app-state-fixed/.cordis/lib/discovery/http-4.dylib",
+      "bytes": 7230584,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/app-state-fixed/.cordis/lib/discovery/http-1.dylib",
+      "bytes": 7230584,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/app-state-fixed/.cordis/lib/http/http-2.dylib",
+      "bytes": 7230584,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/app-state-fixed/.cordis/lib/http/http-1.dylib",
+      "bytes": 7230584,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/app-state/.cordis/lib/kv/kv-1.dylib",
+      "bytes": 654768,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/app-state/.cordis/lib/window-probe/window-probe-1.dylib",
+      "bytes": 1479160,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/app-state/.cordis/lib/discovery/window-probe-3.dylib",
+      "bytes": 1479160,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/app-state/.cordis/lib/discovery/kv-2.dylib",
+      "bytes": 654768,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/app-state/.cordis/lib/discovery/http-1.dylib",
+      "bytes": 7230584,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    },
+    {
+      "path": "target/window-m16/app-state/.cordis/lib/http/http-1.dylib",
+      "bytes": 7230584,
+      "kind": "application/x-mach-binary",
+      "authorization": "e5e4f5cd"
+    }
+  ],
+  "moved_evidence": [],
+  "protected": [
+    "claude-edits",
+    "cleanup-evidence-m21",
+    "debug",
+    "idl-m17",
+    "miri",
+    "miri-sysroot",
+    "pack-runtimes",
+    "phase3-acceptance",
+    "phase3-language-tools",
+    "release",
+    "review-fix",
+    "review-m3",
+    "review-m4",
+    "shared",
+    "test-evidence",
+    "window-m16",
+    "window-tests"
+  ],
+  "ended_utc": "2026-11-13T14:34:51.011299+00:00",
+  "target_after_kib": 31611268,
+  "target_after_human": "30G\t/Users/gordongauerk/Projects/Rust-cordis/target",
+  "filesystem_free_after": 1234711638016,
+  "status": "completed",
+  "target_reclaimed_kib": 31761160,
+  "filesystem_free_increase": 31625617408,
+  "protection_exceptions": [
+    "window-tests/recovery-51816：用户 2026-11-13 授权删除",
+    "window-m16：旧 Swift 模块缓存及实际识别的二进制副本；inspect-window、脚本、JSON、日志与截图保留"
+  ]
+}

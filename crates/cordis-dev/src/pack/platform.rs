@@ -86,11 +86,12 @@ pub fn bundle(plan: &Plan, destination: &Path) -> Result<()> {
     Ok(())
 }
 
-/// ADR-0036：代码签名覆盖发布树中的 Mach-O，文本和资源由 bundle 资源封装覆盖。
+/// ADR-0036/0043：以实际路径收集Mach-O，目录深处的模块先签，外层bundle随后封装。
 pub fn code_files(root: &Path, platform: Platform) -> Result<Vec<PathBuf>> {
     let mut files = Vec::new();
     if platform.macos() {
-        collect(root, &mut files)?;
+        collect(&root.canonicalize()?, &mut files)?;
+        files.sort_by_key(|path| (std::cmp::Reverse(path.components().count()), path.clone()));
     }
     Ok(files)
 }

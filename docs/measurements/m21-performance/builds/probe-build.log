@@ -1,0 +1,5 @@
+   Compiling cordis-sdk-macros v0.1.0 (/Users/gordongauerk/Projects/Rust-cordis/crates/cordis-sdk-macros)
+   Compiling cordis-sdk v0.1.0 (/Users/gordongauerk/Projects/Rust-cordis/crates/cordis-sdk)
+   Compiling kv-api v0.1.0 (/Users/gordongauerk/Projects/Rust-cordis/plugins/kv-api)
+   Compiling cordis-latency-probe v0.1.0 (/Users/gordongauerk/Projects/Rust-cordis/target/web-m20/routing/tests/latency-probe)
+    Finished `release` profile [optimized] target(s) in 2.28s

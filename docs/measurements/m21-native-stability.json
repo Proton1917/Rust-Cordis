@@ -1,0 +1,1248 @@
+{
+  "controller_pid": 81072,
+  "requested_native_rounds": 5,
+  "state": "passed",
+  "cleared_snapshot_variables": [
+    "CORDIS_PACK_TOOLS",
+    "CORDIS_PACK_RUNTIMES",
+    "CORDIS_TEST_DEPENDENCIES",
+    "CORDIS_TEST_SOURCE",
+    "CORDIS_PHASE3_TOOLS",
+    "CORDIS_PHASE3_SCRIPTS_READY",
+    "CORDIS_WEB_TOOLS",
+    "CORDIS_WEB_EXAMPLES",
+    "CORDIS_M21_TOOLS",
+    "CORDIS_CORE_BIN",
+    "CORDIS_HOST_BIN",
+    "CORDIS_SKILL_PATH",
+    "CORDIS_ABI_WRITE_LAYOUT"
+  ],
+  "native_rounds": [
+    {
+      "command": [
+        "/Users/gordongauerk/.cargo/bin/cargo",
+        "test",
+        "-p",
+        "cordis-host",
+        "--test",
+        "native",
+        "--",
+        "--nocapture"
+      ],
+      "pid": 81074,
+      "started_utc": "2026-11-13T13:48:44.016001+00:00",
+      "start_monotonic": 1223873.691102,
+      "log": "target/phase3-acceptance/m21/native-stability/evidence/20261113T134844Z/native-1.log",
+      "state": "passed",
+      "round": 1,
+      "workspace_alive_at_start": true,
+      "exit": 0,
+      "ended_utc": "2026-11-13T13:49:14.932084+00:00",
+      "end_monotonic": 1223904.607105375,
+      "wall_seconds": 30.916003375081345,
+      "tests": {
+        "summaries": [
+          {
+            "state": "ok",
+            "passed": 14,
+            "failed": 0,
+            "ignored": 0,
+            "measured": 0,
+            "filtered_out": 0,
+            "seconds": 22.6
+          }
+        ],
+        "passed": 14,
+        "failed": 0,
+        "test_count": 14
+      },
+      "workspace_alive_at_end": true,
+      "overlap": {
+        "start_monotonic": 1223873.691102,
+        "end_monotonic": 1223904.607105375,
+        "seconds": 30.916003375081345,
+        "full_native_round": true
+      }
+    },
+    {
+      "command": [
+        "/Users/gordongauerk/.cargo/bin/cargo",
+        "test",
+        "-p",
+        "cordis-host",
+        "--test",
+        "native",
+        "--",
+        "--nocapture"
+      ],
+      "pid": 82675,
+      "started_utc": "2026-11-13T13:49:14.936155+00:00",
+      "start_monotonic": 1223904.611192833,
+      "log": "target/phase3-acceptance/m21/native-stability/evidence/20261113T134844Z/native-2.log",
+      "state": "passed",
+      "round": 2,
+      "workspace_alive_at_start": true,
+      "exit": 0,
+      "ended_utc": "2026-11-13T13:49:21.009991+00:00",
+      "end_monotonic": 1223910.684978833,
+      "wall_seconds": 6.073786000022665,
+      "tests": {
+        "summaries": [
+          {
+            "state": "ok",
+            "passed": 14,
+            "failed": 0,
+            "ignored": 0,
+            "measured": 0,
+            "filtered_out": 0,
+            "seconds": 5.98
+          }
+        ],
+        "passed": 14,
+        "failed": 0,
+        "test_count": 14
+      },
+      "workspace_alive_at_end": true,
+      "overlap": {
+        "start_monotonic": 1223904.611192833,
+        "end_monotonic": 1223910.684978833,
+        "seconds": 6.073786000022665,
+        "full_native_round": true
+      }
+    },
+    {
+      "command": [
+        "/Users/gordongauerk/.cargo/bin/cargo",
+        "test",
+        "-p",
+        "cordis-host",
+        "--test",
+        "native",
+        "--",
+        "--nocapture"
+      ],
+      "pid": 82857,
+      "started_utc": "2026-11-13T13:49:21.012084+00:00",
+      "start_monotonic": 1223910.687081333,
+      "log": "target/phase3-acceptance/m21/native-stability/evidence/20261113T134844Z/native-3.log",
+      "state": "passed",
+      "round": 3,
+      "workspace_alive_at_start": true,
+      "exit": 0,
+      "ended_utc": "2026-11-13T13:49:27.349880+00:00",
+      "end_monotonic": 1223917.024848708,
+      "wall_seconds": 6.337767374934629,
+      "tests": {
+        "summaries": [
+          {
+            "state": "ok",
+            "passed": 14,
+            "failed": 0,
+            "ignored": 0,
+            "measured": 0,
+            "filtered_out": 0,
+            "seconds": 6.25
+          }
+        ],
+        "passed": 14,
+        "failed": 0,
+        "test_count": 14
+      },
+      "workspace_alive_at_end": true,
+      "overlap": {
+        "start_monotonic": 1223910.687081333,
+        "end_monotonic": 1223917.024848708,
+        "seconds": 6.337767374934629,
+        "full_native_round": true
+      }
+    },
+    {
+      "command": [
+        "/Users/gordongauerk/.cargo/bin/cargo",
+        "test",
+        "-p",
+        "cordis-host",
+        "--test",
+        "native",
+        "--",
+        "--nocapture"
+      ],
+      "pid": 83040,
+      "started_utc": "2026-11-13T13:49:27.352409+00:00",
+      "start_monotonic": 1223917.027400958,
+      "log": "target/phase3-acceptance/m21/native-stability/evidence/20261113T134844Z/native-4.log",
+      "state": "passed",
+      "round": 4,
+      "workspace_alive_at_start": true,
+      "exit": 0,
+      "ended_utc": "2026-11-13T13:49:33.957719+00:00",
+      "end_monotonic": 1223923.632665791,
+      "wall_seconds": 6.605264833196998,
+      "tests": {
+        "summaries": [
+          {
+            "state": "ok",
+            "passed": 14,
+            "failed": 0,
+            "ignored": 0,
+            "measured": 0,
+            "filtered_out": 0,
+            "seconds": 6.5
+          }
+        ],
+        "passed": 14,
+        "failed": 0,
+        "test_count": 14
+      },
+      "workspace_alive_at_end": true,
+      "overlap": {
+        "start_monotonic": 1223917.027400958,
+        "end_monotonic": 1223923.632665791,
+        "seconds": 6.605264833196998,
+        "full_native_round": true
+      }
+    },
+    {
+      "command": [
+        "/Users/gordongauerk/.cargo/bin/cargo",
+        "test",
+        "-p",
+        "cordis-host",
+        "--test",
+        "native",
+        "--",
+        "--nocapture"
+      ],
+      "pid": 83223,
+      "started_utc": "2026-11-13T13:49:33.959915+00:00",
+      "start_monotonic": 1223923.634874333,
+      "log": "target/phase3-acceptance/m21/native-stability/evidence/20261113T134844Z/native-5.log",
+      "state": "passed",
+      "round": 5,
+      "workspace_alive_at_start": true,
+      "exit": 0,
+      "ended_utc": "2026-11-13T13:49:40.413384+00:00",
+      "end_monotonic": 1223930.088311708,
+      "wall_seconds": 6.453437375137582,
+      "tests": {
+        "summaries": [
+          {
+            "state": "ok",
+            "passed": 14,
+            "failed": 0,
+            "ignored": 0,
+            "measured": 0,
+            "filtered_out": 0,
+            "seconds": 6.37
+          }
+        ],
+        "passed": 14,
+        "failed": 0,
+        "test_count": 14
+      },
+      "workspace_alive_at_end": true,
+      "overlap": {
+        "start_monotonic": 1223923.634874333,
+        "end_monotonic": 1223930.088311708,
+        "seconds": 6.453437375137582,
+        "full_native_round": true
+      }
+    }
+  ],
+  "workspace": {
+    "command": [
+      "/Users/gordongauerk/.cargo/bin/cargo",
+      "test",
+      "--workspace"
+    ],
+    "pid": 81073,
+    "started_utc": "2026-11-13T13:48:44.014435+00:00",
+    "start_monotonic": 1223873.68953675,
+    "log": "target/phase3-acceptance/m21/native-stability/evidence/20261113T134844Z/workspace.log",
+    "state": "passed",
+    "exit": 0,
+    "ended_utc": "2026-11-13T13:56:24.788366+00:00",
+    "end_monotonic": 1224334.462030708,
+    "wall_seconds": 460.77249395800754,
+    "tests": {
+      "summaries": [
+        {
+          "state": "ok",
+          "passed": 6,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 4,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 5,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 9,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 7,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 5,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 6,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 6,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 23,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 6,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 16,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 7,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 2,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 5,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 14,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 10,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 8,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 16,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 14,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 17,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.01
+        },
+        {
+          "state": "ok",
+          "passed": 8,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 2,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 3.19
+        },
+        {
+          "state": "ok",
+          "passed": 8,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 13,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.76
+        },
+        {
+          "state": "ok",
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.03
+        },
+        {
+          "state": "ok",
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 6.48
+        },
+        {
+          "state": "ok",
+          "passed": 4,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 17.6
+        },
+        {
+          "state": "ok",
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 59.55
+        },
+        {
+          "state": "ok",
+          "passed": 2,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 41.25
+        },
+        {
+          "state": "ok",
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 9.38
+        },
+        {
+          "state": "ok",
+          "passed": 2,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 32.08
+        },
+        {
+          "state": "ok",
+          "passed": 3,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 11.37
+        },
+        {
+          "state": "ok",
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 6.53
+        },
+        {
+          "state": "ok",
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 14,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 7.15
+        },
+        {
+          "state": "ok",
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.09
+        },
+        {
+          "state": "ok",
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 4,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.01
+        },
+        {
+          "state": "ok",
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 3,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 18.45
+        },
+        {
+          "state": "ok",
+          "passed": 4,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 2,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 8.92
+        },
+        {
+          "state": "ok",
+          "passed": 12,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 14.78
+        },
+        {
+          "state": "ok",
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.76
+        },
+        {
+          "state": "ok",
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 29.65
+        },
+        {
+          "state": "ok",
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 20.4
+        },
+        {
+          "state": "ok",
+          "passed": 8,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 20.42
+        },
+        {
+          "state": "ok",
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 8.38
+        },
+        {
+          "state": "ok",
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.02
+        },
+        {
+          "state": "ok",
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 14,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 17.56
+        },
+        {
+          "state": "ok",
+          "passed": 4,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.54
+        },
+        {
+          "state": "ok",
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 3,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 8,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 2,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 2,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.43
+        },
+        {
+          "state": "ok",
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        },
+        {
+          "state": "ok",
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "seconds": 0.0
+        }
+      ],
+      "passed": 327,
+      "failed": 0,
+      "test_count": 327
+    }
+  },
+  "native_acceptance": "passed"
+}

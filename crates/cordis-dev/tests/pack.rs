@@ -245,62 +245,6 @@ fn archive_runs_real_plugins_without_toolchain_or_source() {
     case.success();
 }
 
-/// DOC-15 M16：实际 Rust UP/1 进程验证运行时目录与命令改写。
-#[test]
-fn bundled_runtime_executes_real_process_plugin() {
-    let case = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "pack-runtime");
-    let lease = tools().for_case(&case);
-    let root = &lease.root;
-    let project = case.track(
-        root.join("target/pack-tests")
-            .join(format!("runtime-{}", std::process::id())),
-    );
-    let provider = project.join("plugins/provider");
-    let runtime = project.join("provided-runtime/bin");
-    fs::create_dir_all(&provider).unwrap();
-    fs::create_dir_all(&runtime).unwrap();
-    let build_lock = cordis_testkit::build::shared_build_lock(root).unwrap();
-    let target = cordis_testkit::build::shared_target_dir(root);
-    command(
-        Command::new(env!("CARGO"))
-            .args(["build", "--release", "--manifest-path"])
-            .arg(root.join("crates/cordis-runtime/fixtures/plugin/Cargo.toml"))
-            .arg("--target-dir")
-            .arg(&target),
-    );
-    fs::copy(
-        target.join("release/cordis-runtime-fixture"),
-        runtime.join("python3"),
-    )
-    .unwrap();
-    drop(build_lock);
-    fs::write(provider.join("cordis-plugin.toml"), "name='fixture-provider'\nversion='0.1.0'\nsocket='process'\nprotocol=1\ncommand=['python3','provider','v1']\n").unwrap();
-    fs::write(project.join("cordis.toml"), "[pack]\nname='pack-native'\nversion='0.1.0'\nruntimes=['python']\n[pack.runtime_paths]\npython='provided-runtime'\n[runtime]\ncheckpoint_ms=0\n[instance.provider]\nplugin='provider'\ncomponent='provider'\nconfig={initial=41}\n").unwrap();
-    let deployed = release(&project, &tools().binaries, false);
-    let manifest: toml::Table = toml::from_str(
-        &fs::read_to_string(deployed.join("plugins/plugin-1/cordis-plugin.toml")).unwrap(),
-    )
-    .unwrap();
-    let command = manifest["command"][0].as_str().unwrap();
-    assert_eq!(
-        deployed
-            .join("plugins/plugin-1")
-            .join(command)
-            .canonicalize()
-            .unwrap(),
-        deployed
-            .join("runtimes/python/bin/python3")
-            .canonicalize()
-            .unwrap()
-    );
-    activate(&project, &deployed, 1);
-    eprintln!(
-        "M16 真实进程与运行时目录：{}",
-        case.evidence_for(&project).display()
-    );
-    case.success();
-}
-
 /// ADR-0036：真实源印记在签名前建立，发布时在签名后的库上重新运行契约。
 #[cfg(target_os = "macos")]
 fn verified_project(root: &Path, project: &Path) -> PathBuf {

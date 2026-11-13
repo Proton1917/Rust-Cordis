@@ -1,0 +1,240 @@
+{
+  "environment": {
+    "hardware": "Apple M4 Pro",
+    "logical_cpus": 14,
+    "memory_bytes": 51539607552,
+    "platform": "macOS-27.2-arm64-arm-64bit",
+    "native_compiler": "rustc 1.96.0 (ac68faa20 2026-05-25)",
+    "direct_consumer_provider_compiler": "rustc 1.85.0 (4d91de4e4 2025-02-17)",
+    "rust_profile": "release opt-level=3；Cargo默认LTO配置；附加RUSTFLAGS为空",
+    "python": {
+      "version": "3.12.12",
+      "distribution": "conda-forge",
+      "executable": "/Users/gordongauerk/miniforge3/bin/python"
+    },
+    "node": {
+      "executable": "/opt/homebrew/bin/node",
+      "installation": "/opt/homebrew/Cellar/node/26.13.0_2"
+    },
+    "background": "保留常规桌面软件与模型会话；按root协调的任务窗口执行"
+  },
+  "rm7": {
+    "caller_form": "原生Rust cdylib，独立cordis-host分组",
+    "method": "kv@1.0.get",
+    "key": "cordis-measurement",
+    "value_bytes": 64,
+    "setup": "取得服务句柄，写入同一64字节值并执行一次正确性读取；这些步骤在采样前",
+    "result_files_utc": [
+      "2026-11-13 12:53:37 UTC",
+      "2026-11-13 12:53:39 UTC",
+      "2026-11-13 12:53:41 UTC"
+    ],
+    "directions": [
+      {
+        "direction": "rust-to-rust",
+        "raw": "raw/rm7-rust-to-rust.json",
+        "samples": 10000,
+        "median_ns": 124833,
+        "p99_ns": 237750,
+        "wall_ns": 1300140958,
+        "caller": {
+          "kind": "native-rust-plugin",
+          "group": "probe",
+          "pid": 57375,
+          "build_info": "rustc 1.96.0 (ac68faa20 2026-05-25) aarch64-apple-darwin"
+        },
+        "provider": {
+          "pid": 57376,
+          "group": "store",
+          "descriptor": {
+            "name": "kv",
+            "version": "0.1.0",
+            "sdk_version": "0.1.0",
+            "build_info": "rustc 1.96.0 (ac68faa20 2026-05-25) aarch64-apple-darwin",
+            "format": 1,
+            "library": 1,
+            "components": [
+              {
+                "name": "kv-store",
+                "inject": [],
+                "provides": [
+                  "kv@1.0"
+                ],
+                "listens": [],
+                "state_schema": "kv.snapshot",
+                "state_version_min": 1,
+                "state_version_max": 1
+              }
+            ]
+          }
+        },
+        "timing": "Service<Kv>::get入口前至返回Vec释放后，包含SDK/ABI、Host-Core-提供方IPC往返、处理、解码与复制"
+      },
+      {
+        "direction": "rust-to-python",
+        "raw": "raw/rm7-rust-to-python.json",
+        "samples": 10000,
+        "median_ns": 116875,
+        "p99_ns": 146125,
+        "wall_ns": 1200217709,
+        "caller": {
+          "kind": "native-rust-plugin",
+          "group": "probe",
+          "pid": 57386,
+          "build_info": "rustc 1.96.0 (ac68faa20 2026-05-25) aarch64-apple-darwin"
+        },
+        "provider": {
+          "pid": 57396,
+          "group": "store",
+          "descriptor": {
+            "name": "kv",
+            "version": "0.1.0",
+            "sdk_version": "0.1.0",
+            "build_info": "Python UP/1 SDK",
+            "format": 2,
+            "library": null,
+            "components": [
+              {
+                "name": "kv-store",
+                "inject": [],
+                "provides": [
+                  "kv@1.0"
+                ],
+                "listens": [],
+                "state_schema": "kv.snapshot",
+                "state_version_min": 1,
+                "state_version_max": 1
+              }
+            ]
+          }
+        },
+        "timing": "Service<Kv>::get入口前至返回Vec释放后，包含SDK/ABI、Host-Core-提供方IPC往返、处理、解码与复制"
+      },
+      {
+        "direction": "rust-to-typescript",
+        "raw": "raw/rm7-rust-to-typescript.json",
+        "samples": 10000,
+        "median_ns": 81375,
+        "p99_ns": 175084,
+        "wall_ns": 866478292,
+        "caller": {
+          "kind": "native-rust-plugin",
+          "group": "probe",
+          "pid": 57405,
+          "build_info": "rustc 1.96.0 (ac68faa20 2026-05-25) aarch64-apple-darwin"
+        },
+        "provider": {
+          "pid": 57448,
+          "group": "store",
+          "descriptor": {
+            "name": "kv",
+            "version": "0.1.0",
+            "sdk_version": "0.1.0",
+            "build_info": "TypeScript UP/1 SDK",
+            "format": 2,
+            "library": null,
+            "components": [
+              {
+                "name": "kv-store",
+                "inject": [],
+                "provides": [
+                  "kv@1.0"
+                ],
+                "listens": [],
+                "state_schema": "kv.snapshot",
+                "state_version_min": 1,
+                "state_version_max": 1
+              }
+            ]
+          }
+        },
+        "timing": "Service<Kv>::get入口前至返回Vec释放后，包含SDK/ABI、Host-Core-提供方IPC往返、处理、解码与复制"
+      }
+    ]
+  },
+  "rm8": {
+    "criterion": "ADR-0035：串行替换事务开始准备候选至全部受影响实例Active",
+    "confirm_ms": 20,
+    "management_rpc_scope": "真实Rust管理客户端的get/invoke请求与回复",
+    "external_scope": "命令文件发布至回复文件被外部驱动读到",
+    "result_files_utc": [
+      "2026-11-13 12:58:40 UTC",
+      "2026-11-13 13:01:41 UTC",
+      "2026-11-13 13:03:30 UTC"
+    ],
+    "transitions": [
+      {
+        "transition": "native-memory-to-file",
+        "raw": "raw/rm8-native.json",
+        "socket": "native",
+        "samples": 1,
+        "pause_ms": 215,
+        "rpc_wall_us": 259048,
+        "harness_wall_ns": 342218791,
+        "state_bytes": 64
+      },
+      {
+        "transition": "python-to-typescript",
+        "raw": "raw/rm8-python-typescript.json",
+        "socket": "process",
+        "samples": 1,
+        "pause_ms": 362,
+        "rpc_wall_us": 458916,
+        "harness_wall_ns": 471358291,
+        "state_bytes": 64
+      },
+      {
+        "transition": "typescript-to-python",
+        "raw": "raw/rm8-typescript-python.json",
+        "socket": "process",
+        "samples": 1,
+        "pause_ms": 126,
+        "rpc_wall_us": 181729,
+        "harness_wall_ns": 241936333,
+        "state_bytes": 64
+      }
+    ]
+  },
+  "rm9": {
+    "baseline_commit": "dc93da1",
+    "consumer_source": "benchmarks/direct-call/consumer.rs",
+    "warmup_per_round": 10000,
+    "iterations_per_round": 100000,
+    "order": "逐轮交替baseline/current次序",
+    "initial": {
+      "raw": "raw/rm9-initial.json",
+      "baseline_median_ns": 19.14959,
+      "current_median_ns": 20.62625,
+      "median_ratio": 1.077111833725944,
+      "maximum_ratio": 0.8972918426062436,
+      "median_ratio_limit": 1.05,
+      "maximum_ratio_limit": 1.15,
+      "rounds_per_implementation": 9,
+      "sample_count": 18,
+      "passed": false,
+      "failure": "中位数比值Some(1.077111833725944)应满足预定上限1.05",
+      "result_file_utc": "2026-11-13 13:06:02 UTC",
+      "condition": "root转述设计方45fa107f的时段实证：全量测试持续至13:10 UTC，初轮前4轮与重负载重叠"
+    },
+    "coordinated_idle": {
+      "raw": "raw/rm9-coordinated-idle.json",
+      "baseline_median_ns": 20.2225,
+      "current_median_ns": 19.36792,
+      "median_ratio": 0.957741129929534,
+      "maximum_ratio": 0.9079352541034893,
+      "median_ratio_limit": 1.05,
+      "maximum_ratio_limit": 1.15,
+      "rounds_per_implementation": 9,
+      "sample_count": 18,
+      "passed": true,
+      "failure": null,
+      "coordination_check_utc": "2026-11-13 13:39:06 UTC",
+      "started_utc": "2026-11-13 13:39:54 UTC",
+      "result_file_utc": "2026-11-13 13:39:56 UTC",
+      "condition": "root和frontend停止构建、测试、界面任务，设计方停止复核；普通应用和模型会话保持"
+    },
+    "current_snapshot": "target/test-artifacts/phase3-direct-55981-1/libdirect_benchmark_current.dylib",
+    "same_baseline_provider_host": true,
+    "optimized_candidate_used": false
+  }
+}

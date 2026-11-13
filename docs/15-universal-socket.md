@@ -589,6 +589,8 @@ ADR-0036 的 `[pack]` 配置包含 `name`、`version`、`identifier`、`assets`�
 
 `--sign` 对核心、宿主、原生库和进程程序使用同一身份并启用 hardened runtime；`--allow-third-party` 为 Host 设置 library-validation entitlement。启用验证门时，签名后字节变化的库重新执行原契约套件，成功结果与完整验证副本一起交付。Host 可重复接收 `--verified-dir`，同时接受包内与包外验证根；相对验证副本路径在发布包移动后继续解析。
 
+ADR-0043 规定脚本运行时的签名职责：按解析后的实际解释器入口设置权限，Node 使用 JIT 权限；ad-hoc 身份为 Python/Node 配置装入同包原生扩展所需的 library-validation 权限。发布树中的深层 Mach-O 先签，程序与外层 Bundle 随后签署。M21 采用完整 Python 3.12.16 与 Node 22.23.5 的 ad-hoc 签名 tar 包实际验证移动、原生扩展、服务调用及退出。
+
 ## 13 范围外与后续
 
 | 事项 | 说明 |

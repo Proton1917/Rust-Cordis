@@ -1,0 +1,2187 @@
+{
+  "sequence": [
+    "Rust",
+    "Python",
+    "TypeScript"
+  ],
+  "counts": [
+    11,
+    53,
+    56,
+    89,
+    92
+  ],
+  "counter_contexts": [
+    [
+      9,
+      14
+    ],
+    [
+      14,
+      20
+    ]
+  ],
+  "replacements": [
+    {
+      "ok": true,
+      "code": null,
+      "value": null,
+      "detail": null,
+      "rpc_wall_us": 164117
+    },
+    {
+      "ok": true,
+      "code": null,
+      "value": null,
+      "detail": null,
+      "rpc_wall_us": 220908
+    }
+  ],
+  "snapshots": [
+    {
+      "core_version": "0.1.0",
+      "pid": 88373,
+      "groups": [
+        {
+          "name": "admin",
+          "connection": 1,
+          "pid": 88383,
+          "state": "running",
+          "restarts": 0,
+          "plugins": [
+            {
+              "name": "fixture-admin",
+              "version": "0.1.0",
+              "sdk_version": "0.1.0",
+              "build_info": "real UP1 process",
+              "format": 2,
+              "library": null,
+              "components": [
+                {
+                  "name": "admin",
+                  "inject": [
+                    {
+                      "interface": "cordis.manage@1.0",
+                      "required": true
+                    },
+                    {
+                      "interface": "cordis.runtime@1.1",
+                      "required": true
+                    }
+                  ],
+                  "provides": [],
+                  "listens": [],
+                  "state_schema": "",
+                  "state_version_min": 1,
+                  "state_version_max": 1
+                }
+              ]
+            }
+          ],
+          "error": null
+        },
+        {
+          "name": "counter",
+          "connection": 2,
+          "pid": 88388,
+          "state": "running",
+          "restarts": 0,
+          "plugins": [
+            {
+              "name": "counter",
+              "version": "0.1.0",
+              "sdk_version": "0.1.0",
+              "build_info": "rustc 1.96.0 (ac68faa20 2026-05-25) aarch64-apple-darwin",
+              "format": 1,
+              "library": 1,
+              "components": [
+                {
+                  "name": "counter",
+                  "inject": [
+                    {
+                      "interface": "kv@1.0",
+                      "required": true
+                    }
+                  ],
+                  "provides": [],
+                  "listens": [],
+                  "state_schema": "counter.state",
+                  "state_version_min": 1,
+                  "state_version_max": 1
+                }
+              ]
+            }
+          ],
+          "error": null
+        },
+        {
+          "name": "kv-client",
+          "connection": 3,
+          "pid": 88389,
+          "state": "running",
+          "restarts": 0,
+          "plugins": [
+            {
+              "name": "fixture-kv-client",
+              "version": "0.1.0",
+              "sdk_version": "0.1.0",
+              "build_info": "real UP1 process",
+              "format": 2,
+              "library": null,
+              "components": [
+                {
+                  "name": "kv-client",
+                  "inject": [
+                    {
+                      "interface": "kv@1.0",
+                      "required": true
+                    }
+                  ],
+                  "provides": [],
+                  "listens": [],
+                  "state_schema": "",
+                  "state_version_min": 1,
+                  "state_version_max": 1
+                }
+              ]
+            }
+          ],
+          "error": null
+        },
+        {
+          "name": "store",
+          "connection": 4,
+          "pid": 88390,
+          "state": "running",
+          "restarts": 0,
+          "plugins": [
+            {
+              "name": "kv",
+              "version": "0.1.0",
+              "sdk_version": "0.1.0",
+              "build_info": "rustc 1.96.0 (ac68faa20 2026-05-25) aarch64-apple-darwin",
+              "format": 1,
+              "library": 1,
+              "components": [
+                {
+                  "name": "kv-store",
+                  "inject": [],
+                  "provides": [
+                    "kv@1.0"
+                  ],
+                  "listens": [],
+                  "state_schema": "kv.snapshot",
+                  "state_version_min": 1,
+                  "state_version_max": 1
+                }
+              ]
+            }
+          ],
+          "error": null
+        }
+      ],
+      "instances": [
+        {
+          "name": "admin",
+          "plugin": "fixture-admin",
+          "component": "admin",
+          "state": "active",
+          "revision": 0,
+          "bindings": [
+            3,
+            2
+          ],
+          "error": null,
+          "group": "admin",
+          "context": 5,
+          "reference": "installed-1"
+        },
+        {
+          "name": "counter",
+          "plugin": "counter",
+          "component": "counter",
+          "state": "active",
+          "revision": 0,
+          "bindings": [
+            6
+          ],
+          "error": null,
+          "group": "counter",
+          "context": 9,
+          "reference": "installed-2.dylib"
+        },
+        {
+          "name": "kv-client",
+          "plugin": "fixture-kv-client",
+          "component": "kv-client",
+          "state": "active",
+          "revision": 0,
+          "bindings": [
+            6
+          ],
+          "error": null,
+          "group": "kv-client",
+          "context": 8,
+          "reference": "installed-3"
+        },
+        {
+          "name": "store",
+          "plugin": "kv",
+          "component": "kv-store",
+          "state": "active",
+          "revision": 0,
+          "bindings": [],
+          "error": null,
+          "group": "store",
+          "context": 7,
+          "reference": "installed-4.dylib"
+        }
+      ],
+      "last_replace": [],
+      "phase": "running",
+      "configuration_error": null,
+      "instance_errors": {},
+      "plugin_errors": {},
+      "overrides": [],
+      "sources": [
+        {
+          "reference": "admin",
+          "name": "fixture-admin",
+          "version": "0.1.0",
+          "source": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/admin",
+          "directory": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/admin",
+          "entry": {
+            "socket": "process",
+            "protocol": 1,
+            "command": [
+              "/Users/gordongauerk/Projects/Rust-cordis/target/test-artifacts/phase3-language-tools-88232-0/cordis-runtime-fixture",
+              "admin",
+              "v1"
+            ],
+            "restart": {
+              "max": 5,
+              "backoff_ms": 500
+            }
+          },
+          "web": null,
+          "descriptor": null
+        },
+        {
+          "reference": "installed-1",
+          "name": "fixture-admin",
+          "version": "0.1.0",
+          "source": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/installed-1",
+          "directory": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/installed-1",
+          "entry": {
+            "socket": "process",
+            "protocol": 1,
+            "command": [
+              "/Users/gordongauerk/Projects/Rust-cordis/target/test-artifacts/phase3-language-tools-88232-0/cordis-runtime-fixture",
+              "admin",
+              "v1"
+            ],
+            "restart": {
+              "max": 5,
+              "backoff_ms": 500
+            }
+          },
+          "web": null,
+          "descriptor": {
+            "name": "fixture-admin",
+            "version": "0.1.0",
+            "sdk_version": "0.1.0",
+            "build_info": "real UP1 process",
+            "format": 2,
+            "library": null,
+            "components": [
+              {
+                "name": "admin",
+                "inject": [
+                  {
+                    "interface": "cordis.manage@1.0",
+                    "required": true
+                  },
+                  {
+                    "interface": "cordis.runtime@1.1",
+                    "required": true
+                  }
+                ],
+                "provides": [],
+                "listens": [],
+                "state_schema": "",
+                "state_version_min": 1,
+                "state_version_max": 1
+              }
+            ]
+          }
+        },
+        {
+          "reference": "installed-2.dylib",
+          "name": "counter",
+          "version": "0.1.0",
+          "source": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/installed-2.dylib",
+          "directory": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins",
+          "entry": {
+            "socket": "native",
+            "library": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/installed-2.dylib"
+          },
+          "web": null,
+          "descriptor": {
+            "name": "counter",
+            "version": "0.1.0",
+            "sdk_version": "0.1.0",
+            "build_info": "rustc 1.96.0 (ac68faa20 2026-05-25) aarch64-apple-darwin",
+            "format": 1,
+            "library": 1,
+            "components": [
+              {
+                "name": "counter",
+                "inject": [
+                  {
+                    "interface": "kv@1.0",
+                    "required": true
+                  }
+                ],
+                "provides": [],
+                "listens": [],
+                "state_schema": "counter.state",
+                "state_version_min": 1,
+                "state_version_max": 1
+              }
+            ]
+          }
+        },
+        {
+          "reference": "installed-3",
+          "name": "fixture-kv-client",
+          "version": "0.1.0",
+          "source": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/installed-3",
+          "directory": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/installed-3",
+          "entry": {
+            "socket": "process",
+            "protocol": 1,
+            "command": [
+              "/Users/gordongauerk/Projects/Rust-cordis/target/test-artifacts/phase3-language-tools-88232-0/cordis-runtime-fixture",
+              "kv-client",
+              "v1"
+            ],
+            "restart": {
+              "max": 5,
+              "backoff_ms": 500
+            }
+          },
+          "web": null,
+          "descriptor": {
+            "name": "fixture-kv-client",
+            "version": "0.1.0",
+            "sdk_version": "0.1.0",
+            "build_info": "real UP1 process",
+            "format": 2,
+            "library": null,
+            "components": [
+              {
+                "name": "kv-client",
+                "inject": [
+                  {
+                    "interface": "kv@1.0",
+                    "required": true
+                  }
+                ],
+                "provides": [],
+                "listens": [],
+                "state_schema": "",
+                "state_version_min": 1,
+                "state_version_max": 1
+              }
+            ]
+          }
+        },
+        {
+          "reference": "installed-4.dylib",
+          "name": "kv",
+          "version": "0.1.0",
+          "source": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/installed-4.dylib",
+          "directory": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins",
+          "entry": {
+            "socket": "native",
+            "library": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/installed-4.dylib"
+          },
+          "web": null,
+          "descriptor": {
+            "name": "kv",
+            "version": "0.1.0",
+            "sdk_version": "0.1.0",
+            "build_info": "rustc 1.96.0 (ac68faa20 2026-05-25) aarch64-apple-darwin",
+            "format": 1,
+            "library": 1,
+            "components": [
+              {
+                "name": "kv-store",
+                "inject": [],
+                "provides": [
+                  "kv@1.0"
+                ],
+                "listens": [],
+                "state_schema": "kv.snapshot",
+                "state_version_min": 1,
+                "state_version_max": 1
+              }
+            ]
+          }
+        },
+        {
+          "reference": "kv-client",
+          "name": "fixture-kv-client",
+          "version": "0.1.0",
+          "source": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/kv-client",
+          "directory": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/kv-client",
+          "entry": {
+            "socket": "process",
+            "protocol": 1,
+            "command": [
+              "/Users/gordongauerk/Projects/Rust-cordis/target/test-artifacts/phase3-language-tools-88232-0/cordis-runtime-fixture",
+              "kv-client",
+              "v1"
+            ],
+            "restart": {
+              "max": 5,
+              "backoff_ms": 500
+            }
+          },
+          "web": null,
+          "descriptor": null
+        },
+        {
+          "reference": "libcounter.dylib",
+          "name": "counter",
+          "version": "0.1.0",
+          "source": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/libcounter.dylib",
+          "directory": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins",
+          "entry": {
+            "socket": "native",
+            "library": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/libcounter.dylib"
+          },
+          "web": null,
+          "descriptor": {
+            "name": "counter",
+            "version": "0.1.0",
+            "sdk_version": "0.1.0",
+            "build_info": "rustc 1.96.0 (ac68faa20 2026-05-25) aarch64-apple-darwin",
+            "format": 1,
+            "library": null,
+            "components": [
+              {
+                "name": "counter",
+                "inject": [
+                  {
+                    "interface": "kv@1.0",
+                    "required": true
+                  }
+                ],
+                "provides": [],
+                "listens": [],
+                "state_schema": "counter.state",
+                "state_version_min": 1,
+                "state_version_max": 1
+              }
+            ]
+          }
+        },
+        {
+          "reference": "libkv_mem.dylib",
+          "name": "kv",
+          "version": "0.1.0",
+          "source": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/libkv_mem.dylib",
+          "directory": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins",
+          "entry": {
+            "socket": "native",
+            "library": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/libkv_mem.dylib"
+          },
+          "web": null,
+          "descriptor": {
+            "name": "kv",
+            "version": "0.1.0",
+            "sdk_version": "0.1.0",
+            "build_info": "rustc 1.96.0 (ac68faa20 2026-05-25) aarch64-apple-darwin",
+            "format": 1,
+            "library": null,
+            "components": [
+              {
+                "name": "kv-store",
+                "inject": [],
+                "provides": [
+                  "kv@1.0"
+                ],
+                "listens": [],
+                "state_schema": "kv.snapshot",
+                "state_version_min": 1,
+                "state_version_max": 1
+              }
+            ]
+          }
+        }
+      ],
+      "last_batch": [],
+      "libraries": [
+        {
+          "id": 1,
+          "name": "counter",
+          "version": "0.1.0",
+          "sdk_version": "0.1.0",
+          "build_info": "rustc 1.96.0 (ac68faa20 2026-05-25) aarch64-apple-darwin",
+          "sequence": 1,
+          "path": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/.cordis/lib/counter/counter-1.dylib",
+          "verified": false,
+          "leases": 4,
+          "quiescent": false,
+          "retired": false,
+          "closed": false,
+          "components": [
+            {
+              "name": "counter",
+              "inject": [
+                {
+                  "interface": "kv@1.0",
+                  "required": true
+                }
+              ],
+              "provides": [],
+              "listens": [],
+              "state_schema": "counter.state",
+              "state_version_min": 1,
+              "state_version_max": 1
+            }
+          ],
+          "group": "counter",
+          "connection": 2
+        },
+        {
+          "id": 2,
+          "name": "kv",
+          "version": "0.1.0",
+          "sdk_version": "0.1.0",
+          "build_info": "rustc 1.96.0 (ac68faa20 2026-05-25) aarch64-apple-darwin",
+          "sequence": 1,
+          "path": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/.cordis/lib/store/kv-1.dylib",
+          "verified": false,
+          "leases": 3,
+          "quiescent": false,
+          "retired": false,
+          "closed": false,
+          "components": [
+            {
+              "name": "kv-store",
+              "inject": [],
+              "provides": [
+                "kv@1.0"
+              ],
+              "listens": [],
+              "state_schema": "kv.snapshot",
+              "state_version_min": 1,
+              "state_version_max": 1
+            }
+          ],
+          "group": "store",
+          "connection": 4
+        }
+      ],
+      "last_swap": [],
+      "available_plugins": [
+        {
+          "reference": "admin",
+          "name": "fixture-admin",
+          "version": "0.1.0",
+          "path": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/admin",
+          "components": []
+        },
+        {
+          "reference": "installed-1",
+          "name": "fixture-admin",
+          "version": "0.1.0",
+          "path": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/installed-1",
+          "components": [
+            {
+              "name": "admin",
+              "inject": [
+                {
+                  "interface": "cordis.manage@1.0",
+                  "required": true
+                },
+                {
+                  "interface": "cordis.runtime@1.1",
+                  "required": true
+                }
+              ],
+              "provides": [],
+              "listens": [],
+              "state_schema": "",
+              "state_version_min": 1,
+              "state_version_max": 1
+            }
+          ]
+        },
+        {
+          "reference": "installed-2.dylib",
+          "name": "counter",
+          "version": "0.1.0",
+          "path": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/installed-2.dylib",
+          "components": [
+            {
+              "name": "counter",
+              "inject": [
+                {
+                  "interface": "kv@1.0",
+                  "required": true
+                }
+              ],
+              "provides": [],
+              "listens": [],
+              "state_schema": "counter.state",
+              "state_version_min": 1,
+              "state_version_max": 1
+            }
+          ]
+        },
+        {
+          "reference": "installed-3",
+          "name": "fixture-kv-client",
+          "version": "0.1.0",
+          "path": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/installed-3",
+          "components": [
+            {
+              "name": "kv-client",
+              "inject": [
+                {
+                  "interface": "kv@1.0",
+                  "required": true
+                }
+              ],
+              "provides": [],
+              "listens": [],
+              "state_schema": "",
+              "state_version_min": 1,
+              "state_version_max": 1
+            }
+          ]
+        },
+        {
+          "reference": "installed-4.dylib",
+          "name": "kv",
+          "version": "0.1.0",
+          "path": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/installed-4.dylib",
+          "components": [
+            {
+              "name": "kv-store",
+              "inject": [],
+              "provides": [
+                "kv@1.0"
+              ],
+              "listens": [],
+              "state_schema": "kv.snapshot",
+              "state_version_min": 1,
+              "state_version_max": 1
+            }
+          ]
+        },
+        {
+          "reference": "kv-client",
+          "name": "fixture-kv-client",
+          "version": "0.1.0",
+          "path": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/kv-client",
+          "components": []
+        },
+        {
+          "reference": "libcounter.dylib",
+          "name": "counter",
+          "version": "0.1.0",
+          "path": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/libcounter.dylib",
+          "components": [
+            {
+              "name": "counter",
+              "inject": [
+                {
+                  "interface": "kv@1.0",
+                  "required": true
+                }
+              ],
+              "provides": [],
+              "listens": [],
+              "state_schema": "counter.state",
+              "state_version_min": 1,
+              "state_version_max": 1
+            }
+          ]
+        },
+        {
+          "reference": "libkv_mem.dylib",
+          "name": "kv",
+          "version": "0.1.0",
+          "path": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/libkv_mem.dylib",
+          "components": [
+            {
+              "name": "kv-store",
+              "inject": [],
+              "provides": [
+                "kv@1.0"
+              ],
+              "listens": [],
+              "state_schema": "kv.snapshot",
+              "state_version_min": 1,
+              "state_version_max": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "core_version": "0.1.0",
+      "pid": 88373,
+      "groups": [
+        {
+          "name": "admin",
+          "connection": 1,
+          "pid": 88383,
+          "state": "running",
+          "restarts": 0,
+          "plugins": [
+            {
+              "name": "fixture-admin",
+              "version": "0.1.0",
+              "sdk_version": "0.1.0",
+              "build_info": "real UP1 process",
+              "format": 2,
+              "library": null,
+              "components": [
+                {
+                  "name": "admin",
+                  "inject": [
+                    {
+                      "interface": "cordis.manage@1.0",
+                      "required": true
+                    },
+                    {
+                      "interface": "cordis.runtime@1.1",
+                      "required": true
+                    }
+                  ],
+                  "provides": [],
+                  "listens": [],
+                  "state_schema": "",
+                  "state_version_min": 1,
+                  "state_version_max": 1
+                }
+              ]
+            }
+          ],
+          "error": null
+        },
+        {
+          "name": "counter",
+          "connection": 2,
+          "pid": 88388,
+          "state": "running",
+          "restarts": 0,
+          "plugins": [
+            {
+              "name": "counter",
+              "version": "0.1.0",
+              "sdk_version": "0.1.0",
+              "build_info": "rustc 1.96.0 (ac68faa20 2026-05-25) aarch64-apple-darwin",
+              "format": 1,
+              "library": 1,
+              "components": [
+                {
+                  "name": "counter",
+                  "inject": [
+                    {
+                      "interface": "kv@1.0",
+                      "required": true
+                    }
+                  ],
+                  "provides": [],
+                  "listens": [],
+                  "state_schema": "counter.state",
+                  "state_version_min": 1,
+                  "state_version_max": 1
+                }
+              ]
+            }
+          ],
+          "error": null
+        },
+        {
+          "name": "kv-client",
+          "connection": 3,
+          "pid": 88389,
+          "state": "running",
+          "restarts": 0,
+          "plugins": [
+            {
+              "name": "fixture-kv-client",
+              "version": "0.1.0",
+              "sdk_version": "0.1.0",
+              "build_info": "real UP1 process",
+              "format": 2,
+              "library": null,
+              "components": [
+                {
+                  "name": "kv-client",
+                  "inject": [
+                    {
+                      "interface": "kv@1.0",
+                      "required": true
+                    }
+                  ],
+                  "provides": [],
+                  "listens": [],
+                  "state_schema": "",
+                  "state_version_min": 1,
+                  "state_version_max": 1
+                }
+              ]
+            }
+          ],
+          "error": null
+        },
+        {
+          "name": "store",
+          "connection": 12,
+          "pid": 88391,
+          "state": "running",
+          "restarts": 0,
+          "plugins": [
+            {
+              "name": "kv",
+              "version": "0.1.0",
+              "sdk_version": "0.1.0",
+              "build_info": "Python UP/1 SDK",
+              "format": 2,
+              "library": null,
+              "components": [
+                {
+                  "name": "kv-store",
+                  "inject": [],
+                  "provides": [
+                    "kv@1.0"
+                  ],
+                  "listens": [],
+                  "state_schema": "kv.snapshot",
+                  "state_version_min": 1,
+                  "state_version_max": 1
+                }
+              ]
+            }
+          ],
+          "error": null
+        }
+      ],
+      "instances": [
+        {
+          "name": "admin",
+          "plugin": "fixture-admin",
+          "component": "admin",
+          "state": "active",
+          "revision": 0,
+          "bindings": [
+            3,
+            2
+          ],
+          "error": null,
+          "group": "admin",
+          "context": 5,
+          "reference": "installed-1"
+        },
+        {
+          "name": "counter",
+          "plugin": "counter",
+          "component": "counter",
+          "state": "active",
+          "revision": 0,
+          "bindings": [
+            10
+          ],
+          "error": null,
+          "group": "counter",
+          "context": 14,
+          "reference": "installed-2.dylib"
+        },
+        {
+          "name": "kv-client",
+          "plugin": "fixture-kv-client",
+          "component": "kv-client",
+          "state": "active",
+          "revision": 0,
+          "bindings": [
+            10
+          ],
+          "error": null,
+          "group": "kv-client",
+          "context": 15,
+          "reference": "installed-3"
+        },
+        {
+          "name": "store",
+          "plugin": "kv",
+          "component": "kv-store",
+          "state": "active",
+          "revision": 1,
+          "bindings": [],
+          "error": null,
+          "group": "store",
+          "context": 13,
+          "reference": "installed-5"
+        }
+      ],
+      "last_replace": [
+        {
+          "group": "store",
+          "previous_connection": 4,
+          "candidate_connection": 12,
+          "affected_instances": 3,
+          "pause_ms": 124,
+          "committed": true,
+          "succeeded": true,
+          "rolled_back": false,
+          "failure": null
+        }
+      ],
+      "phase": "running",
+      "configuration_error": null,
+      "instance_errors": {},
+      "plugin_errors": {},
+      "overrides": [
+        "store"
+      ],
+      "sources": [
+        {
+          "reference": "admin",
+          "name": "fixture-admin",
+          "version": "0.1.0",
+          "source": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/admin",
+          "directory": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/admin",
+          "entry": {
+            "socket": "process",
+            "protocol": 1,
+            "command": [
+              "/Users/gordongauerk/Projects/Rust-cordis/target/test-artifacts/phase3-language-tools-88232-0/cordis-runtime-fixture",
+              "admin",
+              "v1"
+            ],
+            "restart": {
+              "max": 5,
+              "backoff_ms": 500
+            }
+          },
+          "web": null,
+          "descriptor": null
+        },
+        {
+          "reference": "installed-1",
+          "name": "fixture-admin",
+          "version": "0.1.0",
+          "source": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/installed-1",
+          "directory": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/installed-1",
+          "entry": {
+            "socket": "process",
+            "protocol": 1,
+            "command": [
+              "/Users/gordongauerk/Projects/Rust-cordis/target/test-artifacts/phase3-language-tools-88232-0/cordis-runtime-fixture",
+              "admin",
+              "v1"
+            ],
+            "restart": {
+              "max": 5,
+              "backoff_ms": 500
+            }
+          },
+          "web": null,
+          "descriptor": {
+            "name": "fixture-admin",
+            "version": "0.1.0",
+            "sdk_version": "0.1.0",
+            "build_info": "real UP1 process",
+            "format": 2,
+            "library": null,
+            "components": [
+              {
+                "name": "admin",
+                "inject": [
+                  {
+                    "interface": "cordis.manage@1.0",
+                    "required": true
+                  },
+                  {
+                    "interface": "cordis.runtime@1.1",
+                    "required": true
+                  }
+                ],
+                "provides": [],
+                "listens": [],
+                "state_schema": "",
+                "state_version_min": 1,
+                "state_version_max": 1
+              }
+            ]
+          }
+        },
+        {
+          "reference": "installed-2.dylib",
+          "name": "counter",
+          "version": "0.1.0",
+          "source": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/installed-2.dylib",
+          "directory": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins",
+          "entry": {
+            "socket": "native",
+            "library": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/installed-2.dylib"
+          },
+          "web": null,
+          "descriptor": {
+            "name": "counter",
+            "version": "0.1.0",
+            "sdk_version": "0.1.0",
+            "build_info": "rustc 1.96.0 (ac68faa20 2026-05-25) aarch64-apple-darwin",
+            "format": 1,
+            "library": 1,
+            "components": [
+              {
+                "name": "counter",
+                "inject": [
+                  {
+                    "interface": "kv@1.0",
+                    "required": true
+                  }
+                ],
+                "provides": [],
+                "listens": [],
+                "state_schema": "counter.state",
+                "state_version_min": 1,
+                "state_version_max": 1
+              }
+            ]
+          }
+        },
+        {
+          "reference": "installed-3",
+          "name": "fixture-kv-client",
+          "version": "0.1.0",
+          "source": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/installed-3",
+          "directory": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/installed-3",
+          "entry": {
+            "socket": "process",
+            "protocol": 1,
+            "command": [
+              "/Users/gordongauerk/Projects/Rust-cordis/target/test-artifacts/phase3-language-tools-88232-0/cordis-runtime-fixture",
+              "kv-client",
+              "v1"
+            ],
+            "restart": {
+              "max": 5,
+              "backoff_ms": 500
+            }
+          },
+          "web": null,
+          "descriptor": {
+            "name": "fixture-kv-client",
+            "version": "0.1.0",
+            "sdk_version": "0.1.0",
+            "build_info": "real UP1 process",
+            "format": 2,
+            "library": null,
+            "components": [
+              {
+                "name": "kv-client",
+                "inject": [
+                  {
+                    "interface": "kv@1.0",
+                    "required": true
+                  }
+                ],
+                "provides": [],
+                "listens": [],
+                "state_schema": "",
+                "state_version_min": 1,
+                "state_version_max": 1
+              }
+            ]
+          }
+        },
+        {
+          "reference": "installed-4.dylib",
+          "name": "kv",
+          "version": "0.1.0",
+          "source": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/installed-4.dylib",
+          "directory": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins",
+          "entry": {
+            "socket": "native",
+            "library": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/installed-4.dylib"
+          },
+          "web": null,
+          "descriptor": {
+            "name": "kv",
+            "version": "0.1.0",
+            "sdk_version": "0.1.0",
+            "build_info": "rustc 1.96.0 (ac68faa20 2026-05-25) aarch64-apple-darwin",
+            "format": 1,
+            "library": 1,
+            "components": [
+              {
+                "name": "kv-store",
+                "inject": [],
+                "provides": [
+                  "kv@1.0"
+                ],
+                "listens": [],
+                "state_schema": "kv.snapshot",
+                "state_version_min": 1,
+                "state_version_max": 1
+              }
+            ]
+          }
+        },
+        {
+          "reference": "installed-5",
+          "name": "kv",
+          "version": "0.1.0",
+          "source": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/installed-5",
+          "directory": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/installed-5",
+          "entry": {
+            "socket": "process",
+            "protocol": 1,
+            "command": [
+              "/Users/gordongauerk/miniforge3/bin/python",
+              "-B",
+              "-m",
+              "kv_py"
+            ],
+            "restart": {
+              "max": 5,
+              "backoff_ms": 500
+            }
+          },
+          "web": null,
+          "descriptor": null
+        },
+        {
+          "reference": "kv-client",
+          "name": "fixture-kv-client",
+          "version": "0.1.0",
+          "source": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/kv-client",
+          "directory": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/kv-client",
+          "entry": {
+            "socket": "process",
+            "protocol": 1,
+            "command": [
+              "/Users/gordongauerk/Projects/Rust-cordis/target/test-artifacts/phase3-language-tools-88232-0/cordis-runtime-fixture",
+              "kv-client",
+              "v1"
+            ],
+            "restart": {
+              "max": 5,
+              "backoff_ms": 500
+            }
+          },
+          "web": null,
+          "descriptor": null
+        },
+        {
+          "reference": "libcounter.dylib",
+          "name": "counter",
+          "version": "0.1.0",
+          "source": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/libcounter.dylib",
+          "directory": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins",
+          "entry": {
+            "socket": "native",
+            "library": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/libcounter.dylib"
+          },
+          "web": null,
+          "descriptor": {
+            "name": "counter",
+            "version": "0.1.0",
+            "sdk_version": "0.1.0",
+            "build_info": "rustc 1.96.0 (ac68faa20 2026-05-25) aarch64-apple-darwin",
+            "format": 1,
+            "library": null,
+            "components": [
+              {
+                "name": "counter",
+                "inject": [
+                  {
+                    "interface": "kv@1.0",
+                    "required": true
+                  }
+                ],
+                "provides": [],
+                "listens": [],
+                "state_schema": "counter.state",
+                "state_version_min": 1,
+                "state_version_max": 1
+              }
+            ]
+          }
+        },
+        {
+          "reference": "libkv_mem.dylib",
+          "name": "kv",
+          "version": "0.1.0",
+          "source": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/libkv_mem.dylib",
+          "directory": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins",
+          "entry": {
+            "socket": "native",
+            "library": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/libkv_mem.dylib"
+          },
+          "web": null,
+          "descriptor": {
+            "name": "kv",
+            "version": "0.1.0",
+            "sdk_version": "0.1.0",
+            "build_info": "rustc 1.96.0 (ac68faa20 2026-05-25) aarch64-apple-darwin",
+            "format": 1,
+            "library": null,
+            "components": [
+              {
+                "name": "kv-store",
+                "inject": [],
+                "provides": [
+                  "kv@1.0"
+                ],
+                "listens": [],
+                "state_schema": "kv.snapshot",
+                "state_version_min": 1,
+                "state_version_max": 1
+              }
+            ]
+          }
+        }
+      ],
+      "last_batch": [],
+      "libraries": [
+        {
+          "id": 1,
+          "name": "counter",
+          "version": "0.1.0",
+          "sdk_version": "0.1.0",
+          "build_info": "rustc 1.96.0 (ac68faa20 2026-05-25) aarch64-apple-darwin",
+          "sequence": 1,
+          "path": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/.cordis/lib/counter/counter-1.dylib",
+          "verified": false,
+          "leases": 4,
+          "quiescent": false,
+          "retired": false,
+          "closed": false,
+          "components": [
+            {
+              "name": "counter",
+              "inject": [
+                {
+                  "interface": "kv@1.0",
+                  "required": true
+                }
+              ],
+              "provides": [],
+              "listens": [],
+              "state_schema": "counter.state",
+              "state_version_min": 1,
+              "state_version_max": 1
+            }
+          ],
+          "group": "counter",
+          "connection": 2
+        }
+      ],
+      "last_swap": [],
+      "available_plugins": [
+        {
+          "reference": "admin",
+          "name": "fixture-admin",
+          "version": "0.1.0",
+          "path": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/admin",
+          "components": []
+        },
+        {
+          "reference": "installed-1",
+          "name": "fixture-admin",
+          "version": "0.1.0",
+          "path": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/installed-1",
+          "components": [
+            {
+              "name": "admin",
+              "inject": [
+                {
+                  "interface": "cordis.manage@1.0",
+                  "required": true
+                },
+                {
+                  "interface": "cordis.runtime@1.1",
+                  "required": true
+                }
+              ],
+              "provides": [],
+              "listens": [],
+              "state_schema": "",
+              "state_version_min": 1,
+              "state_version_max": 1
+            }
+          ]
+        },
+        {
+          "reference": "installed-2.dylib",
+          "name": "counter",
+          "version": "0.1.0",
+          "path": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/installed-2.dylib",
+          "components": [
+            {
+              "name": "counter",
+              "inject": [
+                {
+                  "interface": "kv@1.0",
+                  "required": true
+                }
+              ],
+              "provides": [],
+              "listens": [],
+              "state_schema": "counter.state",
+              "state_version_min": 1,
+              "state_version_max": 1
+            }
+          ]
+        },
+        {
+          "reference": "installed-3",
+          "name": "fixture-kv-client",
+          "version": "0.1.0",
+          "path": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/installed-3",
+          "components": [
+            {
+              "name": "kv-client",
+              "inject": [
+                {
+                  "interface": "kv@1.0",
+                  "required": true
+                }
+              ],
+              "provides": [],
+              "listens": [],
+              "state_schema": "",
+              "state_version_min": 1,
+              "state_version_max": 1
+            }
+          ]
+        },
+        {
+          "reference": "installed-4.dylib",
+          "name": "kv",
+          "version": "0.1.0",
+          "path": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/installed-4.dylib",
+          "components": [
+            {
+              "name": "kv-store",
+              "inject": [],
+              "provides": [
+                "kv@1.0"
+              ],
+              "listens": [],
+              "state_schema": "kv.snapshot",
+              "state_version_min": 1,
+              "state_version_max": 1
+            }
+          ]
+        },
+        {
+          "reference": "installed-5",
+          "name": "kv",
+          "version": "0.1.0",
+          "path": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/installed-5",
+          "components": []
+        },
+        {
+          "reference": "kv-client",
+          "name": "fixture-kv-client",
+          "version": "0.1.0",
+          "path": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/kv-client",
+          "components": []
+        },
+        {
+          "reference": "libcounter.dylib",
+          "name": "counter",
+          "version": "0.1.0",
+          "path": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/libcounter.dylib",
+          "components": [
+            {
+              "name": "counter",
+              "inject": [
+                {
+                  "interface": "kv@1.0",
+                  "required": true
+                }
+              ],
+              "provides": [],
+              "listens": [],
+              "state_schema": "counter.state",
+              "state_version_min": 1,
+              "state_version_max": 1
+            }
+          ]
+        },
+        {
+          "reference": "libkv_mem.dylib",
+          "name": "kv",
+          "version": "0.1.0",
+          "path": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/libkv_mem.dylib",
+          "components": [
+            {
+              "name": "kv-store",
+              "inject": [],
+              "provides": [
+                "kv@1.0"
+              ],
+              "listens": [],
+              "state_schema": "kv.snapshot",
+              "state_version_min": 1,
+              "state_version_max": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "core_version": "0.1.0",
+      "pid": 88373,
+      "groups": [
+        {
+          "name": "admin",
+          "connection": 1,
+          "pid": 88383,
+          "state": "running",
+          "restarts": 0,
+          "plugins": [
+            {
+              "name": "fixture-admin",
+              "version": "0.1.0",
+              "sdk_version": "0.1.0",
+              "build_info": "real UP1 process",
+              "format": 2,
+              "library": null,
+              "components": [
+                {
+                  "name": "admin",
+                  "inject": [
+                    {
+                      "interface": "cordis.manage@1.0",
+                      "required": true
+                    },
+                    {
+                      "interface": "cordis.runtime@1.1",
+                      "required": true
+                    }
+                  ],
+                  "provides": [],
+                  "listens": [],
+                  "state_schema": "",
+                  "state_version_min": 1,
+                  "state_version_max": 1
+                }
+              ]
+            }
+          ],
+          "error": null
+        },
+        {
+          "name": "counter",
+          "connection": 2,
+          "pid": 88388,
+          "state": "running",
+          "restarts": 0,
+          "plugins": [
+            {
+              "name": "counter",
+              "version": "0.1.0",
+              "sdk_version": "0.1.0",
+              "build_info": "rustc 1.96.0 (ac68faa20 2026-05-25) aarch64-apple-darwin",
+              "format": 1,
+              "library": 1,
+              "components": [
+                {
+                  "name": "counter",
+                  "inject": [
+                    {
+                      "interface": "kv@1.0",
+                      "required": true
+                    }
+                  ],
+                  "provides": [],
+                  "listens": [],
+                  "state_schema": "counter.state",
+                  "state_version_min": 1,
+                  "state_version_max": 1
+                }
+              ]
+            }
+          ],
+          "error": null
+        },
+        {
+          "name": "kv-client",
+          "connection": 3,
+          "pid": 88389,
+          "state": "running",
+          "restarts": 0,
+          "plugins": [
+            {
+              "name": "fixture-kv-client",
+              "version": "0.1.0",
+              "sdk_version": "0.1.0",
+              "build_info": "real UP1 process",
+              "format": 2,
+              "library": null,
+              "components": [
+                {
+                  "name": "kv-client",
+                  "inject": [
+                    {
+                      "interface": "kv@1.0",
+                      "required": true
+                    }
+                  ],
+                  "provides": [],
+                  "listens": [],
+                  "state_schema": "",
+                  "state_version_min": 1,
+                  "state_version_max": 1
+                }
+              ]
+            }
+          ],
+          "error": null
+        },
+        {
+          "name": "store",
+          "connection": 18,
+          "pid": 88393,
+          "state": "running",
+          "restarts": 0,
+          "plugins": [
+            {
+              "name": "kv",
+              "version": "0.1.0",
+              "sdk_version": "0.1.0",
+              "build_info": "TypeScript UP/1 SDK",
+              "format": 2,
+              "library": null,
+              "components": [
+                {
+                  "name": "kv-store",
+                  "inject": [],
+                  "provides": [
+                    "kv@1.0"
+                  ],
+                  "listens": [],
+                  "state_schema": "kv.snapshot",
+                  "state_version_min": 1,
+                  "state_version_max": 1
+                }
+              ]
+            }
+          ],
+          "error": null
+        }
+      ],
+      "instances": [
+        {
+          "name": "admin",
+          "plugin": "fixture-admin",
+          "component": "admin",
+          "state": "active",
+          "revision": 0,
+          "bindings": [
+            3,
+            2
+          ],
+          "error": null,
+          "group": "admin",
+          "context": 5,
+          "reference": "installed-1"
+        },
+        {
+          "name": "counter",
+          "plugin": "counter",
+          "component": "counter",
+          "state": "active",
+          "revision": 0,
+          "bindings": [
+            14
+          ],
+          "error": null,
+          "group": "counter",
+          "context": 20,
+          "reference": "installed-2.dylib"
+        },
+        {
+          "name": "kv-client",
+          "plugin": "fixture-kv-client",
+          "component": "kv-client",
+          "state": "active",
+          "revision": 0,
+          "bindings": [
+            14
+          ],
+          "error": null,
+          "group": "kv-client",
+          "context": 21,
+          "reference": "installed-3"
+        },
+        {
+          "name": "store",
+          "plugin": "kv",
+          "component": "kv-store",
+          "state": "active",
+          "revision": 2,
+          "bindings": [],
+          "error": null,
+          "group": "store",
+          "context": 19,
+          "reference": "installed-6"
+        }
+      ],
+      "last_replace": [
+        {
+          "group": "store",
+          "previous_connection": 12,
+          "candidate_connection": 18,
+          "affected_instances": 3,
+          "pause_ms": 170,
+          "committed": true,
+          "succeeded": true,
+          "rolled_back": false,
+          "failure": null
+        }
+      ],
+      "phase": "running",
+      "configuration_error": null,
+      "instance_errors": {},
+      "plugin_errors": {},
+      "overrides": [
+        "store"
+      ],
+      "sources": [
+        {
+          "reference": "admin",
+          "name": "fixture-admin",
+          "version": "0.1.0",
+          "source": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/admin",
+          "directory": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/admin",
+          "entry": {
+            "socket": "process",
+            "protocol": 1,
+            "command": [
+              "/Users/gordongauerk/Projects/Rust-cordis/target/test-artifacts/phase3-language-tools-88232-0/cordis-runtime-fixture",
+              "admin",
+              "v1"
+            ],
+            "restart": {
+              "max": 5,
+              "backoff_ms": 500
+            }
+          },
+          "web": null,
+          "descriptor": null
+        },
+        {
+          "reference": "installed-1",
+          "name": "fixture-admin",
+          "version": "0.1.0",
+          "source": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/installed-1",
+          "directory": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/installed-1",
+          "entry": {
+            "socket": "process",
+            "protocol": 1,
+            "command": [
+              "/Users/gordongauerk/Projects/Rust-cordis/target/test-artifacts/phase3-language-tools-88232-0/cordis-runtime-fixture",
+              "admin",
+              "v1"
+            ],
+            "restart": {
+              "max": 5,
+              "backoff_ms": 500
+            }
+          },
+          "web": null,
+          "descriptor": {
+            "name": "fixture-admin",
+            "version": "0.1.0",
+            "sdk_version": "0.1.0",
+            "build_info": "real UP1 process",
+            "format": 2,
+            "library": null,
+            "components": [
+              {
+                "name": "admin",
+                "inject": [
+                  {
+                    "interface": "cordis.manage@1.0",
+                    "required": true
+                  },
+                  {
+                    "interface": "cordis.runtime@1.1",
+                    "required": true
+                  }
+                ],
+                "provides": [],
+                "listens": [],
+                "state_schema": "",
+                "state_version_min": 1,
+                "state_version_max": 1
+              }
+            ]
+          }
+        },
+        {
+          "reference": "installed-2.dylib",
+          "name": "counter",
+          "version": "0.1.0",
+          "source": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/installed-2.dylib",
+          "directory": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins",
+          "entry": {
+            "socket": "native",
+            "library": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/installed-2.dylib"
+          },
+          "web": null,
+          "descriptor": {
+            "name": "counter",
+            "version": "0.1.0",
+            "sdk_version": "0.1.0",
+            "build_info": "rustc 1.96.0 (ac68faa20 2026-05-25) aarch64-apple-darwin",
+            "format": 1,
+            "library": 1,
+            "components": [
+              {
+                "name": "counter",
+                "inject": [
+                  {
+                    "interface": "kv@1.0",
+                    "required": true
+                  }
+                ],
+                "provides": [],
+                "listens": [],
+                "state_schema": "counter.state",
+                "state_version_min": 1,
+                "state_version_max": 1
+              }
+            ]
+          }
+        },
+        {
+          "reference": "installed-3",
+          "name": "fixture-kv-client",
+          "version": "0.1.0",
+          "source": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/installed-3",
+          "directory": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/installed-3",
+          "entry": {
+            "socket": "process",
+            "protocol": 1,
+            "command": [
+              "/Users/gordongauerk/Projects/Rust-cordis/target/test-artifacts/phase3-language-tools-88232-0/cordis-runtime-fixture",
+              "kv-client",
+              "v1"
+            ],
+            "restart": {
+              "max": 5,
+              "backoff_ms": 500
+            }
+          },
+          "web": null,
+          "descriptor": {
+            "name": "fixture-kv-client",
+            "version": "0.1.0",
+            "sdk_version": "0.1.0",
+            "build_info": "real UP1 process",
+            "format": 2,
+            "library": null,
+            "components": [
+              {
+                "name": "kv-client",
+                "inject": [
+                  {
+                    "interface": "kv@1.0",
+                    "required": true
+                  }
+                ],
+                "provides": [],
+                "listens": [],
+                "state_schema": "",
+                "state_version_min": 1,
+                "state_version_max": 1
+              }
+            ]
+          }
+        },
+        {
+          "reference": "installed-4.dylib",
+          "name": "kv",
+          "version": "0.1.0",
+          "source": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/installed-4.dylib",
+          "directory": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins",
+          "entry": {
+            "socket": "native",
+            "library": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/installed-4.dylib"
+          },
+          "web": null,
+          "descriptor": {
+            "name": "kv",
+            "version": "0.1.0",
+            "sdk_version": "0.1.0",
+            "build_info": "rustc 1.96.0 (ac68faa20 2026-05-25) aarch64-apple-darwin",
+            "format": 1,
+            "library": 1,
+            "components": [
+              {
+                "name": "kv-store",
+                "inject": [],
+                "provides": [
+                  "kv@1.0"
+                ],
+                "listens": [],
+                "state_schema": "kv.snapshot",
+                "state_version_min": 1,
+                "state_version_max": 1
+              }
+            ]
+          }
+        },
+        {
+          "reference": "installed-5",
+          "name": "kv",
+          "version": "0.1.0",
+          "source": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/installed-5",
+          "directory": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/installed-5",
+          "entry": {
+            "socket": "process",
+            "protocol": 1,
+            "command": [
+              "/Users/gordongauerk/miniforge3/bin/python",
+              "-B",
+              "-m",
+              "kv_py"
+            ],
+            "restart": {
+              "max": 5,
+              "backoff_ms": 500
+            }
+          },
+          "web": null,
+          "descriptor": null
+        },
+        {
+          "reference": "installed-6",
+          "name": "kv",
+          "version": "0.1.0",
+          "source": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/installed-6",
+          "directory": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/installed-6",
+          "entry": {
+            "socket": "process",
+            "protocol": 1,
+            "command": [
+              "node",
+              "/Users/gordongauerk/Projects/Rust-cordis/plugins/kv-ts/dist/main.js"
+            ],
+            "restart": {
+              "max": 5,
+              "backoff_ms": 500
+            }
+          },
+          "web": null,
+          "descriptor": null
+        },
+        {
+          "reference": "kv-client",
+          "name": "fixture-kv-client",
+          "version": "0.1.0",
+          "source": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/kv-client",
+          "directory": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/kv-client",
+          "entry": {
+            "socket": "process",
+            "protocol": 1,
+            "command": [
+              "/Users/gordongauerk/Projects/Rust-cordis/target/test-artifacts/phase3-language-tools-88232-0/cordis-runtime-fixture",
+              "kv-client",
+              "v1"
+            ],
+            "restart": {
+              "max": 5,
+              "backoff_ms": 500
+            }
+          },
+          "web": null,
+          "descriptor": null
+        },
+        {
+          "reference": "libcounter.dylib",
+          "name": "counter",
+          "version": "0.1.0",
+          "source": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/libcounter.dylib",
+          "directory": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins",
+          "entry": {
+            "socket": "native",
+            "library": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/libcounter.dylib"
+          },
+          "web": null,
+          "descriptor": {
+            "name": "counter",
+            "version": "0.1.0",
+            "sdk_version": "0.1.0",
+            "build_info": "rustc 1.96.0 (ac68faa20 2026-05-25) aarch64-apple-darwin",
+            "format": 1,
+            "library": null,
+            "components": [
+              {
+                "name": "counter",
+                "inject": [
+                  {
+                    "interface": "kv@1.0",
+                    "required": true
+                  }
+                ],
+                "provides": [],
+                "listens": [],
+                "state_schema": "counter.state",
+                "state_version_min": 1,
+                "state_version_max": 1
+              }
+            ]
+          }
+        },
+        {
+          "reference": "libkv_mem.dylib",
+          "name": "kv",
+          "version": "0.1.0",
+          "source": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/libkv_mem.dylib",
+          "directory": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins",
+          "entry": {
+            "socket": "native",
+            "library": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/libkv_mem.dylib"
+          },
+          "web": null,
+          "descriptor": {
+            "name": "kv",
+            "version": "0.1.0",
+            "sdk_version": "0.1.0",
+            "build_info": "rustc 1.96.0 (ac68faa20 2026-05-25) aarch64-apple-darwin",
+            "format": 1,
+            "library": null,
+            "components": [
+              {
+                "name": "kv-store",
+                "inject": [],
+                "provides": [
+                  "kv@1.0"
+                ],
+                "listens": [],
+                "state_schema": "kv.snapshot",
+                "state_version_min": 1,
+                "state_version_max": 1
+              }
+            ]
+          }
+        }
+      ],
+      "last_batch": [],
+      "libraries": [
+        {
+          "id": 1,
+          "name": "counter",
+          "version": "0.1.0",
+          "sdk_version": "0.1.0",
+          "build_info": "rustc 1.96.0 (ac68faa20 2026-05-25) aarch64-apple-darwin",
+          "sequence": 1,
+          "path": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/.cordis/lib/counter/counter-1.dylib",
+          "verified": false,
+          "leases": 4,
+          "quiescent": false,
+          "retired": false,
+          "closed": false,
+          "components": [
+            {
+              "name": "counter",
+              "inject": [
+                {
+                  "interface": "kv@1.0",
+                  "required": true
+                }
+              ],
+              "provides": [],
+              "listens": [],
+              "state_schema": "counter.state",
+              "state_version_min": 1,
+              "state_version_max": 1
+            }
+          ],
+          "group": "counter",
+          "connection": 2
+        }
+      ],
+      "last_swap": [],
+      "available_plugins": [
+        {
+          "reference": "admin",
+          "name": "fixture-admin",
+          "version": "0.1.0",
+          "path": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/admin",
+          "components": []
+        },
+        {
+          "reference": "installed-1",
+          "name": "fixture-admin",
+          "version": "0.1.0",
+          "path": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/installed-1",
+          "components": [
+            {
+              "name": "admin",
+              "inject": [
+                {
+                  "interface": "cordis.manage@1.0",
+                  "required": true
+                },
+                {
+                  "interface": "cordis.runtime@1.1",
+                  "required": true
+                }
+              ],
+              "provides": [],
+              "listens": [],
+              "state_schema": "",
+              "state_version_min": 1,
+              "state_version_max": 1
+            }
+          ]
+        },
+        {
+          "reference": "installed-2.dylib",
+          "name": "counter",
+          "version": "0.1.0",
+          "path": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/installed-2.dylib",
+          "components": [
+            {
+              "name": "counter",
+              "inject": [
+                {
+                  "interface": "kv@1.0",
+                  "required": true
+                }
+              ],
+              "provides": [],
+              "listens": [],
+              "state_schema": "counter.state",
+              "state_version_min": 1,
+              "state_version_max": 1
+            }
+          ]
+        },
+        {
+          "reference": "installed-3",
+          "name": "fixture-kv-client",
+          "version": "0.1.0",
+          "path": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/installed-3",
+          "components": [
+            {
+              "name": "kv-client",
+              "inject": [
+                {
+                  "interface": "kv@1.0",
+                  "required": true
+                }
+              ],
+              "provides": [],
+              "listens": [],
+              "state_schema": "",
+              "state_version_min": 1,
+              "state_version_max": 1
+            }
+          ]
+        },
+        {
+          "reference": "installed-4.dylib",
+          "name": "kv",
+          "version": "0.1.0",
+          "path": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/installed-4.dylib",
+          "components": [
+            {
+              "name": "kv-store",
+              "inject": [],
+              "provides": [
+                "kv@1.0"
+              ],
+              "listens": [],
+              "state_schema": "kv.snapshot",
+              "state_version_min": 1,
+              "state_version_max": 1
+            }
+          ]
+        },
+        {
+          "reference": "installed-5",
+          "name": "kv",
+          "version": "0.1.0",
+          "path": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/installed-5",
+          "components": []
+        },
+        {
+          "reference": "installed-6",
+          "name": "kv",
+          "version": "0.1.0",
+          "path": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/installed-6",
+          "components": []
+        },
+        {
+          "reference": "kv-client",
+          "name": "fixture-kv-client",
+          "version": "0.1.0",
+          "path": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/kv-client",
+          "components": []
+        },
+        {
+          "reference": "libcounter.dylib",
+          "name": "counter",
+          "version": "0.1.0",
+          "path": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/libcounter.dylib",
+          "components": [
+            {
+              "name": "counter",
+              "inject": [
+                {
+                  "interface": "kv@1.0",
+                  "required": true
+                }
+              ],
+              "provides": [],
+              "listens": [],
+              "state_schema": "counter.state",
+              "state_version_min": 1,
+              "state_version_max": 1
+            }
+          ]
+        },
+        {
+          "reference": "libkv_mem.dylib",
+          "name": "kv",
+          "version": "0.1.0",
+          "path": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-migration-88232-0/case/three-language-migration/plugins/libkv_mem.dylib",
+          "components": [
+            {
+              "name": "kv-store",
+              "inject": [],
+              "provides": [
+                "kv@1.0"
+              ],
+              "listens": [],
+              "state_schema": "kv.snapshot",
+              "state_version_min": 1,
+              "state_version_max": 1
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "core_pid": 88373,
+  "exit": 0
+}

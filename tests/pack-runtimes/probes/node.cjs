@@ -1,0 +1,11 @@
+const path = require("node:path");
+const {createRequire} = require("node:module");
+const plugin = path.resolve(process.argv[2]);
+const load = createRequire(path.join(plugin, "package.json"));
+const cbor = load("cbor-x");
+const encoded = cbor.encode({value: 42, text: "独立运行时"});
+if (cbor.decode(encoded).value !== 42) throw new Error("CBOR 实际读写失败");
+const native = Object.keys(require.cache).find(file => file.endsWith(".node"));
+if (!native) throw new Error("CBOR 原生模块需要实际加载");
+const dynamicCode = new Function("value", "return value + 1")(41);
+console.log(JSON.stringify({version: process.version, executable: process.execPath, native, dynamic_code: dynamicCode}));

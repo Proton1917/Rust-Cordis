@@ -1,0 +1,184 @@
+{
+  "core_pid": 88372,
+  "providers": {
+    "rust": {
+      "instance": {
+        "name": "rust",
+        "plugin": "kv",
+        "component": "kv-store",
+        "state": "active",
+        "revision": 0,
+        "bindings": [],
+        "error": null,
+        "group": "rust",
+        "context": 7,
+        "reference": "installed-3.dylib"
+      },
+      "source": {
+        "reference": "installed-3.dylib",
+        "name": "kv",
+        "version": "0.1.0",
+        "source": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-cross-88232-1/case/process-cross/plugins/installed-3.dylib",
+        "directory": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-cross-88232-1/case/process-cross/plugins",
+        "entry": {
+          "socket": "native",
+          "library": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-cross-88232-1/case/process-cross/plugins/installed-3.dylib"
+        },
+        "web": null,
+        "descriptor": {
+          "name": "kv",
+          "version": "0.1.0",
+          "sdk_version": "0.1.0",
+          "build_info": "rustc 1.96.0 (ac68faa20 2026-05-25) aarch64-apple-darwin",
+          "format": 1,
+          "library": 1,
+          "components": [
+            {
+              "name": "kv-store",
+              "inject": [],
+              "provides": [
+                "kv@1.0"
+              ],
+              "listens": [],
+              "state_schema": "kv.snapshot",
+              "state_version_min": 1,
+              "state_version_max": 1
+            }
+          ]
+        }
+      }
+    },
+    "python": {
+      "instance": {
+        "name": "python",
+        "plugin": "kv",
+        "component": "kv-store",
+        "state": "active",
+        "revision": 0,
+        "bindings": [],
+        "error": null,
+        "group": "python",
+        "context": 6,
+        "reference": "installed-1"
+      },
+      "source": {
+        "reference": "installed-1",
+        "name": "kv",
+        "version": "0.1.0",
+        "source": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-cross-88232-1/case/process-cross/plugins/installed-1",
+        "directory": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-cross-88232-1/case/process-cross/plugins/installed-1",
+        "entry": {
+          "socket": "process",
+          "protocol": 1,
+          "command": [
+            "/Users/gordongauerk/miniforge3/bin/python",
+            "-B",
+            "-m",
+            "kv_py"
+          ],
+          "restart": {
+            "max": 5,
+            "backoff_ms": 500
+          }
+        },
+        "web": null,
+        "descriptor": {
+          "name": "kv",
+          "version": "0.1.0",
+          "sdk_version": "0.1.0",
+          "build_info": "Python UP/1 SDK",
+          "format": 2,
+          "library": null,
+          "components": [
+            {
+              "name": "kv-store",
+              "inject": [],
+              "provides": [
+                "kv@1.0"
+              ],
+              "listens": [],
+              "state_schema": "kv.snapshot",
+              "state_version_min": 1,
+              "state_version_max": 1
+            }
+          ]
+        }
+      }
+    },
+    "typescript": {
+      "instance": {
+        "name": "typescript",
+        "plugin": "kv",
+        "component": "kv-store",
+        "state": "active",
+        "revision": 0,
+        "bindings": [],
+        "error": null,
+        "group": "typescript",
+        "context": 8,
+        "reference": "installed-4"
+      },
+      "source": {
+        "reference": "installed-4",
+        "name": "kv",
+        "version": "0.1.0",
+        "source": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-cross-88232-1/case/process-cross/plugins/installed-4",
+        "directory": "/Users/gordongauerk/Projects/Rust-cordis/target/phase3-acceptance/phase3-cross-88232-1/case/process-cross/plugins/installed-4",
+        "entry": {
+          "socket": "process",
+          "protocol": 1,
+          "command": [
+            "node",
+            "/Users/gordongauerk/Projects/Rust-cordis/plugins/kv-ts/dist/main.js"
+          ],
+          "restart": {
+            "max": 5,
+            "backoff_ms": 500
+          }
+        },
+        "web": null,
+        "descriptor": {
+          "name": "kv",
+          "version": "0.1.0",
+          "sdk_version": "0.1.0",
+          "build_info": "TypeScript UP/1 SDK",
+          "format": 2,
+          "library": null,
+          "components": [
+            {
+              "name": "kv-store",
+              "inject": [],
+              "provides": [
+                "kv@1.0"
+              ],
+              "listens": [],
+              "state_schema": "kv.snapshot",
+              "state_version_min": 1,
+              "state_version_max": 1
+            }
+          ]
+        }
+      }
+    }
+  },
+  "directions": {
+    "python-to-typescript": {
+      "bytes": [
+        0,
+        127,
+        255
+      ],
+      "scoped": false
+    },
+    "typescript-to-python": {
+      "bytes": [
+        0,
+        127,
+        255
+      ],
+      "scoped": false
+    }
+  },
+  "cleanup": true,
+  "exit": 0
+}
