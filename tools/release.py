@@ -61,6 +61,7 @@ def stage(artifacts, package, version):
 def component_versions():
     """ADR-0047：发行组合保留各包独立版本，表格从对应包的版本声明生成。"""
     workspace = tomllib.loads((ROOT / "Cargo.toml").read_text())["workspace"]["package"]["version"]
+    typescript_version = json.loads((ROOT / "sdks/typescript/cordis-sdk/package.json").read_text())["version"]
     rows = []
     for label, directory in [
         ("cordis", "crates/cordis-runtime"), ("cordis-host", "crates/cordis-host"),
@@ -69,10 +70,13 @@ def component_versions():
         ("window", "plugins/window"), ("secrets", "plugins/secrets"),
     ]:
         value = tomllib.loads((ROOT / directory / "Cargo.toml").read_text())["package"]["version"]
-        rows.append((label, workspace if isinstance(value, dict) else value))
+        version = workspace if isinstance(value, dict) else value
+        if label == "HTTP":
+            version += f"（内置网页 SDK {typescript_version}）"
+        rows.append((label, version))
     rows.extend([
         ("Python SDK", tomllib.loads((ROOT / "sdks/python/pyproject.toml").read_text())["project"]["version"]),
-        ("TypeScript SDK", json.loads((ROOT / "sdks/typescript/cordis-sdk/package.json").read_text())["version"]),
+        ("TypeScript SDK", typescript_version),
         ("网页宿主", json.loads((ROOT / "sdks/typescript/cordis-web/package.json").read_text())["version"]),
         ("ABI", "v1.0"), ("UP/1", "1"),
     ])

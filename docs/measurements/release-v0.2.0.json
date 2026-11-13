@@ -1,0 +1,90 @@
+{
+  "build": {
+    "revision": "18a62cfaa110191574bf713e9cdb9a365a8a870e",
+    "build_seconds": 46.95900495816022,
+    "binaries": [
+      {
+        "file": "bin/cordis",
+        "architecture": "arm64",
+        "path_matches": 0,
+        "signature": "valid"
+      },
+      {
+        "file": "bin/cordis-host",
+        "architecture": "arm64",
+        "path_matches": 0,
+        "signature": "valid"
+      },
+      {
+        "file": "bin/cordis-dev",
+        "architecture": "arm64",
+        "path_matches": 0,
+        "signature": "valid"
+      },
+      {
+        "file": "plugins/libcordis_http.dylib",
+        "architecture": "arm64",
+        "path_matches": 0,
+        "signature": "valid"
+      },
+      {
+        "file": "plugins/libcordis_watch.dylib",
+        "architecture": "arm64",
+        "path_matches": 0,
+        "signature": "valid"
+      },
+      {
+        "file": "plugins/libcordis_secrets.dylib",
+        "architecture": "arm64",
+        "path_matches": 0,
+        "signature": "valid"
+      },
+      {
+        "file": "plugins/window/cordis-window",
+        "architecture": "arm64",
+        "path_matches": 0,
+        "signature": "valid"
+      }
+    ],
+    "version": "v0.2.0",
+    "asset": "cordis-v0.2.0-aarch64-apple-darwin.tar.gz",
+    "bytes": 10344873
+  },
+  "release": {
+    "assets": [
+      {
+        "name": "cordis-v0.2.0-aarch64-apple-darwin.tar.gz",
+        "size": 10344873,
+        "state": "uploaded",
+        "url": "https://github.com/Proton1917/Rust-Cordis/releases/download/v0.2.0/cordis-v0.2.0-aarch64-apple-darwin.tar.gz"
+      }
+    ],
+    "draft": false,
+    "prerelease": false,
+    "tag": "v0.2.0",
+    "target": "18a62cfaa110191574bf713e9cdb9a365a8a870e",
+    "url": "https://github.com/Proton1917/Rust-Cordis/releases/tag/v0.2.0"
+  },
+  "verification": {
+    "versions": {
+      "cordis": "cordis 0.1.0",
+      "cordis-dev": "cordis-dev 0.2.0"
+    },
+    "file_mode": "0o600",
+    "http_status": 200,
+    "response_bytes": 1534,
+    "exit_code": 0
+  },
+  "active_instances": [
+    "http",
+    "secrets"
+  ],
+  "privacy_check": "七个 Mach-O 的本机用户名和 /Users/ 字符串匹配为零；ad-hoc 签名校验通过。",
+  "component_note": "HTTP 0.1.0 内置网页 SDK 0.2.0；发行组合 v0.2.0 沿用核心 0.1.0。",
+  "design_review": {
+    "message": "fa82989b-ae9e-40e1-9165-8e78d2b29ee5",
+    "result": "passed",
+    "record": "target/claude-edits/evidence/release-v0.2.0-check.txt"
+  },
+  "evidence": "target/releases/v0.2.0/evidence"
+}

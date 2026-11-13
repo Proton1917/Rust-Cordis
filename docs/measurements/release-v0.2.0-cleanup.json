@@ -1,0 +1,33 @@
+{
+  "before": {
+    "target_kib": 20472172,
+    "target_human": "20G",
+    "filesystem_free_bytes": 1240579006464
+  },
+  "after": {
+    "target_kib": 6155232,
+    "target_human": "5.9G",
+    "filesystem_free_bytes": 1254790254592
+  },
+  "removed": [
+    "target/debug",
+    "target/shared",
+    "target/releases/v0.2.0/package",
+    "target/releases/v0.2.0/download"
+  ],
+  "target_reclaimed_bytes": 14660546560,
+  "filesystem_free_increase_bytes": 14211248128,
+  "retained": [
+    "target/releases/v0.2.0/cordis-v0.2.0-aarch64-apple-darwin.tar.gz",
+    "target/releases/v0.2.0/evidence",
+    "target/release-v0.1.0/dist",
+    "target/release-v0.1.0/evidence",
+    "target/phase3-acceptance/m21/rm9-candidate",
+    "target/phase3-acceptance/m21/rm9-analysis",
+    "target/review-fix",
+    "target/review-m3",
+    "target/review-m4",
+    "target/claude-edits",
+    "其他验收证据"
+  ]
+}

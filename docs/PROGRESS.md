@@ -7,30 +7,30 @@
 | 项 | 值 |
 |---|---|
 | 最近完成的实现与检查 | M23：Rust/TypeScript 动态入口、命名依赖、资源所有权与三语言行为；AU-27–AU-30、AU-27a |
-| 当前里程碑 | M23 实现与专项验收通过，339 项完整用例通过；固定 Git 依赖用例依设计方安排在推送后复验 |
-| M23 接口确认 | beb4c8cf 已获设计方批准：invoke/invoke_async 处理纯 CBOR，参数拒绝裸 tag 60000，结果含资源时先释放再返回参数错误；invoke_as/invoke_as_async 经编码环境导入 Service。Inject 命名声明共用类型化校验；Python 沿用 Remote.invoke，TypeScript 增加 getDynamic。ADR-0047 已由设计方追加 AU-27a，随 M23 提交。实现与行为验收进行中，review 基线为 70db380 |
+| 当前里程碑 | M23 完成（18a62cf）；v0.2.0 已发布并经设计方下载核验 |
+| M23 接口确认 | beb4c8cf 批准的纯数据调用、资源释放和拥有型 Service 转交已实现并通过 AU-27a。Inject 命名声明共用类型化校验；Python 沿用 Remote.invoke，TypeScript 提供 getDynamic。ADR-0047 与实现随 18a62cf 提交，review 基线为 70db380 |
 | M23 版本 | 1c6187d3 批准发行标签 v0.2.0，改动的 cordis-sdk、cordis-dev 与 TypeScript SDK 升为 0.2.0；核心、宿主、Python SDK 和既有官方插件保持 0.1.0，ABI v1、UP/1 保持。发布页和包内 README 以组件表说明；脚手架验证生成的 SDK 版本及源码提交 |
 | M23 依赖锁文件 | ef9cfb5a 批准夹具 Cargo.lock 中 SDK 项随 0.2.0 机械联动；其余依赖保持既有版本。核心产品 src/Cargo.toml、ABI 与根锁文件中的核心依赖项保持 review 70db380 |
-| M23 固定 Git 验收 | 72c36897 裁决：M23 单个实现提交先推送，随后以 CORDIS_SOURCE_REVISION 指向该提交，复验 readme_first_plugin_builds_from_pinned_git_sdk；其余完整用例在提交前通过。该项通过并经设计方复核后发布 v0.2.0 |
-| 当前验证 | M23 的四提供方比较、资源释放、替换回滚与脚本动态调用专项通过；完整 workspace 为 339 通过、1 个固定 Git 用例待 M23 推送后复验、1 项测量忽略。fmt、clippy、177 条矩阵、unsafe 与布局通过；core-boundary.diff 为 0 字节 |
-| 下一步 | 推送 M23 后立即以 CORDIS_SOURCE_REVISION=<M23 提交> 复验 readme_first_plugin_builds_from_pinned_git_sdk，回复提交与结果，等待设计方复核；通过后发布 v0.2.0，随包加入 secrets。发行版本与核心 0.1.0 分别记录 |
-| M22 复核跟进 | 439880c9：全量运行的 invalid_channel_frames_and_flood_preserve_other_pages 出现 KeyError，单独三轮通过；分析自动重连的新页面组与回收等待，修改限测试。trusted.rs 的 expect 改为内部错误和诊断，supervisor 保持至多 5450 行。两项安排在 v0.1.0 后、M23 前的 review 提交 |
-| 发布复核跟进 | 0d538651：设计方下载核验 v0.1.0 通过；release notes 说明 secrets 在 v0.1.0 从固定 rev f8729ac 源码构建，经 cordis pack 交付。v0.2.0 起把 secrets 纳入预编译包，打包脚本与 file/grants、0600 配置说明纳入同一 review 提交 |
+| M23 固定 Git 验收 | 按 72c36897 在 18a62cf 推送后复验通过；设计方隔离副本同样指向 18a62cf 构建通过，v0.2.0 已发布 |
+| 当前验证 | 提交前 339 项通过；推送后 CORDIS_SOURCE_REVISION=18a62cfaa110191574bf713e9cdb9a365a8a870e 的固定 Git 用例通过，340 项齐备。fmt、clippy、177 条矩阵、unsafe 与布局通过；core-boundary.diff 为 0 字节 |
+| 下一步 | 等待设计方安排 |
+| M22 复核跟进 | 页面故障测试同步与身份缺席错误处理已在 70db380 完成；五轮并行负载测试通过。supervisor 为 5445 行 |
+| 发布复核跟进 | v0.1.0 与 v0.2.0 均经设计方独立下载核验；v0.2.0 已随包提供 secrets，README 包含 file/grants 和 0600 配置说明 |
 | M22 边界 | 按设计方三项裁决：内核、up、channels、types、process 与 ABI 相对 df05064 保持；supervisor 先提取到 routing 再添加受信调用元数据，结束时至多 5450 代码行；web-deployment 限页面来源，runtime 限 service install |
 | M22 受信信息 | 核心对 scoped 调用追加直接调用方 cordis.caller 与页面的 cordis.page；任何 intercept 来源提交 cordis.* 返回权限错误。secrets 以自己的 grants 配置结合可信调用方鉴权。机密由插件读取和解释，核心转交不透明载荷；AU-25/26 已搜索最详细日志、状态、检查点和错误中的测试值 |
 | M22 页面授权 | 22518c32 裁决：后端 caller={instance}，页面 caller={page_of} 且省略 instance；两者描述直接调用方。secrets 只接受 instance 授权，后端处理页面调用时仍以自己的 instance 读取密钥。三语言 helper 与全栈场景按此验证 |
 | M22 实际故障 | 独立线程 RPC 的 reactor 问题已按批准范围修复；Bridge::invoke 与 sleep/plugin/effect_wait/emit_async 进入宿主执行器。普通线程、自有 Tokio、取消与取消后继续调用场景通过，原失败和修复日志归档在 target/http-m22/evidence |
-| 发布 | v0.1.0 指向 f8729ac；资产 cordis-v0.1.0-aarch64-apple-darwin.tar.gz 为 10,065,291 字节。六个 arm64 程序/库的路径匹配为 0，ad-hoc 签名通过；下载后的版本、HTTP 200 与退出码 0 已验证。设计方独立下载核验通过 |
+| 发布 | v0.2.0 指向 18a62cf；资产 cordis-v0.2.0-aarch64-apple-darwin.tar.gz 为 10,344,873 字节。七个 arm64 程序/库的路径匹配为 0，ad-hoc 签名通过；下载验证核心 0.1.0、开发工具 0.2.0、HTTP 与 secrets Active、HTTP 200、SIGINT 退出 0 |
 | M20 评审跟进 | segmentation_fault_isolates_group 的等待修正及五轮稳定性验收已完成；supervisor 保持 5480/5500 代码行 |
 | M21 性能结果 | RM-7 三方向各 10000 次，RM-8 三次替换完成。RM-9 首轮中位数比 1.07711183；停载重测中位数比 0.95774113、最大值比 0.90793525，满足原 1.05/1.15 判据。完整样本与测量条件并列归档 |
-| 后续事项 | ADR-0045 静态分派候选保持暂停，保存在 target/phase3-acceptance/m21/rm9-candidate 与 rm9-analysis。两轮前 1–4 轮偏高、比值相差约 12%；预热长度与交替采样方法留作独立研究 |
-| 清理 | v0.1.0 发布后清理已执行：target 从 43G 降至 5.4G，目录占用减少 40,461,443,072 字节，文件系统可用空间增加 40,388,063,232 字节。debug/shared 及本次验证程序副本已释放，证据与指定目录保留 |
+| 后续事项 | Linux 实测、crates.io、插件包格式、Windows 移植、RM-9 方法研究与 ADR-0045 的优先级由用户决定；静态分派候选和原始测量资料按原路径保留 |
+| 清理 | v0.2.0 收尾清理已执行：target 从 20G 降至 5.9G，目录占用减少 14,660,546,560 字节，文件系统可用空间增加 14,211,248,128 字节。debug/shared 和本次验证副本已释放，验收证据、发布包与指定目录保留 |
 | 执行安排 | 用户要求关闭全部子代理，由主会话独立完成 M22 与后续 M23；编译沿默认 target/debug 与 target/shared |
-| 后续顺序 | 555a5e1f：M22 提交并经设计方复核 → v0.1.0（M22 标签）与缓存清理 → 按 ADR-0047 实施 M23 动态调用 → 复核后 v0.2.0。ADR-0047 与设计方阶段表改动随 M22 提交 |
-| 验收资料 | docs/measurements/m21-acceptance.md 汇总 AU-1–AU-18；性能、语言、完整运行时和 native 稳定性另有原始 JSON。网页状态与操作见 docs/design/flow/index.html |
-| 文档交付 | README 三张表、guide、DOC-13/15、ADR-0043、skill、解释页与独立 HTML 已同步 |
+| 后续顺序 | M22、v0.1.0、review、M23 与 v0.2.0 均已完成；依 fa82989b 提交收尾记录后停止，等待新的安排 |
+| 验收资料 | docs/measurements/m23-acceptance.md、m23-pinned-git.json、release-v0.2.0.json 与 release-v0.2.0-cleanup.json；历次验收和网页状态资料保留 |
+| 文档交付 | README、guide、ADR-0047、skill、解释页、组件版本表与发布记录已同步 |
 | 窗口界面验收 | AU-17 已归档；用户运行记录为恢复 802 ms，截图、Cmd-Q、检查点与进程退出通过 |
-| 最后更新 | 2026-11-14（Asia/Shanghai），M23 实现、专项与提交前检查归档 |
+| 最后更新 | 2026-11-14（Asia/Shanghai），v0.2.0 发布、核验与缓存清理完成 |
 
 ## 环境
 
@@ -879,7 +879,16 @@ RM-9 两次均为每实现固定 9 轮、每轮预热 10000 次、计量 100000 
 | 核心进程 crate 合计 | 19138 / 21407 |
 
 - Y-9：guide 新增动态调用章节，skill 新增 dynamic 参考与入口，README 组成和路线图、解释页进度已同步。skill quick_validate 通过。已实际查看解释页更新后的桌面、移动截图，保存在 target/dynamic-m23/evidence/docs；M22 发布截图继续保存在其原证据目录。
-- Y-10：按设计方的提交后验收安排，单个 M23 实现提交推送后立即执行固定 Git 依赖用例，复验结果另以当前会话回复并写入后续发布记录；v0.2.0 标签等待该项及设计方复核通过。
+- Y-10：M23 提交 18a62cfaa110191574bf713e9cdb9a365a8a870e 已推送 origin/main。按设计方的提交后验收安排，设置 CORDIS_SOURCE_REVISION 为该提交并执行 `cargo test -p cordis-runtime --test acceptance readme_first_plugin_builds_from_pinned_git_sdk -- --nocapture`，19.31 秒、1 项通过、退出 0。真实 Git SDK 0.2.0 构建并使 app/watch/hello Active；日志 target/dynamic-m23/evidence/pinned-git-after-push.log，结果见 [固定 Git 验收](measurements/m23-pinned-git.json)。340 项用例齐备；v0.2.0 标签等待设计方复核通过。
+
+### v0.2.0 发布与收尾
+
+- M23 的 cf029ce9 隔离复核通过；v0.2.0 标签指向 18a62cfaa110191574bf713e9cdb9a365a8a870e。发布地址 https://github.com/Proton1917/Rust-Cordis/releases/tag/v0.2.0 ，资产 cordis-v0.2.0-aarch64-apple-darwin.tar.gz 为 10,344,873 字节，平台为 macOS arm64。
+- `conda run -n base python tools/release.py v0.2.0` 使用 target/shared 完成 release 编译，耗时 46.959 秒；RUSTFLAGS 将 HOME、仓库、Cargo registry 和 rustup 路径映射为中性前缀。七个 Mach-O 的用户名和 /Users/ 匹配均为 0，arm64 架构及 ad-hoc 签名校验通过。
+- 包内提供 secrets；README 开头与 release notes 均列组件版本表，HTTP 标为 0.1.0 并注明内置网页 SDK 0.2.0。Rust SDK、开发工具和 TypeScript SDK 为 0.2.0，核心与宿主为 0.1.0。README 附 file/grants 与 0600 配置示例；发布说明写明动态调用、拥有型资源与 v0.1.0 插件兼容性。
+- `gh release view` 核对标签、目标提交与单个上传资产；经 gh 下载解开后，核心版本为 0.1.0、开发工具为 0.2.0，HTTP 和 secrets 均 Active，GET / 为 200，SIGINT 退出 0。设计方 fa82989b 独立下载核验通过。完整数据为 [发布记录](measurements/release-v0.2.0.json)，原始证据在 target/releases/v0.2.0/evidence 和 target/claude-edits/evidence/release-v0.2.0-check.txt。
+- 确认编译、测试与验证进程退出后，分别执行 `cargo clean --target-dir target/debug`、`cargo clean --target-dir target/shared`，并释放本次装配和下载验证副本。target 的 `du -sh` 为 20G→5.9G，目录占用减少 14,660,546,560 字节，文件系统可用空间增加 14,211,248,128 字节；逐项路径及数值见 [清理记录](measurements/release-v0.2.0-cleanup.json)。验收证据、正式发布包、既有 dist、rm9-candidate/analysis、review-fix/m3/m4 和 claude-edits 保留。
+- AGENTS 阶段表、README 路线图与解释页已更新；已查看发布后进度页的桌面和移动截图，位于 target/releases/v0.2.0/evidence/docs。收尾以 review 提交推送，下一步为“等待设计方安排”。
 
 ## 第二阶段候选与恢复记录
 

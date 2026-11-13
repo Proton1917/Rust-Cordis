@@ -1,0 +1,9 @@
+{
+  "instances": [
+    "app",
+    "watch",
+    "hello"
+  ],
+  "scenario": "README first plugin",
+  "sdk_revision": "18a62cfaa110191574bf713e9cdb9a365a8a870e"
+}

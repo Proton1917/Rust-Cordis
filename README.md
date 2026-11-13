@@ -173,7 +173,7 @@ cordis run
 | | M20 | 前端插件与全栈插件：WebSocket 转发、页面子实例、网页宿主 `cordis-web` | 完成 |
 | | M21 | 多语言全栈总验收、完整 Python/Node 发布包与插件编写手册 | 完成 |
 | 追加 | M22 | HTTP 路由、通用字节流、页面调用来源与密钥插件 | 完成；[v0.1.0](https://github.com/Proton1917/Rust-Cordis/releases/tag/v0.1.0) 已发布 |
-| | M23 | SDK 动态调用、拥有型资源与命名依赖 | 专项通过；固定 Git 验收在推送后执行 |
+| | M23 | SDK 动态调用、拥有型资源与命名依赖 | 完成；[v0.2.0](https://github.com/Proton1917/Rust-Cordis/releases/tag/v0.2.0) 已发布 |
 
 每个里程碑一个提交，须通过格式、clippy、全部测试（M18 时 307 条）、177 条一致性矩阵、`unsafe` 审计和行数预算检查。逐项记录见 [PROGRESS](docs/PROGRESS.md)，各阶段验收摘要见 [使用指南](docs/guide.md#里程碑验收摘要m0m18)。
 

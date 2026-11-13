@@ -12,8 +12,10 @@
 | 脚本入口 | Python Remote.invoke 与 TypeScript getDynamic 实际读写字节值、处理未知方法并拒绝裸资源编号 | [脚本调用](m23-scripts.json) |
 | 脚手架版本 | 生成项目包含 SDK 0.2.0 约束和开发工具构建时的源码提交；本机 SDK 项目完成构建与运行 | workspace 的 scaffold 目标 |
 
-本轮 `cargo test --workspace --no-fail-fast` 共 339 项通过、1 项失败，独立的 RM-11 测量入口保持忽略。失败项 readme_first_plugin_builds_from_pinned_git_sdk 引用构建时的 70db380，而该提交的 SDK 版本为 0.1.0。设计方 72c36897 明确将这一条安排在 M23 推送后，以 `CORDIS_SOURCE_REVISION=<M23 提交>` 复验；结果按实际日志继续记录。其余完整用例已通过。
+提交前的 `cargo test --workspace --no-fail-fast` 共 339 项通过、1 项失败，独立的 RM-11 测量入口保持忽略。失败项 readme_first_plugin_builds_from_pinned_git_sdk 引用构建时的 70db380，而该提交的 SDK 版本为 0.1.0。设计方 72c36897 将这一条安排在 M23 推送后，指向实际 M23 提交复验。
+
+M23 的 18a62cfaa110191574bf713e9cdb9a365a8a870e 推送后，以该提交设置 CORDIS_SOURCE_REVISION 复验固定 Git 依赖用例，19.31 秒、退出 0。生成项目从该提交取得 SDK 0.2.0，构建并运行 app、watch、hello 三个实例，均进入 Active。结果见 [固定 Git 验收](m23-pinned-git.json)，日志 target/dynamic-m23/evidence/pinned-git-after-push.log；340 项用例全部通过。
 
 fmt、workspace/all-targets clippy、177 条上游矩阵通过；工作区中的 unsafe 审计和 ABI 布局检查通过。ABI 与宏的实现保持，Miri 复用 M22 的 13 条边界与布局结果。编译目录继续采用 target/debug 与 target/shared，成功现场由 TestGuard 归档，日志入口为 target/dynamic-m23/evidence。
 
-发行版本计划为 v0.2.0。Rust SDK、cordis-dev 与 TypeScript SDK 为 0.2.0；核心、宿主、Python SDK 和官方插件保持 0.1.0，ABI v1.0 与 UP/1 保持。夹具 Cargo.lock 中 SDK 项的版本联动是 SDK 升到 0.2.0 的机械结果，其余依赖保持。
+发行版本 v0.2.0 已发布，标签指向 18a62cf。Rust SDK、cordis-dev 与 TypeScript SDK 为 0.2.0；核心、宿主、Python SDK 和官方插件保持 0.1.0，HTTP 内置网页 SDK 为 0.2.0，ABI v1.0 与 UP/1 保持。夹具 Cargo.lock 中 SDK 项的版本联动是 SDK 升到 0.2.0 的机械结果，其余依赖保持。设计方隔离复核和发布包独立下载核验通过，详见 [发布记录](release-v0.2.0.json)。
