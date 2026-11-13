@@ -452,7 +452,7 @@ footer { font-size: 13px; color: var(--muted); border-top: 1px solid var(--line)
     <div class="sec-head">
       <div class="eyebrow">进度</div>
       <h2 id="prog-title">实现进度（2026-11-14）</h2>
-      <p class="lead">M22 外部接入已完成实现与验收，等待设计方复核。三种语言的 HTTP 请求、64 MiB 文件传输、持续请求中的替换回滚、页面与后端授权均已通过；工作区 336 项用例通过，三种语言各 10000 次 HTTP 往返测量已归档。复核后发布 v0.1.0，再实施 M23 的 SDK 动态调用。</p>
+      <p class="lead">M22 外部接入已通过设计方复核，macOS arm64 的 v0.1.0 已发布。三种语言的 HTTP 请求、64 MiB 文件传输、持续请求中的替换回滚、页面与后端授权均已通过；工作区 336 项用例通过，三种语言各 10000 次 HTTP 往返测量已归档。后续实施 M23 的 SDK 动态调用。</p>
     </div>
     <div class="progress">
       <table>
@@ -471,7 +471,7 @@ footer { font-size: 13px; color: var(--muted); border-top: 1px solid var(--line)
           <tr><td>TypeScript SDK</td><td class="mono">M19</td><td><span class="st done">运行验证通过</span></td><td>Node 双向调用、KV 契约、资源与事件转交、迁移回退、脚手架热替换通过</td></tr>
           <tr><td>前端与全栈插件</td><td class="mono">M20</td><td><span class="st done">功能与退出检查通过</span></td><td>八个真实浏览器场景通过；同名页面域隔离、三语言依赖恢复、批次替换回退与 HTTP 重连</td></tr>
           <tr><td>第三阶段综合验收</td><td class="mono">M21</td><td><span class="st done">阶段验收完成</span></td><td>三语言调用、迁移与契约；完整解释器签名包；固定性能记录、插件编写手册及五轮 native 稳定性验收</td></tr>
-          <tr><td>外部接入</td><td class="mono">M22</td><td><span class="st done">完成，待复核</span></td><td>HTTP 路由与通用流；可信页面及后端身份、密钥授权、三语言处理方与自定义页面外壳</td></tr>
+          <tr><td>外部接入</td><td class="mono">M22</td><td><span class="st done">v0.1.0 已发布</span></td><td>HTTP 路由与通用流；可信页面及后端身份、密钥授权、三语言处理方与自定义页面外壳</td></tr>
           <tr><td>SDK 动态调用</td><td class="mono">M23</td><td><span class="st">计划中</span></td><td>按已声明依赖的接口名与方法名调用服务，沿现有依赖与替换机制执行</td></tr>
         </tbody>
       </table>

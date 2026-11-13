@@ -129,14 +129,14 @@ cordis run
 | 部分 | 代码行 | 职责 |
 |---|---:|---|
 | `crates/cordis` | 4230 | 内核：上下文、效应、事件、服务、纤程与组件生命周期 |
-| `crates/cordis-supervisor` | 5444 | 插件进程监管、页面上下文、批量替换与可信调用身份 |
+| `crates/cordis-supervisor` | 5445 | 插件进程监管、页面上下文、批量替换与可信调用身份 |
 | `crates/cordis-routing` | 736 | 对象出口、资源转交、协议描述符与元数据额度 |
 | `crates/cordis-channels` | 250 | 独立页面连接与有界转发队列 |
 | `crates/cordis-web-deployment` | 870 | 网页资源、页面子实例、来源标识与全栈事务 |
 | `crates/cordis-runtime` | 5400 | 核心可执行程序 `cordis`：配置、授权、管理接口、持久化、状态发布 |
 | `crates/cordis-up` | 1628 | UP/1 协议编解码 |
 | `crates/cordis-process`、`cordis-types` | 579 | 进程控制与共享类型 |
-| 核心九个 crate 合计 | 19137 | |
+| 核心九个 crate 合计 | 19138 | |
 | `crates/cordis-host` | 2730 | 原生插件宿主进程 |
 | `crates/cordis-abi` | 2407 | ABI v1.0 的布局与调用约定；`unsafe` 只出现在 ABI、原生宿主和 SDK 宏中，位置由审计测试约束 |
 | `crates/cordis-sdk`、`cordis-sdk-macros` | 2315 | Rust 插件 SDK 与过程宏 |
@@ -172,7 +172,7 @@ cordis run
 | | M19 | TypeScript SDK、`kv-ts`、`new-plugin --ts` | 完成 |
 | | M20 | 前端插件与全栈插件：WebSocket 转发、页面子实例、网页宿主 `cordis-web` | 完成 |
 | | M21 | 多语言全栈总验收、完整 Python/Node 发布包与插件编写手册 | 完成 |
-| 追加 | M22 | HTTP 路由、通用字节流、页面调用来源与密钥插件 | 完成，待复核 |
+| 追加 | M22 | HTTP 路由、通用字节流、页面调用来源与密钥插件 | 完成；[v0.1.0](https://github.com/Proton1917/Rust-Cordis/releases/tag/v0.1.0) 已发布 |
 | | M23 | SDK 动态调用 | 计划中 |
 
 每个里程碑一个提交，须通过格式、clippy、全部测试（M18 时 307 条）、177 条一致性矩阵、`unsafe` 审计和行数预算检查。逐项记录见 [PROGRESS](docs/PROGRESS.md)，各阶段验收摘要见 [使用指南](docs/guide.md#里程碑验收摘要m0m18)。

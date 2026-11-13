@@ -110,9 +110,8 @@ async def healthy_pages(case, original):
     return counts
 
 
-async def one_fault(case, kind, frames):
+async def one_fault(case, kind, frames, original):
     """DOC-16 §11：向已有真实页面连接注入单次故障，等待该页实例回收。"""
-    original = case.status()
     previous_groups = {group["name"] for group in original["groups"]}
     page = await case.context.new_page()
     fault_groups = set()
@@ -142,10 +141,16 @@ async def one_fault(case, kind, frames):
         assert result["closed"], result
     finally:
         await page.close()
-    await case.wait(
-        lambda: all(item["group"] not in fault_groups for item in case.status()["instances"]),
-        f"{kind} 页面子实例回收",
-    )
+    def reclaimed():
+        snapshot = case.status()
+        current_groups = {group["name"] for group in snapshot["groups"]}
+        fault_groups.update(current_groups - previous_groups)
+        return (
+            current_groups.isdisjoint(fault_groups)
+            and all(item["group"] not in fault_groups for item in snapshot["instances"])
+        )
+
+    await case.wait(reclaimed, f"{kind} 页面及重连子实例回收")
     result["healthy_counts"] = await healthy_pages(case, original)
     result["closed_groups"] = sorted(fault_groups)
     result["remaining_instances"] = identity(case.status())
@@ -160,6 +165,7 @@ async def run(case):
         "健康页面及等待服务进入 Active",
     )
     nested = encoded({"notification": {"method": "channel_open", "params": {"channel": 1, "metadata": None}}})
+    original = case.status()
     results = {}
     for kind, frames in (
         ("oversized", []),
@@ -167,6 +173,6 @@ async def run(case):
         ("flood", []),
         ("nested", [nested]),
     ):
-        results[kind] = await one_fault(case, kind, frames)
+        results[kind] = await one_fault(case, kind, frames, original)
     case.save("channel-faults.json", results)
     return results

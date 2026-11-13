@@ -60,10 +60,11 @@ impl Manager {
             Some(_) => return Err(error(2, "Scoped 元数据需要映射")),
         };
         fields.retain(|(key, _)| !matches!(key, Value::Text(key) if key.starts_with("cordis.")));
-        let caller = view
-            .context
-            .extension::<TrustedCall>()
-            .expect("加载上下文持有核心调用身份");
+        let caller = view.context.extension::<TrustedCall>().ok_or_else(|| {
+            let failure = error(4, "Scoped 绑定缺少受信调用身份");
+            self.0.context.logger().error(failure.message.clone());
+            failure
+        })?;
         fields.extend(caller.fields.clone());
         Ok(Value::Map(fields))
     }

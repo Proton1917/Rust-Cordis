@@ -108,7 +108,7 @@ ADR-0046 的 M22 提取与受信身份实现后，代码行与总行如下。sup
 | crate | 目标 / 上限 | 实际代码行 / 总行 |
 |---|---:|---:|
 | cordis-routing | 500 / 800 | 736 / 828 |
-| cordis-supervisor | 4500 / 5500；M22 结束至多 5450 | 5444 / 5895 |
+| cordis-supervisor | 4500 / 5500；M22 结束至多 5450 | 5445 / 5896 |
 | cordis-channels | 700 / 1200 | 250 / 277 |
 | cordis-web-deployment | 1000 / 1500 | 870 / 939 |
 | cordis-runtime | 4500 / 5500 | 5400 / 5933 |

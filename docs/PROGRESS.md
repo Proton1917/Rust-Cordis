@@ -7,18 +7,20 @@
 | 项 | 值 |
 |---|---|
 | 最近完成的实现与检查 | M22：HTTP 路由、通用字节流、页面调用来源、密钥服务与三语言脚手架；AU-19–AU-26、RM-11 |
-| 当前里程碑 | M22 实现与验收完成，等待设计方复核；M21 已通过复核 |
-| 当前验证 | 工作区 336 项用例（含 2 项文档用例）通过；RM-11 独立测量通过。fmt、clippy、177 条矩阵、unsafe、Miri 13 条边界及布局通过。初次失败按影响范围修复与补测，完整记录见 M22 节 |
-| 下一步 | 等待 M22 设计方复核；通过后按 30f61b6a 发布 macOS arm64 v0.1.0、验证下载包并清理编译缓存，再按 ADR-0047 实施 M23。主会话独立执行，编译共用 target/shared |
+| 当前里程碑 | M22、v0.1.0 发布与 review 跟进完成；按 ADR-0047 进入 M23 |
+| 当前验证 | review 的 cargo test --workspace --no-fail-fast 一次通过：336 项用例、0 失败，1 项独立测量保持忽略；与全量运行并行的故障页五轮全部通过。fmt 与 supervisor 全目标 clippy 通过，七文件发布候选与 secrets 配置通过 |
+| 下一步 | 提交 review 修正，按 ADR-0047 实施 M23 动态调用、AU-27–AU-30 与文档更新；核心及 ABI 以本次 review 为基线保持。M23 经复核后发布 v0.2.0，预编译包加入 secrets。主会话独立执行 |
+| M22 复核跟进 | 439880c9：全量运行的 invalid_channel_frames_and_flood_preserve_other_pages 出现 KeyError，单独三轮通过；分析自动重连的新页面组与回收等待，修改限测试。trusted.rs 的 expect 改为内部错误和诊断，supervisor 保持至多 5450 行。两项安排在 v0.1.0 后、M23 前的 review 提交 |
+| 发布复核跟进 | 0d538651：设计方下载核验 v0.1.0 通过；release notes 说明 secrets 在 v0.1.0 从固定 rev f8729ac 源码构建，经 cordis pack 交付。v0.2.0 起把 secrets 纳入预编译包，打包脚本与 file/grants、0600 配置说明纳入同一 review 提交 |
 | M22 边界 | 按设计方三项裁决：内核、up、channels、types、process 与 ABI 相对 df05064 保持；supervisor 先提取到 routing 再添加受信调用元数据，结束时至多 5450 代码行；web-deployment 限页面来源，runtime 限 service install |
 | M22 受信信息 | 核心对 scoped 调用追加直接调用方 cordis.caller 与页面的 cordis.page；任何 intercept 来源提交 cordis.* 返回权限错误。secrets 以自己的 grants 配置结合可信调用方鉴权。机密由插件读取和解释，核心转交不透明载荷；AU-25/26 已搜索最详细日志、状态、检查点和错误中的测试值 |
 | M22 页面授权 | 22518c32 裁决：后端 caller={instance}，页面 caller={page_of} 且省略 instance；两者描述直接调用方。secrets 只接受 instance 授权，后端处理页面调用时仍以自己的 instance 读取密钥。三语言 helper 与全栈场景按此验证 |
 | M22 实际故障 | 独立线程 RPC 的 reactor 问题已按批准范围修复；Bridge::invoke 与 sleep/plugin/effect_wait/emit_async 进入宿主执行器。普通线程、自有 Tokio、取消与取消后继续调用场景通过，原失败和修复日志归档在 target/http-m22/evidence |
-| 发布准备 | macOS arm64 六个程序/库的路径重映射 release 编译已通过，30.92 秒，产物在 target/shared/release，日志在 target/release-v0.1.0/evidence；标签、上传、下载验证与清理均待 M22 后的发布安排 |
+| 发布 | v0.1.0 指向 f8729ac；资产 cordis-v0.1.0-aarch64-apple-darwin.tar.gz 为 10,065,291 字节。六个 arm64 程序/库的路径匹配为 0，ad-hoc 签名通过；下载后的版本、HTTP 200 与退出码 0 已验证。设计方独立下载核验通过 |
 | M20 评审跟进 | segmentation_fault_isolates_group 的等待修正及五轮稳定性验收已完成；supervisor 保持 5480/5500 代码行 |
 | M21 性能结果 | RM-7 三方向各 10000 次，RM-8 三次替换完成。RM-9 首轮中位数比 1.07711183；停载重测中位数比 0.95774113、最大值比 0.90793525，满足原 1.05/1.15 判据。完整样本与测量条件并列归档 |
 | 后续事项 | ADR-0045 静态分派候选保持暂停，保存在 target/phase3-acceptance/m21/rm9-candidate 与 rm9-analysis。两轮前 1–4 轮偏高、比值相差约 12%；预热长度与交替采样方法留作独立研究 |
-| 清理 | 用户授权清理已执行，target 从 60G 降至 30G；代理编译根、主编译 incremental 和旧里程碑二进制已释放。具体路径与空间实测见 M21 小节 |
+| 清理 | v0.1.0 发布后清理已执行：target 从 43G 降至 5.4G，目录占用减少 40,461,443,072 字节，文件系统可用空间增加 40,388,063,232 字节。debug/shared 及本次验证程序副本已释放，证据与指定目录保留 |
 | 执行安排 | 用户要求关闭全部子代理，由主会话独立完成 M22 与后续 M23；编译沿默认 target/debug 与 target/shared |
 | 后续顺序 | 555a5e1f：M22 提交并经设计方复核 → v0.1.0（M22 标签）与缓存清理 → 按 ADR-0047 实施 M23 动态调用 → 复核后 v0.2.0。ADR-0047 与设计方阶段表改动随 M22 提交 |
 | 验收资料 | docs/measurements/m21-acceptance.md 汇总 AU-1–AU-18；性能、语言、完整运行时和 native 稳定性另有原始 JSON。网页状态与操作见 docs/design/flow/index.html |
@@ -803,6 +805,17 @@ RM-9 两次均为每实现固定 9 轮、每轮预热 10000 次、计量 100000 
 - Y-9：README、guide、DOC-13/15、ADR-0039/0041/0046/0048、skill、解释页与页面流程同步。skill 的 quick_validate 通过；三语言 HTTP 模板已真实构建运行。设计方 ADR-0047 与阶段表一并提交，M23 按后续顺序执行。
 - 可视资料：新增四张业务画面已查看并写入 `docs/design/flow/screenshots/`。流程图的应用外壳组、详情导航及移动布局已查看，文档画面在 `target/http-m22/evidence/docs/`；内置浏览器服务返回不可用后沿项目既有 Playwright 流程执行，浏览器进程在 finally 中退出。
 - 发布与缓存：v0.1.0 等待 M22 复核后发布，原 M21 release 编译作为早期准备保留；发布构建将使用 M22 源码及路径重映射。当前编译缓存服务于复核和发布，清理按已授权的发布后顺序执行。
+
+### M22 复核修正与 v0.1.0
+
+- 发布：标签 v0.1.0 指向 f8729ac777881607f208e434a9a6074426188a84，GitHub Release 为 https://github.com/Proton1917/Rust-Cordis/releases/tag/v0.1.0 。资产为 cordis-v0.1.0-aarch64-apple-darwin.tar.gz，10,065,291 字节。M22 release 编译 14.83 秒；HOME、仓库、Cargo registry 与 rustup 路径已重映射。六个 Mach-O 均为 arm64，`strings <文件> | grep -i -E 'gordongauerk|/Users/'` 的匹配全部为 0，ad-hoc 签名通过。记录见 [发布数据](measurements/release-v0.1.0.json)。
+- 下载运行：首次发现随包样例的 plugin_dir 位于错误层级，调整为 runtime.plugin_dir 后替换同名附件。再次通过 gh 下载解开，cordis version 为 0.1.0，HTTP 实例 Active、GET / 为 200、正文 1534 字节，SIGTERM 退出 0。设计方 0d538651 独立下载确认标签、架构、字符串、空标题和 SIGINT 退出通过；原日志分别在 target/release-v0.1.0/evidence/m22 与 target/claude-edits/evidence/release-v0.1.0-check.txt。
+- 439880c9 的测试同步：故障页面连接关闭后，网页宿主按默认 500 ms 间隔自动重连；旧 attached 只记首次分组，而下一步骤把整个快照作为健康基线，导致已回收的 web-29-flood-client 进入健康断言。固定四步共用的健康基线，并在 page.close 后持续收集新增组，等待这些组及所属实例回收；保留 HTTP、健康页面纪元和实际控件操作的原判据。
+- 负载验证：与 `cargo test --workspace --no-fail-fast` 并行，定向执行 invalid_channel_frames_and_flood_preserve_other_pages 五轮，退出码全部为 0，每轮开始与结束时全量测试都在运行；耗时 37.024、12.216、11.656、17.906、11.588 秒。逐轮记录见 [五轮结果](measurements/m22-review-rounds.json)，命令与日志在 target/http-m22/evidence/review。
+- 身份缺席：trusted.rs 的 expect 改为返回 code 4，并写入固定内容的错误诊断。supervisor 为 5445 / 5896，核心九 crate 为 19138 / 21407，保持 5450 行约束；fmt 与 supervisor 全目标 clippy 通过。
+- 0d538651 的发布内容：v0.1.0 发布页已写明 secrets 从固定 rev f8729ac 源码构建，经 cordis pack 交付；v0.2.0 起随包提供。新增 tools/release.py 与 tools/release/README.md、cordis.toml，共用 target/shared 编译，按显式清单装配七个程序和动态库。包含 secrets 的 review 候选实际构建，七个 arm64 文件的签名及路径检查通过；README 的 file/grants 配置以 0600 文件启动 secrets，Active 且退出 0。记录位于 target/releases/v0.1.0-review/evidence。
+- 完整检查：并行负载的 workspace 最终退出 0，共 336 项通过、0 失败；RM-11 测量入口按原约定独立执行。复核跟进结果见 [review 数据](measurements/m22-review.json)。发布进度页面的桌面与移动画面已查看，记录在 target/http-m22/evidence/docs/release-summary-*、release-progress-*。
+- 发布后清理：进程查询确认构建及测试退出后，删除 target/debug、target/shared、v0.1.0 的装配与下载验证副本、含 secrets 的 review 候选程序。保留已发布 tar、日志、JSON、截图、rm9-candidate/analysis、review-fix、review-m3、review-m4 及 claude-edits。`du -sh target` 为 43G→5.4G；目录占用减少 40,461,443,072 字节，文件系统可用空间增加 40,388,063,232 字节。逐项路径与前后值见 [清理记录](measurements/release-v0.1.0-cleanup.json)。
 
 ## 第二阶段候选与恢复记录
 

@@ -1,0 +1,9 @@
+[runtime]
+plugin_dir = "plugins"
+checkpoint_ms = 1000
+
+[instance.http]
+plugin = "libcordis_http.dylib"
+component = "http"
+forwarder = true
+config = { listen = "127.0.0.1:8080" }

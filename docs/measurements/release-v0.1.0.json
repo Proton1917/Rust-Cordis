@@ -1,0 +1,29 @@
+{
+  "tag": "v0.1.0",
+  "commit": "f8729ac777881607f208e434a9a6074426188a84",
+  "url": "https://github.com/Proton1917/Rust-Cordis/releases/tag/v0.1.0",
+  "asset": "cordis-v0.1.0-aarch64-apple-darwin.tar.gz",
+  "asset_bytes": 10065291,
+  "platform": "aarch64-apple-darwin",
+  "build_seconds": 14.83,
+  "path_remapping": ["HOME=/home/build", "workspace=/src", "cargo_registry=/cargo", "rustup=/rustup"],
+  "binary_scan": {
+    "command": "strings <file> | grep -i -E 'gordongauerk|/Users/'",
+    "files": ["bin/cordis", "bin/cordis-host", "bin/cordis-dev", "plugins/libcordis_http.dylib", "plugins/libcordis_watch.dylib", "plugins/window/cordis-window"],
+    "matches": 0,
+    "architecture": "arm64",
+    "signature": "ad-hoc",
+    "signature_verification": "passed"
+  },
+  "download_validation": {
+    "version": "cordis 0.1.0",
+    "http_instance": "active",
+    "get_root_status": 200,
+    "response_bytes": 1534,
+    "exit_code": 0
+  },
+  "configuration_fix": "下载验证发现 plugin_dir 的 TOML 层级错误，改入 runtime 后替换附件；再次下载运行通过。",
+  "secrets_delivery": "v0.1.0 使用固定 rev f8729ac 源码与 cordis pack；v0.2.0 起加入预编译包。",
+  "evidence": "target/release-v0.1.0/evidence/m22",
+  "design_review": "0d538651：设计方下载核验通过，核验记录 target/claude-edits/evidence/release-v0.1.0-check.txt"
+}

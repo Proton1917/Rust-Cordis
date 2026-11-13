@@ -1,0 +1,42 @@
+[
+  {
+    "round": 1,
+    "start_unix": 1794599674.654955,
+    "elapsed_seconds": 37.02416706085205,
+    "workspace_running_at_start": true,
+    "workspace_running_at_end": true,
+    "exit_code": 0
+  },
+  {
+    "round": 2,
+    "start_unix": 1794599711.679459,
+    "elapsed_seconds": 12.215852737426758,
+    "workspace_running_at_start": true,
+    "workspace_running_at_end": true,
+    "exit_code": 0
+  },
+  {
+    "round": 3,
+    "start_unix": 1794599723.8956742,
+    "elapsed_seconds": 11.655771732330322,
+    "workspace_running_at_start": true,
+    "workspace_running_at_end": true,
+    "exit_code": 0
+  },
+  {
+    "round": 4,
+    "start_unix": 1794599735.551768,
+    "elapsed_seconds": 17.906247854232788,
+    "workspace_running_at_start": true,
+    "workspace_running_at_end": true,
+    "exit_code": 0
+  },
+  {
+    "round": 5,
+    "start_unix": 1794599753.458504,
+    "elapsed_seconds": 11.587569236755371,
+    "workspace_running_at_start": true,
+    "workspace_running_at_end": true,
+    "exit_code": 0
+  }
+]

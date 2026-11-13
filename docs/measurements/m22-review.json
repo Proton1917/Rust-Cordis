@@ -1,0 +1,28 @@
+{
+  "baseline": "f8729ac",
+  "channel_faults": {
+    "cause": "故障页面自动重连产生新分组，首次 attached 的分组集合遗漏后续连接，下一步骤将短暂残留实例纳入健康快照。",
+    "change": "固定四步共用的健康基线；关闭故障页后逐次收集新增分组，等待分组与实例全部回收。",
+    "load_command": "cargo test --workspace --no-fail-fast",
+    "rounds": 5,
+    "passed": 5,
+    "round_evidence": "m22-review-rounds.json"
+  },
+  "workspace": {"passed": 336, "failed": 0, "ignored_measurements": 1, "exit_code": 0},
+  "trusted_metadata": {"missing_identity_error": 4, "diagnostic": "Scoped 绑定缺少受信调用身份", "supervisor_code_lines": 5445, "supervisor_total_lines": 5896},
+  "checks": {"fmt": "passed", "supervisor_all_targets_clippy": "passed"},
+  "release_packaging": {
+    "tool": "tools/release.py",
+    "binary_count": 7,
+    "includes": "libcordis_secrets.dylib",
+    "architecture": "arm64",
+    "path_matches": 0,
+    "signatures": "valid",
+    "secrets_file_mode": "0600",
+    "secrets_instance": "active",
+    "run_exit_code": 0,
+    "candidate_scope": "M22 后的 review 工作区候选，供打包脚本验收",
+    "evidence": "target/releases/v0.1.0-review/evidence"
+  },
+  "evidence": "target/http-m22/evidence/review"
+}
