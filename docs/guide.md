@@ -203,10 +203,11 @@ macOS 动态库扩展名为 `.dylib`，Linux 使用 `.so`。验证成功后，�
 `cordis pack` 在目标平台执行构建和装配，目前接受 `aarch64-apple-darwin` 与 `x86_64-unknown-linux-gnu`。部署配置中的 `instance.plugin` 使用具体动态库路径或带 `cordis-plugin.toml` 的插件目录。下面在仓库根目录准备一个实际内存 KV 部署：
 
 ```bash
-cargo build --release --target-dir target \
+CARGO_ENCODED_RUSTFLAGS="$(conda run -n base python tools/build_paths.py)" \
+  cargo build --release --target-dir target/shared \
   -p cordis-runtime -p cordis-host -p cordis-dev -p kv-mem
 mkdir -p target/pack-demo/plugins
-cp target/release/libkv_mem.dylib target/pack-demo/plugins/
+cp target/shared/release/libkv_mem.dylib target/pack-demo/plugins/
 ```
 
 保存以下内容为 `target/pack-demo/cordis.toml`：
@@ -229,10 +230,10 @@ component = "kv-store"
 执行发布命令：
 
 ```bash
-target/release/cordis pack \
+target/shared/release/cordis pack \
   --project target/pack-demo \
   --target aarch64-apple-darwin \
-  --runtime-dir "$PWD/target/release" \
+  --runtime-dir "$PWD/target/shared/release" \
   --out dist/
 ```
 
@@ -241,10 +242,11 @@ target/release/cordis pack \
 macOS 桌面部署可继续加入 HTTP 和窗口插件：
 
 ```bash
-cargo build --release --target-dir target -p cordis-http -p cordis-window
+CARGO_ENCODED_RUSTFLAGS="$(conda run -n base python tools/build_paths.py)" \
+  cargo build --release --target-dir target/shared -p cordis-http -p cordis-window
 mkdir -p target/pack-demo/plugins/window
-cp target/release/libcordis_http.dylib target/pack-demo/plugins/
-cp target/release/cordis-window plugins/window/cordis-plugin.toml \
+cp target/shared/release/libcordis_http.dylib target/pack-demo/plugins/
+cp target/shared/release/cordis-window plugins/window/cordis-plugin.toml \
   target/pack-demo/plugins/window/
 ```
 
@@ -263,10 +265,10 @@ config = { title = "Cordis Demo" }
 ```
 
 ```bash
-target/release/cordis pack \
+target/shared/release/cordis pack \
   --project target/pack-demo \
   --target aarch64-apple-darwin \
-  --runtime-dir "$PWD/target/release" \
+  --runtime-dir "$PWD/target/shared/release" \
   --app --out applications/
 ```
 
@@ -275,6 +277,21 @@ target/release/cordis pack \
 `--sign` 指定本机签名身份并启用 hardened runtime，`--allow-third-party` 为宿主设置第三方库装载权限。启用 `require_verified` 的部署在签名改变库字节后重新执行原契约套件，验证副本及真实结果一起发布。配置、签名及可移动验证副本的规则见 [ADR-0036](adr/0036-release-packaging.md)。
 
 `pack --target-dir <目录>` 指定复用的 Cargo 编译目录，缺省为部署项目的 `target/`；相对目录以部署项目为基准。
+
+### 构建路径隐私
+
+cordis-dev 0.2.1 的 pack 对 Cargo 构建的原生库与进程程序默认映射 HOME、CARGO_HOME、Rust sysroot 和项目目录。用户的 CARGO_ENCODED_RUSTFLAGS 或 RUSTFLAGS 保留在默认参数之后；规则与官方发布共用 tools/path-remapping.json。macOS 动态库在编译期采用相对安装名称。
+
+核心和宿主从 `--runtime-dir` 复制，交付前与其他 Mach-O、ELF 及 TOML、JSON、plist 清单一起接受完整字节检查。检测到当前 HOME 或用户名时，打包返回错误，并列出相对文件名及命中次数。按以下命令从本仓库构建可交付的核心、宿主及官方插件，再将产物目录传给 `--runtime-dir`：
+
+```bash
+CARGO_ENCODED_RUSTFLAGS="$(conda run -n base python tools/build_paths.py)" \
+  cargo build --release --target-dir target/shared \
+  -p cordis-runtime -p cordis-host -p cordis-dev \
+  -p cordis-http -p cordis-window -p cordis-secrets
+```
+
+应用清单应使用可移植的相对路径。明确接受路径披露时，可传入 `--allow-private-paths`，保留警告并继续生成发布包。新 watch 0.1.1 使用 cordis.runtime@1.4，配套核心为 0.1.1；已有 1.3 读取方继续兼容。详细机制见 [ADR-0049](adr/0049-page-projections-and-package-paths.md)。
 
 ### 附带独立 Python 与 Node
 

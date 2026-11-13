@@ -208,7 +208,7 @@ fn write_new(path: &Path, content: &str) -> Result<()> {
     Ok(())
 }
 
-const CONFIGURATION: &str = r#"requires_core = ">=0.1.0,<0.2.0"
+const CONFIGURATION: &str = r#"requires_core = ">=0.1.1,<0.2.0"
 
 [runtime]
 plugin_dir = "target/debug"

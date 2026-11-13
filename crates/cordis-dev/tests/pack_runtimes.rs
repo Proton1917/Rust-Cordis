@@ -104,6 +104,7 @@ fn tools(root: &Path, case: &TestGuard, directory: &Path) -> PathBuf {
         .arg(root.join("crates/cordis-runtime/fixtures/plugin/Cargo.toml"));
     for (index, command) in commands.iter_mut().enumerate() {
         command.current_dir(root).arg("--target-dir").arg(&target);
+        cordis_testkit::build::remap_paths(command, root).unwrap();
         checked(command, &directory.join(format!("tools-{index}.log")));
     }
     snapshot_artifacts(

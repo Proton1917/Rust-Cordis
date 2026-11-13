@@ -124,6 +124,18 @@ impl View {
         let mut snapshot = manager.snapshot();
         let diagnostics = self.diagnostics.lock().clone();
         if let Some(web) = diagnostics.web.as_ref().and_then(Weak::upgrade) {
+            let projections: BTreeMap<_, _> = diagnostics
+                .desired
+                .keys()
+                .flat_map(|name| {
+                    web.child_names(name)
+                        .into_iter()
+                        .map(|child| (child, name.clone()))
+                })
+                .collect();
+            for instance in &mut snapshot.instances {
+                instance.page_of = projections.get(&instance.name).cloned();
+            }
             snapshot.instances.extend(web.snapshot());
         }
         if let Some(sources) = &diagnostics.source_bindings {
@@ -181,6 +193,7 @@ fn complete_instances(snapshot: &mut Snapshot, diagnostics: &Diagnostics) {
         snapshot
             .instances
             .push(cordis_supervisor::manager::InstanceSnapshot {
+                page_of: None,
                 name: name.clone(),
                 group: settings
                     .group
@@ -213,6 +226,7 @@ fn complete_instances(snapshot: &mut Snapshot, diagnostics: &Diagnostics) {
 
 fn runtime_instance(instance: InstanceSnapshot) -> InstanceInfo {
     InstanceInfo {
+        page_of: instance.page_of,
         name: instance.name,
         plugin: instance.plugin,
         component: instance.component,

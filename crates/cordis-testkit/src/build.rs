@@ -7,6 +7,15 @@ use std::{
     sync::atomic::{AtomicU64, Ordering},
 };
 
+/// 发布验证的编译命令采用与 pack 相同的路径映射，产物目录继续由调用方选择。
+pub fn remap_paths(command: &mut std::process::Command, project: &Path) -> io::Result<()> {
+    command.env(
+        "CARGO_ENCODED_RUSTFLAGS",
+        super::build_paths::encoded_flags(project)?,
+    );
+    Ok(())
+}
+
 /// 项目规则 11：解析当前会话编译根；相对环境路径以工作区为基准。
 pub fn target_root(workspace: &Path) -> PathBuf {
     match std::env::var_os("CARGO_TARGET_DIR") {

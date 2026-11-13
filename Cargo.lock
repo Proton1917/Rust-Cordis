@@ -455,7 +455,7 @@ dependencies = [
 
 [[package]]
 name = "cordis-dev"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "clap",
  "cordis-idl",
@@ -464,6 +464,7 @@ dependencies = [
  "cordis-types",
  "cordis-up",
  "flate2",
+ "memchr",
  "object 0.41.0",
  "pathdiff",
  "plist",
@@ -550,7 +551,7 @@ dependencies = [
 
 [[package]]
 name = "cordis-runtime"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "clap",
  "cordis",
@@ -626,11 +627,12 @@ version = "0.1.0"
 dependencies = [
  "cordis",
  "futures-util",
+ "serde_json",
 ]
 
 [[package]]
 name = "cordis-types"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "serde",
 ]
@@ -649,7 +651,7 @@ dependencies = [
 
 [[package]]
 name = "cordis-watch"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "cordis-sdk",
  "notify",

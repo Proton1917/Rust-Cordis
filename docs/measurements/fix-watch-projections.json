@@ -1,0 +1,135 @@
+{
+  "batch": {
+    "state": "succeeded",
+    "id": "1e395fe8-8b9f-4d1a-9401-8dc851d13546"
+  },
+  "drafts": [
+    "第1页待保存草稿",
+    "第2页待保存草稿"
+  ],
+  "documents_preserved": true,
+  "shells_preserved": true,
+  "explicit_projection_rejected": {
+    "state": "rejected",
+    "id": "explicit-page-target",
+    "error": {
+      "code": 4,
+      "message": "批次原实例 web-14-store 缺席",
+      "detail": null
+    }
+  },
+  "before": [
+    {
+      "name": "admin",
+      "state": "active",
+      "context": 5,
+      "page_of": null
+    },
+    {
+      "name": "http",
+      "state": "active",
+      "context": 7,
+      "page_of": null
+    },
+    {
+      "name": "notes",
+      "state": "active",
+      "context": null,
+      "page_of": null
+    },
+    {
+      "name": "store",
+      "state": "active",
+      "context": 9,
+      "page_of": null
+    },
+    {
+      "name": "watch",
+      "state": "active",
+      "context": 10,
+      "page_of": null
+    },
+    {
+      "name": "web-14-notes",
+      "state": "active",
+      "context": 15,
+      "page_of": "notes"
+    },
+    {
+      "name": "web-14-store",
+      "state": "active",
+      "context": 17,
+      "page_of": "store"
+    },
+    {
+      "name": "web-19-notes",
+      "state": "active",
+      "context": 20,
+      "page_of": "notes"
+    },
+    {
+      "name": "web-19-store",
+      "state": "active",
+      "context": 22,
+      "page_of": "store"
+    }
+  ],
+  "after": [
+    {
+      "name": "admin",
+      "state": "active",
+      "context": 5,
+      "page_of": null
+    },
+    {
+      "name": "http",
+      "state": "active",
+      "context": 7,
+      "page_of": null
+    },
+    {
+      "name": "notes",
+      "state": "active",
+      "context": null,
+      "page_of": null
+    },
+    {
+      "name": "store",
+      "state": "active",
+      "context": 24,
+      "page_of": null
+    },
+    {
+      "name": "watch",
+      "state": "active",
+      "context": 10,
+      "page_of": null
+    },
+    {
+      "name": "web-14-notes",
+      "state": "active",
+      "context": 15,
+      "page_of": "notes"
+    },
+    {
+      "name": "web-14-store",
+      "state": "active",
+      "context": 25,
+      "page_of": "store"
+    },
+    {
+      "name": "web-19-notes",
+      "state": "active",
+      "context": 20,
+      "page_of": "notes"
+    },
+    {
+      "name": "web-19-store",
+      "state": "active",
+      "context": 27,
+      "page_of": "store"
+    }
+  ],
+  "exit": 0,
+  "evidence": "target/test-evidence/web-watch-replace-71559-0/web-sdk/web-watch-replace-71559-0/case"
+}

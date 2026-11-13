@@ -62,6 +62,9 @@ pub struct InstanceInfo<F = String> {
     pub context: Option<u64>,
     #[serde(default)]
     pub reference: Option<String>,
+    /// DOC-15 §11：页面投影所属的部署实例，由核心网页部署事实填写。
+    #[serde(default)]
+    pub page_of: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

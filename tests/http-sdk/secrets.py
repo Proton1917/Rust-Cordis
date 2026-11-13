@@ -24,8 +24,8 @@ def prepare(options, label, mode):
     configuration = '[pack]\nname="secret-boundary"\nassets=["public"]\n[runtime]\ncheckpoint_ms=50\n[instance.console]\nplugin="libconsole_log.dylib"\ncomponent="console"\nconfig={level=3}\n'
     configuration += '[instance.secrets]\nplugin="libcordis_secrets.dylib"\ncomponent="secrets"\nconfig={file="public/credentials.env",grants={reader-a=["ALPHA"],reader-b=["BETA"]}}\n'
     for reader in ("reader-a", "reader-b", "unlisted"):
-        child = f',child_result={json.dumps(str(project / "child.json"))}' if reader == "reader-a" else ""
-        configuration += f'[instance.{reader}]\nplugin="libhttp_test_native.dylib"\ncomponent="secrets-probe"\ngroup={json.dumps(reader)}\nconfig={{names=["ALPHA","BETA"],result={json.dumps(str(project / (reader + ".json")))}{child}}}\n'
+        child = ',child_result="child.json"' if reader == "reader-a" else ""
+        configuration += f'[instance.{reader}]\nplugin="libhttp_test_native.dylib"\ncomponent="secrets-probe"\ngroup={json.dumps(reader)}\nconfig={{names=["ALPHA","BETA"],result={json.dumps(reader + ".json")}{child}}}\n'
     (project / "cordis.toml").write_text(configuration)
     return project
 

@@ -4,6 +4,7 @@ mod artifacts;
 mod files;
 mod platform;
 mod plugins;
+mod privacy;
 mod secrets;
 mod signing;
 
@@ -37,6 +38,9 @@ pub struct Options {
     allow_third_party: bool,
     #[arg(long)]
     runtime_dir: Option<PathBuf>,
+    /// 将发布路径隐私检查的命中显式降级为警告。
+    #[arg(long)]
+    allow_private_paths: bool,
 }
 
 struct Plan {
@@ -91,6 +95,7 @@ pub async fn run(options: Options) -> Result<()> {
     plugins::verification(&plan, &artifacts, &deployment, &native).await?;
     service(&plan, &binaries, &deployment)?;
     signing::finish(&plan, &options, &destination, &code).await?;
+    privacy::check(&destination, options.allow_private_paths)?;
     let delivered = if options.app {
         destination
     } else {

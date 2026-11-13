@@ -128,7 +128,7 @@ fn register_services(
         Arc::new(DataDirectory(store.clone())),
     )?;
     manager.provide_builtin(
-        "cordis.runtime@1.3",
+        "cordis.runtime@1.4",
         vec!["snapshot".into()],
         Arc::new(RuntimeInfo(view.clone())),
     )?;

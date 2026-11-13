@@ -1,0 +1,7 @@
+[
+  ["flag", "-Crpath=yes"],
+  ["home", "/home/build"],
+  ["cargo_home", "/cargo"],
+  ["sysroot", "/rustup"],
+  ["project", "/src"]
+]

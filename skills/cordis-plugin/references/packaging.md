@@ -13,6 +13,8 @@ cordis pack --project . --target aarch64-apple-darwin --out dist --app
 
 `--target-dir` 指定 Cargo 产物目录，相对路径按项目解析；`--runtime-dir` 指定发布核心 cordis 与 cordis-host 的所在目录。目标平台检查使用实际可执行文件的机器类型，核心版本须满足项目 requires_core。
 
+cordis-dev 0.2.1 默认重映射 Cargo 构建的 HOME、CARGO_HOME、sysroot 和项目路径，并保留用户环境编译参数。交付前按完整字节检查所有 Mach-O、ELF 及清单，检测到当前 HOME 或用户名时返回错误，诊断列出相对文件名和命中次数。预构建的核心、宿主及第三方程序同样参与检查；它们应采用发布构建和同一套路径映射。仓库的 tools/build_paths.py 生成与 pack 共用的 CARGO_ENCODED_RUSTFLAGS，具体命令见 guide 的“构建路径隐私”。用户明确接受路径披露时可使用 --allow-private-paths，将检查降为警告。
+
 普通发布输出 tar.gz，包内包含核心、宿主、插件、配置、资源和服务入口。macOS `.app` 把程序放在 Contents/MacOS，把部署文件放在 Contents/Resources；桌面应用配置 HTTP 与 window 插件，由窗口显示同一网页宿主。
 
 ## Python 与 Node

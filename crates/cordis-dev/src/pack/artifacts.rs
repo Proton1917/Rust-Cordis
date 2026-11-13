@@ -1,6 +1,6 @@
 //! DOC-15 §12.2：Cargo 的结构化构建消息提供发布目标，目标机器类型另由产物检查。
 
-use crate::{Result, tooling};
+use crate::{Result, build_paths, tooling};
 use serde_json::Value;
 use std::{
     collections::BTreeMap,
@@ -20,6 +20,11 @@ pub async fn build(project: &Path, target: &str, target_dir: &Path) -> Result<Ar
         Ok(_) => {
             tooling::command(
                 vec![
+                    "env".into(),
+                    format!(
+                        "CARGO_ENCODED_RUSTFLAGS={}",
+                        build_paths::encoded_flags(project)?
+                    ),
                     tooling::executable("cargo", None)?
                         .to_string_lossy()
                         .into_owned(),

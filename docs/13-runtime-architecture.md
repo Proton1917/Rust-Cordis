@@ -173,6 +173,8 @@
 - `status.json`：每个库的插件名、版本、副本序号和路径、是否验证、租约数、静止状态；每个实例的状态、纪元、最近一次替换报告。StatusWriter 每 100 ms 发布一次快照，管理回复到达时文件可能仍保留上一帧；调用结果以管理回复为准，批次的受理与完成按 BatchTicket 和 last_batch 区分。使用文件观察操作完成时，同时等待对应的替换报告、批次编号及所需实例状态。
 - 信号：`SIGTERM`/`SIGINT` 触发 `DOC-11` §9 的有序退出。
 
+`cordis.runtime@1.4` 的实例快照增加可选 `page_of`，由 runtime 根据网页部署记录填写所属部署实例名，普通实例为 null。1.3 读取方沿用自描述编码的兼容规则。watch 0.1.1 根据该字段选取部署实例作为替换目标；页面投影随网页部署统一重建。归属与兼容依据见 [ADR-0049](adr/0049-page-projections-and-package-paths.md)。
+
 `deployment::Locations` 统一启动、status、配置重读与原生宿主参数中的目录。普通部署使用配置指定的插件与状态目录。macOS 应用从当前可执行文件定位 `Contents/Resources/cordis.toml`，包内插件作为发布来源保存；运行中的写入按下表放在包外。`pack.state_dir` 可指定状态位置，缺省为用户 `Library/Application Support/<pack.identifier>`（ADR-0036）。
 
 | 内容 | macOS 应用位置 |

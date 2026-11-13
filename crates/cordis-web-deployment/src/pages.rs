@@ -56,7 +56,8 @@ impl Deployment {
         live.registration.activate().await
     }
 
-    pub(super) fn child_names(&self, instance: &str) -> Vec<String> {
+    /// DOC-15 §11：查询当前部署拥有的页面子实例，供状态与替换事务读取归属事实。
+    pub fn child_names(&self, instance: &str) -> Vec<String> {
         self.live
             .lock()
             .get(instance)

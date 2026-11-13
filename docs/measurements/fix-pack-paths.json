@@ -1,0 +1,136 @@
+[
+  {
+    "file": "pack-native-0.1.0-aarch64-apple-darwin/plugins/plugin-1/libapi.dylib",
+    "host_load": "passed",
+    "load_commands": [
+      {
+        "command": "LC_ID_DYLIB",
+        "path": "@rpath/libapi.dylib"
+      },
+      {
+        "command": "LC_LOAD_DYLIB",
+        "path": "system"
+      },
+      {
+        "command": "LC_RPATH",
+        "path": "@loader_path/../../../../../../../.rustup/toolchains/1.96.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/lib"
+      }
+    ],
+    "signature": "valid",
+    "strings_private_matches": 0
+  },
+  {
+    "file": "pack-native-0.1.0-aarch64-apple-darwin/plugins/plugin-3/libcordis_http.dylib",
+    "host_load": "passed",
+    "load_commands": [
+      {
+        "command": "LC_ID_DYLIB",
+        "path": "@rpath/libcordis_http.dylib"
+      },
+      {
+        "command": "LC_LOAD_DYLIB",
+        "path": "system"
+      },
+      {
+        "command": "LC_LOAD_DYLIB",
+        "path": "system"
+      },
+      {
+        "command": "LC_RPATH",
+        "path": "@loader_path/../../../../../../.rustup/toolchains/1.96.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/lib"
+      }
+    ],
+    "signature": "valid",
+    "strings_private_matches": 0
+  },
+  {
+    "file": "pack-native-0.1.0-aarch64-apple-darwin/plugins/plugin-4/libwatch.dylib",
+    "host_load": "passed",
+    "load_commands": [
+      {
+        "command": "LC_ID_DYLIB",
+        "path": "@rpath/libwatch.dylib"
+      },
+      {
+        "command": "LC_LOAD_DYLIB",
+        "path": "system"
+      },
+      {
+        "command": "LC_LOAD_DYLIB",
+        "path": "system"
+      },
+      {
+        "command": "LC_LOAD_DYLIB",
+        "path": "system"
+      },
+      {
+        "command": "LC_LOAD_DYLIB",
+        "path": "system"
+      },
+      {
+        "command": "LC_RPATH",
+        "path": "@loader_path/../../../../../../../.rustup/toolchains/1.96.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/lib"
+      }
+    ],
+    "signature": "valid",
+    "strings_private_matches": 0
+  },
+  {
+    "file": "pack-native-0.1.0-aarch64-apple-darwin/plugins/plugin-2/libapp.dylib",
+    "host_load": "passed",
+    "load_commands": [
+      {
+        "command": "LC_ID_DYLIB",
+        "path": "@rpath/libapp.dylib"
+      },
+      {
+        "command": "LC_LOAD_DYLIB",
+        "path": "system"
+      },
+      {
+        "command": "LC_RPATH",
+        "path": "@loader_path/../../../../../../../.rustup/toolchains/1.96.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/lib"
+      }
+    ],
+    "signature": "valid",
+    "strings_private_matches": 0
+  },
+  {
+    "file": "pack-native-0.1.0-aarch64-apple-darwin/cordis",
+    "load_commands": [
+      {
+        "command": "LC_LOAD_DYLIB",
+        "path": "system"
+      },
+      {
+        "command": "LC_LOAD_DYLIB",
+        "path": "system"
+      },
+      {
+        "command": "LC_RPATH",
+        "path": "@loader_path/../../../../../../.rustup/toolchains/1.96.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/lib"
+      }
+    ],
+    "signature": "valid",
+    "strings_private_matches": 0
+  },
+  {
+    "file": "pack-native-0.1.0-aarch64-apple-darwin/cordis-host",
+    "load_commands": [
+      {
+        "command": "LC_LOAD_DYLIB",
+        "path": "system"
+      },
+      {
+        "command": "LC_LOAD_DYLIB",
+        "path": "system"
+      },
+      {
+        "command": "LC_RPATH",
+        "path": "@loader_path/../../../../../../.rustup/toolchains/1.96.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/lib"
+      }
+    ],
+    "signature": "valid",
+    "strings_private_matches": 0
+  }
+]

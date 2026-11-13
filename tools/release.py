@@ -7,6 +7,8 @@ import subprocess
 import time
 import tomllib
 
+from build_paths import encoded_flags
+
 
 ROOT = Path(__file__).resolve().parent.parent
 PROGRAMS = {
@@ -24,15 +26,8 @@ PACKAGES = ["cordis-runtime", "cordis-host", "cordis-dev", "cordis-http", "cordi
 def build(evidence):
     """ADR-0036：使用当前源码与共享编译目录，映射编译器保留的本机路径。"""
     revision = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
-    home = Path.home()
     environment = os.environ.copy()
-    environment.pop("CARGO_ENCODED_RUSTFLAGS", None)
-    environment["RUSTFLAGS"] = " ".join([
-        f"--remap-path-prefix={home}=/home/build",
-        f"--remap-path-prefix={ROOT}=/src",
-        f"--remap-path-prefix={home / '.cargo/registry'}=/cargo",
-        f"--remap-path-prefix={home / '.rustup'}=/rustup",
-    ])
+    environment["CARGO_ENCODED_RUSTFLAGS"] = encoded_flags(ROOT)
     environment["CORDIS_SOURCE_REVISION"] = revision
     environment["TMPDIR"] = str(ROOT / "target/tmp")
     target = Path(environment.get("CARGO_TARGET_DIR", ROOT / "target")) / "shared"
@@ -84,17 +79,18 @@ def component_versions():
 
 
 def inspect(package, evidence):
-    """发布隐私约束：每个 Mach-O 签名后运行 strings 与 grep，匹配时停止装包。"""
+    """发布隐私约束：签名后的完整文件字节匹配 HOME 和用户名，命中时停止装包。"""
     records = []
     with (evidence / "signatures.log").open("w") as signatures:
         for relative in PROGRAMS.values():
             binary = package / relative
             subprocess.run(["codesign", "--force", "--sign", "-", str(binary)], stdout=signatures, stderr=signatures, check=True)
             subprocess.run(["codesign", "--verify", "--strict", str(binary)], stdout=signatures, stderr=signatures, check=True)
-            strings = subprocess.check_output(["strings", str(binary)])
-            matches = subprocess.run(["grep", "-i", "-E", "gordongauerk|/Users/"], input=strings, capture_output=True)
-            (evidence / (binary.name + ".path-matches.txt")).write_bytes(matches.stdout)
-            if matches.returncode != 1:
+            contents = binary.read_bytes()
+            username = subprocess.check_output(["id", "-un"], text=True).strip()
+            counts = {"HOME": contents.count(os.environ["HOME"].encode()), "username": contents.count(username.encode())}
+            (evidence / (binary.name + ".path-matches.txt")).write_text(json.dumps(counts) + "\n")
+            if any(counts.values()):
                 raise RuntimeError(f"路径信息检查失败：{relative}")
             architecture = subprocess.check_output(["lipo", "-archs", str(binary)], text=True).strip()
             if architecture != "arm64":

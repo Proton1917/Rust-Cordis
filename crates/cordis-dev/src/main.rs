@@ -1,6 +1,8 @@
 #![forbid(unsafe_code)]
 //! DOC-15 §3.1、§12.1：独立开发命令生成项目与插件，运行管理交由 cordis。
 
+#[path = "../../../tools/build_paths.rs"]
+mod build_paths;
 mod idl;
 mod pack;
 mod receipts;

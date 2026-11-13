@@ -83,6 +83,8 @@ fn build(root: &Path, guard: &TestGuard, directory: &Path) -> PathBuf {
                 "cordis-http",
                 "-p",
                 "kv-mem",
+                "-p",
+                "cordis-watch",
                 "--target-dir",
             ])
             .arg(&target),
@@ -107,6 +109,7 @@ fn build(root: &Path, guard: &TestGuard, directory: &Path) -> PathBuf {
             "cordis-dev",
             "cordis-runtime-fixture",
             "libcordis_http.dylib",
+            "libcordis_watch.dylib",
             "libkv_mem.dylib",
         ],
     )
@@ -259,4 +262,9 @@ fn generated_web_plugin_runs_in_the_browser() {
 #[test]
 fn web_batches_restore_or_publish_backends_and_pages() {
     scenario("batch");
+}
+
+#[test]
+fn watch_replaces_deployment_and_preserves_two_page_projections() {
+    scenario("watch-replace");
 }

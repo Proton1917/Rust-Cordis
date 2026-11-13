@@ -13,6 +13,13 @@ use std::{
 };
 
 fn command(command: &mut Command) {
+    if Path::new(command.get_program()).file_name() == Some(std::ffi::OsStr::new("cargo")) {
+        let project = command
+            .get_current_dir()
+            .map(Path::to_owned)
+            .unwrap_or_else(|| std::env::current_dir().unwrap());
+        cordis_testkit::build::remap_paths(command, &project).unwrap();
+    }
     let output = command.output().unwrap();
     assert!(
         output.status.success(),
@@ -83,13 +90,10 @@ fn deployment(guard: &TestGuard, root: &Path, binaries: &Path) -> (PathBuf, Path
         window.join("cordis-plugin.toml"),
     )
     .unwrap();
-    let state = project.join("app-state");
-    let quoted = toml::Value::String(state.to_string_lossy().into_owned());
+    let state = project.join("home/Library/Application Support/org.cordis.window-recovery");
     fs::write(
         project.join("cordis.toml"),
-        format!(
-            "requires_core='>=0.1.0,<0.2.0'\n[pack]\nname='window-recovery'\nstate_dir={quoted}\n\n[runtime]\ncheckpoint_ms=250\nrestart_backoff_ms=100\n\n[instance.http]\nplugin='libcordis_http.dylib'\ncomponent='http'\ngroup='http'\n\n[instance.window]\nplugin='window'\ncomponent='window'\ngroup='window'\ngrants={{'cordis.manage@1'=['shutdown']}}\nconfig={{title='Cordis 窗口验收',width=960,height=680,quit_on_last_window=true}}\n\n[instance.probe]\nplugin='libwindow_probe.dylib'\ncomponent='window-probe'\ngroup='probe'\nconfig={{url='about:blank'}}\n\n[instance.store]\nplugin='libkv_mem.dylib'\ncomponent='kv-store'\ngroup='kv'\n"
-        ),
+        "requires_core='>=0.1.0,<0.2.0'\n[pack]\nname='window-recovery'\n\n[runtime]\ncheckpoint_ms=250\nrestart_backoff_ms=100\n\n[instance.http]\nplugin='libcordis_http.dylib'\ncomponent='http'\ngroup='http'\n\n[instance.window]\nplugin='window'\ncomponent='window'\ngroup='window'\ngrants={'cordis.manage@1'=['shutdown']}\nconfig={title='Cordis 窗口验收',width=960,height=680,quit_on_last_window=true}\n\n[instance.probe]\nplugin='libwindow_probe.dylib'\ncomponent='window-probe'\ngroup='probe'\nconfig={url='about:blank'}\n\n[instance.store]\nplugin='libkv_mem.dylib'\ncomponent='kv-store'\ngroup='kv'\n",
     )
     .unwrap();
     let build_lock = cordis_testkit::build::shared_build_lock(root).unwrap();
@@ -129,6 +133,7 @@ fn launch(project: &Path, app: &Path) -> Core {
         Command::new(app.join("Contents/MacOS/cordis"))
             .current_dir(directory)
             .env("PATH", app.join("Contents/MacOS"))
+            .env("HOME", project.join("home"))
             .stdout(log.try_clone().unwrap())
             .stderr(Stdio::from(log))
             .spawn()

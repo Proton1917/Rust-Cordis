@@ -97,7 +97,7 @@ class Case:
             configuration += 'invoke_timeout_ms=200\n'
         configuration += '[instance.http]\nplugin="http"\nforwarder=true\n[instance.notes]\nplugin="web-notes"\n'
         configuration += '[instance.admin]\nplugin="fixture-admin"\ncomponent="admin"\ngrants={"cordis.manage@1"=["*"]}\nconfig={commands=' + json.dumps(str(self.project / "commands")) + ',results=' + json.dumps(str(self.project / "results")) + '}\n'
-        if self.options.scenario in ("fullstack", "batch"):
+        if self.options.scenario in ("fullstack", "batch", "watch-replace"):
             shutil.copytree(self.examples / "plugins/kv-dashboard-rust", plugins / "store")
             shutil.copy2(self.tools / "libkv_mem.dylib", plugins / "store/libkv_mem.dylib")
             configuration += '[instance.store]\nplugin="kv"\ncomponent="kv-store"\n'
@@ -110,6 +110,8 @@ class Case:
             configuration += f'[instance.realm-counter]\nplugin={json.dumps(metadata["name"])}\n'
         if self.options.scenario == "dependencies":
             configuration += scenario_module(self.options, "dependencies").prepare(self, plugins)
+        if self.options.scenario == "watch-replace":
+            configuration += scenario_module(self.options, "watch_replace").prepare(self, plugins)
         (self.project / "cordis.toml").write_text(configuration)
         (self.project / "tmp").mkdir()
 
@@ -213,7 +215,7 @@ async def execute(options):
                     result = await notes_replacement(case)
                 elif options.scenario == "http-restart":
                     result = await restart_http(case)
-                elif options.scenario in ("channel-faults", "realm-close", "scaffold", "batch", "fullstack", "dependencies"):
+                elif options.scenario in ("channel-faults", "realm-close", "scaffold", "batch", "fullstack", "dependencies", "watch-replace"):
                     name = options.scenario.replace("-", "_")
                     module = scenario_module(options, name)
                     result = await module.run(case)
@@ -252,7 +254,7 @@ if __name__ == "__main__":
     parser.add_argument("--examples", type=Path, required=True)
     parser.add_argument("--dependencies", type=Path)
     parser.add_argument("--modules", type=Path, default=Path(__file__).parent)
-    parser.add_argument("--scenario", choices=("pure-replace", "fullstack", "realm-close", "http-restart", "channel-faults", "scaffold", "batch", "dependencies"), required=True)
+    parser.add_argument("--scenario", choices=("pure-replace", "fullstack", "realm-close", "http-restart", "channel-faults", "scaffold", "batch", "dependencies", "watch-replace"), required=True)
     arguments = parser.parse_args()
     if arguments.dependencies:
         sys.path.insert(0, str(arguments.dependencies.resolve()))

@@ -1,6 +1,6 @@
 [package]
 name = "cordis-dev"
-version = "0.2.0"
+version = "0.2.1"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -23,6 +23,7 @@ tar = "=0.4.46"
 flate2 = "=1.1.11"
 plist = "=1.10.3"
 pathdiff = "=0.2.3"
+memchr = "=2.8.3"
 
 [dev-dependencies]
 cordis-testkit.workspace = true

@@ -462,7 +462,8 @@ impl Session {
                 .find(|plugin| plugin.reference == reference)
                 .ok_or_else(|| Error::new(4, "安装引用在运行时目录中缺席"))?;
             for instance in &snapshot.instances {
-                if instance.plugin != plugin.name
+                if instance.page_of.is_some()
+                    || instance.plugin != plugin.name
                     || instance.reference.as_deref() == Some(&reference)
                 {
                     continue;
@@ -553,7 +554,7 @@ impl Component for Watch {
     fn inject() -> Inject {
         Inject::new()
             .with::<dyn Manage>()
-            .with::<dyn Runtime>()
+            .with_name("cordis.runtime@1.4")
             .with::<dyn cordis_sdk::builtin::DataDir>()
     }
     fn resolve(config: &Config) -> Result<()> {

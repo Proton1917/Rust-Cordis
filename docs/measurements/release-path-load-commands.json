@@ -1,0 +1,97 @@
+{
+  "v0.1.0": [
+    {
+      "file": "plugins/libcordis_http.dylib",
+      "matches": {
+        "HOME": 1,
+        "username": 1
+      }
+    },
+    {
+      "file": "plugins/libcordis_watch.dylib",
+      "matches": {
+        "HOME": 1,
+        "username": 1
+      }
+    },
+    {
+      "file": "plugins/window/cordis-window",
+      "matches": {
+        "HOME": 0,
+        "username": 0
+      }
+    },
+    {
+      "file": "bin/cordis-dev",
+      "matches": {
+        "HOME": 0,
+        "username": 0
+      }
+    },
+    {
+      "file": "bin/cordis",
+      "matches": {
+        "HOME": 0,
+        "username": 0
+      }
+    },
+    {
+      "file": "bin/cordis-host",
+      "matches": {
+        "HOME": 0,
+        "username": 0
+      }
+    }
+  ],
+  "v0.2.0": [
+    {
+      "file": "plugins/libcordis_http.dylib",
+      "matches": {
+        "HOME": 1,
+        "username": 1
+      }
+    },
+    {
+      "file": "plugins/libcordis_secrets.dylib",
+      "matches": {
+        "HOME": 1,
+        "username": 1
+      }
+    },
+    {
+      "file": "plugins/libcordis_watch.dylib",
+      "matches": {
+        "HOME": 1,
+        "username": 1
+      }
+    },
+    {
+      "file": "plugins/window/cordis-window",
+      "matches": {
+        "HOME": 0,
+        "username": 0
+      }
+    },
+    {
+      "file": "bin/cordis-dev",
+      "matches": {
+        "HOME": 0,
+        "username": 0
+      }
+    },
+    {
+      "file": "bin/cordis",
+      "matches": {
+        "HOME": 0,
+        "username": 0
+      }
+    },
+    {
+      "file": "bin/cordis-host",
+      "matches": {
+        "HOME": 0,
+        "username": 0
+      }
+    }
+  ]
+}

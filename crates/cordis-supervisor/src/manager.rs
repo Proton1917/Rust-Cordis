@@ -506,6 +506,7 @@ impl Manager {
             cordis::Epoch::Active { revision, impls } => (Some(revision), impls),
         };
         InstanceSnapshot {
+            page_of: None,
             reference: None,
             name: instance.data.name.clone(),
             group: instance.data.group.clone(),

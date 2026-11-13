@@ -19,6 +19,13 @@ struct Tools {
 }
 
 fn command(command: &mut Command, log: &Path) {
+    if Path::new(command.get_program()).file_name() == Some(std::ffi::OsStr::new("cargo")) {
+        let project = command
+            .get_current_dir()
+            .map(Path::to_owned)
+            .unwrap_or_else(|| std::env::current_dir().unwrap());
+        cordis_testkit::build::remap_paths(command, &project).unwrap();
+    }
     let output = command.output().expect("启动 HTTP 验收命令");
     let mut bytes = output.stdout;
     bytes.extend(output.stderr);
@@ -58,7 +65,7 @@ fn build_scripts(root: &Path, directory: &Path) {
 fn build_rust(root: &Path, directory: &Path) {
     let target = shared_target_dir(root);
     let mut programs = Command::new(env!("CARGO"));
-    programs.current_dir(root).arg("build");
+    programs.current_dir(root).args(["build", "--release"]);
     for package in [
         "cordis-runtime",
         "cordis-host",
@@ -89,7 +96,7 @@ fn build_rust(root: &Path, directory: &Path) {
         command(
             Command::new(env!("CARGO"))
                 .current_dir(root)
-                .args(["build", "--workspace", "--manifest-path"])
+                .args(["build", "--release", "--workspace", "--manifest-path"])
                 .arg(root.join(manifest))
                 .arg("--target-dir")
                 .arg(&target),
@@ -113,7 +120,7 @@ fn tools() -> FixtureLease<Tools> {
         let binaries = snapshot_artifacts(
             guard,
             "http-tools",
-            "debug",
+            "release",
             &[
                 "cordis",
                 "cordis-host",

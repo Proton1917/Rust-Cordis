@@ -393,6 +393,7 @@ impl Deployment {
                     .and_then(|result| result.as_ref().err())
                     .map(Into::into);
                 Some(cordis_supervisor::manager::InstanceSnapshot {
+                    page_of: None,
                     name: spec.instance.clone(),
                     plugin: spec.name.clone(),
                     component: spec.component.clone(),

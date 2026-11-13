@@ -39,6 +39,8 @@ fn tools() -> FixtureLease<Tools> {
                     "cordis-dev",
                     "-p",
                     "kv-mem",
+                    "-p",
+                    "cordis-http",
                     "--target-dir",
                 ])
                 .arg(&target),
@@ -52,7 +54,17 @@ fn tools() -> FixtureLease<Tools> {
             guard,
             "pack-tools",
             "release",
-            &["cordis", "cordis-host", "cordis-dev", &library],
+            &[
+                "cordis",
+                "cordis-host",
+                "cordis-dev",
+                &library,
+                &format!(
+                    "{}cordis_http{}",
+                    std::env::consts::DLL_PREFIX,
+                    std::env::consts::DLL_SUFFIX
+                ),
+            ],
         )
         .unwrap();
         Tools {
@@ -74,6 +86,13 @@ impl Drop for Core {
 }
 
 fn command(command: &mut Command) {
+    if Path::new(command.get_program()).file_name() == Some(std::ffi::OsStr::new("cargo")) {
+        let project = command
+            .get_current_dir()
+            .map(Path::to_owned)
+            .unwrap_or_else(|| std::env::current_dir().unwrap());
+        cordis_testkit::build::remap_paths(command, &project).unwrap();
+    }
     let output = command.output().unwrap();
     assert!(
         output.status.success(),
@@ -191,6 +210,7 @@ fn activate_at(
         .current_dir(directory)
         .env_clear()
         .env("PATH", executable.parent().unwrap())
+        .env("HOME", project.join("home"))
         .stdout(Stdio::from(log.try_clone().unwrap()))
         .stderr(Stdio::from(log))
         .spawn()
@@ -387,18 +407,7 @@ fn application_keeps_signed_resources_and_selects_multiple_verified_roots() {
     let (root, project) = project("app");
     let project = case.track(project);
     verified_project(&root, &project);
-    let state = project.join("app-state");
-    let mut configuration: toml::Table =
-        toml::from_str(&fs::read_to_string(project.join("cordis.toml")).unwrap()).unwrap();
-    configuration["pack"].as_table_mut().unwrap().insert(
-        "state_dir".into(),
-        toml::Value::String(state.to_string_lossy().into_owned()),
-    );
-    fs::write(
-        project.join("cordis.toml"),
-        toml::to_string(&configuration).unwrap(),
-    )
-    .unwrap();
+    let state = project.join("home/Library/Application Support/org.cordis.pack-native");
     let tools = project.join("tools");
     fs::create_dir(&tools).unwrap();
     fs::copy(self::tools().binaries.join("cordis"), tools.join("cordis")).unwrap();
@@ -533,4 +542,289 @@ fn declared_static_assets_are_delivered_at_their_configuration_path() {
         case.evidence_for(&project).display()
     );
     case.success();
+}
+
+/// 发布隐私：脚手架原生应用和 HTTP 处理方使用默认映射，并保留用户编译参数。
+#[test]
+fn scaffold_http_package_remaps_build_paths_and_preserves_user_flags() {
+    let case = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "pack-privacy-http");
+    let tools = tools().for_case(&case);
+    let project = case.directory("pack-tests");
+    prepare_http_application(&tools, &project);
+    let _build = cordis_testkit::build::shared_build_lock(&tools.root).unwrap();
+    let mut pack = pack_command(&tools, &project);
+    pack.env_remove("CARGO_ENCODED_RUSTFLAGS").env("RUSTFLAGS", format!("--cfg pack_user_flag --check-cfg cfg(pack_user_flag) --remap-path-prefix={}=/customer-src", project.display()));
+    command(&mut pack);
+    let archive = fs::read_dir(project.join("dist"))
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    let extracted = project.join("delivered");
+    tar::Archive::new(flate2::read::GzDecoder::new(
+        fs::File::open(archive).unwrap(),
+    ))
+    .unpack(&extracted)
+    .unwrap();
+    let mut evidence = Vec::new();
+    inspect_binaries(&extracted, &extracted, &project, &mut evidence);
+    assert!(
+        evidence.len() >= 6,
+        "核心、宿主、app、watch、HTTP 和处理方已打包"
+    );
+    fs::write(
+        project.join("privacy-result.json"),
+        serde_json::to_vec_pretty(&evidence).unwrap(),
+    )
+    .unwrap();
+    eprintln!("发布路径验收：{}", case.evidence_for(&project).display());
+    case.success();
+}
+
+/// 生成带真实 HTTP 处理方的应用，并以编译条件验证用户参数。
+fn prepare_http_application(tools: &Tools, project: &Path) {
+    command(
+        Command::new(tools.binaries.join("cordis-dev"))
+            .arg("new")
+            .arg(project)
+            .arg("--sdk-path")
+            .arg(tools.root.join("crates/cordis-sdk")),
+    );
+    command(
+        Command::new(tools.binaries.join("cordis-dev"))
+            .args(["new-plugin", "api", "--rust", "--http", "--project"])
+            .arg(project),
+    );
+    fs::create_dir_all(project.join("target/debug")).unwrap();
+    let http = format!(
+        "{}cordis_http{}",
+        std::env::consts::DLL_PREFIX,
+        std::env::consts::DLL_SUFFIX
+    );
+    fs::copy(
+        tools.binaries.join(&http),
+        project.join("target/debug").join(&http),
+    )
+    .unwrap();
+    let mut config: toml::Value =
+        toml::from_str(&fs::read_to_string(project.join("cordis.toml")).unwrap()).unwrap();
+    config.as_table_mut().unwrap().insert(
+        "pack".into(),
+        toml::Value::try_from(serde_json::json!({"name":"pack-native","version":"0.1.0"})).unwrap(),
+    );
+    config["instance"].as_table_mut().unwrap().insert(
+        "http".into(),
+        toml::Value::try_from(
+            serde_json::json!({"plugin":http,"component":"http","forwarder":true}),
+        )
+        .unwrap(),
+    );
+    fs::write(
+        project.join("cordis.toml"),
+        toml::to_string_pretty(&config).unwrap(),
+    )
+    .unwrap();
+    let source = project.join("plugins/api/src/lib.rs");
+    fs::write(
+        &source,
+        format!(
+            "#[cfg(not(pack_user_flag))]\ncompile_error!(\"用户编译参数缺席\");\n{}",
+            fs::read_to_string(&source).unwrap()
+        ),
+    )
+    .unwrap();
+}
+
+fn pack_command(tools: &Tools, project: &Path) -> Command {
+    let target = if cfg!(target_os = "macos") {
+        "aarch64-apple-darwin"
+    } else {
+        "x86_64-unknown-linux-gnu"
+    };
+    let mut command = Command::new(tools.binaries.join("cordis-dev"));
+    command
+        .arg("pack")
+        .arg("--project")
+        .arg(project)
+        .args(["--target", target])
+        .arg("--target-dir")
+        .arg(cordis_testkit::build::shared_target_dir(&tools.root))
+        .arg("--runtime-dir")
+        .arg(&tools.binaries);
+    command
+}
+
+fn inspect_binaries(root: &Path, directory: &Path, project: &Path, evidence: &mut Vec<Value>) {
+    for entry in fs::read_dir(directory).unwrap() {
+        let entry = entry.unwrap();
+        if entry.file_type().unwrap().is_dir() {
+            inspect_binaries(root, &entry.path(), project, evidence);
+            continue;
+        }
+        let bytes = fs::read(entry.path()).unwrap();
+        if object::File::parse(bytes.as_slice()).is_err() {
+            continue;
+        }
+        let strings = Command::new("strings").arg(entry.path()).output().unwrap();
+        assert!(strings.status.success());
+        let text = String::from_utf8_lossy(&strings.stdout);
+        let username = Command::new("id").arg("-un").output().unwrap();
+        let username = String::from_utf8(username.stdout).unwrap();
+        assert!(
+            !text
+                .to_lowercase()
+                .contains(&username.trim().to_lowercase()),
+            "{}",
+            entry.path().display()
+        );
+        assert!(
+            !text.contains("/Users/") && !text.contains(&std::env::var("HOME").unwrap()),
+            "{}",
+            entry.path().display()
+        );
+        let mut row = serde_json::json!({"file":entry.path().strip_prefix(root).unwrap(),"strings_private_matches":0});
+        #[cfg(target_os = "macos")]
+        inspect_signed_library(root, &entry.path(), project, &mut row);
+        evidence.push(row);
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn inspect_signed_library(root: &Path, binary: &Path, project: &Path, row: &mut Value) {
+    row["load_commands"] = inspect_load_commands(binary);
+    command(
+        Command::new("codesign")
+            .args(["--verify", "--strict"])
+            .arg(binary),
+    );
+    row["signature"] = "valid".into();
+    if binary
+        .extension()
+        .is_some_and(|extension| extension == "dylib")
+    {
+        let deployed = fs::read_dir(root).unwrap().next().unwrap().unwrap().path();
+        command(
+            Command::new(deployed.join("cordis-host"))
+                .arg("--describe")
+                .arg(binary)
+                .arg("--cache-dir")
+                .arg(project.join("probe-cache")),
+        );
+        row["host_load"] = "passed".into();
+    }
+}
+
+/// ADR-0049：检查编译期相对安装名称，记录相对条目并验证装载依赖仍为系统库。
+#[cfg(target_os = "macos")]
+fn inspect_load_commands(binary: &Path) -> Value {
+    let output = Command::new("otool")
+        .arg("-l")
+        .arg(binary)
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let text = String::from_utf8(output.stdout).unwrap();
+    let mut kind = "";
+    let mut rows = Vec::new();
+    for line in text.lines().map(str::trim) {
+        if let Some(value) = line.strip_prefix("cmd ") {
+            kind = value;
+        }
+        if !matches!(
+            kind,
+            "LC_ID_DYLIB" | "LC_LOAD_DYLIB" | "LC_LOAD_WEAK_DYLIB" | "LC_RPATH"
+        ) {
+            continue;
+        }
+        let Some(path) = line
+            .strip_prefix("name ")
+            .or_else(|| line.strip_prefix("path "))
+        else {
+            continue;
+        };
+        let path = path.split(" (offset ").next().unwrap();
+        let relative = path.starts_with('@');
+        if kind == "LC_ID_DYLIB" {
+            assert!(path.starts_with("@rpath/"), "相对动态库安装名称");
+        }
+        if matches!(kind, "LC_LOAD_DYLIB" | "LC_LOAD_WEAK_DYLIB") {
+            assert!(
+                path.starts_with("/usr/lib/") || path.starts_with("/System/Library/"),
+                "装载依赖维持系统库范围"
+            );
+        }
+        rows.push(serde_json::json!({"command":kind,"path":if relative {path} else {"system"}}));
+    }
+    Value::Array(rows)
+}
+
+/// 发布隐私：清单中的实际私有路径默认拒绝，显式选项保留警告并交付。
+#[test]
+fn private_manifest_rejects_package_and_explicit_warning_allows_delivery() {
+    let case = TestGuard::for_package(
+        Path::new(env!("CARGO_MANIFEST_DIR")),
+        "pack-private-manifest",
+    );
+    let tools = tools().for_case(&case);
+    let (_, directory) = project("private-manifest");
+    let project = case.track(directory);
+    prepare_private_manifest(&project);
+    check_private_manifest(&tools, &project);
+    case.success();
+}
+
+fn prepare_private_manifest(project: &Path) {
+    let mut config: toml::Value =
+        toml::from_str(&fs::read_to_string(project.join("cordis.toml")).unwrap()).unwrap();
+    config["pack"].as_table_mut().unwrap().insert(
+        "assets".into(),
+        toml::Value::Array(vec!["private.toml".into()]),
+    );
+    fs::write(
+        project.join("cordis.toml"),
+        toml::to_string_pretty(&config).unwrap(),
+    )
+    .unwrap();
+    fs::write(
+        project.join("private.toml"),
+        format!(
+            "path={:?}\nmarker='PRIVATE-PAYLOAD-CONTENT'\n",
+            std::env::var("HOME").unwrap()
+        ),
+    )
+    .unwrap();
+}
+
+fn check_private_manifest(tools: &Tools, project: &Path) {
+    let _build = cordis_testkit::build::shared_build_lock(&tools.root).unwrap();
+    let rejected = pack_command(tools, project).output().unwrap();
+    let error = String::from_utf8_lossy(&rejected.stderr);
+    assert!(!rejected.status.success());
+    assert!(
+        error.contains("private.toml")
+            && error.contains("HOME=1")
+            && error.contains("--allow-private-paths")
+    );
+    assert!(!error.contains("PRIVATE-PAYLOAD-CONTENT"));
+    fs::write(project.join("privacy-rejected.log"), &rejected.stderr).unwrap();
+    let staging = fs::read_dir(project.join("target/pack"))
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    fs::rename(staging, project.join("rejected-package")).unwrap();
+    let allowed = pack_command(tools, project)
+        .arg("--allow-private-paths")
+        .output()
+        .unwrap();
+    assert!(
+        allowed.status.success(),
+        "{}",
+        String::from_utf8_lossy(&allowed.stderr)
+    );
+    assert!(String::from_utf8_lossy(&allowed.stderr).contains("警告：发布路径隐私检查命中"));
+    fs::write(project.join("privacy-warning.log"), &allowed.stderr).unwrap();
+    assert_eq!(fs::read_dir(project.join("dist")).unwrap().count(), 1);
 }

@@ -1,6 +1,8 @@
 //! 确定性任务调度、可推进时钟与测试构建现场。
 
 pub mod build;
+#[path = "../../../tools/build_paths.rs"]
+pub mod build_paths;
 pub mod cleanup;
 pub mod python;
 
