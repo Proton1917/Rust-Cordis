@@ -48,17 +48,27 @@ impl Inject {
         Self::default()
     }
 
-    pub fn with<I: Interface + ?Sized>(mut self) -> Self {
+    pub fn with<I: Interface + ?Sized>(self) -> Self {
+        self.with_name(I::INTERFACE)
+    }
+
+    /// ADR-0047：命名依赖进入同一描述符列表，名称与版本由既有装载边界校验。
+    pub fn with_name(mut self, interface: &'static str) -> Self {
         self.0.push(Dependency {
-            interface: I::INTERFACE,
+            interface,
             required: true,
         });
         self
     }
 
-    pub fn optional<I: Interface + ?Sized>(mut self) -> Self {
+    pub fn optional<I: Interface + ?Sized>(self) -> Self {
+        self.optional_name(I::INTERFACE)
+    }
+
+    /// ADR-0047：可选命名依赖与类型化 optional 共用可用性及版本规则。
+    pub fn optional_name(mut self, interface: &'static str) -> Self {
         self.0.push(Dependency {
-            interface: I::INTERFACE,
+            interface,
             required: false,
         });
         self

@@ -1,0 +1,22 @@
+{
+  "scenario": "scripts",
+  "result": {
+    "python": {
+      "value": [
+        0,
+        255
+      ],
+      "unknown_method": 3,
+      "forged_resource": 2
+    },
+    "typescript": {
+      "value": [
+        0,
+        255
+      ],
+      "unknown_method": 3,
+      "forged_resource": 2
+    }
+  },
+  "exit": 0
+}

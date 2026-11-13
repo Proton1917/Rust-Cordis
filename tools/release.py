@@ -5,6 +5,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import time
+import tomllib
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -53,8 +54,29 @@ def stage(artifacts, package, version):
     shutil.copy2(ROOT / "plugins/window/cordis-plugin.toml", package / "plugins/window/cordis-plugin.toml")
     shutil.copy2(ROOT / "LICENSE", package / "LICENSE")
     template = (ROOT / "tools/release/README.md").read_text()
-    (package / "README.md").write_text(template.replace("{{version}}", version))
+    (package / "README.md").write_text(template.replace("{{version}}", version).replace("{{components}}", component_versions()))
     shutil.copy2(ROOT / "tools/release/cordis.toml", package / "cordis.toml")
+
+
+def component_versions():
+    """ADR-0047：发行组合保留各包独立版本，表格从对应包的版本声明生成。"""
+    workspace = tomllib.loads((ROOT / "Cargo.toml").read_text())["workspace"]["package"]["version"]
+    rows = []
+    for label, directory in [
+        ("cordis", "crates/cordis-runtime"), ("cordis-host", "crates/cordis-host"),
+        ("cordis-dev", "crates/cordis-dev"), ("Rust SDK", "crates/cordis-sdk"),
+        ("HTTP", "plugins/http"), ("watch", "plugins/watch"),
+        ("window", "plugins/window"), ("secrets", "plugins/secrets"),
+    ]:
+        value = tomllib.loads((ROOT / directory / "Cargo.toml").read_text())["package"]["version"]
+        rows.append((label, workspace if isinstance(value, dict) else value))
+    rows.extend([
+        ("Python SDK", tomllib.loads((ROOT / "sdks/python/pyproject.toml").read_text())["project"]["version"]),
+        ("TypeScript SDK", json.loads((ROOT / "sdks/typescript/cordis-sdk/package.json").read_text())["version"]),
+        ("网页宿主", json.loads((ROOT / "sdks/typescript/cordis-web/package.json").read_text())["version"]),
+        ("ABI", "v1.0"), ("UP/1", "1"),
+    ])
+    return "| 组件 | 版本 |\n|---|---|\n" + "\n".join(f"| {name} | {version} |" for name, version in rows)
 
 
 def inspect(package, evidence):

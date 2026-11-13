@@ -3,6 +3,7 @@ extern crate self as cordis_sdk;
 pub mod builtin;
 mod bytes;
 mod context;
+mod dynamic;
 mod metadata;
 mod model;
 mod service;
@@ -11,6 +12,7 @@ pub use bytes::Bytes;
 pub use context::{Context, Effect, EffectScope};
 pub use cordis_abi::{CborValue, Error, Result, decode, encode};
 pub use cordis_types::{Interception, Isolation};
+pub use dynamic::DynamicService;
 pub use metadata::{Caller, caller};
 pub type ContextOptions = cordis_types::ContextOptions<CborValue>;
 pub use cordis_sdk_macros::{event, export_plugin, interface};
@@ -26,9 +28,9 @@ pub const BUILD_INFO: &str = concat!(env!("CORDIS_RUSTC"), " ", env!("CORDIS_TAR
 pub mod prelude {
     pub use crate::{
         AsyncEvent, BorrowedService, BoxFuture, Bytes, CborValue, Component, Context,
-        ContextOptions, Effect, EffectScope, EmptyConfig, Error, Event, Frozen, Inject,
-        Interception, Interface, Isolation, Listens, Provides, Result, Scoped, Service, StateBlob,
-        StateSchema, SyncEvent,
+        ContextOptions, DynamicService, Effect, EffectScope, EmptyConfig, Error, Event, Frozen,
+        Inject, Interception, Interface, Isolation, Listens, Provides, Result, Scoped, Service,
+        StateBlob, StateSchema, SyncEvent,
     };
     pub use std::sync::Arc;
 }

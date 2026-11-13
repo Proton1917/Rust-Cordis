@@ -149,6 +149,8 @@ fn write_crate_at(
 
 fn sdk_dependency(path: Option<&Path>) -> Result<Value> {
     let mut dependency = Table::new();
+    let sdk: Table = toml::from_str(include_str!("../../cordis-sdk/Cargo.toml"))?;
+    dependency.insert("version".into(), sdk["package"]["version"].clone());
     match path {
         Some(path) => {
             dependency.insert(

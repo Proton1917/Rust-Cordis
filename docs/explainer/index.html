@@ -444,7 +444,7 @@ footer { font-size: 13px; color: var(--muted); border-top: 1px solid var(--line)
     <div class="sec-head">
       <div class="eyebrow">进度</div>
       <h2 id="prog-title">实现进度（2026-11-14）</h2>
-      <p class="lead">M22 外部接入已通过设计方复核，macOS arm64 的 v0.1.0 已发布。三种语言的 HTTP 请求、64 MiB 文件传输、持续请求中的替换回滚、页面与后端授权均已通过；工作区 336 项用例通过，三种语言各 10000 次 HTTP 往返测量已归档。后续实施 M23 的 SDK 动态调用。</p>
+      <p class="lead">M22 外部接入已发布为 macOS arm64 的 v0.1.0。M23 增加按名称调用服务的 SDK 接口，四种提供方位置、字节流资源、替换回滚和脚本调用专项均已通过；完整检查中 339 项通过，固定 Git SDK 构建验收在提交推送后执行。发行组合拟为 v0.2.0，核心保持 0.1.0。</p>
     </div>
     <div class="progress">
       <table>
@@ -464,7 +464,7 @@ footer { font-size: 13px; color: var(--muted); border-top: 1px solid var(--line)
           <tr><td>前端与全栈插件</td><td class="mono">M20</td><td><span class="st done">功能与退出检查通过</span></td><td>八个真实浏览器场景通过；同名页面域隔离、三语言依赖恢复、批次替换回退与 HTTP 重连</td></tr>
           <tr><td>第三阶段综合验收</td><td class="mono">M21</td><td><span class="st done">阶段验收完成</span></td><td>三语言调用、迁移与契约；完整解释器签名包；固定性能记录、插件编写手册及五轮 native 稳定性验收</td></tr>
           <tr><td>外部接入</td><td class="mono">M22</td><td><span class="st done">v0.1.0 已发布</span></td><td>HTTP 路由与通用流；可信页面及后端身份、密钥授权、三语言处理方与自定义页面外壳</td></tr>
-          <tr><td>SDK 动态调用</td><td class="mono">M23</td><td><span class="st">计划中</span></td><td>按已声明依赖的接口名与方法名调用服务，沿现有依赖与替换机制执行</td></tr>
+          <tr><td>SDK 动态调用</td><td class="mono">M23</td><td><span class="st">专项验收通过</span></td><td>命名调用沿现有依赖、替换与回滚执行；资源通过拥有型 Service 转交，固定 Git 验收在推送后执行</td></tr>
         </tbody>
       </table>
     </div>

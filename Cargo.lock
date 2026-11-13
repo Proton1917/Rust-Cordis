@@ -455,7 +455,7 @@ dependencies = [
 
 [[package]]
 name = "cordis-dev"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "clap",
  "cordis-idl",
@@ -569,7 +569,7 @@ dependencies = [
 
 [[package]]
 name = "cordis-sdk"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "cordis-abi",
  "cordis-sdk-macros",

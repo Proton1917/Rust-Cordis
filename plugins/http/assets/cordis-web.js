@@ -2890,18 +2890,20 @@ var Context = class _Context {
     });
   }
   async get(interfaceName, binding, client) {
+    return new client(await this.getDynamic(interfaceName, binding));
+  }
+  /** ADR-0047：动态代理沿同一 get 请求取得当前依赖视图及资源引用。 */
+  async getDynamic(interfaceName, binding) {
     const payload = await this.runtime.connection.request("get", {
       context: this.number,
       interface: interfaceName
     });
     try {
-      return new client(
-        new Remote(
-          this.runtime,
-          binding,
-          payload.reference(fields(payload.value).object),
-          interfaceName
-        )
+      return new Remote(
+        this.runtime,
+        binding,
+        payload.reference(fields(payload.value).object),
+        interfaceName
       );
     } finally {
       payload.close();
@@ -3065,7 +3067,7 @@ var Runtime = class {
         {
           name: this.name,
           version: this.version,
-          sdk_version: "0.1.0",
+          sdk_version: "0.2.0",
           build_info: "TypeScript UP/1 SDK",
           format: 2,
           library: null,

@@ -1,5 +1,9 @@
 # Cordis {{version}}
 
+{{components}}
+
+发行版本代表组件的组合；v0.2.0 新增 SDK 能力，沿用版本 0.1.0 的核心。
+
 平台为 macOS Apple Silicon（aarch64-apple-darwin）。本包包含 cordis、cordis-host、cordis-dev，以及 HTTP、watch、window、secrets 官方插件。
 
 ## 最小运行

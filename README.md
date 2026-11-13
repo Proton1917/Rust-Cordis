@@ -139,11 +139,11 @@ cordis run
 | 核心九个 crate 合计 | 19138 | |
 | `crates/cordis-host` | 2730 | 原生插件宿主进程 |
 | `crates/cordis-abi` | 2407 | ABI v1.0 的布局与调用约定；`unsafe` 只出现在 ABI、原生宿主和 SDK 宏中，位置由审计测试约束 |
-| `crates/cordis-sdk`、`cordis-sdk-macros` | 2315 | Rust 插件 SDK 与过程宏 |
+| `crates/cordis-sdk`、`cordis-sdk-macros` | 2407 | Rust 插件 SDK、动态调用与过程宏 |
 | `crates/cordis-idl` | 2331 | WIT 解析与三语言绑定生成 |
-| `crates/cordis-dev` | 2577 | 开发工具：`new`、`new-plugin`、`idl gen`、`verify`、`pack` |
+| `crates/cordis-dev` | 2580 | 开发工具：`new`、`new-plugin`、`idl gen`、`verify`、`pack` |
 | `sdks/python` | 967 | Python SDK |
-| `sdks/typescript` | 1500 | 共用 SDK 1293 行、网页宿主 207 行，统计各自 src |
+| `sdks/typescript` | 1501 | 共用 SDK 1294 行、网页宿主 207 行，统计各自 src |
 | `plugins/` | | `watch`、`console-log`、`http`、`window`、`secrets`；三语言 HTTP 回显和 KV、计数示例；共享接口与契约包括 `http-api`、`stream-api`、`secrets-api`、`kv-api`、`kv-contract`、`web-api`、`forward-api`、`window-api` |
 
 ## 理论依据
@@ -173,7 +173,7 @@ cordis run
 | | M20 | 前端插件与全栈插件：WebSocket 转发、页面子实例、网页宿主 `cordis-web` | 完成 |
 | | M21 | 多语言全栈总验收、完整 Python/Node 发布包与插件编写手册 | 完成 |
 | 追加 | M22 | HTTP 路由、通用字节流、页面调用来源与密钥插件 | 完成；[v0.1.0](https://github.com/Proton1917/Rust-Cordis/releases/tag/v0.1.0) 已发布 |
-| | M23 | SDK 动态调用 | 计划中 |
+| | M23 | SDK 动态调用、拥有型资源与命名依赖 | 专项通过；固定 Git 验收在推送后执行 |
 
 每个里程碑一个提交，须通过格式、clippy、全部测试（M18 时 307 条）、177 条一致性矩阵、`unsafe` 审计和行数预算检查。逐项记录见 [PROGRESS](docs/PROGRESS.md)，各阶段验收摘要见 [使用指南](docs/guide.md#里程碑验收摘要m0m18)。
 

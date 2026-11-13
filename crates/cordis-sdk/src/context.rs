@@ -216,6 +216,14 @@ impl Context {
         Service::from_object(self.environment.host().get(self.handle, I::INTERFACE)?)
     }
 
+    /// ADR-0047：经同一 Host.get 取得已声明依赖，保留当前加载视图与 Scoped 身份。
+    pub fn get_dynamic(&self, interface: &str) -> Result<crate::DynamicService> {
+        self.environment
+            .host()
+            .get(self.handle, interface)
+            .map(crate::DynamicService::from_object)
+    }
+
     pub fn on<E, F>(&self, listener: F) -> Result<()>
     where
         E: SyncEvent,

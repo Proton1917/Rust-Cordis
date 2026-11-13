@@ -47,6 +47,7 @@ fn rust(project: &Path, name: &str) -> Result<()> {
         .as_table()
         .ok_or("cordis-sdk 依赖需要来源表")?
         .clone();
+    dependency.remove("version");
     if let Some(path) = dependency.get("path").and_then(Value::as_str) {
         let sdk = Path::new(path);
         let root = sdk

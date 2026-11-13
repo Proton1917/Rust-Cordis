@@ -1,0 +1,170 @@
+{
+  "scenario": "matrix",
+  "result": {
+    "same": {
+      "context": 11,
+      "errors": {
+        "builtin_runtime": true,
+        "calls": [
+          {
+            "code": 3,
+            "method": "absent-method"
+          },
+          {
+            "code": 2,
+            "method": "get"
+          },
+          {
+            "code": 2,
+            "method": "get"
+          },
+          {
+            "code": 2,
+            "method": "put"
+          }
+        ],
+        "typed_undeclared": 4,
+        "typed_undeclared_secrets": 4,
+        "undeclared": 4,
+        "undeclared_secrets": 4
+      },
+      "iterations": 10,
+      "metadata": {
+        "cordis.caller": {
+          "instance": "probe"
+        }
+      },
+      "resources": {
+        "bytes": 1048576,
+        "raw_result_code": 2,
+        "raw_result_released": true,
+        "typed_resource_released": true
+      },
+      "typed": true
+    },
+    "rust": {
+      "context": 13,
+      "errors": {
+        "builtin_runtime": true,
+        "calls": [
+          {
+            "code": 3,
+            "method": "absent-method"
+          },
+          {
+            "code": 2,
+            "method": "get"
+          },
+          {
+            "code": 2,
+            "method": "get"
+          },
+          {
+            "code": 2,
+            "method": "put"
+          }
+        ],
+        "typed_undeclared": 4,
+        "typed_undeclared_secrets": 4,
+        "undeclared": 4,
+        "undeclared_secrets": 4
+      },
+      "iterations": 10,
+      "metadata": {
+        "cordis.caller": {
+          "instance": "probe"
+        }
+      },
+      "resources": {
+        "bytes": 1048576,
+        "raw_result_code": 2,
+        "raw_result_released": true,
+        "typed_resource_released": true
+      },
+      "typed": false
+    },
+    "python": {
+      "context": 13,
+      "errors": {
+        "builtin_runtime": true,
+        "calls": [
+          {
+            "code": 3,
+            "method": "absent-method"
+          },
+          {
+            "code": 2,
+            "method": "get"
+          },
+          {
+            "code": 2,
+            "method": "get"
+          },
+          {
+            "code": 2,
+            "method": "put"
+          }
+        ],
+        "typed_undeclared": 4,
+        "typed_undeclared_secrets": 4,
+        "undeclared": 4,
+        "undeclared_secrets": 4
+      },
+      "iterations": 10,
+      "metadata": {
+        "cordis.caller": {
+          "instance": "probe"
+        }
+      },
+      "resources": {
+        "bytes": 1048576,
+        "raw_result_code": 2,
+        "raw_result_released": true,
+        "typed_resource_released": true
+      },
+      "typed": false
+    },
+    "typescript": {
+      "context": 13,
+      "errors": {
+        "builtin_runtime": true,
+        "calls": [
+          {
+            "code": 3,
+            "method": "absent-method"
+          },
+          {
+            "code": 2,
+            "method": "get"
+          },
+          {
+            "code": 2,
+            "method": "get"
+          },
+          {
+            "code": 2,
+            "method": "put"
+          }
+        ],
+        "typed_undeclared": 4,
+        "typed_undeclared_secrets": 4,
+        "undeclared": 4,
+        "undeclared_secrets": 4
+      },
+      "iterations": 10,
+      "metadata": {
+        "cordis.caller": {
+          "instance": "probe"
+        }
+      },
+      "resources": {
+        "bytes": 1048576,
+        "raw_result_code": 2,
+        "raw_result_released": true,
+        "typed_resource_released": true
+      },
+      "typed": false
+    }
+  },
+  "exit": 0
+}

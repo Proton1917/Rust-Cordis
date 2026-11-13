@@ -13,13 +13,14 @@
 7. [验证插件与部署为服务](#验证插件与部署为服务)
 8. [发布压缩包与 macOS 应用](#发布压缩包与-macos-应用)
 9. [WIT 接口生成](#wit-接口生成)
-10. [Python 进程插件](#python-进程插件)
-11. [TypeScript 进程插件](#typescript-进程插件)
-12. [网页插件与全栈插件](#网页插件与全栈插件)
-13. [HTTP 路由插件](#http-路由插件)
-14. [通用字节流与调用身份](#通用字节流与调用身份)
-15. [密钥与服务环境](#密钥与服务环境)
-16. [里程碑验收摘要（M0–M18）](#里程碑验收摘要m0m18)
+10. [动态调用](#动态调用)
+11. [Python 进程插件](#python-进程插件)
+12. [TypeScript 进程插件](#typescript-进程插件)
+13. [网页插件与全栈插件](#网页插件与全栈插件)
+14. [HTTP 路由插件](#http-路由插件)
+15. [通用字节流与调用身份](#通用字节流与调用身份)
+16. [密钥与服务环境](#密钥与服务环境)
+17. [里程碑验收摘要（M0–M18）](#里程碑验收摘要m0m18)
 
 ## 内核概念与接口
 
@@ -312,6 +313,67 @@ cargo run -p cordis-dev -- idl gen --lang ts \
 ```
 
 生成结果包括提供方接口、数据类型与调用方代理。Rust 接口保留类型化调用，并可通过通用调用传递复合资源；Python 与 TypeScript 绑定使用同一套 CBOR 表示。WIT 的类型映射、方法顺序、借用资源与异步值规则见 [ADR-0039](adr/0039-wit-bindings.md)。
+
+## 动态调用
+
+方法名称来自配置、配方或网关映射时，可以通过动态代理调用已声明的服务。Rust 的 `Context::get_dynamic` 与类型化 `get` 共用依赖视图：提供方替换时使用方重建，失败回滚后继续取得原实现，提供方卸下后使用方转为 Pending。Scoped 提供方收到相同的业务元数据与 `cordis.caller`。
+
+普通插件服务在 inject 中声明，包括 `cordis.http`、`cordis.secrets` 和 `cordis.byte-stream`。核心自己提供的内置服务沿用类型化 get 的既有取得规则。Rust 可以按接口类型声明依赖，也可以使用 `Inject::with_name("kv@1.0")`；可选声明为 `optional_name`，名称与版本沿同一装载校验处理。
+
+```rust
+use cordis_sdk::prelude::*;
+
+async fn write_message(context: &Context) -> Result<Option<Bytes>> {
+    let service = context.get_dynamic("kv@1.0")?;
+    service.invoke_as::<_, ()>("put", &("message", Bytes(b"hello".to_vec())))?;
+    let value = service.invoke_as("get", &("message",))?;
+    service.invoke_async("flush", CborValue::Array(Vec::new())).await?;
+    Ok(value)
+}
+```
+
+参数使用位置数组。Rust 单参数 tuple 写成 `(value,)`，零参数使用空 `Vec<CborValue>` 或 `CborValue::Array(Vec::new())`。`invoke`/`invoke_as` 使用同步入口，`invoke_async`/`invoke_as_async` 使用异步入口；异步入口也能承接同步方法。`Bytes` 表示字节串，继承 v0.x 的字节串与旧数组双读规则。
+
+原始 `invoke` 与 `invoke_async` 接收、返回普通 CBOR 数据。参数出现资源标签时返回参数错误；结果出现资源标签时，先归还结果的资源引用，再返回提示使用 `invoke_as` 的错误。含服务对象的参数和结果使用 Serde 的 `Service` 字段，由 `invoke_as` 或 `invoke_as_async` 完成资源转交。例如提供方的 open 方法返回通用字节流时：
+
+```rust
+use cordis_sdk::{CborValue, DynamicService, Result, Service};
+use stream_api::ByteStream;
+
+async fn open_stream(service: &DynamicService) -> Result<Service<dyn ByteStream>> {
+    service.invoke_as_async("open", &Vec::<CborValue>::new()).await
+}
+```
+
+Python 通过现有的 `get` 取得 `Remote`，按方法名调用。`binding` 是 `cordis idl gen --lang python` 生成的模块：
+
+```python
+async def read_message(context, binding):
+    service = await context.get("kv@1.0", binding)
+    try:
+        return await service.invoke("kv@1.0", "get", ["message"])
+    finally:
+        service.close()
+```
+
+TypeScript 的 `getDynamic` 返回同一个拥有资源引用的 `Remote`。`binding` 使用生成模块，方法参数按普通 CBOR 数据类型提供：
+
+```typescript
+import {Context, Binding} from "cordis-sdk";
+
+async function readMessage(context: Context, binding: Binding): Promise<unknown> {
+    const service = await context.getDynamic("kv@1.0", binding);
+    try {
+        return await service.invoke("kv@1.0", "get", ["message"]);
+    } finally {
+        service.close();
+    }
+}
+```
+
+脚本 SDK 的资源标签携带拥有关系，生成绑定负责导入与导出；裸资源编号在发送边界返回参数错误。服务句柄由当前操作或效应持有，操作结束或组件清理时归还。
+
+类型化代理提供编译期方法名与参数检查，并在同组原生调用中使用直接 ABI 方法槽。动态代理统一使用 V-2 通用入口，按方法名分派并进行 CBOR 编解码，适用于方法名称确实由运行时输入决定的调用；未知方法和参数错误在调用时返回。
 
 ## Python 进程插件
 

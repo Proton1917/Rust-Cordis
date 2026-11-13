@@ -32,6 +32,8 @@ description: 编写、验证和部署 Cordis Rust、Python、TypeScript 与网�
 
 服务方法、事件和资源参数按接口声明编码。通过 `cordis idl gen` 从同一 WIT 生成 Rust、Python 或 TypeScript 绑定，提供方和使用方共同维护该定义。替换保持逻辑插件名、组件名及服务接口主版本；兼容追加方法时提升接口次版本。
 
+方法名称来自配方、配置或网关映射时，使用 [动态调用](references/dynamic.md)。Rust 的 get_dynamic、TypeScript 的 getDynamic 与 Python 的 Remote.invoke 沿现有依赖视图执行；原生资源参数和返回值通过 invoke_as 的 Service 类型传递。
+
 结构中的字节字段采用 `cordis_sdk::Bytes`、Python `bytes` 或 TypeScript `Uint8Array`；WIT 绑定统一写出字节串并兼容旧数组。超过消息上限的数据经通用字节流分块传递。外部 HTTP 调用、页面身份与密钥授权见 [HTTP、流与身份](references/http.md)。
 
 ## 运行与交付

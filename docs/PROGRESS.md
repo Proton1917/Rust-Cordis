@@ -6,10 +6,14 @@
 
 | 项 | 值 |
 |---|---|
-| 最近完成的实现与检查 | M22：HTTP 路由、通用字节流、页面调用来源、密钥服务与三语言脚手架；AU-19–AU-26、RM-11 |
-| 当前里程碑 | M22、v0.1.0 发布与 review 跟进完成；按 ADR-0047 进入 M23 |
-| 当前验证 | review 的 cargo test --workspace --no-fail-fast 一次通过：336 项用例、0 失败，1 项独立测量保持忽略；与全量运行并行的故障页五轮全部通过。fmt 与 supervisor 全目标 clippy 通过，七文件发布候选与 secrets 配置通过 |
-| 下一步 | 提交 review 修正，按 ADR-0047 实施 M23 动态调用、AU-27–AU-30 与文档更新；核心及 ABI 以本次 review 为基线保持。M23 经复核后发布 v0.2.0，预编译包加入 secrets。主会话独立执行 |
+| 最近完成的实现与检查 | M23：Rust/TypeScript 动态入口、命名依赖、资源所有权与三语言行为；AU-27–AU-30、AU-27a |
+| 当前里程碑 | M23 实现与专项验收通过，339 项完整用例通过；固定 Git 依赖用例依设计方安排在推送后复验 |
+| M23 接口确认 | beb4c8cf 已获设计方批准：invoke/invoke_async 处理纯 CBOR，参数拒绝裸 tag 60000，结果含资源时先释放再返回参数错误；invoke_as/invoke_as_async 经编码环境导入 Service。Inject 命名声明共用类型化校验；Python 沿用 Remote.invoke，TypeScript 增加 getDynamic。ADR-0047 已由设计方追加 AU-27a，随 M23 提交。实现与行为验收进行中，review 基线为 70db380 |
+| M23 版本 | 1c6187d3 批准发行标签 v0.2.0，改动的 cordis-sdk、cordis-dev 与 TypeScript SDK 升为 0.2.0；核心、宿主、Python SDK 和既有官方插件保持 0.1.0，ABI v1、UP/1 保持。发布页和包内 README 以组件表说明；脚手架验证生成的 SDK 版本及源码提交 |
+| M23 依赖锁文件 | ef9cfb5a 批准夹具 Cargo.lock 中 SDK 项随 0.2.0 机械联动；其余依赖保持既有版本。核心产品 src/Cargo.toml、ABI 与根锁文件中的核心依赖项保持 review 70db380 |
+| M23 固定 Git 验收 | 72c36897 裁决：M23 单个实现提交先推送，随后以 CORDIS_SOURCE_REVISION 指向该提交，复验 readme_first_plugin_builds_from_pinned_git_sdk；其余完整用例在提交前通过。该项通过并经设计方复核后发布 v0.2.0 |
+| 当前验证 | M23 的四提供方比较、资源释放、替换回滚与脚本动态调用专项通过；完整 workspace 为 339 通过、1 个固定 Git 用例待 M23 推送后复验、1 项测量忽略。fmt、clippy、177 条矩阵、unsafe 与布局通过；core-boundary.diff 为 0 字节 |
+| 下一步 | 推送 M23 后立即以 CORDIS_SOURCE_REVISION=<M23 提交> 复验 readme_first_plugin_builds_from_pinned_git_sdk，回复提交与结果，等待设计方复核；通过后发布 v0.2.0，随包加入 secrets。发行版本与核心 0.1.0 分别记录 |
 | M22 复核跟进 | 439880c9：全量运行的 invalid_channel_frames_and_flood_preserve_other_pages 出现 KeyError，单独三轮通过；分析自动重连的新页面组与回收等待，修改限测试。trusted.rs 的 expect 改为内部错误和诊断，supervisor 保持至多 5450 行。两项安排在 v0.1.0 后、M23 前的 review 提交 |
 | 发布复核跟进 | 0d538651：设计方下载核验 v0.1.0 通过；release notes 说明 secrets 在 v0.1.0 从固定 rev f8729ac 源码构建，经 cordis pack 交付。v0.2.0 起把 secrets 纳入预编译包，打包脚本与 file/grants、0600 配置说明纳入同一 review 提交 |
 | M22 边界 | 按设计方三项裁决：内核、up、channels、types、process 与 ABI 相对 df05064 保持；supervisor 先提取到 routing 再添加受信调用元数据，结束时至多 5450 代码行；web-deployment 限页面来源，runtime 限 service install |
@@ -26,7 +30,7 @@
 | 验收资料 | docs/measurements/m21-acceptance.md 汇总 AU-1–AU-18；性能、语言、完整运行时和 native 稳定性另有原始 JSON。网页状态与操作见 docs/design/flow/index.html |
 | 文档交付 | README 三张表、guide、DOC-13/15、ADR-0043、skill、解释页与独立 HTML 已同步 |
 | 窗口界面验收 | AU-17 已归档；用户运行记录为恢复 802 ms，截图、Cmd-Q、检查点与进程退出通过 |
-| 最后更新 | 2026-11-14（Asia/Shanghai），M22 实现、完整验收与资料归档 |
+| 最后更新 | 2026-11-14（Asia/Shanghai），M23 实现、专项与提交前检查归档 |
 
 ## 环境
 
@@ -816,6 +820,66 @@ RM-9 两次均为每实现固定 9 轮、每轮预热 10000 次、计量 100000 
 - 0d538651 的发布内容：v0.1.0 发布页已写明 secrets 从固定 rev f8729ac 源码构建，经 cordis pack 交付；v0.2.0 起随包提供。新增 tools/release.py 与 tools/release/README.md、cordis.toml，共用 target/shared 编译，按显式清单装配七个程序和动态库。包含 secrets 的 review 候选实际构建，七个 arm64 文件的签名及路径检查通过；README 的 file/grants 配置以 0600 文件启动 secrets，Active 且退出 0。记录位于 target/releases/v0.1.0-review/evidence。
 - 完整检查：并行负载的 workspace 最终退出 0，共 336 项通过、0 失败；RM-11 测量入口按原约定独立执行。复核跟进结果见 [review 数据](measurements/m22-review.json)。发布进度页面的桌面与移动画面已查看，记录在 target/http-m22/evidence/docs/release-summary-*、release-progress-*。
 - 发布后清理：进程查询确认构建及测试退出后，删除 target/debug、target/shared、v0.1.0 的装配与下载验证副本、含 secrets 的 review 候选程序。保留已发布 tar、日志、JSON、截图、rm9-candidate/analysis、review-fix、review-m3、review-m4 及 claude-edits。`du -sh target` 为 43G→5.4G；目录占用减少 40,461,443,072 字节，文件系统可用空间增加 40,388,063,232 字节。逐项路径与前后值见 [清理记录](measurements/release-v0.1.0-cleanup.json)。
+
+### M23 SDK 动态调用
+
+- 职责：按名称选择服务方法及参数编码属于使用方，Rust SDK 新增 DynamicService，复用 Host.get、Object.invoke/invoke_async、CborEncoder 与 decode_in；依据第一性原理第 3、5 条，核心、ABI、UP/1 的产品实现保持。TypeScript Context.getDynamic 返回现有 Remote，Python 沿用 Context.get 与 Remote.invoke。
+- 接口：Rust 提供 get_dynamic、invoke/invoke_async、invoke_as/invoke_as_async，以及 Inject.with_name/optional_name。原始接口拒绝参数中的资源标签，含资源的结果先释放再返回 code 2；带 Service 的序列化接口保留资源拥有关系。普通服务按 inject 取得，实际存在但未声明的 secrets 同样返回 code 4；核心内置 Runtime 保持类型化取得规则。
+- AU-27/27a/28/30：同组原生、跨组原生、Python、TypeScript 四种提供方的全部 KV 方法与错误比较通过；Scoped 的 caller 相同。真实 1 MiB 文件流逐字节读取，原始资源结果拒绝后提供方观察到释放，invoke_as_async 取得资源并完成读取与释放。三种语言的裸资源参数拒绝通过。记录为 [矩阵](measurements/m23-matrix.json) 与 [脚本](measurements/m23-scripts.json)。
+- AU-29：持续调用期间完成内存 KV 到文件 KV 的替换、加载失败候选的回滚以及提供方卸下，使用方分别重建、恢复与转 Pending；文件实现实际写出持久化文件。记录为 [生命周期](measurements/m23-lifecycle.json)。
+- 脚手架：新项目的 SDK 约束来自 SDK 包声明，现为 0.2.0；默认 Git rev 来自开发工具构建提交。新增 generated_project_requires_sdk_02_at_the_development_build_revision 验证约束和提交，原有本机 SDK 生成项目构建运行通过。HTTP 共享接口保留自己的包版本，来源依赖继续共用相同 Git rev 或路径。
+- Y-1/Y-2：cargo fmt --all --check 与 cargo clippy --workspace --all-targets -- -D warnings 通过；日志 target/dynamic-m23/evidence/fmt.log、clippy.log。
+- Y-3：cargo test --workspace --no-fail-fast 的 339 项通过、1 项失败，RM-11 独立测量入口保持忽略。失败项 readme_first_plugin_builds_from_pinned_git_sdk 使用构建时 70db380，而该提交的 SDK 为 0.1.0，无法满足新声明 ^0.2.0。设计方 72c36897 明确先推送单个 M23 实现提交，再用 CORDIS_SOURCE_REVISION=<M23 提交> 立即复验这一条；其余用例提交前全部通过。原日志 target/dynamic-m23/evidence/workspace.log。
+- Y-4/Y-5：177 条上游矩阵通过，unsafe 审计在本次 workspace 中通过；日志 conformance.log 与 workspace.log。Y-6/Y-7：ABI 与宏实现保持 M22 已验源，复用该阶段 Miri 的 13 条边界用例与布局；本次原生布局检查通过。
+- AU-8：相对 70db380 的核心九 crate 产品 src/Cargo.toml 与 cordis-abi 完整 diff 为 0 字节，记录 core-boundary.diff。根 Cargo.lock 的产品项只联动 cordis-sdk 与 cordis-dev 版本；夹具锁中的 SDK 版本联动是 SDK 升到 0.2.0 的机械结果，已按 ef9cfb5a 批准范围保留，其他依赖保持。
+- 版本：发行组合为 v0.2.0，实际改动的 Rust SDK、cordis-dev、TypeScript SDK 为 0.2.0；核心、宿主、Python SDK、网页宿主和官方插件为 0.1.0，ABI v1.0、UP/1 保持。tools/release.py 从各包声明生成组件表，后续发布页采用同一版本口径，包内提供 secrets。
+- Y-8：cloc 2.10、--skip-uniqueness，代码行排除空行与注释；延续各 crate 既有目标和上限，超过目标的现有职责说明沿 M22 记录。新增 SDK 与开发工具仍处于上限内，核心合计保持 19138 / 21407。
+
+| crate | 代码行 / 总行 |
+|---|---:|
+| console-log | 465 / 515 |
+| cordis | 4230 / 5112 |
+| cordis-abi | 2407 / 2846 |
+| cordis-channels | 250 / 277 |
+| cordis-contract | 31 / 47 |
+| cordis-dev | 2580 / 2818 |
+| cordis-host | 2730 / 3020 |
+| cordis-idl | 2331 / 2475 |
+| cordis-process | 374 / 410 |
+| cordis-routing | 736 / 828 |
+| cordis-runtime | 5400 / 5933 |
+| cordis-sdk | 980 / 1136 |
+| cordis-sdk-macros | 1427 / 1558 |
+| cordis-supervisor | 5445 / 5896 |
+| cordis-testkit | 502 / 571 |
+| cordis-types | 205 / 239 |
+| cordis-up | 1628 / 1773 |
+| cordis-web-deployment | 870 / 939 |
+| counter | 6 / 9 |
+| counter-component | 75 / 85 |
+| forward-api | 17 / 21 |
+| http | 1686 / 1831 |
+| http-api | 135 / 152 |
+| http-echo | 162 / 176 |
+| kv-api | 23 / 37 |
+| kv-contract | 56 / 66 |
+| kv-file | 135 / 148 |
+| kv-mem | 6 / 9 |
+| kv-mem-component | 73 / 86 |
+| sdks/python/cordis_sdk | 967 / 1162 |
+| sdks/typescript/cordis-sdk | 1294 / 1411 |
+| sdks/typescript/cordis-web | 207 / 232 |
+| secrets | 87 / 97 |
+| secrets-api | 6 / 9 |
+| stream-api | 110 / 128 |
+| watch | 578 / 622 |
+| web-api | 25 / 32 |
+| window | 943 / 1020 |
+| window-api | 11 / 17 |
+| 核心进程 crate 合计 | 19138 / 21407 |
+
+- Y-9：guide 新增动态调用章节，skill 新增 dynamic 参考与入口，README 组成和路线图、解释页进度已同步。skill quick_validate 通过。已实际查看解释页更新后的桌面、移动截图，保存在 target/dynamic-m23/evidence/docs；M22 发布截图继续保存在其原证据目录。
+- Y-10：按设计方的提交后验收安排，单个 M23 实现提交推送后立即执行固定 Git 依赖用例，复验结果另以当前会话回复并写入后续发布记录；v0.2.0 标签等待该项及设计方复核通过。
 
 ## 第二阶段候选与恢复记录
 

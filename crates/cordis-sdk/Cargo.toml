@@ -1,6 +1,6 @@
 [package]
 name = "cordis-sdk"
-version.workspace = true
+version = "0.2.0"
 edition.workspace = true
 rust-version = "1.85"
 publish.workspace = true

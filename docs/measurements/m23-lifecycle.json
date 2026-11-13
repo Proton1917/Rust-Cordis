@@ -1,0 +1,1391 @@
+{
+  "scenario": "lifecycle",
+  "result": {
+    "rust": {
+      "before": {
+        "context": 13,
+        "errors": {
+          "builtin_runtime": true,
+          "calls": [
+            {
+              "code": 3,
+              "method": "absent-method"
+            },
+            {
+              "code": 2,
+              "method": "get"
+            },
+            {
+              "code": 2,
+              "method": "get"
+            },
+            {
+              "code": 2,
+              "method": "put"
+            }
+          ],
+          "typed_undeclared": 4,
+          "typed_undeclared_secrets": 4,
+          "undeclared": 4,
+          "undeclared_secrets": 4
+        },
+        "iterations": 10,
+        "metadata": {
+          "cordis.caller": {
+            "instance": "probe"
+          }
+        },
+        "resources": {
+          "bytes": 1048576,
+          "raw_result_code": 2,
+          "raw_result_released": true,
+          "typed_resource_released": true
+        },
+        "typed": false
+      },
+      "replaced": {
+        "context": 17,
+        "errors": {
+          "builtin_runtime": true,
+          "calls": [
+            {
+              "code": 3,
+              "method": "absent-method"
+            },
+            {
+              "code": 2,
+              "method": "get"
+            },
+            {
+              "code": 2,
+              "method": "get"
+            },
+            {
+              "code": 2,
+              "method": "put"
+            }
+          ],
+          "typed_undeclared": 4,
+          "typed_undeclared_secrets": 4,
+          "undeclared": 4,
+          "undeclared_secrets": 4
+        },
+        "iterations": 10,
+        "metadata": {
+          "cordis.caller": {
+            "instance": "probe"
+          }
+        },
+        "resources": {
+          "bytes": 1048576,
+          "raw_result_code": 2,
+          "raw_result_released": true,
+          "typed_resource_released": true
+        },
+        "typed": false
+      },
+      "failure": {
+        "ok": false,
+        "code": 1002,
+        "value": "KV新版本加载失败",
+        "detail": {
+          "group": "store",
+          "plugin": "kv",
+          "committed": false,
+          "cause": null
+        },
+        "rpc_wall_us": 129392
+      },
+      "restored": {
+        "context": 22,
+        "errors": {
+          "builtin_runtime": true,
+          "calls": [
+            {
+              "code": 3,
+              "method": "absent-method"
+            },
+            {
+              "code": 2,
+              "method": "get"
+            },
+            {
+              "code": 2,
+              "method": "get"
+            },
+            {
+              "code": 2,
+              "method": "put"
+            }
+          ],
+          "typed_undeclared": 4,
+          "typed_undeclared_secrets": 4,
+          "undeclared": 4,
+          "undeclared_secrets": 4
+        },
+        "iterations": 10,
+        "metadata": {
+          "cordis.caller": {
+            "instance": "probe"
+          }
+        },
+        "resources": {
+          "bytes": 1048576,
+          "raw_result_code": 2,
+          "raw_result_released": true,
+          "typed_resource_released": true
+        },
+        "typed": false
+      },
+      "removed": {
+        "core_version": "0.1.0",
+        "pid": 19492,
+        "groups": [
+          {
+            "name": "admin",
+            "connection": 1,
+            "pid": 19514,
+            "state": "running",
+            "restarts": 0,
+            "plugins": [
+              {
+                "name": "fixture-admin",
+                "version": "0.1.0",
+                "sdk_version": "0.1.0",
+                "build_info": "real UP1 process",
+                "format": 2,
+                "library": null,
+                "components": [
+                  {
+                    "name": "admin",
+                    "inject": [
+                      {
+                        "interface": "cordis.manage@1.0",
+                        "required": true
+                      },
+                      {
+                        "interface": "cordis.runtime@1.1",
+                        "required": true
+                      }
+                    ],
+                    "provides": [],
+                    "listens": [],
+                    "state_schema": "",
+                    "state_version_min": 1,
+                    "state_version_max": 1
+                  }
+                ]
+              }
+            ],
+            "error": null
+          },
+          {
+            "name": "identity",
+            "connection": 2,
+            "pid": 19520,
+            "state": "running",
+            "restarts": 0,
+            "plugins": [
+              {
+                "name": "dynamic-tests",
+                "version": "0.1.0",
+                "sdk_version": "0.2.0",
+                "build_info": "rustc 1.96.0 (ac68faa20 2026-05-25) aarch64-apple-darwin",
+                "format": 1,
+                "library": 1,
+                "components": [
+                  {
+                    "name": "identity",
+                    "inject": [],
+                    "provides": [
+                      "dynamic.identity@1.0",
+                      "dynamic.undeclared@1.0"
+                    ],
+                    "listens": [],
+                    "state_schema": "",
+                    "state_version_min": 0,
+                    "state_version_max": 0
+                  },
+                  {
+                    "name": "probe",
+                    "inject": [
+                      {
+                        "interface": "kv@1.0",
+                        "required": true
+                      },
+                      {
+                        "interface": "dynamic.identity@1.0",
+                        "required": true
+                      },
+                      {
+                        "interface": "dynamic.streams@1.0",
+                        "required": false
+                      }
+                    ],
+                    "provides": [],
+                    "listens": [],
+                    "state_schema": "",
+                    "state_version_min": 0,
+                    "state_version_max": 0
+                  },
+                  {
+                    "name": "streams",
+                    "inject": [],
+                    "provides": [
+                      "dynamic.streams@1.0"
+                    ],
+                    "listens": [],
+                    "state_schema": "",
+                    "state_version_min": 0,
+                    "state_version_max": 0
+                  }
+                ]
+              }
+            ],
+            "error": null
+          },
+          {
+            "name": "probe",
+            "connection": 12,
+            "pid": 19532,
+            "state": "running",
+            "restarts": 0,
+            "plugins": [
+              {
+                "name": "dynamic-tests",
+                "version": "0.1.0",
+                "sdk_version": "0.2.0",
+                "build_info": "rustc 1.96.0 (ac68faa20 2026-05-25) aarch64-apple-darwin",
+                "format": 1,
+                "library": 1,
+                "components": [
+                  {
+                    "name": "identity",
+                    "inject": [],
+                    "provides": [
+                      "dynamic.identity@1.0",
+                      "dynamic.undeclared@1.0"
+                    ],
+                    "listens": [],
+                    "state_schema": "",
+                    "state_version_min": 0,
+                    "state_version_max": 0
+                  },
+                  {
+                    "name": "probe",
+                    "inject": [
+                      {
+                        "interface": "kv@1.0",
+                        "required": true
+                      },
+                      {
+                        "interface": "dynamic.identity@1.0",
+                        "required": true
+                      },
+                      {
+                        "interface": "dynamic.streams@1.0",
+                        "required": false
+                      }
+                    ],
+                    "provides": [],
+                    "listens": [],
+                    "state_schema": "",
+                    "state_version_min": 0,
+                    "state_version_max": 0
+                  },
+                  {
+                    "name": "streams",
+                    "inject": [],
+                    "provides": [
+                      "dynamic.streams@1.0"
+                    ],
+                    "listens": [],
+                    "state_schema": "",
+                    "state_version_min": 0,
+                    "state_version_max": 0
+                  }
+                ]
+              }
+            ],
+            "error": null
+          },
+          {
+            "name": "secrets",
+            "connection": 3,
+            "pid": 19522,
+            "state": "running",
+            "restarts": 0,
+            "plugins": [
+              {
+                "name": "secrets",
+                "version": "0.1.0",
+                "sdk_version": "0.2.0",
+                "build_info": "rustc 1.96.0 (ac68faa20 2026-05-25) aarch64-apple-darwin",
+                "format": 1,
+                "library": 1,
+                "components": [
+                  {
+                    "name": "secrets",
+                    "inject": [],
+                    "provides": [
+                      "cordis.secrets@1.0"
+                    ],
+                    "listens": [],
+                    "state_schema": "",
+                    "state_version_min": 0,
+                    "state_version_max": 0
+                  }
+                ]
+              }
+            ],
+            "error": null
+          },
+          {
+            "name": "streams",
+            "connection": 5,
+            "pid": 19526,
+            "state": "running",
+            "restarts": 0,
+            "plugins": [
+              {
+                "name": "dynamic-tests",
+                "version": "0.1.0",
+                "sdk_version": "0.2.0",
+                "build_info": "rustc 1.96.0 (ac68faa20 2026-05-25) aarch64-apple-darwin",
+                "format": 1,
+                "library": 1,
+                "components": [
+                  {
+                    "name": "identity",
+                    "inject": [],
+                    "provides": [
+                      "dynamic.identity@1.0",
+                      "dynamic.undeclared@1.0"
+                    ],
+                    "listens": [],
+                    "state_schema": "",
+                    "state_version_min": 0,
+                    "state_version_max": 0
+                  },
+                  {
+                    "name": "probe",
+                    "inject": [
+                      {
+                        "interface": "kv@1.0",
+                        "required": true
+                      },
+                      {
+                        "interface": "dynamic.identity@1.0",
+                        "required": true
+                      },
+                      {
+                        "interface": "dynamic.streams@1.0",
+                        "required": false
+                      }
+                    ],
+                    "provides": [],
+                    "listens": [],
+                    "state_schema": "",
+                    "state_version_min": 0,
+                    "state_version_max": 0
+                  },
+                  {
+                    "name": "streams",
+                    "inject": [],
+                    "provides": [
+                      "dynamic.streams@1.0"
+                    ],
+                    "listens": [],
+                    "state_schema": "",
+                    "state_version_min": 0,
+                    "state_version_max": 0
+                  }
+                ]
+              }
+            ],
+            "error": null
+          }
+        ],
+        "instances": [
+          {
+            "name": "admin",
+            "plugin": "fixture-admin",
+            "component": "admin",
+            "state": "active",
+            "revision": 0,
+            "bindings": [
+              3,
+              2
+            ],
+            "error": null,
+            "group": "admin",
+            "context": 6,
+            "reference": "installed-1"
+          },
+          {
+            "name": "identity",
+            "plugin": "dynamic-tests",
+            "component": "identity",
+            "state": "active",
+            "revision": 0,
+            "bindings": [],
+            "error": null,
+            "group": "identity",
+            "context": 8,
+            "reference": "installed-2.dylib"
+          },
+          {
+            "name": "probe",
+            "plugin": "dynamic-tests",
+            "component": "probe",
+            "state": "pending",
+            "revision": null,
+            "bindings": [],
+            "error": null,
+            "group": "probe",
+            "context": null,
+            "reference": "installed-2.dylib"
+          },
+          {
+            "name": "secrets",
+            "plugin": "secrets",
+            "component": "secrets",
+            "state": "active",
+            "revision": 0,
+            "bindings": [],
+            "error": null,
+            "group": "secrets",
+            "context": 9,
+            "reference": "installed-3.dylib"
+          },
+          {
+            "name": "streams",
+            "plugin": "dynamic-tests",
+            "component": "streams",
+            "state": "active",
+            "revision": 0,
+            "bindings": [],
+            "error": null,
+            "group": "streams",
+            "context": 11,
+            "reference": "installed-2.dylib"
+          }
+        ],
+        "last_replace": [],
+        "phase": "running",
+        "configuration_error": null,
+        "instance_errors": {},
+        "plugin_errors": {},
+        "overrides": [
+          "store"
+        ],
+        "sources": [
+          {
+            "reference": "admin",
+            "name": "fixture-admin",
+            "version": "0.1.0",
+            "source": "/Users/gordongauerk/Projects/Rust-cordis/target/dynamic-sdk/lifecycle-18917-1/rust/plugins/admin",
+            "directory": "/Users/gordongauerk/Projects/Rust-cordis/target/dynamic-sdk/lifecycle-18917-1/rust/plugins/admin",
+            "entry": {
+              "socket": "process",
+              "protocol": 1,
+              "command": [
+                "/Users/gordongauerk/Projects/Rust-cordis/target/test-artifacts/script-sdk-tools-18917-0/cordis-runtime-fixture",
+                "admin",
+                "v1"
+              ],
+              "restart": {
+                "max": 5,
+                "backoff_ms": 500
+              }
+            },
+            "web": null,
+            "descriptor": null
+          },
+          {
+            "reference": "installed-1",
+            "name": "fixture-admin",
+            "version": "0.1.0",
+            "source": "/Users/gordongauerk/Projects/Rust-cordis/target/dynamic-sdk/lifecycle-18917-1/rust/plugins/installed-1",
+            "directory": "/Users/gordongauerk/Projects/Rust-cordis/target/dynamic-sdk/lifecycle-18917-1/rust/plugins/installed-1",
+            "entry": {
+              "socket": "process",
+              "protocol": 1,
+              "command": [
+                "/Users/gordongauerk/Projects/Rust-cordis/target/test-artifacts/script-sdk-tools-18917-0/cordis-runtime-fixture",
+                "admin",
+                "v1"
+              ],
+              "restart": {
+                "max": 5,
+                "backoff_ms": 500
+              }
+            },
+            "web": null,
+            "descriptor": {
+              "name": "fixture-admin",
+              "version": "0.1.0",
+              "sdk_version": "0.1.0",
+              "build_info": "real UP1 process",
+              "format": 2,
+              "library": null,
+              "components": [
+                {
+                  "name": "admin",
+                  "inject": [
+                    {
+                      "interface": "cordis.manage@1.0",
+                      "required": true
+                    },
+                    {
+                      "interface": "cordis.runtime@1.1",
+                      "required": true
+                    }
+                  ],
+                  "provides": [],
+                  "listens": [],
+                  "state_schema": "",
+                  "state_version_min": 1,
+                  "state_version_max": 1
+                }
+              ]
+            }
+          },
+          {
+            "reference": "installed-2.dylib",
+            "name": "dynamic-tests",
+            "version": "0.1.0",
+            "source": "/Users/gordongauerk/Projects/Rust-cordis/target/dynamic-sdk/lifecycle-18917-1/rust/plugins/installed-2.dylib",
+            "directory": "/Users/gordongauerk/Projects/Rust-cordis/target/dynamic-sdk/lifecycle-18917-1/rust/plugins",
+            "entry": {
+              "socket": "native",
+              "library": "/Users/gordongauerk/Projects/Rust-cordis/target/dynamic-sdk/lifecycle-18917-1/rust/plugins/installed-2.dylib"
+            },
+            "web": null,
+            "descriptor": {
+              "name": "dynamic-tests",
+              "version": "0.1.0",
+              "sdk_version": "0.2.0",
+              "build_info": "rustc 1.96.0 (ac68faa20 2026-05-25) aarch64-apple-darwin",
+              "format": 1,
+              "library": null,
+              "components": [
+                {
+                  "name": "identity",
+                  "inject": [],
+                  "provides": [
+                    "dynamic.identity@1.0",
+                    "dynamic.undeclared@1.0"
+                  ],
+                  "listens": [],
+                  "state_schema": "",
+                  "state_version_min": 0,
+                  "state_version_max": 0
+                },
+                {
+                  "name": "probe",
+                  "inject": [
+                    {
+                      "interface": "kv@1.0",
+                      "required": true
+                    },
+                    {
+                      "interface": "dynamic.identity@1.0",
+                      "required": true
+                    },
+                    {
+                      "interface": "dynamic.streams@1.0",
+                      "required": false
+                    }
+                  ],
+                  "provides": [],
+                  "listens": [],
+                  "state_schema": "",
+                  "state_version_min": 0,
+                  "state_version_max": 0
+                },
+                {
+                  "name": "streams",
+                  "inject": [],
+                  "provides": [
+                    "dynamic.streams@1.0"
+                  ],
+                  "listens": [],
+                  "state_schema": "",
+                  "state_version_min": 0,
+                  "state_version_max": 0
+                }
+              ]
+            }
+          },
+          {
+            "reference": "installed-3.dylib",
+            "name": "secrets",
+            "version": "0.1.0",
+            "source": "/Users/gordongauerk/Projects/Rust-cordis/target/dynamic-sdk/lifecycle-18917-1/rust/plugins/installed-3.dylib",
+            "directory": "/Users/gordongauerk/Projects/Rust-cordis/target/dynamic-sdk/lifecycle-18917-1/rust/plugins",
+            "entry": {
+              "socket": "native",
+              "library": "/Users/gordongauerk/Projects/Rust-cordis/target/dynamic-sdk/lifecycle-18917-1/rust/plugins/installed-3.dylib"
+            },
+            "web": null,
+            "descriptor": {
+              "name": "secrets",
+              "version": "0.1.0",
+              "sdk_version": "0.2.0",
+              "build_info": "rustc 1.96.0 (ac68faa20 2026-05-25) aarch64-apple-darwin",
+              "format": 1,
+              "library": 1,
+              "components": [
+                {
+                  "name": "secrets",
+                  "inject": [],
+                  "provides": [
+                    "cordis.secrets@1.0"
+                  ],
+                  "listens": [],
+                  "state_schema": "",
+                  "state_version_min": 0,
+                  "state_version_max": 0
+                }
+              ]
+            }
+          },
+          {
+            "reference": "installed-4.dylib",
+            "name": "kv",
+            "version": "0.1.0",
+            "source": "/Users/gordongauerk/Projects/Rust-cordis/target/dynamic-sdk/lifecycle-18917-1/rust/plugins/installed-4.dylib",
+            "directory": "/Users/gordongauerk/Projects/Rust-cordis/target/dynamic-sdk/lifecycle-18917-1/rust/plugins",
+            "entry": {
+              "socket": "native",
+              "library": "/Users/gordongauerk/Projects/Rust-cordis/target/dynamic-sdk/lifecycle-18917-1/rust/plugins/installed-4.dylib"
+            },
+            "web": null,
+            "descriptor": {
+              "name": "kv",
+              "version": "0.1.0",
+              "sdk_version": "0.2.0",
+              "build_info": "rustc 1.96.0 (ac68faa20 2026-05-25) aarch64-apple-darwin",
+              "format": 1,
+              "library": 1,
+              "components": [
+                {
+                  "name": "kv-store",
+                  "inject": [],
+                  "provides": [
+                    "kv@1.0"
+                  ],
+                  "listens": [],
+                  "state_schema": "kv.snapshot",
+                  "state_version_min": 1,
+                  "state_version_max": 1
+                }
+              ]
+            }
+          },
+          {
+            "reference": "installed-5.dylib",
+            "name": "kv",
+            "version": "0.1.0",
+            "source": "/Users/gordongauerk/Projects/Rust-cordis/target/dynamic-sdk/lifecycle-18917-1/rust/plugins/installed-5.dylib",
+            "directory": "/Users/gordongauerk/Projects/Rust-cordis/target/dynamic-sdk/lifecycle-18917-1/rust/plugins",
+            "entry": {
+              "socket": "native",
+              "library": "/Users/gordongauerk/Projects/Rust-cordis/target/dynamic-sdk/lifecycle-18917-1/rust/plugins/installed-5.dylib"
+            },
+            "web": null,
+            "descriptor": {
+              "name": "kv",
+              "version": "0.1.0",
+              "sdk_version": "0.2.0",
+              "build_info": "rustc 1.96.0 (ac68faa20 2026-05-25) aarch64-apple-darwin",
+              "format": 1,
+              "library": null,
+              "components": [
+                {
+                  "name": "kv-store",
+                  "inject": [
+                    {
+                      "interface": "cordis.data-dir@1.0",
+                      "required": true
+                    }
+                  ],
+                  "provides": [
+                    "kv@1.0"
+                  ],
+                  "listens": [],
+                  "state_schema": "kv.snapshot",
+                  "state_version_min": 1,
+                  "state_version_max": 1
+                }
+              ]
+            }
+          },
+          {
+            "reference": "installed-6.dylib",
+            "name": "kv",
+            "version": "0.2.0",
+            "source": "/Users/gordongauerk/Projects/Rust-cordis/target/dynamic-sdk/lifecycle-18917-1/rust/plugins/installed-6.dylib",
+            "directory": "/Users/gordongauerk/Projects/Rust-cordis/target/dynamic-sdk/lifecycle-18917-1/rust/plugins",
+            "entry": {
+              "socket": "native",
+              "library": "/Users/gordongauerk/Projects/Rust-cordis/target/dynamic-sdk/lifecycle-18917-1/rust/plugins/installed-6.dylib"
+            },
+            "web": null,
+            "descriptor": {
+              "name": "kv",
+              "version": "0.2.0",
+              "sdk_version": "0.2.0",
+              "build_info": "rustc 1.96.0 (ac68faa20 2026-05-25) aarch64-apple-darwin",
+              "format": 1,
+              "library": null,
+              "components": [
+                {
+                  "name": "kv-store",
+                  "inject": [],
+                  "provides": [
+                    "kv@1.0"
+                  ],
+                  "listens": [],
+                  "state_schema": "kv.snapshot",
+                  "state_version_min": 1,
+                  "state_version_max": 1
+                }
+              ]
+            }
+          },
+          {
+            "reference": "libcordis_secrets.dylib",
+            "name": "secrets",
+            "version": "0.1.0",
+            "source": "/Users/gordongauerk/Projects/Rust-cordis/target/dynamic-sdk/lifecycle-18917-1/rust/plugins/libcordis_secrets.dylib",
+            "directory": "/Users/gordongauerk/Projects/Rust-cordis/target/dynamic-sdk/lifecycle-18917-1/rust/plugins",
+            "entry": {
+              "socket": "native",
+              "library": "/Users/gordongauerk/Projects/Rust-cordis/target/dynamic-sdk/lifecycle-18917-1/rust/plugins/libcordis_secrets.dylib"
+            },
+            "web": null,
+            "descriptor": {
+              "name": "secrets",
+              "version": "0.1.0",
+              "sdk_version": "0.2.0",
+              "build_info": "rustc 1.96.0 (ac68faa20 2026-05-25) aarch64-apple-darwin",
+              "format": 1,
+              "library": null,
+              "components": [
+                {
+                  "name": "secrets",
+                  "inject": [],
+                  "provides": [
+                    "cordis.secrets@1.0"
+                  ],
+                  "listens": [],
+                  "state_schema": "",
+                  "state_version_min": 0,
+                  "state_version_max": 0
+                }
+              ]
+            }
+          },
+          {
+            "reference": "libdynamic_test_native.dylib",
+            "name": "dynamic-tests",
+            "version": "0.1.0",
+            "source": "/Users/gordongauerk/Projects/Rust-cordis/target/dynamic-sdk/lifecycle-18917-1/rust/plugins/libdynamic_test_native.dylib",
+            "directory": "/Users/gordongauerk/Projects/Rust-cordis/target/dynamic-sdk/lifecycle-18917-1/rust/plugins",
+            "entry": {
+              "socket": "native",
+              "library": "/Users/gordongauerk/Projects/Rust-cordis/target/dynamic-sdk/lifecycle-18917-1/rust/plugins/libdynamic_test_native.dylib"
+            },
+            "web": null,
+            "descriptor": {
+              "name": "dynamic-tests",
+              "version": "0.1.0",
+              "sdk_version": "0.2.0",
+              "build_info": "rustc 1.96.0 (ac68faa20 2026-05-25) aarch64-apple-darwin",
+              "format": 1,
+              "library": null,
+              "components": [
+                {
+                  "name": "identity",
+                  "inject": [],
+                  "provides": [
+                    "dynamic.identity@1.0",
+                    "dynamic.undeclared@1.0"
+                  ],
+                  "listens": [],
+                  "state_schema": "",
+                  "state_version_min": 0,
+                  "state_version_max": 0
+                },
+                {
+                  "name": "probe",
+                  "inject": [
+                    {
+                      "interface": "kv@1.0",
+                      "required": true
+                    },
+                    {
+                      "interface": "dynamic.identity@1.0",
+                      "required": true
+                    },
+                    {
+                      "interface": "dynamic.streams@1.0",
+                      "required": false
+                    }
+                  ],
+                  "provides": [],
+                  "listens": [],
+                  "state_schema": "",
+                  "state_version_min": 0,
+                  "state_version_max": 0
+                },
+                {
+                  "name": "streams",
+                  "inject": [],
+                  "provides": [
+                    "dynamic.streams@1.0"
+                  ],
+                  "listens": [],
+                  "state_schema": "",
+                  "state_version_min": 0,
+                  "state_version_max": 0
+                }
+              ]
+            }
+          },
+          {
+            "reference": "libkv_mem.dylib",
+            "name": "kv",
+            "version": "0.1.0",
+            "source": "/Users/gordongauerk/Projects/Rust-cordis/target/dynamic-sdk/lifecycle-18917-1/rust/plugins/libkv_mem.dylib",
+            "directory": "/Users/gordongauerk/Projects/Rust-cordis/target/dynamic-sdk/lifecycle-18917-1/rust/plugins",
+            "entry": {
+              "socket": "native",
+              "library": "/Users/gordongauerk/Projects/Rust-cordis/target/dynamic-sdk/lifecycle-18917-1/rust/plugins/libkv_mem.dylib"
+            },
+            "web": null,
+            "descriptor": {
+              "name": "kv",
+              "version": "0.1.0",
+              "sdk_version": "0.2.0",
+              "build_info": "rustc 1.96.0 (ac68faa20 2026-05-25) aarch64-apple-darwin",
+              "format": 1,
+              "library": null,
+              "components": [
+                {
+                  "name": "kv-store",
+                  "inject": [],
+                  "provides": [
+                    "kv@1.0"
+                  ],
+                  "listens": [],
+                  "state_schema": "kv.snapshot",
+                  "state_version_min": 1,
+                  "state_version_max": 1
+                }
+              ]
+            }
+          }
+        ],
+        "last_batch": [],
+        "libraries": [
+          {
+            "id": 1,
+            "name": "dynamic-tests",
+            "version": "0.1.0",
+            "sdk_version": "0.2.0",
+            "build_info": "rustc 1.96.0 (ac68faa20 2026-05-25) aarch64-apple-darwin",
+            "sequence": 1,
+            "path": "/Users/gordongauerk/Projects/Rust-cordis/target/dynamic-sdk/lifecycle-18917-1/rust/.cordis/lib/identity/dynamic-tests-1.dylib",
+            "verified": false,
+            "leases": 3,
+            "quiescent": false,
+            "retired": false,
+            "closed": false,
+            "components": [
+              {
+                "name": "identity",
+                "inject": [],
+                "provides": [
+                  "dynamic.identity@1.0",
+                  "dynamic.undeclared@1.0"
+                ],
+                "listens": [],
+                "state_schema": "",
+                "state_version_min": 0,
+                "state_version_max": 0
+              },
+              {
+                "name": "probe",
+                "inject": [
+                  {
+                    "interface": "kv@1.0",
+                    "required": true
+                  },
+                  {
+                    "interface": "dynamic.identity@1.0",
+                    "required": true
+                  },
+                  {
+                    "interface": "dynamic.streams@1.0",
+                    "required": false
+                  }
+                ],
+                "provides": [],
+                "listens": [],
+                "state_schema": "",
+                "state_version_min": 0,
+                "state_version_max": 0
+              },
+              {
+                "name": "streams",
+                "inject": [],
+                "provides": [
+                  "dynamic.streams@1.0"
+                ],
+                "listens": [],
+                "state_schema": "",
+                "state_version_min": 0,
+                "state_version_max": 0
+              }
+            ],
+            "group": "identity",
+            "connection": 2
+          },
+          {
+            "id": 2,
+            "name": "secrets",
+            "version": "0.1.0",
+            "sdk_version": "0.2.0",
+            "build_info": "rustc 1.96.0 (ac68faa20 2026-05-25) aarch64-apple-darwin",
+            "sequence": 1,
+            "path": "/Users/gordongauerk/Projects/Rust-cordis/target/dynamic-sdk/lifecycle-18917-1/rust/.cordis/lib/secrets/secrets-1.dylib",
+            "verified": false,
+            "leases": 2,
+            "quiescent": false,
+            "retired": false,
+            "closed": false,
+            "components": [
+              {
+                "name": "secrets",
+                "inject": [],
+                "provides": [
+                  "cordis.secrets@1.0"
+                ],
+                "listens": [],
+                "state_schema": "",
+                "state_version_min": 0,
+                "state_version_max": 0
+              }
+            ],
+            "group": "secrets",
+            "connection": 3
+          },
+          {
+            "id": 4,
+            "name": "dynamic-tests",
+            "version": "0.1.0",
+            "sdk_version": "0.2.0",
+            "build_info": "rustc 1.96.0 (ac68faa20 2026-05-25) aarch64-apple-darwin",
+            "sequence": 1,
+            "path": "/Users/gordongauerk/Projects/Rust-cordis/target/dynamic-sdk/lifecycle-18917-1/rust/.cordis/lib/streams/dynamic-tests-1.dylib",
+            "verified": false,
+            "leases": 2,
+            "quiescent": false,
+            "retired": false,
+            "closed": false,
+            "components": [
+              {
+                "name": "identity",
+                "inject": [],
+                "provides": [
+                  "dynamic.identity@1.0",
+                  "dynamic.undeclared@1.0"
+                ],
+                "listens": [],
+                "state_schema": "",
+                "state_version_min": 0,
+                "state_version_max": 0
+              },
+              {
+                "name": "probe",
+                "inject": [
+                  {
+                    "interface": "kv@1.0",
+                    "required": true
+                  },
+                  {
+                    "interface": "dynamic.identity@1.0",
+                    "required": true
+                  },
+                  {
+                    "interface": "dynamic.streams@1.0",
+                    "required": false
+                  }
+                ],
+                "provides": [],
+                "listens": [],
+                "state_schema": "",
+                "state_version_min": 0,
+                "state_version_max": 0
+              },
+              {
+                "name": "streams",
+                "inject": [],
+                "provides": [
+                  "dynamic.streams@1.0"
+                ],
+                "listens": [],
+                "state_schema": "",
+                "state_version_min": 0,
+                "state_version_max": 0
+              }
+            ],
+            "group": "streams",
+            "connection": 5
+          },
+          {
+            "id": 5,
+            "name": "dynamic-tests",
+            "version": "0.1.0",
+            "sdk_version": "0.2.0",
+            "build_info": "rustc 1.96.0 (ac68faa20 2026-05-25) aarch64-apple-darwin",
+            "sequence": 1,
+            "path": "/Users/gordongauerk/Projects/Rust-cordis/target/dynamic-sdk/lifecycle-18917-1/rust/.cordis/lib/probe/dynamic-tests-1.dylib",
+            "verified": false,
+            "leases": 1,
+            "quiescent": false,
+            "retired": false,
+            "closed": false,
+            "components": [
+              {
+                "name": "identity",
+                "inject": [],
+                "provides": [
+                  "dynamic.identity@1.0",
+                  "dynamic.undeclared@1.0"
+                ],
+                "listens": [],
+                "state_schema": "",
+                "state_version_min": 0,
+                "state_version_max": 0
+              },
+              {
+                "name": "probe",
+                "inject": [
+                  {
+                    "interface": "kv@1.0",
+                    "required": true
+                  },
+                  {
+                    "interface": "dynamic.identity@1.0",
+                    "required": true
+                  },
+                  {
+                    "interface": "dynamic.streams@1.0",
+                    "required": false
+                  }
+                ],
+                "provides": [],
+                "listens": [],
+                "state_schema": "",
+                "state_version_min": 0,
+                "state_version_max": 0
+              },
+              {
+                "name": "streams",
+                "inject": [],
+                "provides": [
+                  "dynamic.streams@1.0"
+                ],
+                "listens": [],
+                "state_schema": "",
+                "state_version_min": 0,
+                "state_version_max": 0
+              }
+            ],
+            "group": "probe",
+            "connection": 12
+          }
+        ],
+        "last_swap": [
+          {
+            "plugin": "kv",
+            "previous_library": 6,
+            "candidate_library": 7,
+            "affected_instances": 0,
+            "pause_ms": 0,
+            "quiescence_ms": null,
+            "committed": false,
+            "succeeded": false,
+            "rolled_back": true,
+            "failure": "KV新版本加载失败"
+          }
+        ],
+        "available_plugins": [
+          {
+            "reference": "admin",
+            "name": "fixture-admin",
+            "version": "0.1.0",
+            "path": "/Users/gordongauerk/Projects/Rust-cordis/target/dynamic-sdk/lifecycle-18917-1/rust/plugins/admin",
+            "components": []
+          },
+          {
+            "reference": "installed-1",
+            "name": "fixture-admin",
+            "version": "0.1.0",
+            "path": "/Users/gordongauerk/Projects/Rust-cordis/target/dynamic-sdk/lifecycle-18917-1/rust/plugins/installed-1",
+            "components": [
+              {
+                "name": "admin",
+                "inject": [
+                  {
+                    "interface": "cordis.manage@1.0",
+                    "required": true
+                  },
+                  {
+                    "interface": "cordis.runtime@1.1",
+                    "required": true
+                  }
+                ],
+                "provides": [],
+                "listens": [],
+                "state_schema": "",
+                "state_version_min": 1,
+                "state_version_max": 1
+              }
+            ]
+          },
+          {
+            "reference": "installed-2.dylib",
+            "name": "dynamic-tests",
+            "version": "0.1.0",
+            "path": "/Users/gordongauerk/Projects/Rust-cordis/target/dynamic-sdk/lifecycle-18917-1/rust/plugins/installed-2.dylib",
+            "components": [
+              {
+                "name": "identity",
+                "inject": [],
+                "provides": [
+                  "dynamic.identity@1.0",
+                  "dynamic.undeclared@1.0"
+                ],
+                "listens": [],
+                "state_schema": "",
+                "state_version_min": 0,
+                "state_version_max": 0
+              },
+              {
+                "name": "probe",
+                "inject": [
+                  {
+                    "interface": "kv@1.0",
+                    "required": true
+                  },
+                  {
+                    "interface": "dynamic.identity@1.0",
+                    "required": true
+                  },
+                  {
+                    "interface": "dynamic.streams@1.0",
+                    "required": false
+                  }
+                ],
+                "provides": [],
+                "listens": [],
+                "state_schema": "",
+                "state_version_min": 0,
+                "state_version_max": 0
+              },
+              {
+                "name": "streams",
+                "inject": [],
+                "provides": [
+                  "dynamic.streams@1.0"
+                ],
+                "listens": [],
+                "state_schema": "",
+                "state_version_min": 0,
+                "state_version_max": 0
+              }
+            ]
+          },
+          {
+            "reference": "installed-3.dylib",
+            "name": "secrets",
+            "version": "0.1.0",
+            "path": "/Users/gordongauerk/Projects/Rust-cordis/target/dynamic-sdk/lifecycle-18917-1/rust/plugins/installed-3.dylib",
+            "components": [
+              {
+                "name": "secrets",
+                "inject": [],
+                "provides": [
+                  "cordis.secrets@1.0"
+                ],
+                "listens": [],
+                "state_schema": "",
+                "state_version_min": 0,
+                "state_version_max": 0
+              }
+            ]
+          },
+          {
+            "reference": "installed-4.dylib",
+            "name": "kv",
+            "version": "0.1.0",
+            "path": "/Users/gordongauerk/Projects/Rust-cordis/target/dynamic-sdk/lifecycle-18917-1/rust/plugins/installed-4.dylib",
+            "components": [
+              {
+                "name": "kv-store",
+                "inject": [],
+                "provides": [
+                  "kv@1.0"
+                ],
+                "listens": [],
+                "state_schema": "kv.snapshot",
+                "state_version_min": 1,
+                "state_version_max": 1
+              }
+            ]
+          },
+          {
+            "reference": "installed-5.dylib",
+            "name": "kv",
+            "version": "0.1.0",
+            "path": "/Users/gordongauerk/Projects/Rust-cordis/target/dynamic-sdk/lifecycle-18917-1/rust/plugins/installed-5.dylib",
+            "components": [
+              {
+                "name": "kv-store",
+                "inject": [
+                  {
+                    "interface": "cordis.data-dir@1.0",
+                    "required": true
+                  }
+                ],
+                "provides": [
+                  "kv@1.0"
+                ],
+                "listens": [],
+                "state_schema": "kv.snapshot",
+                "state_version_min": 1,
+                "state_version_max": 1
+              }
+            ]
+          },
+          {
+            "reference": "installed-6.dylib",
+            "name": "kv",
+            "version": "0.2.0",
+            "path": "/Users/gordongauerk/Projects/Rust-cordis/target/dynamic-sdk/lifecycle-18917-1/rust/plugins/installed-6.dylib",
+            "components": [
+              {
+                "name": "kv-store",
+                "inject": [],
+                "provides": [
+                  "kv@1.0"
+                ],
+                "listens": [],
+                "state_schema": "kv.snapshot",
+                "state_version_min": 1,
+                "state_version_max": 1
+              }
+            ]
+          },
+          {
+            "reference": "libcordis_secrets.dylib",
+            "name": "secrets",
+            "version": "0.1.0",
+            "path": "/Users/gordongauerk/Projects/Rust-cordis/target/dynamic-sdk/lifecycle-18917-1/rust/plugins/libcordis_secrets.dylib",
+            "components": [
+              {
+                "name": "secrets",
+                "inject": [],
+                "provides": [
+                  "cordis.secrets@1.0"
+                ],
+                "listens": [],
+                "state_schema": "",
+                "state_version_min": 0,
+                "state_version_max": 0
+              }
+            ]
+          },
+          {
+            "reference": "libdynamic_test_native.dylib",
+            "name": "dynamic-tests",
+            "version": "0.1.0",
+            "path": "/Users/gordongauerk/Projects/Rust-cordis/target/dynamic-sdk/lifecycle-18917-1/rust/plugins/libdynamic_test_native.dylib",
+            "components": [
+              {
+                "name": "identity",
+                "inject": [],
+                "provides": [
+                  "dynamic.identity@1.0",
+                  "dynamic.undeclared@1.0"
+                ],
+                "listens": [],
+                "state_schema": "",
+                "state_version_min": 0,
+                "state_version_max": 0
+              },
+              {
+                "name": "probe",
+                "inject": [
+                  {
+                    "interface": "kv@1.0",
+                    "required": true
+                  },
+                  {
+                    "interface": "dynamic.identity@1.0",
+                    "required": true
+                  },
+                  {
+                    "interface": "dynamic.streams@1.0",
+                    "required": false
+                  }
+                ],
+                "provides": [],
+                "listens": [],
+                "state_schema": "",
+                "state_version_min": 0,
+                "state_version_max": 0
+              },
+              {
+                "name": "streams",
+                "inject": [],
+                "provides": [
+                  "dynamic.streams@1.0"
+                ],
+                "listens": [],
+                "state_schema": "",
+                "state_version_min": 0,
+                "state_version_max": 0
+              }
+            ]
+          },
+          {
+            "reference": "libkv_mem.dylib",
+            "name": "kv",
+            "version": "0.1.0",
+            "path": "/Users/gordongauerk/Projects/Rust-cordis/target/dynamic-sdk/lifecycle-18917-1/rust/plugins/libkv_mem.dylib",
+            "components": [
+              {
+                "name": "kv-store",
+                "inject": [],
+                "provides": [
+                  "kv@1.0"
+                ],
+                "listens": [],
+                "state_schema": "kv.snapshot",
+                "state_version_min": 1,
+                "state_version_max": 1
+              }
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "exit": 0
+}
