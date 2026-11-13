@@ -20,6 +20,11 @@ pub struct Context {
 }
 
 impl Context {
+    /// DOC-16 §5：当前加载视图编号，可与只读运行时快照中的实例上下文匹配。
+    pub fn context_id(&self) -> u64 {
+        self.handle
+    }
+
     /// DOC-15 §7、ADR-0039：构造可作为返回值传递的本地资源，由服务句柄持有库租约。
     pub fn service<I: Interface + ?Sized>(&self, value: Arc<I>) -> Result<Service<I>> {
         Service::from_object(I::object(value, self.environment)?)

@@ -1,0 +1,8 @@
+name = "web-notes"
+version = "0.1.0"
+socket = "web"
+
+[web]
+assets = "web"
+mount = "/notes"
+entry = "index.js"

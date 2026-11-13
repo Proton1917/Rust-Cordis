@@ -1,6 +1,5 @@
 /** DOC-16 §2–6、§10：有界标准流帧、双向请求和连接级所有权。 */
 import { Decoder, Encoder, setSizeLimits } from "cbor-x";
-import type { Readable, Writable } from "node:stream";
 import { CordisError, fields, identifier, type Identifier, type Fields } from "./types.js";
 import type { Payload } from "./bindings.js";
 import { currentSignal, type Runtime } from "./runtime.js";
@@ -9,6 +8,12 @@ import { checkValue, type ValueLimits } from "./budget.js";
 interface Pending {
     resolve(value: Payload): void;
     reject(error: unknown): void;
+}
+export interface Input extends AsyncIterable<Uint8Array> {
+    destroy(error?: Error): void;
+}
+export interface Output {
+    write(value: Uint8Array, callback: (error?: Error | null) => void): unknown;
 }
 export interface Limits extends ValueLimits {
     maxFrame: number;
@@ -46,8 +51,8 @@ export class Connection {
 
     constructor(
         readonly runtime: Runtime,
-        readonly input: Readable,
-        readonly output: Writable,
+        readonly input: Input,
+        readonly output: Output,
         limits: Partial<Limits>,
     ) {
         this.limits = { ...DEFAULT_LIMITS, ...limits };
@@ -68,16 +73,15 @@ export class Connection {
             checkValue(message, this.limits);
             const data = this.encoder.encode(message);
             if (data.length > this.limits.maxFrame) throw new CordisError(8, "消息超过帧长度上限");
-            const header = Buffer.allocUnsafe(4);
-            header.writeUInt32BE(data.length);
+            const framed = new Uint8Array(data.length + 4);
+            new DataView(framed.buffer).setUint32(0, data.length);
+            framed.set(data, 4);
             this.writes++;
             const write = this.tail
                 .then(async () => {
                     if (this.closed) throw new CordisError(4, "核心连接已关闭");
                     await new Promise<void>((resolve, reject) => {
-                        this.output.write(Buffer.concat([header, data]), (error) =>
-                            error ? reject(error) : resolve(),
-                        );
+                        this.output.write(framed, (error) => (error ? reject(error) : resolve()));
                     });
                     committed = true;
                 })
@@ -168,12 +172,17 @@ export class Connection {
 
     /** CP-10：流结束释放资源；帧长度检查发生在等待完整消息之前。 */
     async serve(): Promise<void> {
-        let buffered = Buffer.alloc(0);
+        let buffered: Uint8Array<ArrayBufferLike> = new Uint8Array(0);
         try {
             for await (const chunk of this.input) {
-                buffered = Buffer.concat([buffered, chunk]);
+                const joined = new Uint8Array(buffered.length + chunk.length);
+                joined.set(buffered);
+                joined.set(chunk, buffered.length);
+                buffered = joined;
                 while (buffered.length >= 4) {
-                    const length = buffered.readUInt32BE(0);
+                    const length = new DataView(buffered.buffer, buffered.byteOffset, 4).getUint32(
+                        0,
+                    );
                     if (length > this.limits.maxFrame)
                         throw new CordisError(8, "输入帧超过长度上限");
                     if (buffered.length < length + 4) break;

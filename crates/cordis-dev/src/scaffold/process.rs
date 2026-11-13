@@ -43,11 +43,23 @@ pub fn python_plugin(project: &Path, name: &str) -> Result<()> {
 
 /// DOC-15 §12.1：各进程语言共用项目登记、Cargo 排除项与 watch 源目录。
 fn create(project: &Path, name: &str, write: fn(&Path, &str) -> Result<()>) -> Result<()> {
+    create_deployment(project, name, false, write)
+}
+
+/// DOC-15 §12.1：目录插件共用部署链接和 watch 登记，Rust crate 保留 Cargo 成员身份。
+pub(super) fn create_deployment(
+    project: &Path,
+    name: &str,
+    cargo_member: bool,
+    write: impl FnOnce(&Path, &str) -> Result<()>,
+) -> Result<()> {
     let project = project.canonicalize()?;
     let (configuration, addition, settings) = registration(&project, name, name.into())?;
     let cargo = project.join("Cargo.toml");
     let mut workspace: DocumentMut = fs::read_to_string(&cargo)?.parse()?;
-    exclude(&mut workspace, name)?;
+    if !cargo_member {
+        exclude(&mut workspace, name)?;
+    }
     let directory = project.join("plugins").join(name);
     let sources = settings
         .get("runtime")

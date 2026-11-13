@@ -1,0 +1,10 @@
+[package]
+name = "forward-api"
+version.workspace = true
+edition.workspace = true
+rust-version = "1.85"
+publish.workspace = true
+license.workspace = true
+
+[dependencies]
+cordis-sdk.workspace = true

@@ -1,0 +1,9 @@
+package cordis:web-text@1.0.0;
+
+interface text-normalizer {
+    normalize: func(value: string) -> string;
+}
+
+interface text-length {
+    measure: func(value: string) -> u32;
+}

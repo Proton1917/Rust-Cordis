@@ -368,7 +368,7 @@ footer { font-size: 13px; color: var(--muted); border-top: 1px solid var(--line)
       <div class="note"><b>唯一的内核</b>系统中只有一个<button class="term" data-term="kernel">内核</button>，位于核心进程。实例的启动、停止、更换顺序由它决定，插件进程按核心的指令执行。</div>
       <div class="note"><b>高速插口与插件组</b>Rust 插件编译为动态库，经<button class="term" data-term="fastsocket">高速插口</button>由 <button class="term code" data-term="host">cordis-host</button> 装载。同一<button class="term" data-term="group">插件组</button>的插件在同一进程中直接调用。</div>
       <div class="note"><b>通用插口</b>Python、TypeScript 等语言的插件是普通程序，经<button class="term" data-term="unisocket">通用插口</button>与核心收发消息。核心不包含这些语言的运行环境。</div>
-      <div class="note"><b>前端插件</b>前端代码同样是插件，经通用插口接入。浏览器页面是<button class="term" data-term="webhost">网页宿主</button>，不含内核；页面的消息由 http 插件转发给核心，核心本身不监听网络。</div>
+      <div class="note"><b>前端插件</b>浏览器页面是<button class="term" data-term="webhost">网页宿主</button>，执行组件的启动、界面更新与清理。http 插件把每页的 WebSocket 转为独立的 UP/1 连接，核心管理该页的子实例、服务域与调用预算。</div>
     </div>
   </section>
 
@@ -444,7 +444,7 @@ footer { font-size: 13px; color: var(--muted); border-top: 1px solid var(--line)
     <div class="sec-head">
       <div class="eyebrow">进度</div>
       <h2 id="prog-title">实现进度（2026-11-13）</h2>
-      <p class="lead">Rust 原生插件系统已完成系统验收，发布包、窗口恢复、截图和 Cmd-Q 退出均通过验收。WIT 生成三种语言的接口绑定，Python 与 TypeScript SDK 已通过跨语言调用、状态迁移和隔离域验证。当前接入浏览器页面；上方模拟包含后续阶段的前端场景。</p>
+      <p class="lead">M20 网页插件与全栈插件的功能及退出检查已通过。浏览器页面通过 http 插件接入核心，真实场景覆盖页面隔离、三语言服务依赖、局部替换、事务回退和连接恢复。当前接续 M21，进行第三阶段跨语言验收、运行时发布包与插件编写手册验收。</p>
     </div>
     <div class="progress">
       <table>
@@ -461,10 +461,16 @@ footer { font-size: 13px; color: var(--muted); border-top: 1px solid var(--line)
           <tr><td>WIT 接口描述语言</td><td class="mono">M17</td><td><span class="st done">运行验证通过</span></td><td>三语言绑定与 CBOR 互通通过；kv-api 由 WIT 生成，复合资源按调用期回收</td></tr>
           <tr><td>Python SDK 与插件脚手架</td><td class="mono">M18</td><td><span class="st done">运行验证通过</span></td><td>双向调用、KV 契约、跨插口迁移、隔离域与资源转交通过；源码变化触发热替换</td></tr>
           <tr><td>TypeScript SDK</td><td class="mono">M19</td><td><span class="st done">运行验证通过</span></td><td>Node 双向调用、KV 契约、资源与事件转交、迁移回退、脚手架热替换通过</td></tr>
-          <tr><td>前端与全栈插件</td><td class="mono">M20–M21</td><td><span class="st todo">候选准备</span></td><td>浏览器页面经 http 插件接入，独立连接与页面子实例由核心管理</td></tr>
+          <tr><td>前端与全栈插件</td><td class="mono">M20</td><td><span class="st done">功能与退出检查通过</span></td><td>八个真实浏览器场景通过；同名页面域隔离、三语言依赖恢复、批次替换回退与 HTTP 重连</td></tr>
+          <tr><td>第三阶段综合验收</td><td class="mono">M21</td><td><span class="st doing">验收进行中</span></td><td>跨语言替换与契约场景、附带 Python/Node 的发布包、插件编写手册与性能记录</td></tr>
         </tbody>
       </table>
     </div>
+    <div class="notes" id="web-mechanisms">
+      <div class="note"><b>页面实例与依赖恢复</b>每页的前端组件在核心中各有一个子实例，归属于网页实例或活动后端。页面服务按页面编号隔离，显式命名域也属于当前页面。必需提供方撤回时，子实例进入 Pending 并清理界面；提供方插回后重新执行 apply。关闭一页会回收该页子实例，其余页面继续运行。</div>
+      <div class="note"><b>版本替换与连接恢复</b>替换时逐页导出状态、清理旧组件，再加载带新序号的模块，保持同一页面文档。全栈替换先激活后端，再更新页面；候选失败时共同恢复原版本。HTTP 重启沿原地址轮换令牌，各页完成本地清理后重连。消息和在途调用预算按页面连接分别计算。</div>
+    </div>
+    <p class="callout"><a href="../design/flow/index.html">查看网页插件状态与替换流程</a>：真实截图展示全栈替换、依赖撤回和恢复、动态装配及 HTTP 重连的界面状态。</p>
   </section>
 
   <section aria-labelledby="gloss-title">
@@ -580,7 +586,7 @@ footer { font-size: 13px; color: var(--muted); border-top: 1px solid var(--line)
       see: ["group", "kernel", "up1"] },
     webhost: { name: "网页宿主", alias: "cordis-web",
       def: "运行前端插件的浏览器页面。页面中的 cordis-web 脚本按核心的指令装载、启动、停止前端插件。",
-      more: "网页宿主不含内核，地位与 cordis-host 相同。页面经 WebSocket 连接 http 插件，http 插件把每个页面作为一条独立的 UP/1 连接转交核心。每个页面上的前端插件在核心中各有一个子实例，页面关闭时由核心回收；前端插件经核心使用任何插件提供的服务。",
+      more: "页面经 WebSocket 连接 http 插件，再以独立 UP/1 连接接入核心。核心为每个页面组件建立子实例，页面中的普通服务域与显式命名域按页面区分。必需依赖撤回时清理界面，依赖恢复后重新激活；版本替换时导出并继承每页状态，页面关闭时回收所属实例与效应。",
       see: ["unisocket", "host", "up1"] },
     up1: { name: "UP/1", alias: "插件协议第 1 版",
       def: "核心与所有插件之间的消息协议：进程插件通过标准输入输出传送带长度前缀的 CBOR 消息，浏览器页面通过 WebSocket 传送同样的消息。",

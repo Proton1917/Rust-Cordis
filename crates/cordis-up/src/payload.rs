@@ -365,3 +365,24 @@ pub struct ReplacementFailure {
     pub committed: bool,
     pub cause: Value,
 }
+
+/// DOC-16 §11：转发方分配页面编号，元数据由网页部署解释。
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ChannelOpen {
+    pub channel: u64,
+    pub metadata: Value,
+}
+
+/// DOC-16 §11：frame 为完整内层 CBOR 字节串，类型错误按页面连接处理。
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ChannelFrame {
+    pub channel: u64,
+    pub frame: Value,
+}
+
+/// DOC-16 §11：按当前物理连接定位页面，关闭后回收其编号与资源。
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ChannelClose {
+    pub channel: u64,
+    pub reason: String,
+}

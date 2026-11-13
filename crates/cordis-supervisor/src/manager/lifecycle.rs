@@ -16,15 +16,64 @@ pub(super) struct Frozen {
     pub(super) failure: Option<WireError>,
 }
 
+/// ADR-0041：网页部署持有冻结状态及导出器，跨后端与页面步骤统一决定解冻或释放。
+#[derive(Clone)]
+pub struct FrozenSnapshot(Arc<Frozen>);
+
+impl FrozenSnapshot {
+    pub fn states(&self) -> &HashMap<String, payload::State> {
+        &self.0.states
+    }
+}
+
 /// SW-5–SW-8：一次替换的原快照、受影响实例名与变更前纪元。
 pub(super) struct Transition {
     pub frozen: Frozen,
     pub inherited: HashMap<String, Option<payload::State>>,
     pub names: Vec<String>,
     pub before: HashMap<String, cordis::Epoch>,
+    pub permit_pending: bool,
 }
 
 impl Manager {
+    /// ADR-0041：取得具体加载代的父视图，排队后的子挂载继续验证同一代的有效性。
+    pub fn active_instance_context(&self, name: &str) -> Result<Context> {
+        let instance = self.instance(name)?;
+        let generation = instance
+            .data
+            .current
+            .lock()
+            .upgrade()
+            .ok_or_else(|| error(4, "父实例当前加载缺席"))?;
+        generation.active()?;
+        Ok(generation.context.clone())
+    }
+    /// DOC-11 SW-5、ADR-0041：取得指定页面的冻结快照，导出失败解冻已访问的对象。
+    pub async fn freeze_instances(&self, names: &[String]) -> Result<FrozenSnapshot> {
+        let names = names.to_vec();
+        self.transaction(move |manager| async move {
+            manager.running()?;
+            for name in &names {
+                manager.instance(name)?;
+            }
+            let frozen = manager.export(&names, true).await;
+            if let Some(problem) = &frozen.failure {
+                let problem = problem.clone();
+                manager.thaw(&frozen).await?;
+                return Err(problem);
+            }
+            Ok(FrozenSnapshot(Arc::new(frozen)))
+        })
+        .await
+    }
+
+    /// DOC-11 SW-5：回退决议解冻原导出器，成功路径在旧页面清理后释放快照句柄。
+    pub async fn thaw_snapshot(&self, snapshot: &FrozenSnapshot) -> Result<()> {
+        let frozen = snapshot.0.clone();
+        self.transaction(move |manager| async move { manager.thaw(&frozen).await })
+            .await
+    }
+
     /// SW-5：取得可逆冻结与原快照；任一导出失败时解冻已经访问的导出器。
     pub(super) async fn prepare_transition(
         &self,
@@ -63,6 +112,7 @@ impl Manager {
             inherited,
             names,
             before: self.epochs(),
+            permit_pending: false,
         })
     }
     /// CP-1、CP-6：准备独立进程并握手，接受其描述符后建立核心分组。
@@ -246,7 +296,7 @@ impl Manager {
                 return Err(error(2, "插件名称重复"));
             }
             for info in &plugin.components {
-                validate_name(&info.name)?;
+                info.name.split('/').try_for_each(validate_name)?;
                 if !info.state_schema.is_empty() && info.state_version_min > info.state_version_max
                 {
                     return Err(error(2, "继承状态版本范围无效"));
@@ -377,40 +427,167 @@ impl Manager {
         self.transaction(move |manager| async move {
             manager.running()?;
             manager.check_view(&view)?;
-            validate_name(&specification.name)?;
-            if manager
-                .0
-                .catalog
-                .lock()
-                .instances
-                .contains_key(&specification.name)
-            {
-                return Err(error(2, "实例名称已经存在"));
-            }
-            if let Some(state) = &inherited {
-                payload::persistent_value(&state.data)
-                    .map_err(|problem| error(2, problem.to_string()))?;
-            }
-            let group = manager.group(&specification.group)?;
-            let current = group.current.lock().clone();
-            let key = (
-                specification.plugin.clone(),
-                specification.component.clone(),
-            );
-            let component = current
-                .components
-                .get(&key)
-                .ok_or_else(|| error(2, "描述符中缺少目标组件"))?;
-            manager.resolve(component, &specification.config).await?;
-            let definition = group
-                .definitions
-                .lock()
-                .get(&key)
-                .cloned()
-                .ok_or_else(|| error(4, "组件定义已退役"))?;
+            let definition = manager
+                .mount_definition(&specification, inherited.as_ref())
+                .await?;
             manager.install_instance(view, specification, definition, inherited)
         })
         .await
+    }
+
+    /// DOC-15 §11.2、ADR-0041：页面组件挂在活跃后端实例下，父卸载由内核等待子级清理。
+    pub async fn mount_child_instance(
+        &self,
+        parent: String,
+        specification: InstanceSpec,
+        inherited: Option<payload::State>,
+        options: payload::ContextOptions,
+    ) -> Result<Fiber> {
+        self.transaction(move |manager| async move {
+            manager.running()?;
+            let parent = manager
+                .instance(&parent)?
+                .data
+                .current
+                .lock()
+                .upgrade()
+                .ok_or_else(|| error(4, "父实例当前加载缺席"))?;
+            parent.active()?;
+            let registration = parent.reserve()?;
+            let view = manager
+                .derive_context(&parent.context, &options)?
+                .extend(registration);
+            let definition = manager
+                .mount_definition(&specification, inherited.as_ref())
+                .await?;
+            parent.active()?;
+            manager
+                .install_child(&parent.context, view, specification, definition, inherited)
+                .await
+        })
+        .await
+    }
+
+    /// DOC-15 §11.2、ADR-0041：纯前端 Owner 由同一 Manager.context 创建，页面归其实际父效应。
+    pub async fn mount_owned_child(
+        &self,
+        parent: Context,
+        specification: InstanceSpec,
+        inherited: Option<payload::State>,
+        options: payload::ContextOptions,
+    ) -> Result<Fiber> {
+        self.transaction(move |manager| async move {
+            manager.running()?;
+            let view = manager.derive_context(&parent, &options)?;
+            let definition = manager
+                .mount_definition(&specification, inherited.as_ref())
+                .await?;
+            if !parent.is_current() {
+                return Err(error(4, "页面 Owner 已进入清理"));
+            }
+            manager
+                .install_child(&parent, view, specification, definition, inherited)
+                .await
+        })
+        .await
+    }
+
+    /// ADR-0041：两类父对象共用子实例安装与目录清理登记。
+    async fn install_child(
+        &self,
+        parent: &Context,
+        view: Context,
+        specification: InstanceSpec,
+        definition: ComponentDef,
+        inherited: Option<payload::State>,
+    ) -> Result<Fiber> {
+        let name = specification.name.clone();
+        let child = self.install_instance(view, specification, definition, inherited)?;
+        if let Err(cause) = self.track_child(parent, name.clone(), child.clone()) {
+            self.dispose_owned_child(&name, &child).await?;
+            return Err(cause);
+        }
+        Ok(child)
+    }
+
+    /// DOC-15 §11.2：父效应等待子实例回退后同步移除目录与检查点记录。
+    fn track_child(&self, parent: &Context, name: String, child: Fiber) -> Result<()> {
+        let core = Arc::downgrade(&self.0);
+        parent
+            .effect("page-child", move |scope| {
+                scope.defer_async(move || async move {
+                    let result = child.dispose().await;
+                    if let Some(core) = core.upgrade() {
+                        Manager(core).remove_owned_child(&name, &child);
+                    }
+                    result
+                })
+            })
+            .map_err(kernel_error)?;
+        Ok(())
+    }
+
+    /// DOC-15 §11.2：核心生命周期回调直接等待指定页面，目录移除按纤程身份匹配。
+    pub async fn dispose_owned_child(&self, name: &str, expected: &Fiber) -> Result<()> {
+        let result = expected.dispose().await.map_err(kernel_error);
+        self.remove_owned_child(name, expected);
+        result
+    }
+
+    fn remove_owned_child(&self, name: &str, expected: &Fiber) {
+        let discarded = {
+            let mut catalog = self.0.catalog.lock();
+            if catalog
+                .instances
+                .get(name)
+                .is_some_and(|instance| instance.fiber == *expected)
+            {
+                catalog.checkpoints.remove(name);
+                catalog.instances.remove(name)
+            } else {
+                None
+            }
+        };
+        drop(discarded);
+    }
+
+    /// DOC-11 §5.2：两种挂载入口共用目标描述符、状态和远端配置的边界检查。
+    async fn mount_definition(
+        &self,
+        specification: &InstanceSpec,
+        inherited: Option<&payload::State>,
+    ) -> Result<ComponentDef> {
+        validate_name(&specification.name)?;
+        if self
+            .0
+            .catalog
+            .lock()
+            .instances
+            .contains_key(&specification.name)
+        {
+            return Err(error(2, "实例名称已经存在"));
+        }
+        if let Some(state) = inherited {
+            payload::persistent_value(&state.data)
+                .map_err(|problem| error(2, problem.to_string()))?;
+        }
+        let group = self.group(&specification.group)?;
+        let current = group.current.lock().clone();
+        let key = (
+            specification.plugin.clone(),
+            specification.component.clone(),
+        );
+        let component = current
+            .components
+            .get(&key)
+            .ok_or_else(|| error(2, "描述符中缺少目标组件"))?;
+        self.resolve(component, &specification.config).await?;
+        group
+            .definitions
+            .lock()
+            .get(&key)
+            .cloned()
+            .ok_or_else(|| error(4, "组件定义已退役"))
     }
 
     /// DOC-11 §5.2、T-LIF-1：已验证的配置进入内核，目录记录和检查点归属同一个实例名。
@@ -1111,6 +1288,16 @@ impl Manager {
         before: &HashMap<String, cordis::Epoch>,
         explicit: &[String],
     ) -> Result<Vec<Fiber>> {
+        self.stabilize_with(before, explicit, false).await
+    }
+
+    /// ADR-0044：配置调和接受内核计算的 Pending，版本替换继续要求 Active。
+    pub(super) async fn stabilize_with(
+        &self,
+        before: &HashMap<String, cordis::Epoch>,
+        explicit: &[String],
+        permit_pending: bool,
+    ) -> Result<Vec<Fiber>> {
         let future = async {
             loop {
                 let instances = self
@@ -1121,7 +1308,7 @@ impl Manager {
                     .values()
                     .cloned()
                     .collect::<Vec<_>>();
-                let changed: Vec<_> = instances
+                let mut changed: Vec<_> = instances
                     .into_iter()
                     .filter(|instance| {
                         explicit.contains(&instance.data.name)
@@ -1144,13 +1331,22 @@ impl Manager {
                             .unwrap_or_else(|| kernel_error(problem))
                     })?;
                 }
+                // ADR-0041：等待期间父级可完成子实例退役，按当前目录身份判断存活部署。
+                changed.retain(|instance| {
+                    let catalog = self.0.catalog.lock();
+                    catalog
+                        .instances
+                        .get(&instance.data.name)
+                        .is_some_and(|current| Arc::ptr_eq(current, instance))
+                });
                 if changed.iter().any(|instance| !instance.fiber.is_settled()) {
                     continue;
                 }
-                if changed
-                    .iter()
-                    .any(|instance| instance.fiber.state() != cordis::FiberState::Active)
-                {
+                if changed.iter().any(|instance| {
+                    let state = instance.fiber.state();
+                    state != cordis::FiberState::Active
+                        && !(permit_pending && state == cordis::FiberState::Pending)
+                }) {
                     return Err(error(4, "受影响实例未进入Active"));
                 }
                 return Ok(changed
@@ -1436,7 +1632,7 @@ impl Manager {
             effects.records.retain(|(owner, _), _| *owner != connection);
             effects.next.remove(&connection);
         }
-        self.0.metadata.lock().remove(&connection);
+        self.0.metadata.reclaim(connection);
     }
 
     /// SW-9、CP-7：等待进程拥有者完成退出，再回收连接目录。

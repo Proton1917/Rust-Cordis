@@ -85,27 +85,14 @@ impl Acceptance {
 
     /// 脚本包安装在本次验收目录，版本由 requirements 与 npm lock 固定。
     fn prepare_scripts(&self) {
-        self.execute(
-            Command::new("conda")
-                .env("PIP_REQUIRE_VIRTUALENV", "false")
-                .args([
-                    "run",
-                    "-n",
-                    "base",
-                    "python",
-                    "-m",
-                    "pip",
-                    "install",
-                    "--disable-pip-version-check",
-                    "--no-deps",
-                    "--cache-dir",
-                ])
-                .arg(self.root.join("target/idl-dependencies/pip-cache"))
-                .arg("--target")
-                .arg(self.directory.join("python"))
-                .arg("--requirement")
-                .arg(self.fixture.join("requirements.txt")),
-            "prepare-python",
+        run(
+            &mut cordis_testkit::python::install_dependencies(
+                &self.root,
+                &self.fixture.join("requirements.txt"),
+                &self.directory.join("python"),
+            )
+            .unwrap(),
+            &self.directory.join("prepare-python.log"),
         );
         let javascript = self.directory.join("javascript");
         fs::create_dir_all(&javascript).unwrap();

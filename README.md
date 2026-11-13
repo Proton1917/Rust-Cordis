@@ -37,7 +37,7 @@ flowchart TB
     W <--> B["浏览器页面<br/>网页宿主 cordis-web"]
 ```
 
-图中 TypeScript 进程与浏览器页面分别在 M19、M20 接入，其余部分已经交付。
+图中浏览器页面已在 M20 接入。
 
 只有一个内核，它在核心进程里。实例、依赖、加载卸载、替换与回滚都由它决定。插件进程和网页宿主只执行核心的指令，不含内核。
 
@@ -78,6 +78,9 @@ flowchart TB
 | 窗口进程恢复 | 桌面窗口进程被 SIGKILL 后 875 ms 恢复，核心进程不变 | [M16](docs/measurements/m16-window-recovery.json) |
 | 跨语言迁移 | 原生 kv → Python kv → 失败候选回滚 → 原生 kv → 批次替换，计数依次为 1、99、200、255、366 | [M18](docs/measurements/m18-python-sdk.json) |
 | Python 契约 | Python 版 kv 通过原生 kv 的全部 8 项契约断言 | [M18](docs/measurements/m18-python-sdk.json) |
+| 网页与全栈替换 | 两页独立状态保留，Rust→Python 后端切换与坏前端候选回退通过；三语言提供方撤回使页面 Pending，插回后恢复 | [M20 浏览器验收](docs/measurements/m20-web-acceptance.json) |
+| 页面故障隔离 | 超大帧、畸形 CBOR、嵌套转发及 128 个并发调用只关闭故障页；健康页面和核心身份保持 | M20 AU-15 |
+| 通道解析 | 固定 1800 秒模糊测试，实际 1801 秒、1,663,834 次输入，退出 0 | [M20 UP/1](docs/measurements/m20-up1-fuzz.json) |
 | 上游一致性 | 177 条上游用例：8 条移植、166 条改写、3 条不适用，每个里程碑重新校验 | [一致性矩阵](docs/04-conformance.md) |
 
 ## 快速开始
@@ -107,19 +110,22 @@ cordis run
 | 部分 | 代码行 | 职责 |
 |---|---:|---|
 | `crates/cordis` | 4230 | 内核：上下文、效应、事件、服务、纤程与组件生命周期 |
-| `crates/cordis-supervisor` | 5500 | 插件进程监管、跨进程路由、批量替换 |
-| `crates/cordis-runtime` | 5056 | 核心可执行程序 `cordis`：配置、授权、管理接口、持久化、状态发布 |
-| `crates/cordis-up` | 1613 | UP/1 协议编解码 |
+| `crates/cordis-supervisor` | 5480 | 插件进程监管、页面上下文、批量替换 |
+| `crates/cordis-routing` | 580 | 对象出口、资源转交与元数据额度 |
+| `crates/cordis-channels` | 250 | 独立页面连接与有界转发队列 |
+| `crates/cordis-web-deployment` | 850 | 网页资源、页面子实例与全栈事务 |
+| `crates/cordis-runtime` | 5313 | 核心可执行程序 `cordis`：配置、授权、管理接口、持久化、状态发布 |
+| `crates/cordis-up` | 1628 | UP/1 协议编解码 |
 | `crates/cordis-process`、`cordis-types` | 579 | 进程控制与共享类型 |
-| 核心六个 crate 合计 | 16978 | |
-| `crates/cordis-host` | 2491 | 原生插件宿主进程 |
+| 核心九个 crate 合计 | 18910 | |
+| `crates/cordis-host` | 2719 | 原生插件宿主进程 |
 | `crates/cordis-abi` | 2407 | ABI v1.0 的布局与调用约定；`unsafe` 只出现在 ABI、原生宿主和 SDK 宏中，位置由审计测试约束 |
-| `crates/cordis-sdk`、`cordis-sdk-macros` | 2220 | Rust 插件 SDK 与过程宏 |
+| `crates/cordis-sdk`、`cordis-sdk-macros` | 2216 | Rust 插件 SDK 与过程宏 |
 | `crates/cordis-idl` | 2324 | WIT 解析与三语言绑定生成 |
-| `crates/cordis-dev` | 2144 | 开发工具：`new`、`new-plugin`、`idl gen`、`verify`、`pack` |
+| `crates/cordis-dev` | 2278 | 开发工具：`new`、`new-plugin`、`idl gen`、`verify`、`pack` |
 | `sdks/python` | 838 | Python SDK |
-| `sdks/typescript` | 1126 | TypeScript SDK（M19） |
-| `plugins/` | | `watch`、`console-log`、`http`、`window`，`kv-mem`、`kv-file`、`kv-py`、`counter`、`counter-py`，以及接口与契约 crate `kv-api`、`kv-contract`、`web-api`、`window-api` |
+| `sdks/typescript` | 1369 | 共用 SDK 1163 行、网页宿主 206 行，统计各自 src |
+| `plugins/` | | `watch`、`console-log`、`http`、`window`，`kv-mem`、`kv-file`、`kv-py`、`kv-ts`、`counter`、`counter-py`，以及接口与契约 crate `kv-api`、`kv-contract`、`web-api`、`forward-api`、`window-api` |
 
 ## 理论依据
 
@@ -145,8 +151,8 @@ cordis run
 | | M17 | WIT 三语言接口生成 | 完成 |
 | | M18 | Python SDK 与跨插口双向替换 | 完成 |
 | | M19 | TypeScript SDK、`kv-ts`、`new-plugin --ts` | 完成 |
-| | M20 | 前端插件与全栈插件：WebSocket 转发、页面子实例、网页宿主 `cordis-web` | 候选准备中 |
-| | M21 | 多语言全栈总验收 | 未开始 |
+| | M20 | 前端插件与全栈插件：WebSocket 转发、页面子实例、网页宿主 `cordis-web` | 完成 |
+| | M21 | 多语言全栈总验收 | 验收进行中 |
 
 每个里程碑一个提交，须通过格式、clippy、全部测试（M18 时 307 条）、177 条一致性矩阵、`unsafe` 审计和行数预算检查。逐项记录见 [PROGRESS](docs/PROGRESS.md)，各阶段验收摘要见 [使用指南](docs/guide.md#里程碑验收摘要m0m18)。
 

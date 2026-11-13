@@ -164,7 +164,18 @@ async fn directory(
             )?;
             Ok(None)
         }
-        other => Err(format!("M16 发布清单需要 native 或 process，收到 {other}").into()),
+        "web" => {
+            if manifest.get("web").is_none() {
+                return Err("网页插件需要 web 资源声明".into());
+            }
+            assets(source, destination, &manifest)?;
+            fs::write(
+                destination.join("cordis-plugin.toml"),
+                toml::to_string_pretty(&manifest)?,
+            )?;
+            Ok(None)
+        }
+        other => Err(format!("发布清单需要 native、process 或 web，收到 {other}").into()),
     }
 }
 

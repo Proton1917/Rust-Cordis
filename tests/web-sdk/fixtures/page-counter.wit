@@ -1,0 +1,6 @@
+package cordis:page-realm@1.0.0;
+
+interface page-counter {
+    value: func() -> u64;
+    increment: func() -> u64;
+}

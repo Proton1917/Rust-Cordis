@@ -11,6 +11,8 @@ sources = sorted(
     for category in ("crates", "plugins")
     for path in root.glob(f"{category}/*/src")
 )
+sources += [pathlib.Path("sdks/python/cordis_sdk")]
+sources += sorted(path.relative_to(root) for path in root.glob("sdks/typescript/*/src"))
 
 # DOC-13 §1.1：使用 cloc 的 Rust 注释规则，逐文件计数并关闭内容去重。
 result = subprocess.run(
@@ -18,7 +20,7 @@ result = subprocess.run(
         "cloc",
         "--skip-uniqueness",
         f"--sdir={scratch}",
-        "--include-lang=Rust",
+        "--include-lang=Rust,Python,TypeScript",
         "--json",
         "--by-file",
         *(str(path) for path in sources),
@@ -32,9 +34,12 @@ records = json.loads(result.stdout)
 totals = {}
 for filename, counts in records.items():
     parts = pathlib.Path(filename).parts
-    if len(parts) < 3 or parts[0] not in ("crates", "plugins"):
+    if len(parts) < 3 or parts[0] not in ("crates", "plugins", "sdks"):
         continue
-    total = totals.setdefault(parts[1], [0, 0])
+    if parts[0] != "sdks" and counts["language"] != "Rust":
+        continue
+    name = "/".join(parts[:3]) if parts[0] == "sdks" else parts[1]
+    total = totals.setdefault(name, [0, 0])
     total[0] += counts["code"]
     total[1] += counts["code"] + counts["comment"] + counts["blank"]
 
@@ -45,8 +50,9 @@ for name, (code, total) in sorted(totals.items()):
     print(f"| {name} | {code} / {total} |")
 core_names = (
     "cordis", "cordis-supervisor", "cordis-runtime",
-    "cordis-up", "cordis-process", "cordis-types",
+    "cordis-up", "cordis-process", "cordis-types", "cordis-routing", "cordis-channels",
+    "cordis-web-deployment",
 )
 core_code = sum(totals[name][0] for name in core_names)
 core_total = sum(totals[name][1] for name in core_names)
-print(f"| 六个核心 crate 合计 | {core_code} / {core_total} |")
+print(f"| 核心进程 crate 合计 | {core_code} / {core_total} |")

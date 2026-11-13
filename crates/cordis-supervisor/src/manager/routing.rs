@@ -9,63 +9,7 @@ use tokio::sync::OnceCell;
 
 type LiveGenerations = (Option<Arc<Generation>>, Option<Arc<Generation>>);
 
-#[derive(Clone, Debug)]
-pub struct CallContext {
-    pub connection: u64,
-    pub context: u64,
-    pub instance: String,
-    pub group: String,
-    pub plugin: String,
-}
-
-pub struct Arguments {
-    pub values: Vec<Value>,
-    objects: HashMap<u64, RemoteObject>,
-}
-impl Arguments {
-    pub fn import(&self, id: u64) -> Result<RemoteObject> {
-        self.objects
-            .get(&id)
-            .cloned()
-            .ok_or_else(|| error(4, "参数资源编号缺席"))
-    }
-}
-
-pub trait LocalService: Send + Sync + 'static {
-    fn invoke<'a>(
-        &'a self,
-        context: &'a CallContext,
-        method: &'a str,
-        args: &'a Arguments,
-    ) -> HandlerFuture<'a, Result<LocalReply>>;
-}
-
-pub struct LocalReply {
-    pub value: Value,
-    pub after_write: Option<Box<dyn FnOnce() + Send + 'static>>,
-}
-
-impl From<Value> for LocalReply {
-    fn from(value: Value) -> Self {
-        Self {
-            value,
-            after_write: None,
-        }
-    }
-}
-
-impl LocalReply {
-    pub fn new(value: Value) -> Self {
-        value.into()
-    }
-
-    pub fn with_after_write(value: Value, action: impl FnOnce() + Send + 'static) -> Self {
-        Self {
-            value,
-            after_write: Some(Box::new(action)),
-        }
-    }
-}
+pub(super) type Batch = cordis_routing::Batch<Route>;
 
 pub(super) enum Target {
     Remote(RemoteObject),
@@ -81,45 +25,6 @@ pub(super) struct Route {
     pub lifetime: Option<Weak<Generation>>,
     pub view: Option<Arc<ViewRecord>>,
 }
-pub(super) struct Batch {
-    core: Weak<Core>,
-    recipient: u64,
-    pub ids: Vec<u64>,
-    committed: bool,
-}
-
-impl Drop for Batch {
-    fn drop(&mut self) {
-        if self.committed {
-            return;
-        }
-        if let Some(core) = self.core.upgrade() {
-            let discarded = {
-                let mut routes = core.routes.lock();
-                let discarded = self
-                    .ids
-                    .iter()
-                    .filter_map(|id| routes.entries.remove(&(self.recipient, *id)))
-                    .collect::<Vec<_>>();
-                if let Some(counter) = routes.counters.get_mut(&self.recipient) {
-                    counter.active -= discarded.len();
-                }
-                discarded
-            };
-            drop(discarded);
-        }
-    }
-}
-
-impl Batch {
-    fn commit(mut self) {
-        self.committed = true;
-    }
-    pub fn outgoing(self, value: Value) -> Outgoing {
-        Outgoing::with_commit(value, move || self.commit())
-    }
-}
-
 impl Route {
     pub fn remote(
         object: RemoteObject,
@@ -157,6 +62,72 @@ impl Route {
 }
 
 impl Manager {
+    /// DOC-16 §7、ADR-0041：转发授权使用真实连接所属的活跃上下文身份。
+    pub fn request_origin(&self, connection: &Connection, context: u64) -> Result<CallContext> {
+        let view = self.generation(connection.id(), context)?;
+        view.active()?;
+        Ok(call_origin(&view))
+    }
+
+    /// DOC-15 §11.3、ADR-0041：核心装配调用当前远端服务，参数和结果采用持久化数据。
+    pub async fn invoke_service(
+        &self,
+        interface: &str,
+        method: &str,
+        args: Vec<Value>,
+    ) -> Result<Value> {
+        let route = self.lookup_service_route(interface)?;
+        let _live = route.live()?;
+        let Target::Remote(object) = &route.target else {
+            return Err(error(3, "核心装配接口需要远端提供方"));
+        };
+        for argument in &args {
+            payload::persistent_value(argument).map_err(|problem| error(2, problem.to_string()))?;
+        }
+        let response = object
+            .peer()
+            .request(
+                "invoke",
+                value(&payload::Invoke {
+                    object: object.id(),
+                    method: method.into(),
+                    args,
+                    refs: Vec::new(),
+                })?,
+                self.0.options.invoke_timeout,
+            )
+            .await?;
+        let result: payload::InvokeResult = decode(response.value())?;
+        payload::persistent_value(&result.value)
+            .map_err(|problem| error(2, problem.to_string()))?;
+        Ok(result.value)
+    }
+
+    /// DOC-15 §11.3：资源登记持有原 HTTP 服务对象，清理定位同次激活的登记表。
+    pub fn lookup_remote_service(&self, interface: &str) -> Result<RemoteObject> {
+        let route = self.lookup_service_route(interface)?;
+        let _live = route.live()?;
+        match &route.target {
+            Target::Remote(object) => Ok(object.clone()),
+            _ => Err(error(3, "核心装配接口需要远端提供方")),
+        }
+    }
+
+    fn lookup_service_route(&self, interface: &str) -> Result<Arc<Route>> {
+        let requested = Interface::parse(interface)?;
+        let binding = self
+            .0
+            .context
+            .lookup_named(requested.key.as_str())
+            .ok_or_else(|| error(4, "核心装配所需服务缺席"))?
+            .downcast::<Binding>()
+            .map_err(|_| error(2, "服务绑定需要远端路由"))?;
+        if binding.interface.minor < requested.minor {
+            return Err(error(3, "接口次版本不足"));
+        }
+        Ok(binding.route.clone())
+    }
+
     /// ADR-0017：在监管根登记核心内置服务，实例读取时绑定真实调用者身份。
     pub fn provide_builtin(
         &self,
@@ -211,12 +182,7 @@ impl Manager {
     }
 
     pub(super) fn route(&self, recipient: u64, id: u64) -> Result<Arc<Route>> {
-        let routes = self.0.routes.lock();
-        routes
-            .entries
-            .get(&(recipient, id))
-            .cloned()
-            .ok_or_else(|| error(4, "对象编号已退役或属于另一条连接"))
+        self.0.routes.route(recipient, id)
     }
 
     /// DOC-16 资源协议、CP-3：按接收连接分配编号和额度，批次失败时归还。
@@ -226,35 +192,15 @@ impl Manager {
         route: Arc<Route>,
         batch: &mut Batch,
     ) -> Result<u64> {
-        let mut routes = self.0.routes.lock();
-        if !recipient.is_alive() {
-            return Err(error(4, "接收连接已结束"));
-        }
-        let counter = routes
-            .counters
-            .entry(recipient.id())
-            .or_insert(ExportCounter { next: 1, active: 0 });
-        if counter.active >= self.0.options.max_exports {
-            return Err(error(8, "该连接的活跃出口资源已达上限"));
-        }
-        let id = counter.next;
-        counter.next = counter
-            .next
-            .checked_add(1)
-            .ok_or_else(|| error(8, "出口编号空间已耗尽"))?;
-        counter.active += 1;
-        routes.entries.insert((recipient.id(), id), route);
-        batch.ids.push(id);
-        Ok(id)
+        let owner = match &route.target {
+            Target::Remote(object) => Some(object.peer().id()),
+            _ => None,
+        };
+        self.0.routes.export(recipient, route, owner, batch)
     }
 
     pub(super) fn batch(&self, recipient: u64) -> Batch {
-        Batch {
-            core: Arc::downgrade(&self.0),
-            recipient,
-            ids: Vec::new(),
-            committed: false,
-        }
+        self.0.routes.batch(recipient)
     }
 
     /// DOC-16 对象信息：首次请求取得接口和方法表，同一活跃路由复用结果。
@@ -355,13 +301,7 @@ impl Manager {
         Arc::new(Route {
             target: Target::Local {
                 service: service.clone(),
-                origin: Some(CallContext {
-                    connection: generation.component.connection.id(),
-                    context: generation.id,
-                    instance: generation.instance.name.clone(),
-                    group: generation.instance.group.clone(),
-                    plugin: generation.instance.plugin.clone(),
-                }),
+                origin: Some(call_origin(generation)),
             },
             info: OnceCell::new_with(Some(
                 binding.route.info.get().expect("builtin metadata").clone(),
@@ -437,51 +377,12 @@ impl Manager {
 
     /// DOC-16 资源协议：移除接收方导出编号，锁外释放对象与库租约。
     pub(super) fn release(&self, recipient: u64, ids: &[u64]) -> Result<()> {
-        let discarded = {
-            let mut routes = self.0.routes.lock();
-            let next = routes
-                .counters
-                .get(&recipient)
-                .map_or(1, |counter| counter.next);
-            for id in ids {
-                if *id == 0 || *id >= next {
-                    return Err(error(4, "release编号属于该连接已分配范围之外"));
-                }
-            }
-            let discarded = ids
-                .iter()
-                .filter_map(|id| routes.entries.remove(&(recipient, *id)))
-                .collect::<Vec<_>>();
-            if let Some(counter) = routes.counters.get_mut(&recipient) {
-                counter.active -= discarded.len();
-            }
-            discarded
-        };
-        drop(discarded);
-        Ok(())
+        self.0.routes.release(recipient, ids)
     }
 
     /// DOC-15 CP-6：连接终止后清空该连接的路由与编号计数。
     pub(super) fn reclaim_routes(&self, connection: u64) {
-        let discarded = {
-            let mut routes = self.0.routes.lock();
-            let ids: Vec<_> = routes.entries.iter().filter_map(|(id, route)| {
-                let owner_ended = matches!(&route.target, Target::Remote(object) if object.peer().id() == connection);
-                (id.0 == connection || owner_ended).then_some(*id)
-            }).collect();
-            let discarded: Vec<_> = ids
-                .iter()
-                .filter_map(|id| routes.entries.remove(id).map(|route| (id.0, route)))
-                .collect();
-            for (recipient, _) in &discarded {
-                if let Some(counter) = routes.counters.get_mut(recipient) {
-                    counter.active -= 1;
-                }
-            }
-            routes.counters.remove(&connection);
-            discarded
-        };
-        drop(discarded);
+        self.0.routes.reclaim(connection)
     }
 
     /// DOC-16 资源协议：按 CBOR 资源标签转交编号，Batch 保存发送完成前的拥有引用。
@@ -491,19 +392,9 @@ impl Manager {
         incoming: &Payload,
         recipient: &Connection,
     ) -> Result<(Value, Batch)> {
-        let mut batch = self.batch(recipient.id());
-        let mut translated = HashMap::new();
-        let data = rewrite(data, &mut |id| {
-            if let Some(mapped) = translated.get(&id) {
-                return Ok(*mapped);
-            }
-            let object = incoming.import(id)?;
-            let mapped =
-                self.export_route(recipient, Route::remote(object, None, None), &mut batch)?;
-            translated.insert(id, mapped);
-            Ok(mapped)
-        })?;
-        Ok((data, batch))
+        self.0
+            .routes
+            .transfer(data, incoming, recipient, imported_route)
     }
 
     /// DOC-15 §6.1、CP-5：检验路由寿命后锁外调用，返回值与发送后动作随响应转交。
@@ -518,85 +409,43 @@ impl Manager {
         match &route.target {
             Target::View => Err(error(3, "上下文租约的可调用方法为空")),
             Target::Remote(object) => {
-                let (args, batch) =
-                    self.transfer(Value::Array(request.args), incoming, object.peer())?;
-                let Value::Array(args) = args else {
-                    unreachable!("argument array preserved")
-                };
-                let outgoing = value(&payload::Invoke {
-                    object: object.id(),
-                    method: request.method,
-                    args,
-                    refs: batch.ids.clone(),
-                })?;
-                let result = object
-                    .peer()
-                    .request(
-                        "invoke",
-                        batch.outgoing(outgoing),
-                        self.0.options.invoke_timeout,
-                    )
-                    .await?;
-                let response: payload::InvokeResult = decode(result.value())?;
-                let (value, batch) = self.transfer(response.value, &result, caller)?;
-                let output = super::value(&payload::InvokeResult {
-                    value,
-                    refs: batch.ids.clone(),
-                })?;
-                Ok(batch.outgoing(output))
+                self.0
+                    .routes
+                    .invoke_remote(caller, object, request, incoming, imported_route)
+                    .await
             }
             Target::Local { service, origin } => {
                 let origin = origin
                     .as_ref()
                     .ok_or_else(|| error(4, "内置对象缺少调用上下文"))?;
-                let objects = request
-                    .refs
-                    .iter()
-                    .map(|id| incoming.import(*id).map(|object| (*id, object)))
-                    .collect::<Result<_>>()?;
-                let arguments = Arguments {
-                    values: request.args,
-                    objects,
-                };
-                let result = service.invoke(origin, &request.method, &arguments).await?;
-                let (value, batch) = self.transfer(result.value, incoming, caller)?;
-                let output = super::value(&payload::InvokeResult {
-                    value,
-                    refs: batch.ids.clone(),
-                })?;
-                let outgoing = batch.outgoing(output);
-                Ok(match result.after_write {
-                    Some(action) => outgoing.after_write(action),
-                    None => outgoing,
-                })
+                self.0
+                    .routes
+                    .invoke_local(
+                        caller,
+                        service.as_ref(),
+                        origin,
+                        request,
+                        incoming,
+                        imported_route,
+                    )
+                    .await
             }
         }
     }
 }
 
-fn rewrite(data: Value, resource: &mut impl FnMut(u64) -> Result<u64>) -> Result<Value> {
-    Ok(match data {
-        Value::Tag(payload::OBJECT_TAG, id) => {
-            let id = id
-                .as_integer()
-                .and_then(|id| u64::try_from(id).ok())
-                .filter(|id| *id != 0)
-                .ok_or_else(|| error(2, "资源标签需要正u64编号"))?;
-            payload::ObjectRef(resource(id)?).into()
-        }
-        Value::Tag(tag, value) => Value::Tag(tag, Box::new(rewrite(*value, resource)?)),
-        Value::Array(values) => Value::Array(
-            values
-                .into_iter()
-                .map(|value| rewrite(value, resource))
-                .collect::<Result<_>>()?,
-        ),
-        Value::Map(values) => Value::Map(
-            values
-                .into_iter()
-                .map(|(key, value)| Ok((rewrite(key, resource)?, rewrite(value, resource)?)))
-                .collect::<Result<_>>()?,
-        ),
-        value => value,
-    })
+/// ADR-0041：载荷转交只保留远端资源，纪元视图由实际服务绑定另行持有。
+fn imported_route(object: RemoteObject) -> Arc<Route> {
+    Route::remote(object, None, None)
+}
+
+/// ADR-0017：管理调用与转发授权共用核心已解析的上下文身份。
+fn call_origin(view: &ViewLease) -> CallContext {
+    CallContext {
+        connection: view.component.connection.id(),
+        context: view.id,
+        instance: view.instance.name.clone(),
+        group: view.instance.group.clone(),
+        plugin: view.instance.plugin.clone(),
+    }
 }

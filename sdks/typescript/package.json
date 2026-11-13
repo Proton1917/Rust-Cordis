@@ -1,0 +1,6 @@
+{
+  "name": "cordis-script-sdks",
+  "private": true,
+  "workspaces": ["cordis-sdk", "cordis-web"],
+  "scripts": {"build": "node build.mjs"}
+}

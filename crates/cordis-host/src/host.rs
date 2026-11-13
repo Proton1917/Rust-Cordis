@@ -74,6 +74,7 @@ struct RetiredLibrary {
 }
 
 pub(crate) struct Inner {
+    pub forward: Arc<crate::forward::Forwarders>,
     options: HostOptions,
     store: LibraryStore,
     libraries: Mutex<HashMap<u64, NativeLibrary>>,
@@ -104,6 +105,7 @@ impl Host {
         let native = RuntimeOwner::new(options.native_workers)?;
         let executor = NativeExecutor::new(native.handle(), io.clone());
         Ok(Self(Arc::new(Inner {
+            forward: Arc::new(crate::forward::Forwarders::default()),
             options,
             store,
             libraries: Mutex::new(HashMap::new()),
@@ -150,7 +152,7 @@ impl Host {
             .await
     }
 
-    fn connection(&self) -> Result<Connection> {
+    pub(crate) fn connection(&self) -> Result<Connection> {
         self.0
             .connection
             .get()
@@ -538,6 +540,9 @@ impl Host {
         )?;
         let result: payload::GetResult = from_value(response.value().clone())?;
         let object = response.import(result.object).map_err(from_wire)?;
+        if result.interface == "cordis.forward@1.0" {
+            return crate::forward::object(self.clone(), context, object);
+        }
         self.bridge()?.import(
             object,
             payload::ObjectInfo {
@@ -996,6 +1001,14 @@ impl Handler for Host {
         self.0.connection.get_or_init(|| peer);
         Box::pin(async move {
             match method.as_str() {
+                "channel_frame" | "channel_close" => {
+                    self.0
+                        .forward
+                        .clone()
+                        .receive(self.clone(), &method, params)
+                        .await
+                        .map_err(to_wire)?;
+                }
                 "callback" => self.notify_callback(params).map_err(to_wire)?,
                 "release" => {
                     let request: payload::Release =

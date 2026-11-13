@@ -416,6 +416,312 @@ async fn core_orders_same_group_cleanup_and_rebuilds_dependencies() {
     case.success();
 }
 
+/// ADR-0041：两条真实进程连接分别承担后端与页面组件。
+async fn page_groups() -> (Manager, Arc<Control>) {
+    let (manager, control) = setup(options()).await;
+    manager
+        .attach_group(group("backend", "v1", "backend-plugin", no_restart()))
+        .await
+        .unwrap();
+    manager
+        .attach_group(group("page", "v1", "page-plugin", no_restart()))
+        .await
+        .unwrap();
+    (manager, control)
+}
+
+async fn mount_backend(manager: &Manager, name: &str) {
+    manager
+        .mount(
+            instance(
+                name,
+                "backend",
+                "backend-plugin",
+                "independent",
+                configuration(7),
+            ),
+            None,
+        )
+        .await
+        .unwrap()
+        .settled()
+        .await
+        .unwrap();
+}
+
+fn page_spec(name: &str, initial: u64) -> InstanceSpec {
+    instance(
+        name,
+        "page",
+        "page-plugin",
+        "independent",
+        configuration(initial),
+    )
+}
+
+fn page_scope(realm: &str) -> payload::ContextOptions {
+    payload::ContextOptions {
+        isolate: vec![payload::Isolation {
+            interface: "fixture.independent@1.0".into(),
+            realm: Some(realm.into()),
+        }],
+        intercept: Vec::new(),
+    }
+}
+
+/// DOC-15 §11.2、ADR-0041：跨连接子实例保留父级效应，父完成前执行实际远端清理。
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn deployment_children_finish_before_parent_disposal() {
+    let case = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "page-parent");
+    let _fixture = plugin().for_case(&case);
+    let (manager, control) = page_groups().await;
+    mount_backend(&manager, "parent").await;
+    assert_eq!(
+        integer(
+            &manager
+                .invoke_service("fixture.independent@1.0", "add", vec![3u64.into()])
+                .await
+                .unwrap()
+        ),
+        10,
+    );
+    let child = manager
+        .mount_child_instance(
+            "parent".into(),
+            page_spec("page-child", 42),
+            None,
+            page_scope("page-one"),
+        )
+        .await
+        .unwrap();
+    child.settled().await.unwrap();
+    let ready = control.ready_after("page-child", 0).await;
+    assert_eq!(integer(&invoke(&ready, "get", Vec::new()).await), 42);
+    manager.dispose("parent").await.unwrap();
+    assert_eq!(
+        try_invoke(&ready, "get", Vec::new())
+            .await
+            .unwrap_err()
+            .code,
+        4
+    );
+    assert!(
+        manager
+            .snapshot()
+            .instances
+            .iter()
+            .all(|instance| instance.name != "page-child")
+    );
+    manager.shutdown().await.unwrap();
+    case.success();
+}
+
+/// DOC-15 §11.2：核心 Owner 按后端存在信号重建，后端停用等待页面的实际清理。
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn core_owner_tracks_backend_presence_and_releases_page() {
+    let case = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "page-owner");
+    let _fixture = plugin().for_case(&case);
+    let (manager, control) = page_groups().await;
+    let current = Arc::new(Mutex::new(None));
+    let observed = current.clone();
+    let definition = cordis::ComponentDef::new(
+        "web-owner",
+        cordis::Inject::new().with_named("cordis.instance.backend"),
+        move |context, ()| {
+            *observed.lock() = Some(context);
+            async { Ok(()) }
+        },
+    );
+    let owner = manager.context().mount_with(&definition, ()).unwrap();
+    assert_eq!(owner.state(), FiberState::Pending);
+    mount_backend(&manager, "backend").await;
+    owner.settled().await.unwrap();
+    assert_eq!(owner.state(), FiberState::Active);
+    let context = current.lock().clone().unwrap();
+    let child = manager
+        .mount_owned_child(
+            context,
+            page_spec("owned-page", 43),
+            None,
+            page_scope("page-owner"),
+        )
+        .await
+        .unwrap();
+    child.settled().await.unwrap();
+    let ready = control.ready_after("owned-page", 0).await;
+    assert_eq!(integer(&invoke(&ready, "get", Vec::new()).await), 43);
+    freeze_page(&manager, &ready).await;
+    manager.dispose("backend").await.unwrap();
+    assert_eq!(owner.state(), FiberState::Pending);
+    assert_eq!(
+        try_invoke(&ready, "get", Vec::new())
+            .await
+            .unwrap_err()
+            .code,
+        4
+    );
+    assert!(
+        manager
+            .snapshot()
+            .instances
+            .iter()
+            .all(|instance| instance.name != "owned-page")
+    );
+    owner.dispose().await.unwrap();
+    manager.shutdown().await.unwrap();
+    case.success();
+}
+
+/// DOC-11 SW-5：快照持有期间写入被冻结，明确解冻后恢复真实服务调用。
+async fn freeze_page(manager: &Manager, ready: &Ready) {
+    let snapshot = manager
+        .freeze_instances(&["owned-page".into()])
+        .await
+        .unwrap();
+    assert_eq!(integer(&snapshot.states()["owned-page"].data), 43);
+    assert_eq!(
+        try_invoke(ready, "add", vec![1u64.into()])
+            .await
+            .unwrap_err()
+            .code,
+        4
+    );
+    manager.thaw_snapshot(&snapshot).await.unwrap();
+    assert_eq!(integer(&invoke(ready, "add", vec![1u64.into()]).await), 44);
+}
+
+/// ADR-0041：页面名称复用后，旧父效应清理保留新实例的目录记录。
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn late_parent_cleanup_preserves_reused_child_name() {
+    let case = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "page-reused-name");
+    let _fixture = plugin().for_case(&case);
+    let (manager, control) = page_groups().await;
+    mount_backend(&manager, "parent-a").await;
+    let view = manager
+        .derive_context(&manager.context(), &page_scope("parent-b"))
+        .unwrap();
+    manager
+        .mount_in(
+            view,
+            instance(
+                "parent-b",
+                "backend",
+                "backend-plugin",
+                "independent",
+                configuration(8),
+            ),
+            None,
+        )
+        .await
+        .unwrap()
+        .settled()
+        .await
+        .unwrap();
+    manager
+        .mount_child_instance(
+            "parent-a".into(),
+            page_spec("shared-page", 41),
+            None,
+            page_scope("old-page"),
+        )
+        .await
+        .unwrap()
+        .settled()
+        .await
+        .unwrap();
+    let old = control.ready_after("shared-page", 0).await;
+    manager.dispose("shared-page").await.unwrap();
+    let child = manager
+        .mount_child_instance(
+            "parent-b".into(),
+            page_spec("shared-page", 42),
+            None,
+            page_scope("new-page"),
+        )
+        .await
+        .unwrap();
+    child.settled().await.unwrap();
+    let current = control.ready_after("shared-page", old.context).await;
+    manager.dispose("parent-a").await.unwrap();
+    assert!(
+        manager
+            .snapshot()
+            .instances
+            .iter()
+            .any(|instance| instance.name == "shared-page")
+    );
+    assert_eq!(integer(&invoke(&current, "get", Vec::new()).await), 42);
+    manager
+        .dispose_owned_child("shared-page", &child)
+        .await
+        .unwrap();
+    assert!(
+        manager
+            .snapshot()
+            .instances
+            .iter()
+            .all(|instance| instance.name != "shared-page")
+    );
+    manager.shutdown().await.unwrap();
+    case.success();
+}
+
+/// ADR-0041：挂载通知触发父级释放时，登记失败会等待子级回收并移除目录。
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn owner_closing_during_child_attachment_reclaims_catalog_entry() {
+    let case = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "page-attach-close");
+    let _fixture = plugin().for_case(&case);
+    let (manager, _) = page_groups().await;
+    let current = Arc::new(Mutex::new(None));
+    let captured = current.clone();
+    let definition = cordis::ComponentDef::new(
+        "closing-owner",
+        cordis::Inject::new(),
+        move |context, ()| {
+            *captured.lock() = Some(context);
+            async { Ok(()) }
+        },
+    );
+    let owner = manager.context().mount_with(&definition, ()).unwrap();
+    owner.settled().await.unwrap();
+    let retained = owner.clone();
+    manager
+        .context()
+        .on::<cordis::InternalPlugin>(move |fiber| {
+            if fiber.is_alive() && fiber.name() == "page/page-plugin/independent" {
+                tokio::task::block_in_place(|| {
+                    tokio::runtime::Handle::current().block_on(async {
+                        tokio::time::timeout(Duration::from_secs(5), retained.dispose())
+                            .await
+                            .unwrap()
+                            .unwrap();
+                    })
+                });
+            }
+            None
+        })
+        .unwrap();
+    let parent = current.lock().clone().unwrap();
+    let result = manager
+        .mount_owned_child(
+            parent,
+            page_spec("opening-page", 1),
+            None,
+            page_scope("closing-page"),
+        )
+        .await;
+    assert!(result.is_err(), "父级释放后挂载交回错误");
+    assert!(
+        manager
+            .snapshot()
+            .instances
+            .iter()
+            .all(|instance| instance.name != "opening-page")
+    );
+    manager.shutdown().await.unwrap();
+    case.success();
+}
+
 // CP-6：真实SIGKILL回收提供方，依赖转Pending，独立进程保持纪元，重启继承最近检查点。
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn process_failure_releases_dependencies_and_restores_checkpoint() {

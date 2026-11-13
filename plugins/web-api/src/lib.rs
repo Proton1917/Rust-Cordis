@@ -12,7 +12,21 @@ pub struct WebEntry {
 }
 
 /// ADR-0038：窗口通过同一插件接口取得可直接加载的页面地址。
-#[cordis_sdk::interface(name = "cordis.web", version = "1.0")]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct WebRegistration {
+    pub name: String,
+    pub version: String,
+    pub sequence: u64,
+    pub assets: String,
+    pub mount: String,
+    pub entry: String,
+    pub component: String,
+}
+
+#[cordis_sdk::interface(name = "cordis.web", version = "1.1")]
 pub trait Web: Send + Sync {
     fn entry(&self) -> Result<WebEntry>;
+    fn register(&self, registration: WebRegistration) -> Result<u64>;
+    fn activate(&self, registration: u64) -> Result<()>;
+    fn unregister(&self, registration: u64) -> Result<()>;
 }

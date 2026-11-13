@@ -2,13 +2,14 @@
 
 use super::*;
 use cordis_supervisor::manager::{BatchInstance, BatchReplacement};
+use std::collections::BTreeSet;
 
 struct TargetInstance {
     settings: InstanceSettings,
     package: Package,
     group: String,
     view: Context,
-    manage: Option<NamedProvision>,
+    manage: Option<Effect>,
     remount: bool,
 }
 
@@ -27,22 +28,60 @@ impl Controller {
         replacements: &[(String, String)],
         configuration: Option<Configuration>,
     ) -> Result<()> {
+        self.apply_deployment_batch(replacements, configuration, self.overlay.clone())
+            .await
+    }
+
+    /// ADR-0031、DOC-15 §11.4：配置、后端与网页版本统一准备；失败归还新建授权。
+    pub(super) async fn apply_deployment_batch(
+        &mut self,
+        replacements: &[(String, String)],
+        configuration: Option<Configuration>,
+        overlay: Overlay,
+    ) -> Result<()> {
+        let reconfigure = configuration.is_some();
         let before = self.batch_current_instances()?;
-        let mut target = self
-            .prepare_batch_target(replacements, configuration)
+        let target = self
+            .prepare_batch_target(replacements, configuration, overlay)
             .await?;
-        let mut desired = match batch_instances(&target.instances) {
+        let desired = match batch_instances(&target.instances) {
             Ok(desired) => desired,
             Err(problem) => {
                 release_target(target).await?;
                 return Err(problem);
             }
         };
+        let pages = match self.prepare_batch_pages(&target).await {
+            Ok(pages) => pages,
+            Err(problem) => {
+                release_target(target).await?;
+                return Err(problem);
+            }
+        };
+        *self.permissions.lock() = target.configuration.effective(&target.overlay)?;
+        self.execute_batch_target(target, before, desired, pages, reconfigure)
+            .await
+    }
+
+    /// SW-5–SW-9：后端先稳定，再确认每个页面，持久化成功后发布新运行目录。
+    async fn execute_batch_target(
+        &mut self,
+        mut target: TargetDeployment,
+        before: Vec<BatchInstance>,
+        mut desired: Vec<BatchInstance>,
+        pages: Vec<web::WebChange>,
+        reconfigure: bool,
+    ) -> Result<()> {
         let sources = std::mem::take(&mut target.sources);
-        let result = self
-            .manager
-            .replace_batch(sources, before.clone(), desired.clone(), HashMap::new())
-            .await;
+        let result = if reconfigure {
+            self.manager
+                .reconfigure_batch(sources, before.clone(), desired.clone(), HashMap::new())
+                .await
+        } else {
+            self.manager
+                .replace_batch(sources, before.clone(), desired.clone(), HashMap::new())
+                .await
+        };
         if result.is_ok() || result.as_ref().is_err_and(replacement_committed) {
             let snapshot = self.manager.snapshot();
             for item in &mut desired {
@@ -60,18 +99,27 @@ impl Controller {
             Err(problem) if replacement_committed(&problem) => {
                 let original = self.batch_original_states();
                 return self
-                    .restore_batch(target, before, desired, original, problem)
+                    .restore_batch(target, before, desired, original, pages, problem)
                     .await;
             }
             Err(problem) => {
+                *self.permissions.lock() = self.configuration.effective(&self.overlay)?;
+                let recovery = self.rollback_web_changes(&pages).await;
                 self.refresh_batch_fibers()?;
                 release_target(target).await?;
-                return Err(problem);
+                return match recovery {
+                    Ok(()) => Err(problem),
+                    Err(recovery) => Err(web::recovery_error("批次", problem, recovery)),
+                };
             }
         };
-        if let Err(problem) = self.persist_batch(&target, &states).await {
+        let finalized = match self.finish_web_changes(&pages).await {
+            Ok(()) => self.persist_batch(&target, &states).await,
+            Err(problem) => Err(problem),
+        };
+        if let Err(problem) = finalized {
             return self
-                .restore_batch(target, before, desired, states, problem)
+                .restore_batch(target, before, desired, states, pages, problem)
                 .await;
         }
         self.accept_batch_target(target).await?;
@@ -108,11 +156,43 @@ impl Controller {
         Ok(candidates)
     }
 
+    /// DOC-15 §11.4：网页变更覆盖新增、移除、视图与版本变化，后端描述由实际激活补齐。
+    async fn prepare_batch_pages(&self, target: &TargetDeployment) -> Result<Vec<web::WebChange>> {
+        let names = self
+            .mounted
+            .keys()
+            .chain(target.instances.keys())
+            .collect::<BTreeSet<_>>();
+        let mut candidates = Vec::new();
+        for name in names {
+            let old = self.mounted.get(name);
+            let next = target.instances.get(name);
+            if old.zip(next).is_some_and(|(old, next)| {
+                old.settings == next.settings
+                    && old.package.reference == next.package.reference
+                    && !next.remount
+            }) {
+                continue;
+            }
+            let specification = next
+                .filter(|item| item.package.web.is_some())
+                .map(|item| Self::web_spec(name, &item.settings, &item.package, &item.view))
+                .transpose()?;
+            candidates.push((
+                name.clone(),
+                specification,
+                next.is_some_and(|item| item.remount),
+            ));
+        }
+        self.prepare_web_targets(candidates).await
+    }
+
     /// loader EntryGroup.update、ADR-0031：最终配置先展开，再把窗口候选映射到完整实例集合。
     async fn prepare_batch_target(
         &mut self,
         replacements: &[(String, String)],
         configuration: Option<Configuration>,
+        overlay: Overlay,
     ) -> Result<TargetDeployment> {
         let candidates = self.batch_candidates(replacements).await?;
         if configuration.is_some() {
@@ -126,7 +206,7 @@ impl Controller {
         }
         let mut target = TargetDeployment {
             configuration,
-            overlay: self.overlay.clone(),
+            overlay,
             instances: BTreeMap::new(),
             groups: BTreeMap::new(),
             sources: Vec::new(),
@@ -159,46 +239,19 @@ impl Controller {
         name: String,
         mut settings: InstanceSettings,
     ) -> Result<()> {
-        let declared = target
-            .configuration
-            .instance
-            .get(&name)
-            .map(|item| item.plugin.as_str())
-            .unwrap_or(&settings.plugin);
-        let reference = self
-            .sources
-            .lock()
-            .select(&name, declared, &settings.plugin);
-        let original = self.installed_package(&reference).await?;
-        let group = settings
-            .group
-            .clone()
-            .unwrap_or_else(|| original.name.clone());
-        config::instance_name(&group)?;
-        let package = candidates
-            .get(&(group.clone(), original.name.clone()))
-            .cloned()
-            .unwrap_or(original);
-        if candidates.contains_key(&(group.clone(), package.name.clone())) {
-            self.record_batch_version(target, &name, &package);
-            settings.plugin = package.reference.clone();
-        }
-        let packages = target.groups.entry(group.clone()).or_default();
-        if let Some(previous) = packages.iter().find(|item| item.name == package.name) {
-            if previous.reference != package.reference {
-                return Err(parameter("最终分组包含同逻辑插件的不同来源"));
-            }
-        } else {
-            packages.push(package.clone());
-        }
+        let (package, group) = self
+            .batch_package(target, candidates, &name, &mut settings)
+            .await?;
         let old = self.mounted.get(&name);
         let remount = old.is_none_or(|old| {
             old.group != group
                 || old.package.name != package.name
+                || matches!(old.package.entry, Entry::Web) != matches!(package.entry, Entry::Web)
                 || old.settings.component != settings.component
                 || old.settings.isolate != settings.isolate
                 || old.settings.intercept != settings.intercept
                 || old.settings.grants != settings.grants
+                || old.settings.forwarder != settings.forwarder
         });
         let view = if remount {
             self.mount_view(&settings)?
@@ -224,6 +277,48 @@ impl Controller {
         Ok(())
     }
 
+    /// ADR-0031：解析实例来源并形成目标宿主分组，网页 Owner 保持页面生命周期归属。
+    async fn batch_package(
+        &mut self,
+        target: &mut TargetDeployment,
+        candidates: &BTreeMap<(String, String), Package>,
+        name: &str,
+        settings: &mut InstanceSettings,
+    ) -> Result<(Package, String)> {
+        let declared = target
+            .configuration
+            .instance
+            .get(name)
+            .map(|item| item.plugin.as_str())
+            .unwrap_or(&settings.plugin);
+        let reference = self.sources.lock().select(name, declared, &settings.plugin);
+        let original = self.installed_package(&reference).await?;
+        let group = settings
+            .group
+            .clone()
+            .unwrap_or_else(|| original.name.clone());
+        config::instance_name(&group)?;
+        let package = candidates
+            .get(&(group.clone(), original.name.clone()))
+            .cloned()
+            .unwrap_or(original);
+        if candidates.contains_key(&(group.clone(), package.name.clone())) {
+            self.record_batch_version(target, name, &package);
+            settings.plugin = package.reference.clone();
+        }
+        if !matches!(package.entry, Entry::Web) {
+            let packages = target.groups.entry(group.clone()).or_default();
+            if let Some(previous) = packages.iter().find(|item| item.name == package.name) {
+                if previous.reference != package.reference {
+                    return Err(parameter("最终分组包含同逻辑插件的不同来源"));
+                }
+            } else {
+                packages.push(package.clone());
+            }
+        }
+        Ok((package, group))
+    }
+
     /// DOC-15 §3.2、DOC-11 §7：保存原始成员条目及实际装载引用，继承的scope信息继续由配置展开。
     fn record_batch_version(&self, target: &mut TargetDeployment, name: &str, package: &Package) {
         let raw = target.configuration.entries(&target.overlay);
@@ -243,6 +338,7 @@ impl Controller {
         let snapshot = self.manager.snapshot();
         self.mounted
             .iter()
+            .filter(|(_, item)| !matches!(item.package.entry, Entry::Web))
             .map(|(name, item)| {
                 let actual = snapshot
                     .instances
@@ -331,10 +427,17 @@ impl Controller {
                 .instances
                 .get(name)
                 .is_some_and(|item| item.package.reference != previous.plugin)
-                && let Some(state) = original.get(name)
             {
-                self.store
-                    .save_replacement(name, &previous.plugin, state.as_ref())?;
+                if let Some(state) = original.get(name) {
+                    self.store
+                        .save_replacement(name, &previous.plugin, state.as_ref())?;
+                } else if self
+                    .mounted
+                    .get(name)
+                    .is_some_and(|item| matches!(item.package.entry, Entry::Web))
+                {
+                    self.store.save_replacement(name, &previous.plugin, None)?;
+                }
             }
         }
         let exported = self.manager.checkpoint().await?;
@@ -361,20 +464,27 @@ impl Controller {
         before: Vec<BatchInstance>,
         desired: Vec<BatchInstance>,
         original: HashMap<String, Option<payload::State>>,
+        pages: Vec<web::WebChange>,
         problem: WireError,
     ) -> Result<()> {
+        *self.permissions.lock() = self.configuration.effective(&self.overlay)?;
+        let page_configuration = self.restore_web_configurations(&pages);
         let sources = self.batch_sources(&target.groups, &self.groups)?;
         let restored = self
             .manager
-            .replace_batch(sources, desired, before, original.clone())
+            .reconfigure_batch(sources, desired, before, original.clone())
             .await;
         let original_active =
             restored.is_ok() || restored.as_ref().is_err_and(replacement_committed);
         if original_active {
+            let page_recovery = self.rollback_web_changes(&pages).await;
             self.refresh_batch_fibers()?;
             self.store.restore_states(&original)?;
             release_target(target).await?;
             self.store.retain_replacements(&self.overlay)?;
+            if let Err(recovery) = page_configuration.and(page_recovery) {
+                return Err(web::recovery_error("批次", problem, recovery));
+            }
         } else {
             self.accept_batch_target(target).await?;
             self.store.save_overlay(&self.overlay)?;
@@ -404,9 +514,13 @@ impl Controller {
     }
 
     /// ADR-0031：恢复后的纤程句柄来自监管器当前目录，配置和授权仍为窗口前值。
-    fn refresh_batch_fibers(&mut self) -> Result<()> {
+    pub(super) fn refresh_batch_fibers(&mut self) -> Result<()> {
         for (name, item) in &mut self.mounted {
-            item.fiber = self.manager.instance_fiber(name)?;
+            item.fiber = if matches!(item.package.entry, Entry::Web) {
+                self.web.instance_fiber(name)?
+            } else {
+                self.manager.instance_fiber(name)?
+            };
         }
         Ok(())
     }
@@ -415,6 +529,11 @@ impl Controller {
     async fn accept_batch_target(&mut self, target: TargetDeployment) -> Result<()> {
         let mut prior = std::mem::take(&mut self.mounted);
         for (name, item) in target.instances {
+            let fiber = if matches!(item.package.entry, Entry::Web) {
+                self.web.instance_fiber(&name)?
+            } else {
+                self.manager.instance_fiber(&name)?
+            };
             let old = prior.remove(&name);
             let manage = if item.remount {
                 if let Some(old) = old
@@ -432,7 +551,7 @@ impl Controller {
                     settings: item.settings,
                     package: item.package,
                     group: item.group,
-                    fiber: self.manager.instance_fiber(&name)?,
+                    fiber,
                     _view: item.view,
                     manage,
                 },
@@ -455,6 +574,7 @@ impl Controller {
 fn batch_instances(instances: &BTreeMap<String, TargetInstance>) -> Result<Vec<BatchInstance>> {
     instances
         .iter()
+        .filter(|(_, item)| !matches!(item.package.entry, Entry::Web))
         .map(|(name, item)| {
             Ok(BatchInstance {
                 specification: InstanceSpec {

@@ -1,0 +1,10 @@
+name = "kv"
+version = "0.1.0"
+socket = "process"
+protocol = 1
+command = ["python", "-B", "-m", "kv_py"]
+
+[web]
+assets = "web"
+mount = "/python-notes"
+entry = "index.js"

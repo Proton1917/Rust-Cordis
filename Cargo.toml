@@ -7,6 +7,9 @@ members = [
     "crates/cordis-sdk-macros",
     "crates/cordis-up",
     "crates/cordis-supervisor",
+    "crates/cordis-routing",
+    "crates/cordis-channels",
+    "crates/cordis-web-deployment",
     "crates/cordis-types",
     "crates/cordis-process",
     "crates/cordis-host",
@@ -24,6 +27,7 @@ members = [
     "plugins/kv-file",
     "plugins/kv-contract",
     "plugins/web-api",
+    "plugins/forward-api",
     "plugins/http",
     "plugins/window-api",
     "plugins/window",
@@ -61,10 +65,14 @@ cordis-up = { path = "crates/cordis-up" }
 cordis-types = { path = "crates/cordis-types" }
 cordis-process = { path = "crates/cordis-process" }
 cordis-supervisor = { path = "crates/cordis-supervisor" }
+cordis-routing = { path = "crates/cordis-routing" }
+cordis-channels = { path = "crates/cordis-channels" }
+cordis-web-deployment = { path = "crates/cordis-web-deployment" }
 cordis-contract = { path = "crates/cordis-contract" }
 cordis-idl = { path = "crates/cordis-idl" }
 kv-api = { path = "plugins/kv-api" }
 kv-mem-component = { path = "plugins/kv-mem-component" }
 counter-component = { path = "plugins/counter-component" }
 web-api = { path = "plugins/web-api" }
+forward-api = { path = "plugins/forward-api" }
 window-api = { path = "plugins/window-api" }

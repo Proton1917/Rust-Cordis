@@ -108,7 +108,7 @@ async fn create_controller(
             handle,
             logs,
         },
-    );
+    )?;
     Ok((controller, requests, view))
 }
 

@@ -6,6 +6,8 @@ use toml::{Table, Value};
 
 mod process;
 pub use process::{python_plugin, typescript_plugin};
+mod web;
+pub use web::{Backend, web_plugin};
 
 const REPOSITORY: &str = "https://github.com/Proton1917/Rust-Cordis.git";
 const SDK_REVISION: &str = env!("CORDIS_SOURCE_REVISION");
@@ -100,7 +102,11 @@ fn append_instance(config_path: &Path, serialized: &str) -> Result<()> {
 /// DOC-15 §12.1：生成 cdylib manifest，watch 从项目内共用的真实实现编译。
 fn write_crate(project: &Path, name: &str, source: &str, watch: bool) -> Result<()> {
     let directory = project.join("plugins").join(name);
-    fs::create_dir(&directory)?;
+    write_crate_at(&directory, name, source, watch)
+}
+
+fn write_crate_at(directory: &Path, name: &str, source: &str, watch: bool) -> Result<()> {
+    fs::create_dir(directory)?;
     fs::create_dir(directory.join("src"))?;
     let mut manifest: Table = toml::from_str(PLUGIN_MANIFEST)?;
     manifest["package"]["name"] = Value::String(name.into());

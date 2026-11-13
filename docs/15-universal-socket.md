@@ -355,7 +355,7 @@ library = "kv_file"         # 按平台补全为 libkv_file.dylib、libkv_file.s
 [web]
 assets = "web"
 mount = "/kv"
-entry = "web/index.js"
+entry = "index.js"
 ```
 
 清单的 `name`、`version` 必须与动态库描述符 `PluginV1` 中的一致，不一致时拒绝装载。分组仍由 `cordis.toml` 指定，不写在清单中。
@@ -380,7 +380,7 @@ restart = { max = 5, backoff_ms = 500 }
 [web]                                    # 可选，见 §11
 assets = "web"
 mount = "/kv"
-entry = "web/index.js"
+entry = "index.js"
 ```
 
 ```python
@@ -430,7 +430,7 @@ socket = "web"
 [web]
 assets = "web"
 mount = "/dashboard"
-entry = "web/index.js"
+entry = "index.js"
 ```
 
 ```ts
@@ -459,7 +459,7 @@ export default defineComponent({
 | Rust | `crates/cordis-sdk` | Rust 1.85 | `DOC-13` §7 | 第二阶段已有；`V-2` 增加通用调用 |
 | Python | `sdks/python/cordis_sdk` | Python 3.11 及以上 | cbor2 5.6.5（ADR-0040） | `Component`、`Context`、`run`；`asyncio`；效应与清理；状态导出；`UP/1` 客户端 |
 | TypeScript | `sdks/typescript/cordis-sdk` | Node 22 及以上，或 Bun、Deno | cbor-x 1.6.0（ADR-0040） | 同上；`Promise` |
-| 网页宿主 | `sdks/typescript/cordis-web` | 支持 ES 模块与 WebSocket 的浏览器、系统 WebView | 无 | TypeScript SDK 的浏览器构建：WebSocket 传输、`defineComponent`、§11.2 的宿主职责 |
+| 网页宿主 | `sdks/typescript/cordis-web` | 支持 ES 模块与 WebSocket 的浏览器、系统 WebView | cbor-x 1.6.0（ADR-0040、ADR-0041） | TypeScript SDK 的浏览器构建：WebSocket 传输、`defineComponent`、§11.2 的宿主职责 |
 | 代码生成 | `cordis idl gen --lang rust\|python\|ts <wit>` | — | `wit-parser` | 由 WIT 生成接口、数据类型、调用方代理；TypeScript 代码同时用于 Node 与浏览器 |
 
 脚本语言 SDK 使用成熟 CBOR 库，依赖随 pyproject.toml、requirements.txt 或 package.json 声明；发布包携带相应运行依赖。插件作者可以安装 SDK 包或把 SDK 目录复制进插件。PyPI 与 npm 发布属于后续事项。本机开发测试使用已有 Conda base 与 Node 环境。
@@ -475,7 +475,7 @@ export default defineComponent({
 | 前端插件 | `socket = "web"`，带 `[web]` | 组件 `<名称>`，代码只在浏览器中运行 |
 | 全栈插件 | `socket = "native"` 或 `"process"`，带 `[web]` | 后端组件 `<名称>` 与前端组件 `<名称>/web`；两者版本相同，作为一个插件替换与回滚 |
 
-`[web]` 段的字段：`assets`（资源目录，相对插件目录）、`mount`（挂载路径）、`entry`（浏览器入口模块，导出一个组件定义）。
+`[web]` 段的字段：`assets`（资源目录，相对插件目录）、`mount`（挂载路径）、`entry`（相对 `assets` 的浏览器入口模块，导出一个组件定义）。例如 `assets = "web"`、`entry = "index.js"` 定位插件目录中的 `web/index.js`。版本 URL 保留资源目录内的相对布局，模块通过 `import.meta.url` 解析同版本的样式、图片和其他模块。
 
 ### 11.2 网页宿主
 
@@ -494,12 +494,14 @@ M16 按 ADR-0038 交付静态服务与页面入口，供窗口加载真实页面
 
 | HTTP 配置 | 缺省值 | 含义 |
 |---|---|---|
-| `listen` | `127.0.0.1:0` | 监听地址；端口 0 由操作系统分配 |
+| `listen` | `127.0.0.1:0` | 监听地址；首次端口 0 由操作系统分配，后续激活恢复该实例已公布的地址 |
 | `assets` | 缺省 | 静态目录；缺省时提供 Cordis 启动页 |
 | `index` | `index.html` | 静态目录内的相对入口文件 |
 | `shutdown_ms` | `2000` | 停用时的有序关闭等待，单位毫秒 |
 
 监听套接字、专用线程、自有 Tokio 运行时和连接归同一组件效应，停用时发送关闭通知并等待资源释放；服务器异常结束时撤回该效应。后续网页接入按以下职责执行：
+
+动态端口的实际地址保存于 HTTP 插件数据目录的 `listeners/<实例名>.json`，文件记录配置地址与实际绑定地址。HTTP 进程重启后复用原地址，浏览器可从相同 origin 读取新的会话令牌并重连。每次激活仍产生新的令牌；改变 `listen` 配置时按新配置重新绑定。地址持久化由 HTTP 插件执行，核心继续管理该实例的数据目录与生命周期（ADR-0041）。
 
 1. `http` 是原生插件，默认自成一组，提供插件接口 `cordis.web@1`。M16 提供静态资源与入口，M20 追加资源登记、挂载路由、浏览器入口清单和 WebSocket 连接。
 2. M20 核心装载带 `[web]` 段的插件时，经 `cordis.web@1` 登记它的资源目录、挂载路径与入口。登记是该插件实例的效应，插件卸下时路由撤回。浏览器模块的地址带替换序号：`/_cordis/<插件>/<序号>/<入口>`，各版本使用独立模块地址。

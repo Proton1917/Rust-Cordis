@@ -28,6 +28,8 @@ pub struct Package {
     pub source: PathBuf,
     pub directory: PathBuf,
     pub entry: Entry,
+    #[serde(default)]
+    pub web: Option<manifest::Web>,
     pub descriptor: Option<payload::Plugin>,
 }
 
@@ -154,6 +156,7 @@ pub async fn inspect(
         source,
         directory,
         entry,
+        web: declared.and_then(|manifest| manifest.web),
         descriptor,
     })
 }

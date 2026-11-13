@@ -52,11 +52,42 @@ impl Manager {
         target: Vec<BatchInstance>,
         states: HashMap<String, Option<payload::State>>,
     ) -> Result<HashMap<String, Option<payload::State>>> {
+        self.queue_deployment_batch(replacements, before, target, states, false)
+            .await
+    }
+
+    /// ADR-0044：配置目标允许依赖缺席，执行与清理错误仍进入同一批次恢复。
+    pub async fn reconfigure_batch(
+        &self,
+        replacements: Vec<BatchReplacement>,
+        before: Vec<BatchInstance>,
+        target: Vec<BatchInstance>,
+        states: HashMap<String, Option<payload::State>>,
+    ) -> Result<HashMap<String, Option<payload::State>>> {
+        self.queue_deployment_batch(replacements, before, target, states, true)
+            .await
+    }
+
+    async fn queue_deployment_batch(
+        &self,
+        replacements: Vec<BatchReplacement>,
+        before: Vec<BatchInstance>,
+        target: Vec<BatchInstance>,
+        states: HashMap<String, Option<payload::State>>,
+        permit_pending: bool,
+    ) -> Result<HashMap<String, Option<payload::State>>> {
         let committed = Arc::new(AtomicBool::new(false));
         let marker = committed.clone();
         self.transaction(move |manager| async move {
             manager
-                .execute_deployment_batch(replacements, before, target, states, marker)
+                .execute_deployment_batch(
+                    replacements,
+                    before,
+                    target,
+                    states,
+                    marker,
+                    permit_pending,
+                )
                 .await
         })
         .await
@@ -73,16 +104,18 @@ impl Manager {
         mut target: Vec<BatchInstance>,
         states: HashMap<String, Option<payload::State>>,
         committed: Arc<AtomicBool>,
+        permit_pending: bool,
     ) -> Result<HashMap<String, Option<payload::State>>> {
         let started = std::time::Instant::now();
         self.running()?;
         let prepared = self
-            .prepare_batch_sources(replacements, &before, &mut target)
+            .prepare_batch_sources(replacements, &before, &mut target, permit_pending)
             .await?;
-        let (transition, names) = match self.freeze_batch(&prepared, &before, &target).await {
+        let (mut transition, names) = match self.freeze_batch(&prepared, &before, &target).await {
             Ok(frozen) => frozen,
             Err(problem) => return Err(self.discard_batch(&prepared, problem).await),
         };
+        transition.permit_pending = permit_pending;
         let original = transition
             .names
             .iter()
@@ -95,7 +128,7 @@ impl Manager {
             .await
         {
             Ok(()) => {
-                self.accept_batch(&prepared, &transition.before, &names, &target, started)
+                self.accept_batch(&prepared, &transition, &names, &target, started)
                     .await
             }
             Err(problem) => Err(problem),
@@ -130,6 +163,7 @@ impl Manager {
         replacements: Vec<BatchReplacement>,
         before: &[BatchInstance],
         target: &mut [BatchInstance],
+        permit_pending: bool,
     ) -> Result<BTreeMap<String, PreparedGroup>> {
         let mut prepared = BTreeMap::new();
         let preparation = async {
@@ -145,7 +179,8 @@ impl Manager {
                     .restart_specification(&group.group, &group.candidate)
                     .await?;
             }
-            self.preflight_batch(&prepared, before, target).await
+            self.preflight_batch(&prepared, before, target, permit_pending)
+                .await
         }
         .await;
         if let Err(problem) = preparation {
@@ -190,7 +225,11 @@ impl Manager {
             .await
         {
             Ok(()) => self
-                .stabilize(&transition.before, &transition.names)
+                .stabilize_with(
+                    &transition.before,
+                    &transition.names,
+                    transition.permit_pending,
+                )
                 .await
                 .map(|_| ()),
             Err(problem) => Err(problem),
@@ -327,6 +366,7 @@ impl Manager {
         prepared: &BTreeMap<String, PreparedGroup>,
         before: &[BatchInstance],
         target: &mut [BatchInstance],
+        permit_pending: bool,
     ) -> Result<()> {
         let mut components = HashMap::new();
         for item in target.iter_mut() {
@@ -360,6 +400,9 @@ impl Manager {
             {
                 return Err(error(2, "批次最终实例名称重复"));
             }
+        }
+        if permit_pending {
+            return Ok(());
         }
         let mut provided = HashMap::new();
         for item in target.iter() {
@@ -570,7 +613,7 @@ impl Manager {
     async fn accept_batch(
         &self,
         prepared: &BTreeMap<String, PreparedGroup>,
-        epochs: &HashMap<String, cordis::Epoch>,
+        transition: &lifecycle::Transition,
         names: &HashSet<String>,
         target: &[BatchInstance],
         started: std::time::Instant,
@@ -580,7 +623,9 @@ impl Manager {
             .filter(|item| names.contains(&item.specification.name))
             .map(|item| item.specification.name.clone())
             .collect::<Vec<_>>();
-        let changed = self.stabilize(epochs, &names).await?;
+        let changed = self
+            .stabilize_with(&transition.before, &names, transition.permit_pending)
+            .await?;
         let paused = started.elapsed();
         for result in join_all(
             prepared

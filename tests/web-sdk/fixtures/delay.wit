@@ -1,0 +1,6 @@
+package cordis:page-delay@1.0.0;
+
+interface delay {
+    /// 等待当前页面的效应结束，用于观察在途请求和连接截止时间。
+    pause: async func() -> string;
+}

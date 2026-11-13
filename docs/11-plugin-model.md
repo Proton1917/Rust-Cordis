@@ -269,6 +269,8 @@ config = { debounce_ms = 300 }
 
 这一层就是 `PAPER` §4.2 的组件加载器，它本身由运行时以普通组件的形式挂载在内核上。
 
+配置调和以 `Active` 或依赖缺席时的 `Pending` 作为有效稳定状态。移除提供方会完成依赖方清理并保存新的配置，依赖方在提供方返回后自动激活。执行、清理或截止时间错误仍恢复原部署。普通版本替换沿 `SW-7` 要求受影响实例 `Active`；带完整配置重读的批次使用配置目标的稳定语义（ADR-0044）。
+
 ### 10.1 管理授权与持久叠加层
 
 cordis.manage@1 提供 install、add、remove、replace、rollback、configure、reload、shutdown。授权由 cordis.toml 实例条目的 grants 指定，可写具体方法名或 `*`；获得授权的实例取得对应服务，方法调用逐项检查权限。管理接口维持原有授权范围，配置重读从人维护的文件重新取得授权。
@@ -336,7 +338,24 @@ socket = "native"
 library = "kv_file"
 ```
 
-进程插件使用 `socket = "process"`，声明 `protocol = 1`、`command` 和可选的 `restart`。原生分组由实例的 `group` 配置决定，进程插件各自运行在独立进程中。清单的 `socket = "web"` 与 `[web]` 字段以及实例的 `forwarder` 标记按 DOC-15 §9、§11、§15 在 M20 接入网页宿主。
+进程插件使用 `socket = "process"`，声明 `protocol = 1`、`command` 和可选的 `restart`。原生分组由实例的 `group` 配置决定，进程插件各自运行在独立进程中。
+
+网页插件使用 `socket = "web"`，必需的 `[web]` 声明资源和入口。原生或进程插件追加同一段即可提供浏览器部分。
+
+```toml
+name = "dashboard"
+version = "0.1.0"
+socket = "web"
+
+[web]
+assets = "web"
+mount = "/dashboard"
+entry = "index.js"
+```
+
+`assets` 相对插件目录，`entry` 相对 `assets`。HTTP 插件按部署序号发布 `/_cordis/<插件>/<序号>/<入口>`，相对资源引用保留该序号。HTTP 实例配置 `forwarder = true`，核心按实际来源连接与加载上下文授予转发能力。每个页面分别握手并持有独立编号表，其子实例与服务域由核心内核管理（DOC-15 §11、ADR-0041）。
+
+纯网页组件名为插件名；全栈插件的浏览器组件名为后端组件名加 `/web`。两部分共用清单版本及替换事务。替换依次完成后端激活与各页面更新，步骤失败时恢复旧后端和页面状态。资源登记归属对应实例的效应，页面退出回收本页子实例，插件停用撤回资源路由。
 
 ### 10.4 上游配置与工具行为对应
 

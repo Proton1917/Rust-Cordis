@@ -1,0 +1,15 @@
+/* Open Claude UI 02d021fceaf2a907f9e63a8125621bdda1b85d60 的主题与按钮尺寸；许可证随文件提供。 */
+:host { display: block; color: #151515; font: 15px/1.6 -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif; }
+* { box-sizing: border-box; }
+article { max-width: 640px; margin: 0 auto; padding: 28px; border: 1px solid rgba(21,21,21,.1); border-radius: 16px; background: #fff; }
+h2 { margin: 0 0 8px; font-size: 24px; overflow-wrap: anywhere; }
+p { color: #525252; margin: 0 0 20px; }
+output { display: block; margin: 20px 0; font-size: 40px; font-weight: 600; font-variant-numeric: tabular-nums; }
+button { min-height: 40px; padding: 8px 20px; border: 0; border-radius: 12px; background: #b85e40; color: #fff; font: inherit; font-weight: 600; cursor: pointer; transition: background-color 150ms, transform 150ms; }
+button:hover { background: #9e4b31; }
+button:active { transform: scale(.98); }
+button:focus-visible { outline: 2px solid #d97757; outline-offset: 3px; }
+[role="status"] { min-height: 24px; margin: 16px 0 0; font-size: 13px; }
+@media (max-width: 520px) { article { padding: 20px; border-radius: 12px; } }
+@media (prefers-color-scheme: dark) { :host { color: #f2f1ec; } article { background: #1a1a19; border-color: rgba(255,255,255,.12); } p { color: #b4b4ae; } }
+@media (prefers-reduced-motion: reduce) { button { transition: none; } button:active { transform: none; } }

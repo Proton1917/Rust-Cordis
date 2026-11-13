@@ -1,0 +1,8 @@
+/state/
+/source/plugins/*.dylib
+/source/plugins/*.so
+/source/plugins/kv-dashboard-rust/*.dylib
+/source/plugins/kv-dashboard-rust/*.so
+/source/plugins/kv-dashboard-python/cordis_sdk/
+/source/plugins/kv-dashboard-python/kv_py/
+/source/plugins/*/web/

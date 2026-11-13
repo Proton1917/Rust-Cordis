@@ -3,6 +3,7 @@
 #![deny(unsafe_op_in_unsafe_fn)]
 
 pub mod abi;
+mod forward;
 pub mod host;
 mod jobs;
 pub mod lease;

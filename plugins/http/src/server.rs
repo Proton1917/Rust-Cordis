@@ -1,9 +1,22 @@
 //! ADR-0038、PR-3/PR-6：专用线程拥有 Tokio、监听套接字及全部 HTTP 连接。
 
-use super::Config;
-use axum::{Router, http::header, response::Html, routing::get};
+use super::{
+    Config,
+    registry::Registry,
+    socket::{Bridge, SocketState},
+};
+use axum::{
+    Json, Router,
+    http::{HeaderMap, StatusCode, header},
+    response::{Html, IntoResponse},
+    routing::get,
+};
 use cordis_sdk::{Error, Result};
-use std::{future::IntoFuture, sync::mpsc::SyncSender, time::Duration};
+use std::{
+    future::IntoFuture,
+    sync::{Arc, mpsc::SyncSender},
+    time::Duration,
+};
 use tokio::sync::watch;
 use tower_http::services::{ServeDir, ServeFile};
 use web_api::WebEntry;
@@ -17,6 +30,9 @@ pub(super) fn run(
     config: Config,
     stop: watch::Receiver<bool>,
     ready: SyncSender<Result<WebEntry>>,
+    registry: Arc<Registry>,
+    bridge: Option<Bridge>,
+    binding: Option<super::listen::Binding>,
 ) -> Result<()> {
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -30,7 +46,7 @@ pub(super) fn run(
         }
     };
     runtime.block_on(async move {
-        let prepared = prepare(&config).await;
+        let prepared = prepare(&config, registry, bridge, stop.clone(), binding).await;
         let (listener, router, entry) = match prepared {
             Ok(prepared) => prepared,
             Err(error) => {
@@ -46,11 +62,20 @@ pub(super) fn run(
 }
 
 /// DOC-15 §11.3：绑定实际地址并生成本次激活的随机令牌，页面URL使用标准URL编码。
-async fn prepare(config: &Config) -> Result<(tokio::net::TcpListener, Router, WebEntry)> {
+async fn prepare(
+    config: &Config,
+    registry: Arc<Registry>,
+    bridge: Option<Bridge>,
+    stop: watch::Receiver<bool>,
+    binding: Option<super::listen::Binding>,
+) -> Result<(tokio::net::TcpListener, Router, WebEntry)> {
     let listener = tokio::net::TcpListener::bind(config.listen)
         .await
         .map_err(problem)?;
     let address = listener.local_addr().map_err(problem)?;
+    if let Some(binding) = binding {
+        binding.save(address)?;
+    }
     let token = uuid::Uuid::new_v4().to_string();
     let mut url = url::Url::parse(&format!("http://{address}/")).map_err(problem)?;
     url.set_fragment(Some(&format!("cordis_token={token}")));
@@ -58,31 +83,98 @@ async fn prepare(config: &Config) -> Result<(tokio::net::TcpListener, Router, We
         url: url.into(),
         token,
     };
-    let router = routes(config, &entry)?;
+    let router = routes(config, &entry, registry, bridge, stop)?;
     Ok((listener, router, entry))
 }
 
 /// ADR-0038：启动信息按激活更新；自定义资源由 tower-http 处理静态文件协议。
-fn routes(config: &Config, entry: &WebEntry) -> Result<Router> {
+fn routes(
+    config: &Config,
+    entry: &WebEntry,
+    registry: Arc<Registry>,
+    bridge: Option<Bridge>,
+    stop: watch::Receiver<bool>,
+) -> Result<Router> {
     let bootstrap = format!(
         "globalThis.CORDIS_SESSION = {};\n",
         serde_json::to_string(entry).map_err(problem)?
     );
-    let router = Router::new().route(
-        "/_cordis/session.js",
-        get(move || {
-            let body = bootstrap.clone();
-            async move {
+    let origin = url::Url::parse(&entry.url)
+        .map_err(problem)?
+        .origin()
+        .ascii_serialization();
+    let socket = SocketState {
+        origin,
+        token: entry.token.clone(),
+        bridge,
+        stop,
+    };
+    let session = entry.clone();
+    let token = entry.token.clone();
+    let entries = registry.clone();
+    let assets = registry.clone();
+    let router = Router::new()
+        .route("/_cordis/socket", get(super::socket::upgrade))
+        .with_state(socket)
+        .route(
+            "/_cordis/manifest.json",
+            get(move |headers: HeaderMap| {
+                let expected = format!("Bearer {token}");
+                let entries = entries.clone();
+                async move {
+                    if headers
+                        .get(header::AUTHORIZATION)
+                        .and_then(|value| value.to_str().ok())
+                        != Some(expected.as_str())
+                    {
+                        return StatusCode::FORBIDDEN.into_response();
+                    }
+                    (
+                        [(header::CACHE_CONTROL, "no-store")],
+                        Json(entries.entries()),
+                    )
+                        .into_response()
+                }
+            }),
+        )
+        .route(
+            "/_cordis/session.json",
+            get(move || {
+                let entry = session.clone();
+                async move { ([(header::CACHE_CONTROL, "no-store")], Json(entry)) }
+            }),
+        )
+        .route(
+            "/_cordis/cordis-web.js",
+            get(|| async {
                 (
-                    [
-                        (header::CONTENT_TYPE, "text/javascript; charset=utf-8"),
-                        (header::CACHE_CONTROL, "no-store"),
-                    ],
-                    body,
+                    [(header::CONTENT_TYPE, "text/javascript; charset=utf-8")],
+                    include_str!("../assets/cordis-web.js"),
                 )
-            }
-        }),
-    );
+            }),
+        )
+        .route(
+            "/_cordis/{plugin}/{sequence}/{*file}",
+            get(move |request| {
+                let registry = assets.clone();
+                async move { registry.serve(request).await }
+            }),
+        )
+        .route(
+            "/_cordis/session.js",
+            get(move || {
+                let body = bootstrap.clone();
+                async move {
+                    (
+                        [
+                            (header::CONTENT_TYPE, "text/javascript; charset=utf-8"),
+                            (header::CACHE_CONTROL, "no-store"),
+                        ],
+                        body,
+                    )
+                }
+            }),
+        );
     if let Some(root) = &config.assets {
         let root = root.canonicalize().map_err(problem)?;
         let index = root.join(&config.index).canonicalize().map_err(problem)?;
@@ -93,7 +185,13 @@ fn routes(config: &Config, entry: &WebEntry) -> Result<Router> {
             .route_service("/", ServeFile::new(index))
             .fallback_service(ServeDir::new(root)))
     } else {
-        Ok(router.route("/", get(|| async { Html(DEFAULT_PAGE) })))
+        Ok(router
+            .route("/", get(|| async { Html(DEFAULT_PAGE) }))
+            .route("/favicon.ico", get(|| async { StatusCode::NO_CONTENT }))
+            .fallback(move |request| {
+                let registry = registry.clone();
+                async move { registry.serve(request).await }
+            }))
     }
 }
 
@@ -125,4 +223,4 @@ async fn stopping(mut stop: watch::Receiver<bool>) {
     }
 }
 
-const DEFAULT_PAGE: &str = "<!doctype html><html lang=\"zh-CN\"><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>Cordis 窗口</title><script src=\"/_cordis/session.js\"></script><body><h1>Cordis 窗口</h1><p>运行中</p></body></html>";
+const DEFAULT_PAGE: &str = include_str!("../assets/index.html");

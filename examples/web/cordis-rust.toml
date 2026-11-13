@@ -1,0 +1,18 @@
+requires_core = "^0.1"
+
+[runtime]
+plugin_dir = "source/plugins"
+state_dir = "state/rust"
+checkpoint_ms = 1000
+confirm_ms = 100
+
+[instance.http]
+plugin = "http"
+group = "http"
+forwarder = true
+config = { listen = "127.0.0.1:8071" }
+
+[instance.store]
+plugin = "kv-dashboard-rust"
+component = "kv-store"
+group = "store"

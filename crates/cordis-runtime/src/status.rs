@@ -22,6 +22,8 @@ use std::{
 
 #[derive(Clone, Default, Serialize)]
 pub struct Diagnostics {
+    #[serde(skip)]
+    pub web: Option<Weak<cordis_web_deployment::Deployment>>,
     pub phase: String,
     pub configuration_error: Option<String>,
     pub instance_errors: BTreeMap<String, String>,
@@ -121,6 +123,9 @@ impl View {
         let last_swap = self.map_library_ids(&manager, &mut libraries)?;
         let mut snapshot = manager.snapshot();
         let diagnostics = self.diagnostics.lock().clone();
+        if let Some(web) = diagnostics.web.as_ref().and_then(Weak::upgrade) {
+            snapshot.instances.extend(web.snapshot());
+        }
         if let Some(sources) = &diagnostics.source_bindings {
             sources.lock().confirm(&snapshot)?;
         }

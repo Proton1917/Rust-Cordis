@@ -1,0 +1,239 @@
+{
+  "milestone": "M20",
+  "cases": [
+    {
+      "scenario": "batch",
+      "exit_code": 0,
+      "result": {
+        "rejected": {
+          "ticket": {
+            "ok": true,
+            "code": null,
+            "value": {
+              "id": "web-batch-rejected"
+            },
+            "detail": null,
+            "rpc_wall_us": 4963
+          },
+          "outcome": {
+            "state": "rejected",
+            "id": "web-batch-rejected",
+            "error": {
+              "code": 1,
+              "message": "Error: 候选页面激活失败 (code 1)",
+              "detail": {
+                "group": "batch",
+                "plugin": null,
+                "committed": false,
+                "cause": null
+              }
+            }
+          }
+        },
+        "accepted": {
+          "ticket": {
+            "ok": true,
+            "code": null,
+            "value": {
+              "id": "web-batch-accepted"
+            },
+            "detail": null,
+            "rpc_wall_us": 5282
+          },
+          "outcome": {
+            "state": "succeeded",
+            "id": "web-batch-accepted"
+          }
+        },
+        "changes": {
+          "configure": {
+            "ok": true,
+            "code": null,
+            "value": null,
+            "detail": null,
+            "rpc_wall_us": 40090
+          },
+          "remove_notes": {
+            "ok": true,
+            "code": null,
+            "value": null,
+            "detail": null,
+            "rpc_wall_us": 21211
+          },
+          "remove_store": {
+            "ok": true,
+            "code": null,
+            "value": null,
+            "detail": null,
+            "rpc_wall_us": 13939
+          }
+        },
+        "origins": [
+          1794572811587.2,
+          1794572812280.9
+        ]
+      },
+      "evidence": "target/test-evidence/web-batch-49453-7/web-sdk/web-batch-49453-7/case/result.json"
+    },
+    {
+      "scenario": "channel-faults",
+      "exit_code": 0,
+      "result": {
+        "oversized": {
+          "closed": true,
+          "code": 1005,
+          "sent": 1,
+          "healthy_counts": [
+            1,
+            1
+          ],
+          "closed_groups": [
+            "web-page-22"
+          ]
+        },
+        "malformed": {
+          "closed": true,
+          "code": 1005,
+          "sent": 1,
+          "healthy_counts": [
+            2,
+            2
+          ],
+          "closed_groups": [
+            "web-page-36"
+          ]
+        },
+        "flood": {
+          "closed": true,
+          "code": 1005,
+          "sent": 128,
+          "calls": {
+            "started": 64,
+            "active": 0,
+            "peak": 64
+          },
+          "error_codes": [
+            8
+          ],
+          "healthy_counts": [
+            3,
+            3
+          ],
+          "closed_groups": [
+            "web-page-43"
+          ]
+        },
+        "nested": {
+          "closed": true,
+          "code": 1005,
+          "sent": 1,
+          "healthy_counts": [
+            4,
+            4
+          ],
+          "closed_groups": [
+            "web-page-50"
+          ]
+        }
+      },
+      "evidence": "target/test-evidence/web-channel-faults-49453-3/web-sdk/web-channel-faults-49453-3/case/result.json"
+    },
+    {
+      "scenario": "dependencies",
+      "exit_code": 0,
+      "result": {
+        "providers": [
+          "Rust",
+          "Python",
+          "TypeScript"
+        ],
+        "pending_and_restored": 3,
+        "remaining_pages": 1,
+        "value": "AB🌍 · 3 字符"
+      },
+      "evidence": "target/test-evidence/web-dependencies-49453-8/web-sdk/web-dependencies-49453-8/case/result.json"
+    },
+    {
+      "scenario": "fullstack",
+      "exit_code": 0,
+      "result": {
+        "native_to_python": true,
+        "backend_restored": "0.2.0",
+        "page_counts": [
+          1,
+          2
+        ],
+        "shared_value": "跨语言共享内容",
+        "rejected": {
+          "ok": false,
+          "code": 1,
+          "value": "Error: 候选页面激活失败 (code 1)",
+          "detail": null,
+          "rpc_wall_us": 2012715
+        }
+      },
+      "evidence": "target/test-evidence/web-fullstack-49453-0/web-sdk/web-fullstack-49453-0/case/result.json"
+    },
+    {
+      "scenario": "http-restart",
+      "exit_code": 0,
+      "result": {
+        "same_origin": "http://127.0.0.1:62167/",
+        "token_rotated": true,
+        "pages_active": 2
+      },
+      "evidence": "target/test-evidence/web-http-restart-49453-1/web-sdk/web-http-restart-49453-1/case/result.json"
+    },
+    {
+      "scenario": "pure-replace",
+      "exit_code": 0,
+      "result": {
+        "state_inherited": true,
+        "rollback": true,
+        "page_reload": false
+      },
+      "evidence": "target/test-evidence/web-pure-replace-49453-6/web-sdk/web-pure-replace-49453-6/case/result.json"
+    },
+    {
+      "scenario": "realm-close",
+      "exit_code": 0,
+      "result": {
+        "realm": "shared-browser-test",
+        "initial": [
+          0,
+          0
+        ],
+        "after_first_increment": [
+          1,
+          0
+        ],
+        "remaining_value": 1
+      },
+      "evidence": "target/test-evidence/web-realm-close-49453-5/web-sdk/web-realm-close-49453-5/case/result.json"
+    },
+    {
+      "scenario": "scaffold",
+      "exit_code": 0,
+      "result": {
+        "generated_plugin": "page-counter",
+        "counts": [
+          1,
+          2
+        ],
+        "state_inherited": true,
+        "page_reload": false,
+        "children_reclaimed": true,
+        "registration_removed": true
+      },
+      "evidence": "target/test-evidence/web-scaffold-49453-4/web-sdk/web-scaffold-49453-4/case/result.json"
+    }
+  ],
+  "rust_web_test_count": 8,
+  "test_log": "target/web-m20/frontend/evidence/web-pip-helper.log",
+  "rust_test_seconds": 32.74,
+  "environment": {
+    "PIP_REQUIRE_VIRTUALENV": "true",
+    "installation": "cordis_testkit::python::install_dependencies"
+  },
+  "flow": "docs/design/flow/index.html"
+}

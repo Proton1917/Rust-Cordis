@@ -1,0 +1,8 @@
+name = "realm-counter"
+version = "0.1.0"
+socket = "web"
+
+[web]
+assets = "web"
+mount = "/realm-counter"
+entry = "index.js"

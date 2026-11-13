@@ -29,6 +29,10 @@ const SDK: &[(&str, &str)] = &[
         include_str!("../../../../../sdks/typescript/cordis-sdk/src/runtime.ts"),
     ),
     (
+        "node.ts",
+        include_str!("../../../../../sdks/typescript/cordis-sdk/src/node.ts"),
+    ),
+    (
         "bindings.ts",
         include_str!("../../../../../sdks/typescript/cordis-sdk/src/bindings.ts"),
     ),

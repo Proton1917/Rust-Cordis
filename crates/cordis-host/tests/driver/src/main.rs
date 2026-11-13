@@ -3,7 +3,7 @@
 mod allocation;
 
 use clap::Parser;
-use cordis::{Clock, Context, FiberState, Spawn, Task};
+use cordis::{Clock, Context, EventOptions, FiberState, InternalService, Spawn, Task};
 use cordis_supervisor::{
     PeerOptions,
     manager::{
@@ -16,6 +16,7 @@ use cordis_up::{
     rpc::{HandlerFuture, RemoteObject},
 };
 use std::{
+    collections::HashSet,
     error::Error,
     path::{Path, PathBuf},
     process::Command,
@@ -430,6 +431,32 @@ async fn exercise(artifacts: &Artifacts, same_group: bool) -> Result<()> {
     Ok(())
 }
 
+type PresenceSignals = Arc<Mutex<HashSet<Arc<str>>>>;
+
+/// ADR-0041：同步记录加载存在信号，业务服务仍按单独的准确增量检查。
+fn observe_presence(context: &Context) -> Result<PresenceSignals> {
+    let names = Arc::new(Mutex::new(HashSet::new()));
+    let observed = names.clone();
+    context.on_with::<InternalService>(
+        move |change| {
+            if change.name.starts_with("cordis.instance.") {
+                let mut names = observed.lock().unwrap();
+                if change.value.is_some() {
+                    names.insert(change.name.clone());
+                } else {
+                    names.remove(&change.name);
+                }
+            }
+            None
+        },
+        EventOptions {
+            global: true,
+            ..EventOptions::default()
+        },
+    )?;
+    Ok(names)
+}
+
 async fn composition(artifacts: &Artifacts, same_group: bool) -> Result<()> {
     let context = Context::new(Arc::new(Executor(Instant::now())));
     let manager = Manager::new(
@@ -512,6 +539,7 @@ async fn composition(artifacts: &Artifacts, same_group: bool) -> Result<()> {
             )?;
         }
         let services_before = context.service_count();
+        let presence = observe_presence(&manager.context())?;
         let parent = manager
             .mount(
                 InstanceSpec {
@@ -530,7 +558,7 @@ async fn composition(artifacts: &Artifacts, same_group: bool) -> Result<()> {
             format!("组合组件状态：{:?}", parent.state()),
         )?;
         check(
-            context.service_count() == services_before + 1,
+            context.service_count() == services_before + presence.lock().unwrap().len() + 1,
             "子组件应在私有域中提供一个实际服务",
         )?;
         let states = manager.checkpoint().await?;

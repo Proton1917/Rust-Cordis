@@ -1,0 +1,17 @@
+[package]
+name = "cordis-web-deployment"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[dependencies]
+cordis.workspace = true
+cordis-up.workspace = true
+cordis-supervisor.workspace = true
+cordis-channels.workspace = true
+parking_lot.workspace = true
+serde.workspace = true
+tokio.workspace = true
+url = "=2.5.8"

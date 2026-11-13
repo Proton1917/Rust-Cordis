@@ -11,21 +11,22 @@ mod routing;
 mod views;
 
 pub use batch::{BatchInstance, BatchReplacement};
+pub use cordis_routing::{Arguments, CallContext, LocalReply, LocalService};
+pub use lifecycle::FrozenSnapshot;
 pub use model::{
     Failure, GroupSnapshot, GroupSpec, InstanceSnapshot, InstanceSpec, LogOrigin, LogRecord,
     LogSink, ManagerOptions, ReplaceReport, RestartPolicy, Snapshot,
 };
-pub use routing::{Arguments, CallContext, LocalReply, LocalService};
 
 use crate::Peer;
 use cordis::{ComponentDef, Context, Fiber, Inject};
+use cordis_routing::Interface;
 use cordis_up::{
     Value, WireError, payload,
     rpc::{Connection, Handler, HandlerFuture, Outgoing, Payload, RemoteObject},
 };
 use generation::{Generation, InstanceData, RemoteComponent, RemoteEffect, ScopeRecord, ViewLease};
 use metadata::{MetadataLease, saved_error};
-use model::Interface;
 use parking_lot::Mutex;
 use routing::Route;
 use serde::{Serialize, de::DeserializeOwned};
@@ -33,7 +34,7 @@ use std::{
     collections::{BTreeMap, HashMap, HashSet},
     sync::{
         Arc, Weak,
-        atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering},
+        atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering},
     },
     time::Duration,
 };
@@ -119,15 +120,6 @@ pub(super) struct Catalog {
     replacement_states: HashMap<String, HashMap<String, Option<payload::State>>>,
 }
 
-pub(super) struct Routes {
-    entries: HashMap<(u64, u64), Arc<Route>>,
-    counters: HashMap<u64, ExportCounter>,
-}
-
-pub(super) struct ExportCounter {
-    next: u64,
-    active: usize,
-}
 pub(super) struct Effects {
     records: HashMap<(u64, u64), Weak<RemoteEffect>>,
     next: HashMap<u64, u64>,
@@ -178,11 +170,11 @@ pub(super) struct Core {
     next: AtomicU64,
     catalog: Mutex<Catalog>,
     contexts: Mutex<HashMap<u64, Weak<ViewRecord>>>,
-    realms: Mutex<HashMap<String, Weak<RealmLease>>>,
+    realms: Mutex<HashMap<views::RealmKey, Weak<RealmLease>>>,
     scopes: Mutex<HashMap<u64, Weak<ScopeRecord>>>,
     effects: Mutex<Effects>,
-    routes: Mutex<Routes>,
-    metadata: Mutex<HashMap<u64, Arc<AtomicUsize>>>,
+    routes: cordis_routing::Router<Route>,
+    metadata: cordis_routing::metadata::MetadataBudget,
     stopping: AtomicBool,
     exported: AtomicBool,
     shutdown_export: Mutex<Option<lifecycle::Frozen>>,
@@ -190,6 +182,7 @@ pub(super) struct Core {
     stop: watch::Sender<bool>,
     finished: watch::Sender<Option<Result<()>>>,
     log_sink: Mutex<Option<LogSink>>,
+    handler_extension: Mutex<Option<Weak<dyn Handler>>>,
 }
 
 #[derive(Clone)]
@@ -231,6 +224,10 @@ impl Manager {
         let manager = Self(Arc::new(Core {
             context: context.clone(),
             fiber,
+            routes: cordis_routing::Router::new(options.max_exports, options.invoke_timeout),
+            metadata: cordis_routing::metadata::MetadataBudget::new(
+                options.max_retained_metadata_bytes,
+            ),
             options,
             next: AtomicU64::new(1),
             catalog: Mutex::new(Catalog::default()),
@@ -241,11 +238,6 @@ impl Manager {
                 records: HashMap::new(),
                 next: HashMap::new(),
             }),
-            routes: Mutex::new(Routes {
-                entries: HashMap::new(),
-                counters: HashMap::new(),
-            }),
-            metadata: Mutex::new(HashMap::new()),
             stopping: AtomicBool::new(false),
             exported: AtomicBool::new(false),
             shutdown_export: Mutex::new(None),
@@ -256,6 +248,7 @@ impl Manager {
             stop,
             finished,
             log_sink: Mutex::new(None),
+            handler_extension: Mutex::new(None),
         }));
         let retained = manager.clone();
         context
@@ -381,6 +374,16 @@ impl Manager {
     }
     pub(super) fn id(&self) -> u64 {
         self.0.next.fetch_add(1, Ordering::Relaxed)
+    }
+
+    /// DOC-16 §5、§11：转发通道和真实进程共用核心的连接世代分配器。
+    pub fn reserve_connection_id(&self) -> u64 {
+        self.id()
+    }
+
+    /// ADR-0041：runtime 强持转发处理器，监管器以弱引用接入协议扩展。
+    pub fn set_handler_extension(&self, extension: Weak<dyn Handler>) {
+        *self.0.handler_extension.lock() = Some(extension);
     }
 
     pub(super) fn group(&self, name: &str) -> Result<Arc<Group>> {

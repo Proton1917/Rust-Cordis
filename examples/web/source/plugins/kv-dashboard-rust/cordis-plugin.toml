@@ -1,0 +1,9 @@
+name = "kv"
+version = "0.1.0"
+socket = "native"
+library = "kv_mem"
+
+[web]
+assets = "web"
+mount = "/rust-notes"
+entry = "index.js"

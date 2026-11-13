@@ -1,0 +1,50 @@
+{
+  "segments": [
+    {
+      "log": "target/m20-workspace-tests.log",
+      "passed": 248,
+      "failed_at_this_attempt": 2
+    },
+    {
+      "log": "target/m20-native-composition.log",
+      "passed": 2,
+      "failed_at_this_attempt": 0
+    },
+    {
+      "log": "target/m20-workspace-remaining-after.log",
+      "passed": 27,
+      "failed_at_this_attempt": 8
+    },
+    {
+      "log": "target/m20-workspace-tail.log",
+      "passed": 37,
+      "failed_at_this_attempt": 0
+    },
+    {
+      "log": "target/m20-window.log",
+      "passed": 1,
+      "failed_at_this_attempt": 0
+    },
+    {
+      "log": "target/m20-remaining-doctests.log",
+      "passed": 2,
+      "failed_at_this_attempt": 0
+    },
+    {
+      "log": "target/m20-middle-doctests.log",
+      "passed": 0,
+      "failed_at_this_attempt": 0
+    },
+    {
+      "log": "target/web-m20/frontend/evidence/web-pip-helper.log",
+      "passed": 8,
+      "failed_at_this_attempt": 0
+    }
+  ],
+  "passed_case_total": 325,
+  "revalidated_without_extra_count": [
+    "target/web-m20/frontend/evidence/idl-pip-helper.log",
+    "target/web-m20/frontend/evidence/python-pip-helper.log",
+    "target/m20-http-favicon.log"
+  ]
+}

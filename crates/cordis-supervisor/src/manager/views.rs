@@ -7,11 +7,15 @@ use generation::{Binding, Configuration, Registration};
 use routing::Target;
 use tokio::sync::OnceCell;
 
+pub(super) type RealmKey = (Option<u64>, String);
+
 pub(super) struct RealmLease {
-    name: String,
+    name: RealmKey,
     realm: cordis::Realm,
     core: Weak<Core>,
 }
+
+struct PageNamespace(u64);
 
 impl Drop for RealmLease {
     fn drop(&mut self) {
@@ -100,6 +104,11 @@ impl Drop for ViewRecord {
 }
 
 impl Manager {
+    /// DOC-15 §11.2、ADR-0041：页面身份存于核心上下文，派生视图和子组件沿祖先链继承。
+    pub fn page_context(&self, parent: &Context, connection: u64) -> Context {
+        parent.extend(PageNamespace(connection))
+    }
+
     /// ADR-0025：部署配置与远端请求共享命名隔离域及逐字段元数据覆盖规则。
     pub fn derive_context(
         &self,
@@ -112,7 +121,7 @@ impl Manager {
             let key = Interface::key(&isolation.interface)?;
             let realm = match &isolation.realm {
                 Some(name) => {
-                    let lease = self.realm_lease(name);
+                    let lease = self.realm_lease(&context, name);
                     let realm = lease.realm;
                     context = context.extend(lease);
                     realm
@@ -148,17 +157,21 @@ impl Manager {
     }
 
     /// ADR-0025：同名域共享一份身份，最后一个视图释放时由 RealmLease 撤回登记。
-    fn realm_lease(&self, name: &str) -> Arc<RealmLease> {
+    fn realm_lease(&self, context: &Context, name: &str) -> Arc<RealmLease> {
+        let namespace = context
+            .extension::<PageNamespace>()
+            .map(|namespace| namespace.0);
+        let name = (namespace, name.to_owned());
         let mut realms = self.0.realms.lock();
-        match realms.get(name).and_then(Weak::upgrade) {
+        match realms.get(&name).and_then(Weak::upgrade) {
             Some(lease) => lease,
             None => {
                 let lease = Arc::new(RealmLease {
-                    name: name.into(),
+                    name: name.clone(),
                     realm: cordis::Realm::new(),
                     core: Arc::downgrade(&self.0),
                 });
-                realms.insert(name.into(), Arc::downgrade(&lease));
+                realms.insert(name, Arc::downgrade(&lease));
                 lease
             }
         }

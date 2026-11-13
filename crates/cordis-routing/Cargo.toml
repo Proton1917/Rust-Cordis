@@ -1,0 +1,14 @@
+[package]
+name = "cordis-routing"
+description = "Core object directories and owned UP/1 service forwarding."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[dependencies]
+cordis-up.workspace = true
+parking_lot.workspace = true
+serde.workspace = true
+semver.workspace = true

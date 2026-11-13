@@ -6,14 +6,15 @@
 
 | 项 | 值 |
 |---|---|
-| 最近完成的实现与检查 | `M19`；TypeScript SDK、迁移回退与脚手架通过；测试现场清理的连续两轮验收通过 |
-| 当前里程碑 | M19 提交；接续 M20 网页插件 |
-| 当前验证 | target/cleanup-verification-m19-lifecycle 两轮各 311 条用例通过，耗时 277.188 / 247.984 秒；20 类现场的文件数、字节数、目录数增长均为 0 |
-| M19 进行中证据 | `target/test-evidence/typescript-sdk-behavior-72065-1/typescript-sdk/behavior-72065`（完整 SDK 场景）；`target/test-evidence/typescript-scaffold-72065-0/typescript-sdk/scaffold-72065`（真实 Node 脚手架热替换）；全局日志 target/m19-*.log |
-| 下一步 | M20：按 target/web-m20/routing 的 ADR-0041、integration.md 与 frontend/CONTINUATION.md 接入 routing/channels/web-deployment、HTTP 转发、cordis-web、页面子实例与三个示例；完成局部更新/全栈回退/多页隔离/重连验收。主会话使用默认 target/ 与 target/shared，两个代理各用现有共享根 |
-| 文档交付 | 保留设计方重写的 README 与新增 docs/guide.md；M19 更新 README 路线图状态及 sdks/typescript 行数，TypeScript 用法新增至 guide；同步解释页。后续详细用法统一进入 guide |
-| 窗口界面验收 | AU-17 通过；用户在 iTerm2 执行，窗口恢复 802 ms，截图、Cmd-Q、检查点与进程退出均通过 |
-| 最后更新 | 2026-11-13（Asia/Shanghai），M19 完整验收与测试现场清理 |
+| 最近完成的实现与检查 | M20：网页宿主、页面隔离、全栈替换与回退、三语言服务依赖、浏览器故障隔离与脚手架 |
+| 当前里程碑 | M20 退出检查通过，接续 M21 总验收 |
+| 当前验证 | 工作区 323 条运行用例与 2 条文档用例分段通过；8 条真实浏览器场景通过；177 条矩阵、unsafe 审计、fmt 与 clippy 通过 |
+| 下一步 | 整合 target/phase3-acceptance/m21 的 ADR-0043、真实 Python/Node 打包、跨语言总验收与 skill 候选；执行固定 RM-7/8/9，完成 M21 退出检查并提交推送 |
+| M21 并行安排 | m20_routing 正执行 release 测量准备与固定测量；m17_cache_cleanup 核对 M21 skill 与最新网页 API。主会话整合及提交，编译根保持 target、agent-shared、agent-cleanup 三处 |
+| 验收资料 | docs/measurements/m20-web-acceptance.json、m20-workspace-tests.json、m20-up1-fuzz.json；网页状态与操作见 docs/design/flow/index.html |
+| 文档交付 | README 更新路线图、组成与实测表；完整用法进入 docs/guide.md；解释页和独立 HTML 已同步。M21 详细步骤继续写入 guide |
+| 窗口界面验收 | AU-17 已归档；用户运行记录为恢复 802 ms，截图、Cmd-Q、检查点与进程退出通过 |
+| 最后更新 | 2026-11-13（Asia/Shanghai），M20 退出结果与 M21 接续 |
 
 ## 环境
 
@@ -604,6 +605,56 @@ cargo test --manifest-path target/m17-review/source/Cargo.toml -p cordis --doc
 | TypeScript SDK | 1126 / 1222 |
 | 六个核心 crate 合计 | 16978 / 18997 |
 
+### M20 网页宿主、页面隔离与全栈替换
+
+- 交付：cordis-routing 提取对象出口、资源转交与有界元数据；cordis-channels 负责每页独立 UP/1 连接；cordis-web-deployment 管理资源 Owner、页面子实例与共同恢复。HTTP 追加版本资源、WebSocket、Origin/令牌检查及默认地址恢复；cordis-web 复用 TypeScript Runtime。ABI v1.0 的布局保持原值。
+- 脚手架与示例：new-plugin --web 支持纯网页，以及 Rust/Python/TypeScript 后端组合；原生 build.sh 将动态库放入插件目录。examples/web 包含笔记、Rust KV 面板和 Python KV 面板。Node SDK 与网页宿主由同一 TypeScript 编译入口构建，HTTP 内嵌包携带实际 cbor-x 许可证。
+- Y-1：cargo fmt --all --check 通过，target/m20-fmt-integrated.log；后续测试修正经同一 formatter 输出更新。
+- Y-2：完整工作区 all-targets clippy -D warnings 通过，target/m20-clippy-ready.log，2.39 秒；共享安装函数和 HTTP 的受影响目标通过，target/m20-clippy-helper-http.log，11.43 秒；独立原生测试 driver 的 clippy 通过，target/m20-driver-clippy.log，5.59 秒。
+- Y-3：工作区全部目标分段完成，共 323 条运行用例、2 条文档用例通过。初次命令为 cargo test --workspace；两条原生 Scoped 测试改为单独计量实例存在信号，私域业务服务仍精确增加 1，定向两条 3.75 秒通过。HTTP 默认页检查转为其公开挂载节点。继续执行余下目标时，pip 的 PIP_REQUIRE_VIRTUALENV=true 使 web 夹具初始化失败；设计方 7b5bdb65 的意见通过公共 testkit 安装函数收口，idl/python/web 共用。修复后原 8 条 web 测试在外层环境仍为 true 时全部通过，32.74 秒；受影响 IDL 与 Python 脚手架分别 7.80 / 32.77 秒通过。其他有效结果按范围复用，完整分段计数见 [工作区结果](measurements/m20-workspace-tests.json)。
+- 浏览器：8 个固定场景通过，包括两页局部替换与回退、Rust→Python 全栈切换及坏前端恢复、混合批次提交/恢复/configure/remove、三个语言提供方逐项撤回后的 Pending 与恢复、页面命名域与关页隔离、HTTP 同 origin 重连、协议故障及生成模板的动态装配。[浏览器结果](measurements/m20-web-acceptance.json) 保存原始 case 路径。洪泛为 128 个真实调用，开始与峰值均为 64，额度错误为 code 8；故障页关闭后其调用归零，健康页继续工作。
+- 界面：正式 49453 批次的桌面与移动状态图已查看，组件间距及移动按钮布局已修正；docs/design/flow 交付 9 个状态、5 条操作关系、12 张截图。解释页进度区的 1280 / 390 视口已查看。浏览器记录定位的默认 /favicon.ico 404 改为 204，真实 HTTP 请求用例 0.09 秒通过；自定义资源目录沿原路由提供其图标。
+- Y-4：177 条矩阵通过，8 条移植、166 条改写、3 条不适用；target/m20-conformance.log。
+- Y-5：unsafe 审计通过，target/m20-unsafe.log，并在工作区执行中再次通过。核心产品依赖树保持 Q0，target/m20-core-dependencies.txt；原生宿主的产品依赖树保持与内核分离，target/m20-host-dependencies.txt。
+- Y-6：ABI 实现与宏生产模板保持既有语义，复用 M17 的 13 条 Miri 边界用例与布局比较；工具链沿环境表。Y-7：本阶段工作区的原生布局测试通过，ABI 为 v1.0。
+- CP-9：up1_decoder 增加转发载荷及内层消息解析，固定 max_total_time=1800，实际 1801 秒、1,663,834 次输入、退出 0。被测 cordis-up/src 与正式源通过 diff -qr 完整字节比较，测试目标通过 cmp；[模糊测试记录](measurements/m20-up1-fuzz.json) 保存命令与结果，原日志 target/m20-fuzz/fuzz.log。
+- Y-8：cloc 2.10 --skip-uniqueness 统计各 crate/src 的 Rust 代码，排除空行与注释；SDK 单独按各自 src 的语言规则统计。完整表见下方。supervisor + routing 的注释合计 227 行，提取前为 178 行。supervisor、runtime、host、UP/1 与宏超过目标的部分分别来自生命周期和事务、部署管理、ABI 适配、协议预算及跨语言接口生成，均处于 DOC-13 上限内。
+- Y-9：DOC-11/13/15/16、ADR-0041/0044、README 三张表、guide、网页 SDK 文档、解释页与流程图已同步。ADR-0043 已分配给 M21 独立运行时打包候选，随 M21 提交。
+- Y-10：提交主题 M20: 接入网页宿主、页面隔离与全栈替换，推送目标 origin/main。
+- 决策与修正：ADR-0041 使用 Context 扩展与 (页面编号, 域名) 键隔离页面命名域，保留后端全局命名域；旧核心的同名服务重复注册证据与修复后的 0/0→1/0 证据分别在 routing/evidence/realm-provider-active、realm-controls。父级在 child 登记期间结束时等待其回收；稳定检查重新定位仍登记的 Instance；失败 Owner 在共同回退时按原快照重新激活。ADR-0044 为配置调和保留 Active/Pending 稳定语义，纯版本替换沿 SW-7。
+- 接续：M21 的独立 Python/Node 签名包、六方向覆盖与三语言迁移、skill 章节候选已经准备；固定 RM-7/8/9 正按预定次数执行。正式整合从 target/phase3-acceptance/m21 的说明继续。
+
+| crate 或 SDK | 代码行 / 总行 |
+|---|---:|
+| cordis | 4230 / 5112 |
+| cordis-abi | 2407 / 2846 |
+| cordis-sdk | 789 / 915 |
+| cordis-sdk-macros | 1427 / 1558 |
+| cordis-up | 1628 / 1773 |
+| cordis-supervisor | 5480 / 5923 |
+| cordis-routing | 580 / 660 |
+| cordis-channels | 250 / 277 |
+| cordis-web-deployment | 850 / 918 |
+| cordis-runtime | 5313 / 5839 |
+| cordis-host | 2719 / 3007 |
+| cordis-dev | 2278 / 2498 |
+| cordis-idl | 2324 / 2466 |
+| cordis-process | 374 / 410 |
+| cordis-types | 205 / 239 |
+| cordis-testkit | 502 / 571 |
+| cordis-contract | 31 / 47 |
+| console-log | 465 / 515 |
+| cordis-watch | 578 / 622 |
+| cordis-http | 823 / 892 |
+| cordis-window | 943 / 1020 |
+| web-api / forward-api / window-api | 25/32；17/21；11/17 |
+| kv-api / kv-contract / kv-file | 23/37；56/66；129/142 |
+| kv-mem / kv-mem-component | 6/9；67/80 |
+| counter / counter-component | 6/9；75/85 |
+| Python SDK | 838 / 987 |
+| TypeScript SDK / 网页宿主 | 1163/1261；206/231 |
+| 核心九个 crate 合计 | 18910 / 21151 |
+
 ## 第二阶段候选与恢复记录
 
 用户设置的 10 分钟计时于 2026-11-12 02:40:22 UTC 到期后暂停，随后按用户指令恢复。设计提交为 `478b3a4`，包含用户指定的序号和完整字节比对方案。M7 已完成验收，后续候选继续按下表接入。
@@ -643,6 +694,9 @@ M8 候选保留独立 `[workspace]` 以便隔离编译，正式接入时改为�
 ## 决策与发现
 
 实现过程中得到的、文档里没有的结论记在这里，每条写明日期、结论、依据（源码位置或用例编号）。需要改变 `DOC-01` 条款或 `DOC-02` 规则的结论另写 ADR，这里只留一行指向它。
+
+- 2026-11-13（Asia/Shanghai）：M20 页面使用 Context 扩展的命名空间隔离显式命名域，前后端事务共同保存页面状态；生命周期稳定检查按实际 Instance 身份处理退役页面，失败 Owner 通过恢复序号重新激活。ADR-0041 与八个浏览器场景记录对应结构与行为。
+- 2026-11-13（Asia/Shanghai）：配置移除提供方产生的 Pending 是有效部署状态，版本替换继续沿 SW-7 检查 Active；两者共享提交与恢复流程，判据见 ADR-0044。设计方指出的 PIP_REQUIRE_VIRTUALENV 环境依赖由公共 testkit 安装函数处理，三处真实场景已通过。
 
 - 2026-11-12（UTC−08:00）：M19 恢复后完成旧候选清理，10 个带 Cargo 标记的 debug/release 目录已删除，`du -sh target` 从 41G 降至 38G；路径与结果为 `target/cache-cleanup-m19.json`。编译目录内的结果文件保存到 `target/cache-cleanup-m19-evidence`。默认 target/debug、target/shared、Miri、窗口辅助程序及 M20 正在使用的 agent-shared/agent-cleanup 保持；后两者分别承担路由提取和网页接入。
 - 2026-11-13（Asia/Shanghai）：按 e7df894d 清理已结束测试现场，共移除 264 个目录，其中 262 个属于文档未引用现场，2 项引用误归类的处理见后条。13 个引用现场保留文本、JSON、CBOR 与图像证据，清除 1234 个编译产物及依赖文件。`du -sh target` 从 39G 降至 32G，执行记录为 `target/test-residue-cleanup-m19.json`，脚本为 `target/prune_test_residue_m19.py`。公共守卫与测试调用迁移进行中，随后按要求连续执行两次工作区测试。

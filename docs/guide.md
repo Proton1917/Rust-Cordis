@@ -1,6 +1,6 @@
 # Rust-Cordis 使用指南
 
-本文是 [README](../README.md) 的配套手册，收录内核接口、构建检查、插件编写、契约验证、服务部署、发布打包、WIT 生成和 Python 插件的完整操作说明。项目定位、架构和实测数据见 README。
+本文是 [README](../README.md) 的配套手册，收录内核接口、构建检查、插件编写、契约验证、服务部署、发布打包、WIT 生成，以及 Python、TypeScript 和网页插件的操作说明。项目定位、架构和实测数据见 README。
 
 ## 目录
 
@@ -15,7 +15,8 @@
 9. [WIT 接口生成](#wit-接口生成)
 10. [Python 进程插件](#python-进程插件)
 11. [TypeScript 进程插件](#typescript-进程插件)
-12. [里程碑验收摘要（M0–M18）](#里程碑验收摘要m0m18)
+12. [网页插件与全栈插件](#网页插件与全栈插件)
+13. [里程碑验收摘要（M0–M18）](#里程碑验收摘要m0m18)
 
 ## 内核概念与接口
 
@@ -328,6 +329,49 @@ npm --prefix plugins/kv-ts run build
 ```
 
 M19 的双向调用、8 项原生 KV 契约、私有域和命名域、资源与事件转交、跨插口迁移及失败回退均通过真实核心验收。两次完整工作区测试各通过 311 条用例，20 类测试现场的文件数、字节数和目录数保持原值，详见 [M19 SDK 验收](measurements/m19-typescript-sdk.json)与[测试现场验收](measurements/m19-test-cleanup.json)。
+
+## 网页插件与全栈插件
+
+网页模块通过 `cordis-web` 执行组件入口，并经 HTTP 插件转发的 WebSocket 使用 UP/1。组件的依赖、效应和页面子实例由核心内核管理。每页拥有自己的服务域；页面可以注入 Rust、Python 和 TypeScript 后端提供的服务。
+
+在已有 Cordis 项目中，可以分别生成纯网页与三种后端组合：
+
+```bash
+cordis new-plugin notes --web
+cordis new-plugin native-panel --rust --web
+cordis new-plugin python-panel --python --web
+cordis new-plugin node-panel --ts --web
+```
+
+各插件的 README 给出具体构建方法。Rust 组合模板使用 `sh plugins/native-panel/build.sh`，把 Cargo 的动态库产物复制进插件目录；Python 和 TypeScript 组合沿用前两节的依赖安装与编译方式。纯网页入口是普通 ES 模块，文件位于 `plugins/notes/web/index.js`。
+
+网页发布需要 HTTP 插件提供 `cordis.web@1.1`。将已构建的 HTTP 动态库放入项目的 `runtime.plugin_dir`，并在配置中登记：
+
+```toml
+[instance.http]
+plugin = "http"
+component = "http"
+forwarder = true
+```
+
+HTTP 默认首次绑定本机动态端口，通过 Web 服务公布页面入口。窗口插件可以直接使用这个入口；浏览器示例的配置使用明确端口，运行方式见[网页示例](../examples/web/README.md)。示例包括页面笔记、Rust KV 全栈面板和 Python KV 全栈面板，提供字节读写、键列表与独立页面计数。
+
+清单中 `assets` 相对插件目录，`entry` 相对资源目录：
+
+```toml
+name = "notes"
+version = "0.1.0"
+socket = "web"
+
+[web]
+assets = "web"
+mount = "/notes"
+entry = "index.js"
+```
+
+浏览器入口默认导出 `defineComponent` 的组件定义。模板将 DOM 与事件监听器登记为效应，计数通过 `exportState` 导出，并在写入前检查 `Frozen`。替换时核心导出各页状态、撤回旧界面，再让网页宿主导入带新序号的模块地址；页面对象和整页导航保持原状。全栈插件先完成后端激活，再更新所有页面，任一步失败时恢复原后端与原页面。
+
+`watch` 将本插件目录的文件变化作为替换来源。多个插件在同一防抖窗口变化时，`replace_batch` 统一决定提交或恢复。页面关闭回收本页子实例；移除插件撤回它的资源路由与各页界面。网页服务之间的共享限定在同一页，跨页面数据由后端服务持有。
 
 ## 里程碑验收摘要（M0–M18）
 

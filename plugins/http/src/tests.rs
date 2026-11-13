@@ -13,7 +13,16 @@ impl Running {
     fn start(config: Config) -> Self {
         let (stop, stopping) = watch::channel(false);
         let (ready, started) = std::sync::mpsc::sync_channel(1);
-        let thread = std::thread::spawn(move || server::run(config, stopping, ready));
+        let thread = std::thread::spawn(move || {
+            server::run(
+                config,
+                stopping,
+                ready,
+                Arc::new(registry::Registry::default()),
+                None,
+                None,
+            )
+        });
         Self {
             entry: started.recv().unwrap().unwrap(),
             stop,
@@ -81,7 +90,19 @@ fn static_pages_bootstrap_tokens_and_connections_follow_server_lifetime() {
     );
     let body = directory.join("default.html");
     assert_eq!(request(url.as_str(), &body, "%{http_code}"), "200");
-    assert!(fs::read_to_string(&body).unwrap().contains("Cordis 窗口"));
+    assert!(
+        fs::read_to_string(&body)
+            .unwrap()
+            .contains("id=\"cordis-components\"")
+    );
+    assert_eq!(
+        request(
+            url.join("/favicon.ico").unwrap().as_str(),
+            &directory.join("favicon"),
+            "%{http_code}"
+        ),
+        "204"
+    );
     let bootstrap = directory.join("session.js");
     assert_eq!(
         request(

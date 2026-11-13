@@ -4,6 +4,7 @@ mod batch;
 mod contract;
 mod outcomes;
 mod sources;
+mod web;
 pub(crate) use outcomes::{BatchOutcomes, PendingBatch};
 pub(crate) use sources::SourceBindings;
 
@@ -18,12 +19,12 @@ use crate::{
     status::Diagnostics,
     storage::Store,
 };
-use cordis::{Context, Fiber, NamedProvision, Realm};
+use cordis::{Context, Effect, Fiber, Realm};
 use cordis_supervisor::manager::{InstanceSpec, Manager};
 use cordis_up::{Value, WireError, payload};
 use parking_lot::Mutex;
 use std::{
-    collections::{BTreeMap, BTreeSet, HashMap},
+    collections::{BTreeMap, HashMap},
     path::PathBuf,
     sync::Arc,
     time::Duration,
@@ -35,7 +36,7 @@ struct Mounted {
     group: String,
     fiber: Fiber,
     _view: Context,
-    manage: Option<NamedProvision>,
+    manage: Option<Effect>,
 }
 
 /// DOC-11 §7：保存一次插件替换涉及的部署版本和显式继承状态。
@@ -50,6 +51,7 @@ struct Replacement {
 }
 
 pub struct Controller {
+    web: Arc<cordis_web_deployment::Deployment>,
     pub manager: Arc<Manager>,
     pub configuration: Configuration,
     pub path: PathBuf,
@@ -88,7 +90,7 @@ impl Controller {
         store: Store,
         overlay: Overlay,
         services: ControlServices,
-    ) -> Self {
+    ) -> Result<Self> {
         let ControlServices {
             diagnostics,
             permissions,
@@ -109,7 +111,19 @@ impl Controller {
                 .to_owned(),
         )));
         diagnostics.lock().source_bindings = Some(sources.clone());
-        Self {
+        let allowed = permissions.clone();
+        let web = cordis_web_deployment::Deployment::new(
+            manager.clone(),
+            Arc::new(move |name| {
+                allowed
+                    .lock()
+                    .get(name)
+                    .is_some_and(|settings| settings.forwarder)
+            }),
+        )?;
+        diagnostics.lock().web = Some(Arc::downgrade(&web));
+        Ok(Self {
+            web,
             manager,
             configuration,
             path,
@@ -128,7 +142,7 @@ impl Controller {
             installed: HashMap::new(),
             outcomes,
             sources,
-        }
+        })
     }
 
     /// DOC-15 §3.2：发现来源、建立进程分组，再按检查点挂载实例；局部错误记入诊断。
@@ -173,6 +187,9 @@ impl Controller {
         for (name, settings) in target {
             match self.instance_package(name, settings).await {
                 Ok(package) => {
+                    if matches!(package.entry, Entry::Web) {
+                        continue;
+                    }
                     let group = settings
                         .group
                         .clone()
@@ -293,7 +310,6 @@ impl Controller {
                 self.replace(name, &previous.plugin, true).await?;
             }
             Operation::Reload(configuration) => {
-                self.discover().await?;
                 self.commit_configuration(configuration.clone(), self.overlay.clone())
                     .await?;
                 self.diagnostics.lock().configuration_error = None;
@@ -519,6 +535,9 @@ impl Controller {
         inherited: Option<payload::State>,
     ) -> Result<()> {
         let package = self.instance_package(name, &settings).await?;
+        if matches!(package.entry, Entry::Web) {
+            return self.mount_web(name, settings, package);
+        }
         let group = settings
             .group
             .clone()
@@ -540,7 +559,7 @@ impl Controller {
                     name: name.into(),
                     group: group.clone(),
                     plugin: package.name.clone(),
-                    component,
+                    component: component.clone(),
                     config: Value::serialized(&settings.config).map_err(parameter)?,
                 },
                 inherited,
@@ -557,6 +576,10 @@ impl Controller {
             }
         };
         self.store.consume(name)?;
+        if package.web.is_some() {
+            self.web
+                .mount(Self::web_spec(name, &settings, &package, &view)?)?;
+        }
         self.mounted.insert(
             name.into(),
             Mounted {
@@ -659,7 +682,8 @@ impl Controller {
                 &self.manager.context(),
                 &payload::ContextOptions { isolate, intercept },
             )?
-            .isolate_named(config::MANAGE, Realm::new()))
+            .isolate_named(config::MANAGE, Realm::new())
+            .isolate_named("cordis.forward@1", Realm::new()))
     }
 
     /// DOC-15 §3.2：按配置授权提供实例专有管理对象，调用时继续逐方法鉴权。
@@ -668,34 +692,50 @@ impl Controller {
         name: &str,
         settings: &InstanceSettings,
         view: &Context,
-    ) -> Result<Option<NamedProvision>> {
-        if settings
+    ) -> Result<Option<Effect>> {
+        let mut provisions = Vec::new();
+        if settings.forwarder {
+            provisions.push(self.web.forwarder(view)?);
+        }
+        if !settings
             .grants
             .get(config::MANAGE)
             .is_none_or(Vec::is_empty)
         {
+            provisions.push(
+                self.manager.provide_builtin_in(
+                    view,
+                    "cordis.manage@1.1",
+                    config::METHODS
+                        .iter()
+                        .map(|method| (*method).into())
+                        .collect(),
+                    Arc::new(Management {
+                        owner: name.into(),
+                        permissions: self.permissions.clone(),
+                        control: self.handle.clone(),
+                        configuration: self.path.clone(),
+                        store: self.store.clone(),
+                        diagnostics: self.diagnostics.clone(),
+                        outcomes: self.outcomes.clone(),
+                        logs: self.logs.clone(),
+                    }),
+                )?,
+            );
+        }
+        if provisions.is_empty() {
             return Ok(None);
         }
-        self.manager
-            .provide_builtin_in(
-                view,
-                "cordis.manage@1.1",
-                config::METHODS
-                    .iter()
-                    .map(|method| (*method).into())
-                    .collect(),
-                Arc::new(Management {
-                    owner: name.into(),
-                    permissions: self.permissions.clone(),
-                    control: self.handle.clone(),
-                    configuration: self.path.clone(),
-                    store: self.store.clone(),
-                    diagnostics: self.diagnostics.clone(),
-                    outcomes: self.outcomes.clone(),
-                    logs: self.logs.clone(),
-                }),
-            )
-            .map(Some)
+        view.effect("instance-permissions", move |scope| {
+            scope.defer_async(move || async move {
+                for provision in provisions {
+                    provision.dispose().await?;
+                }
+                Ok(())
+            })
+        })
+        .map(Some)
+        .map_err(kernel)
     }
 
     /// T-EFF-2、CP-7：释放实例与授权，最后一个成员退出后释放其分组进程。
@@ -703,6 +743,11 @@ impl Controller {
         let Some(mounted) = self.mounted.remove(name) else {
             return Ok(());
         };
+        if matches!(mounted.package.entry, Entry::Web) {
+            self.web.remove(name).await?;
+            return Ok(());
+        }
+        self.web.remove(name).await?;
         let result = self.manager.dispose(name).await;
         let grant = match mounted.manage {
             Some(grant) => grant.dispose().await.map_err(kernel),
@@ -720,59 +765,6 @@ impl Controller {
         Ok(())
     }
 
-    /// loader EntryGroup.update、S-FBR-4：按名称调和变化项，配置更新保留实例身份。
-    async fn reconcile(
-        &mut self,
-        target: &BTreeMap<String, InstanceSettings>,
-        inherited: &HashMap<String, payload::State>,
-    ) -> Result<()> {
-        for name in self.changed_instances(target) {
-            self.remove(&name).await?;
-        }
-        let mut mounted_now = Vec::new();
-        for (name, settings) in target {
-            if let Some(current) = self.mounted.get_mut(name) {
-                if current.settings.config != settings.config {
-                    self.manager
-                        .update(
-                            name,
-                            Value::serialized(&settings.config).map_err(parameter)?,
-                        )
-                        .await?;
-                    current.settings = settings.clone();
-                }
-            } else {
-                self.mount(name, settings.clone(), inherited.get(name).cloned())
-                    .await?;
-                mounted_now.push(name.clone());
-            }
-        }
-        for name in mounted_now {
-            self.settle(&name).await?;
-        }
-        Ok(())
-    }
-
-    /// loader Entry.update：组件或上下文变化重建，其余变化交给实例配置更新。
-    fn changed_instances(&self, target: &BTreeMap<String, InstanceSettings>) -> Vec<String> {
-        self.mounted
-            .iter()
-            .filter_map(|(name, current)| {
-                let next = target.get(name);
-                (next.is_none()
-                    || next.is_some_and(|next| {
-                        next.plugin != current.settings.plugin
-                            || next.component != current.settings.component
-                            || next.group != current.settings.group
-                            || next.isolate != current.settings.isolate
-                            || next.intercept != current.settings.intercept
-                            || next.grants != current.settings.grants
-                    }))
-                .then(|| name.clone())
-            })
-            .collect()
-    }
-
     /// CP-4：实例稳定等待受 apply 截止时间限制，保留内核返回的加载错误。
     async fn settle(&self, name: &str) -> Result<()> {
         let mounted = self.mounted.get(name).expect("mounted instance retained");
@@ -785,89 +777,14 @@ impl Controller {
         .map_err(kernel)
     }
 
-    /// DOC-15 §3.2：保存变化项原状态，调和成功后发布配置；失败恢复原部署。
+    /// DOC-15 §3.2、§11.4：配置与插件批次共用状态保存、页面协调及持久提交。
     async fn commit_configuration(
         &mut self,
-        mut configuration: Configuration,
-        mut overlay: Overlay,
+        configuration: Configuration,
+        overlay: Overlay,
     ) -> Result<()> {
-        self.sources
-            .lock()
-            .apply_declarations(&configuration, &mut overlay);
-        let before = self.configuration.effective(&self.overlay)?;
-        let target = configuration.effective(&overlay)?;
-        if configuration.runtime != self.configuration.runtime {
-            self.logs
-                .emit(1, "runtime", "runtime设置将在下次启动时生效");
-            configuration.runtime = self.configuration.runtime.clone();
-        }
-        let affected = before
-            .keys()
-            .chain(target.keys())
-            .filter(|name| before.get(*name) != target.get(*name))
-            .cloned()
-            .collect::<BTreeSet<_>>();
-        let exported = affected
-            .iter()
-            .filter(|name| self.mounted.contains_key(*name))
-            .cloned()
-            .collect::<Vec<_>>();
-        let saved = self.manager.checkpoint_instances(&exported).await?;
-        let inherited = inherited_configuration(&before, &target, &saved);
-        *self.permissions.lock() = target.clone();
-        let result = self
-            .reconcile(&target, &inherited)
+        self.apply_deployment_batch(&[], Some(configuration), overlay)
             .await
-            .and_then(|_| self.persist_configuration(&before, &target, &overlay));
-        if let Err(problem) = result {
-            return self
-                .restore_configuration(&before, &affected, &saved, problem)
-                .await;
-        }
-        self.configuration = configuration;
-        self.overlay = overlay;
-        self.refresh()?;
-        self.store.retain_replacements(&self.overlay)
-    }
-
-    /// DOC-15 §3.2、CP-11：发布新部署前清除移除或更换组件的旧检查点。
-    fn persist_configuration(
-        &self,
-        before: &BTreeMap<String, InstanceSettings>,
-        target: &BTreeMap<String, InstanceSettings>,
-        overlay: &Overlay,
-    ) -> Result<()> {
-        for (name, old) in before {
-            if target
-                .get(name)
-                .is_none_or(|next| old.plugin != next.plugin || old.component != next.component)
-            {
-                self.store.forget(name)?;
-            }
-        }
-        self.store.save_overlay(overlay)
-    }
-
-    /// DOC-11 §7：配置事务失败恢复原授权、实例定义和原状态，保留双重失败原因。
-    async fn restore_configuration(
-        &mut self,
-        before: &BTreeMap<String, InstanceSettings>,
-        affected: &BTreeSet<String>,
-        saved: &HashMap<String, payload::State>,
-        problem: WireError,
-    ) -> Result<()> {
-        *self.permissions.lock() = before.clone();
-        for name in affected {
-            self.remove(name).await?;
-        }
-        if let Err(rollback) = self.reconcile(before, saved).await {
-            return Err(WireError::new(
-                1,
-                format!("管理变更失败：{problem}；恢复失败：{rollback}"),
-            ));
-        }
-        self.store.checkpoint(saved)?;
-        Err(problem)
     }
 
     /// DOC-11 SW-5–SW-9：提交后的退役错误仍持久化活动版本，并保留原错误供调用方处理。
@@ -876,6 +793,7 @@ impl Controller {
         if replacement.candidate.reference == replacement.previous.reference && !rollback {
             return Ok(());
         }
+        let web = self.prepare_web_changes(&replacement).await?;
         let outcome = self
             .replace_package(
                 &replacement.group,
@@ -888,12 +806,23 @@ impl Controller {
         if let Err(problem) = &outcome
             && !replacement_committed(problem)
         {
+            if let Err(recovery) = self.rollback_web_changes(&web).await {
+                return Err(web::recovery_error("替换", problem.clone(), recovery));
+            }
             return outcome;
         }
-        let original = self.manager.last_replacement_states(&replacement.group);
+        let mut original = self.manager.last_replacement_states(&replacement.group);
+        if matches!(replacement.candidate.entry, Entry::Web) {
+            original.extend(replacement.affected.iter().map(|name| (name.clone(), None)));
+        }
+        if let Err(problem) = self.finish_web_changes(&web).await {
+            return self
+                .restore_replacement(replacement, original, web, problem)
+                .await;
+        }
         if let Err(problem) = self.persist_replacement(&replacement, &original) {
             return self
-                .restore_after_persistence_failure(replacement, original, problem)
+                .restore_replacement(replacement, original, web, problem)
                 .await;
         }
         self.accept_replacement(replacement)?;
@@ -916,6 +845,12 @@ impl Controller {
         if candidate.name != current.package.name {
             return Err(WireError::new(3, "库替换需要相同逻辑插件名称"));
         }
+        if matches!(candidate.entry, Entry::Web) != matches!(current.package.entry, Entry::Web) {
+            return Err(WireError::new(
+                3,
+                "网页与后端实例的形态转换通过配置变更执行",
+            ));
+        }
         let group = current.group.clone();
         let previous = current.package.clone();
         let affected = self
@@ -924,11 +859,14 @@ impl Controller {
             .filter(|(_, item)| item.group == group && item.package.name == candidate.name)
             .map(|(name, _)| name.clone())
             .collect::<Vec<_>>();
-        let mut packages = self
-            .groups
-            .get(&group)
-            .expect("mounted group retained")
-            .clone();
+        let mut packages = if matches!(previous.entry, Entry::Web) {
+            vec![previous.clone()]
+        } else {
+            self.groups
+                .get(&group)
+                .expect("mounted group retained")
+                .clone()
+        };
         for package in &mut packages {
             if package.name == candidate.name {
                 *package = candidate.clone();
@@ -995,14 +933,20 @@ impl Controller {
         self.store.save_overlay(&replacement.overlay)
     }
 
-    /// DOC-11 §7：持久化失败时用本次 SW-5 原快照恢复，恢复错误保留双方提交事实。
-    async fn restore_after_persistence_failure(
+    /// DOC-11 §7、DOC-15 §11.4：页面或持久化失败均恢复同次快照，保留实际提交事实。
+    async fn restore_replacement(
         &mut self,
         replacement: Replacement,
         original: HashMap<String, Option<payload::State>>,
+        pages: Vec<web::WebChange>,
         problem: WireError,
     ) -> Result<()> {
-        let packages = self.groups[&replacement.group].clone();
+        let page_configuration = self.restore_web_configurations(&pages);
+        let packages = if matches!(replacement.previous.entry, Entry::Web) {
+            vec![replacement.previous.clone()]
+        } else {
+            self.groups[&replacement.group].clone()
+        };
         let recovery = self
             .replace_package(
                 &replacement.group,
@@ -1016,8 +960,13 @@ impl Controller {
             .as_ref()
             .map_or_else(replacement_committed, |()| true)
         {
+            let page_recovery = self.rollback_web_changes(&pages).await;
             self.store.restore_states(&original)?;
             self.store.retain_replacements(&self.overlay)?;
+            self.refresh_batch_fibers()?;
+            if let Err(recovery) = page_configuration.and(page_recovery) {
+                return Err(web::recovery_error("替换", problem, recovery));
+            }
         } else {
             self.accept_replacement(replacement)?;
         }
@@ -1025,7 +974,7 @@ impl Controller {
             Ok(()) => Err(problem),
             Err(recovery) => Err(WireError::new(
                 1,
-                format!("保存部署失败：{problem}；恢复结果：{recovery}"),
+                format!("替换失败：{problem}；恢复结果：{recovery}"),
             )),
         }
     }
@@ -1040,7 +989,9 @@ impl Controller {
             mounted.package = replacement.candidate.clone();
             mounted.settings.plugin = replacement.candidate.reference.clone();
         }
-        self.groups.insert(replacement.group, replacement.packages);
+        if !matches!(replacement.candidate.entry, Entry::Web) {
+            self.groups.insert(replacement.group, replacement.packages);
+        }
         self.overlay = replacement.overlay;
         self.logs.emit(
             2,
@@ -1088,7 +1039,8 @@ impl Controller {
                     )
                     .await?;
             }
-            Entry::Web => return Err(WireError::new(3, "网页插件需要网页宿主连接")),
+            Entry::Web if matches!(current.entry, Entry::Web) => {}
+            Entry::Web => return Err(WireError::new(3, "网页插件与后端插件采用各自实例形态")),
         }
         Ok(())
     }
@@ -1100,26 +1052,6 @@ fn replacement_committed(problem: &WireError) -> bool {
         .detail
         .deserialized::<payload::ReplacementFailure>()
         .is_ok_and(|failure| failure.committed)
-}
-
-/// DOC-11 §5：同一插件组件的配置更新继承原状态，组件身份变化使用自身初始状态。
-fn inherited_configuration(
-    before: &BTreeMap<String, InstanceSettings>,
-    target: &BTreeMap<String, InstanceSettings>,
-    saved: &HashMap<String, payload::State>,
-) -> HashMap<String, payload::State> {
-    saved
-        .iter()
-        .filter(|(name, _)| {
-            before
-                .get(*name)
-                .zip(target.get(*name))
-                .is_some_and(|(old, next)| {
-                    old.plugin == next.plugin && old.component == next.component
-                })
-        })
-        .map(|(name, state)| (name.clone(), state.clone()))
-        .collect()
 }
 
 /// DOC-16 §5：内核错误保留说明并转换为协议通用失败。

@@ -1,0 +1,8 @@
+name = "service-dependencies"
+version = "0.1.0"
+socket = "web"
+
+[web]
+assets = "web"
+mount = "/service-dependencies"
+entry = "index.js"

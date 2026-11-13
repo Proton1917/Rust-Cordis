@@ -19,6 +19,56 @@ struct NativeSwap {
 }
 
 impl Manager {
+    /// DOC-15 §11.3、ADR-0041：在既有页面连接登记新的逻辑插件，保留原组件定义身份。
+    pub async fn add_library(&self, group: String, path: PathBuf) -> Result<payload::Plugin> {
+        self.transaction(move |manager| async move {
+            manager.running()?;
+            let group = manager.group(&group)?;
+            if group.specification.lock().is_some() {
+                return Err(error(3, "动态页面模块登记需要逻辑连接分组"));
+            }
+            let previous = group.current.lock().clone();
+            let prepared = manager.prepare_library(&previous.connection, &path).await?;
+            let result = async {
+                if previous
+                    .descriptor
+                    .plugins
+                    .iter()
+                    .any(|plugin| plugin.name == prepared.plugin.name)
+                {
+                    return Err(error(2, "页面插件名称已经登记"));
+                }
+                let candidate = manager.native_generation(
+                    &group.name,
+                    &prepared.plugin.name,
+                    &previous,
+                    &prepared,
+                )?;
+                manager
+                    .library_command::<()>(
+                        &previous.connection,
+                        "library_activate",
+                        prepared.library,
+                    )
+                    .await?;
+                manager.activate(&group, candidate, None)?;
+                Ok(prepared.plugin.clone())
+            }
+            .await;
+            if result.is_err() {
+                manager
+                    .library_command::<payload::LibraryRetired>(
+                        &previous.connection,
+                        "library_retire",
+                        prepared.library,
+                    )
+                    .await?;
+            }
+            result
+        })
+        .await
+    }
+
     /// DOC-15 CP-5：锁外查询活动宿主，查询错误写入对应分组状态。
     pub async fn library_snapshots(&self) -> Result<Vec<LibraryInfo>> {
         let groups: Vec<_> = self.0.catalog.lock().groups.values().cloned().collect();
@@ -260,11 +310,14 @@ impl Manager {
             },
         )?;
         let mut descriptor = previous.descriptor.as_ref().clone();
-        *descriptor
+        match descriptor
             .plugins
             .iter_mut()
             .find(|entry| entry.name == plugin)
-            .expect("selected plugin") = prepared.plugin.clone();
+        {
+            Some(entry) => *entry = prepared.plugin.clone(),
+            None => descriptor.plugins.push(prepared.plugin.clone()),
+        }
         let retained = self.retain_metadata(
             &previous.connection,
             metadata::descriptor_bytes(&descriptor)?,

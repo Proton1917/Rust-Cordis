@@ -8,7 +8,7 @@ use std::{
 
 #[path = "support/script_tools.rs"]
 mod script_tools;
-use cordis_testkit::cleanup::TestGuard;
+use cordis_testkit::{cleanup::TestGuard, python::install_dependencies};
 use script_tools::{Running, Tools, active, checked, tools};
 
 #[test]
@@ -69,28 +69,12 @@ fn python_project(tools: &Tools) -> PathBuf {
 /// ADR-0040：依赖位于生成插件的目录，测试清单选择已安装的 Conda 解释器。
 fn python_dependencies(tools: &Tools, plugin: &Path) {
     checked(
-        Command::new("conda")
-            .current_dir(&tools.root)
-            .env("PIP_REQUIRE_VIRTUALENV", "false")
-            .env("TMPDIR", tools.root.join("target/tmp"))
-            .args([
-                "run",
-                "--no-capture-output",
-                "-n",
-                "base",
-                "python",
-                "-m",
-                "pip",
-                "install",
-                "--disable-pip-version-check",
-                "--no-deps",
-                "--cache-dir",
-            ])
-            .arg(tools.root.join("target/python-sdk-dependencies/pip-cache"))
-            .arg("--target")
-            .arg(plugin.join(".dependencies"))
-            .arg("-r")
-            .arg(plugin.join("requirements.txt")),
+        &mut install_dependencies(
+            &tools.root,
+            &plugin.join("requirements.txt"),
+            &plugin.join(".dependencies"),
+        )
+        .unwrap(),
     );
     let path = plugin.join("cordis-plugin.toml");
     let mut manifest: toml::Table = toml::from_str(&fs::read_to_string(&path).unwrap()).unwrap();

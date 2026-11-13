@@ -1,13 +1,22 @@
 /** DOC-16 §5–10：核心指令驱动组件、对象和回调，插件只执行本地函数。 */
-import { AsyncLocalStorage } from "node:async_hooks";
-import { Connection, type Limits } from "./wire.js";
+import { Connection, type Limits, type Input, type Output } from "./wire.js";
 import { BindingTransport, Payload, Reference, Service, outgoing } from "./bindings.js";
 import { Callback, Context, Exporter, type Component } from "./context.js";
 import { CordisError, configuration, fields, identifier, type Identifier } from "./types.js";
 
-const invocation = new AsyncLocalStorage<AbortSignal>();
+export interface InvocationScope {
+    current(): AbortSignal | undefined;
+    run<T>(signal: AbortSignal, operation: () => Promise<T>): Promise<T>;
+}
+let invocation: InvocationScope = {
+    current: () => undefined,
+    run: (_signal, operation) => operation(),
+};
+export function configureInvocation(scope: InvocationScope): void {
+    invocation = scope;
+}
 export function currentSignal(): AbortSignal | undefined {
-    return invocation.getStore();
+    return invocation.current();
 }
 /** DOC-16 §10：调用方的 AbortSignal 沿本次异步调用交给 cancel 通知。 */
 export function withSignal<T>(signal: AbortSignal, operation: () => Promise<T>): Promise<T> {
@@ -27,10 +36,12 @@ export class Runtime {
         readonly name: string,
         readonly version: string,
         components: Component[],
+        input: Input,
+        output: Output,
         limits: Partial<Limits> = {},
     ) {
         this.components = new Map(components.map((component) => [component.name, component]));
-        this.connection = new Connection(this, process.stdin, process.stdout, limits);
+        this.connection = new Connection(this, input, output, limits);
     }
 
     description(): object {
@@ -123,10 +134,15 @@ export class Runtime {
         return { value, offers: [] };
     }
 
-    private async component(method: string, params: Record<string, any>): Promise<void> {
+    protected resolveComponent(params: Record<string, any>): Component {
         if (params.plugin !== this.name) throw new CordisError(3, "插件名称与进程描述不符");
         const component = this.components.get(params.component);
         if (!component) throw new CordisError(3, "组件名称缺席");
+        return component;
+    }
+
+    private async component(method: string, params: Record<string, any>): Promise<void> {
+        const component = this.resolveComponent(params);
         const config = configuration(params.config);
         if (method === "resolve") {
             await component.resolve?.(config);
@@ -228,23 +244,5 @@ export class Runtime {
         this.events.clear();
         this.contexts.clear();
         this.imports.clear();
-    }
-}
-
-/** CP-10：标准输入 EOF 后结束插件进程及其后台句柄。 */
-export async function run(
-    name: string,
-    components: Component[],
-    version = "0.1.0",
-    limits: Partial<Limits> = {},
-): Promise<void> {
-    const runtime = new Runtime(name, version, components, limits);
-    try {
-        await runtime.connection.serve();
-    } catch (error) {
-        console.error(error);
-        process.exitCode = 1;
-    } finally {
-        process.exit(process.exitCode ?? 0);
     }
 }

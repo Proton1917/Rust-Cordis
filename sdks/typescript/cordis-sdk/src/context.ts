@@ -40,6 +40,7 @@ export class Callback {
         readonly context: Context,
         readonly event = false,
         readonly binding?: Binding,
+        readonly cleanup = false,
     ) {}
 }
 export class Exporter {
@@ -210,10 +211,12 @@ export class Context {
         asynchronous = true,
     ): Promise<void> {
         if (!this.scope) throw new CordisError(2, "defer 需要效应回调作用域");
-        await this.register("defer", new Callback(cleanup, this), "callback", {
-            scope: this.scope,
-            asynchronous,
-        });
+        await this.register(
+            "defer",
+            new Callback(cleanup, this, false, undefined, true),
+            "callback",
+            { scope: this.scope, asynchronous },
+        );
     }
 
     async on(

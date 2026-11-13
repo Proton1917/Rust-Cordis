@@ -1,0 +1,36 @@
+{
+  "status": "passed",
+  "started_utc": "2026-11-13T09:41:37.178273+00:00",
+  "command": [
+    "/Users/gordongauerk/Projects/Rust-cordis/target/tools/bin/cargo-fuzz",
+    "run",
+    "--fuzz-dir",
+    "/Users/gordongauerk/Projects/Rust-cordis/crates/cordis-up/fuzz",
+    "--target-dir",
+    "/Users/gordongauerk/Projects/Rust-cordis/target/shared",
+    "up1_decoder",
+    "/Users/gordongauerk/Projects/Rust-cordis/target/up-m10/fuzz/corpus/up1_decoder",
+    "--",
+    "-max_total_time=1800",
+    "-timeout=2",
+    "-rss_limit_mb=2048",
+    "-max_len=16777216",
+    "-artifact_prefix=/Users/gordongauerk/Projects/Rust-cordis/target/m20-fuzz/artifacts/"
+  ],
+  "pid": 18130,
+  "exit_code": 0,
+  "wall_seconds": 1813.052,
+  "executions": 1663834,
+  "fuzz_seconds": 1801,
+  "source_comparison": {
+    "commands": [
+      "diff -qr target/m20-fuzz/tested-src crates/cordis-up/src",
+      "cmp target/m20-fuzz/tested-target.rs crates/cordis-up/fuzz/fuzz_targets/up1_decoder.rs"
+    ],
+    "exit_codes": [
+      0,
+      0
+    ],
+    "method": "full byte comparison"
+  }
+}

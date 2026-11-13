@@ -1,0 +1,8 @@
+name = "flood-provider"
+version = "0.1.0"
+socket = "web"
+
+[web]
+assets = "web"
+mount = "/flood-provider"
+entry = "index.js"

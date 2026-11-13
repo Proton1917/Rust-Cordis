@@ -25,7 +25,14 @@ fn request<T: DeserializeOwned>(connection: &Connection, params: &Payload) -> Re
 impl Handler for Manager {
     /// DOC-16 §6：纯编号释放在读消息任务完成，先于后续请求观察释放结果。
     fn immediate_notification(&self, method: &str) -> bool {
+        let extension = self
+            .0
+            .handler_extension
+            .lock()
+            .as_ref()
+            .and_then(Weak::upgrade);
         matches!(method, "release" | "effect_release")
+            || extension.is_some_and(|extension| extension.immediate_notification(method))
     }
 
     /// DOC-16 §5：按资源职责分派宿主请求，业务错误保留协议错误码返回调用方。
@@ -57,7 +64,18 @@ impl Handler for Manager {
                     self.log(&connection, request(&connection, &params)?)?;
                     Value::Null
                 }
-                _ => return Err(error(3, format!("未知宿主方法 {method}"))),
+                _ => {
+                    let extension = self
+                        .0
+                        .handler_extension
+                        .lock()
+                        .as_ref()
+                        .and_then(Weak::upgrade);
+                    return match extension {
+                        Some(extension) => extension.request(connection, method, params).await,
+                        None => Err(error(3, format!("未知宿主方法 {method}"))),
+                    };
+                }
             };
             Ok(Outgoing::new(output))
         })
@@ -82,7 +100,18 @@ impl Handler for Manager {
                 }
                 "log" => self.log(&connection, request(&connection, &params)?),
                 "emit" => self.emit_remote(&connection, params).await,
-                _ => Err(error(3, format!("未知插件通知 {method}"))),
+                _ => {
+                    let extension = self
+                        .0
+                        .handler_extension
+                        .lock()
+                        .as_ref()
+                        .and_then(Weak::upgrade);
+                    match extension {
+                        Some(extension) => extension.notify(connection, method, params).await,
+                        None => Err(error(3, format!("未知插件通知 {method}"))),
+                    }
+                }
             }
         })
     }
