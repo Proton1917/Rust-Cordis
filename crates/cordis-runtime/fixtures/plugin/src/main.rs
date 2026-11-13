@@ -85,11 +85,11 @@ impl Offer {
 }
 impl Drop for Offer {
     fn drop(&mut self) {
-        if !self.committed {
-            if let Some(shared) = self.shared.upgrade() {
-                let removed = shared.objects.lock().remove(&self.id);
-                drop(removed);
-            }
+        if !self.committed
+            && let Some(shared) = self.shared.upgrade()
+        {
+            let removed = shared.objects.lock().remove(&self.id);
+            drop(removed);
         }
     }
 }
@@ -330,20 +330,19 @@ impl Shared {
                     }
                 }
                 if let Some(path) = &session.config.observed {
-                    fs::write(path, session.counter.lock().value.to_string()).map_err(error)?;
+                    publish(path, session.counter.lock().value.to_string())?;
                 }
             }
             "reader" => {
                 let response =
                     Self::invoke(&session, self.counter_interface(), "get", Vec::new()).await?;
                 if let Some(path) = &session.config.observed {
-                    fs::write(path, serde_json::to_vec(&response).map_err(error)?)
-                        .map_err(error)?;
+                    publish(path, serde_json::to_vec(&response).map_err(error)?)?;
                 }
                 if let Some(path) = &session.config.meta_observed {
                     let meta = Self::invoke(&session, self.counter_interface(), "meta", Vec::new())
                         .await?;
-                    fs::write(path, serde_json::to_vec(&meta).map_err(error)?).map_err(error)?;
+                    publish(path, serde_json::to_vec(&meta).map_err(error)?)?;
                 }
             }
             "admin" | "client" | "kv-client" | "native-client" => {
@@ -397,10 +396,7 @@ impl Shared {
                             .config
                             .results
                             .join(path.file_name().expect("command filename"));
-                        let staged = destination.with_extension("next");
-                        fs::write(&staged, serde_json::to_vec(&reply).map_err(error)?)
-                            .map_err(error)?;
-                        fs::rename(staged, destination).map_err(error)?;
+                        publish(&destination, serde_json::to_vec(&reply).map_err(error)?)?;
                     }
                     tokio::time::sleep(Duration::from_millis(10)).await;
                 }
@@ -615,4 +611,11 @@ async fn main() -> Result<()> {
     )?;
     connection.closed().await;
     Ok(())
+}
+
+/// DOC-15 验收：观察值和管理回复完整写入暂存文件后，共同通过 rename 发布。
+fn publish(path: &std::path::Path, bytes: impl AsRef<[u8]>) -> Result<()> {
+    let staged = path.with_extension("next");
+    fs::write(&staged, bytes).map_err(error)?;
+    fs::rename(staged, path).map_err(error)
 }

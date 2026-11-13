@@ -475,11 +475,22 @@ export default defineComponent({
 
 ### 11.3 `http` 插件与转发
 
-1. `http` 是原生插件，默认自成一组，提供内置接口 `cordis.web@1`。它负责静态资源、挂载路由、浏览器入口清单，以及 WebSocket 连接。
-2. 核心装载带 `[web]` 段的插件时，经 `cordis.web@1` 登记它的资源目录、挂载路径与入口。登记是该插件实例的效应，插件卸下时路由撤回。浏览器模块的地址带替换序号：`/_cordis/<插件>/<序号>/<入口>`，新旧版本的模块地址不同，浏览器缓存不会混用新旧代码。
-3. 页面经 WebSocket 连接 `http` 插件。`http` 插件不解释 `UP/1` 内容，只用 §8 第 9 条的转发通道把每个页面作为一条独立连接交给核心。核心对每个页面连接分别执行 `CP-2`、`CP-3`、`CP-8`，页面发来的内容按不可信输入处理。
+M16 按 ADR-0038 交付静态服务与页面入口，供窗口加载真实页面。`plugins/web-api` 中的 `cordis.web@1.0` 提供同步 `entry() -> WebEntry`，字段为 `url: String`、`token: String`。入口片段使用 `cordis_token=<令牌>`，`/_cordis/session.js` 提供同次激活的入口信息并设置 `Cache-Control: no-store`。
+
+| HTTP 配置 | 缺省值 | 含义 |
+|---|---|---|
+| `listen` | `127.0.0.1:0` | 监听地址；端口 0 由操作系统分配 |
+| `assets` | 缺省 | 静态目录；缺省时提供 Cordis 启动页 |
+| `index` | `index.html` | 静态目录内的相对入口文件 |
+| `shutdown_ms` | `2000` | 停用时的有序关闭等待，单位毫秒 |
+
+监听套接字、专用线程、自有 Tokio 运行时和连接归同一组件效应，停用时发送关闭通知并等待资源释放；服务器异常结束时撤回该效应。后续网页接入按以下职责执行：
+
+1. `http` 是原生插件，默认自成一组，提供插件接口 `cordis.web@1`。M16 提供静态资源与入口，M20 追加资源登记、挂载路由、浏览器入口清单和 WebSocket 连接。
+2. M20 核心装载带 `[web]` 段的插件时，经 `cordis.web@1` 登记它的资源目录、挂载路径与入口。登记是该插件实例的效应，插件卸下时路由撤回。浏览器模块的地址带替换序号：`/_cordis/<插件>/<序号>/<入口>`，各版本使用独立模块地址。
+3. M20 的页面经 WebSocket 连接 `http` 插件，再由 §8 第 9 条的转发通道把每个页面作为一条独立连接交给核心。核心解释 `UP/1` 内容，对每个页面连接分别执行 `CP-2`、`CP-3`、`CP-8`，页面发来的内容按不可信输入处理。
 4. 核心不监听网络端口。HTTP 与 WebSocket 的解析代码都在 `http` 插件进程中，它们的缺陷与崩溃只影响该插件：`http` 插件崩溃时全部页面连接关闭，各页面的子实例被回收；`http` 插件按 `CP-6` 重启后，页面自动重连，子实例重建。
-5. `http` 插件默认只绑定 `127.0.0.1`。WebSocket 握手检查 `Origin`，并要求 `http` 插件每次启动生成的随机会话令牌，令牌写入它提供的页面。对外服务时的地址、TLS 与认证是 `http` 插件的配置项。
+5. `http` 插件默认绑定 `127.0.0.1`，每次激活生成随机会话令牌。M20 的 WebSocket 握手检查 `Origin` 与该令牌。对外服务的 TLS 与认证随 HTTP 部署能力扩展。
 
 ### 11.4 热替换与回滚
 
@@ -494,10 +505,12 @@ export default defineComponent({
 ### 11.6 窗口插件
 
 1. `plugins/window` 是进程插件：一个用 Rust 编写的独立可执行文件，经 `UP/1` 接入，不是原生库插件。macOS 的 AppKit 与 WebView 只能在进程主线程上运行；`cordis-host` 的主线程运行 `UP/1` 消息循环，同组还有其他插件，原生库形式取不到主线程。窗口进程的主线程运行界面事件循环，`UP/1` 在另一线程处理。
-2. 它提供接口 `window@1`：`open(url, title, width, height) -> 窗口编号`、`close(编号)`、事件 `closed`。打开窗口是效应，插件卸下时窗口关闭。它依赖 `cordis.web@1` 取得页面地址与会话令牌。
-3. 平台组件：macOS 使用 WKWebView，Linux 使用 WebKitGTK。所用的 Rust 库在 `M16` 以 ADR 确定。
+2. `window@1.0` 提供异步 `open(url, title, width, height) -> u64`、`close(id)`，`window.closed@1.0` 发布异步事件 `{ id: u64 }`。打开窗口登记效应，插件卸下时窗口关闭。窗口声明 `cordis.web@1.0` 和 `cordis.manage@1.0` 依赖，部署授予 `shutdown`，通过 Web 服务取得页面地址与会话令牌。原生使用方共用 `plugins/window-api`。
+3. ADR-0037 采用 tao 0.37.2、wry 0.57.2 和 muda 0.21.2，分别负责窗口事件循环、系统 WebView 与菜单。macOS 使用 WKWebView；Linux 使用 WebKitGTK，并依赖 GTK 3 与 WebKitGTK 4.1 开发包。
 4. 窗口进程崩溃时按 `CP-6` 重启，窗口重新打开；核心与后端插件不受影响。
 5. 在 `.app` 中，窗口进程代表整个应用：Dock 中只出现一个应用图标，名称为应用名。Cmd-Q，以及关闭最后一个窗口（可配置），经 `cordis.manage@1` 的 `shutdown()` 请求核心有序退出。核心进程不显示界面。
+6. `title`、`width`、`height`、`quit_on_last_window` 的缺省值分别为 `Cordis`、`1000`、`720`、`true`。窗口配置及已显示页面组成 `window.snapshot`。检查点冻结期间，异步 open、close 和显示动作按上下文等待 thaw；清理回收等待者与窗口。
+7. WebView 使用临时浏览会话；页面组件状态通过核心导出和继承，长期数据经后端服务保存。Web 提供方重建后，默认启动页取得当前入口地址和令牌。
 
 ## 12 项目脚手架与发布打包
 
@@ -542,14 +555,22 @@ mathbook-studio-1.0-macos-arm64/
 
 | 项 | 规定 |
 |---|---|
-| 目标平台 | 每个平台一个发布包：`aarch64-apple-darwin`、`x86_64-unknown-linux-gnu` |
+| 目标平台 | 在所选目标平台执行打包：`aarch64-apple-darwin`、`x86_64-unknown-linux-gnu`。工具读取实际机器类型并检查核心版本要求 |
 | 插件 | Rust 插件按目标平台编译；Python、TypeScript 插件按目录复制；`cordis pack` 检查每个插件的 ABI 与协议版本受打包的核心支持 |
 | 语言运行时 | 配置 `[pack] runtimes = ["python", "node"]` 时，把独立版解释器放入 `runtimes/`，通用插件的启动命令改写为指向它们。解释器属于发布包，不属于核心，`Q0` 与 `AU-8` 不受影响 |
-| 服务器部署 | 输出压缩包；可选输出容器镜像的构建文件 |
-| 桌面软件 | macOS 输出 `.app`：核心为主程序且不显示界面，窗口插件（§11.6）显示前端插件 |
+| 服务器部署 | 输出 tar.gz 与 `service/install.sh`；容器镜像构建文件为可选后续产物 |
+| 桌面软件 | `--app` 输出 macOS Bundle；核心和宿主位于 `Contents/MacOS`，插件与部署配置位于 `Contents/Resources`，窗口程序位于 `Contents/MacOS/cordis-window` |
 | 开发工具 | 发布包不含 `cordis-dev`（§3.1） |
 | macOS 签名 | 开启 hardened runtime 的程序默认只能加载同一开发者团队签名的动态库。`cordis pack --sign <身份>` 用同一身份为 `cordis`、`cordis-host` 与全部原生插件签名；需要加载第三方签名插件的部署，为 `cordis-host`（不为 `cordis`）配置 `com.apple.security.cs.disable-library-validation`。核心本身不加载任何动态库，不需要此项 |
 | 发布后的更新 | 由持有 `cordis.manage@1` 授权的插件完成：`watch` 插件监视插件目录，或更新插件取得新版本后调用 `install` 与 `replace`；核心热替换，不需要重装发布包 |
+
+ADR-0036 的 `[pack]` 配置包含 `name`、`version`、`identifier`、`assets`、`state_dir`、`runtimes` 与 `runtime_paths`。名称缺省取项目目录名，版本缺省为 `0.1.0`，Bundle 标识缺省为 `org.cordis.<name>`。`assets` 是项目内相对路径数组，发布时保持路径；HTTP 配置 `assets='web'` 可与 `pack.assets=['web']` 配合。`runtime_paths` 指定独立 Python/Node 目录，分别提供 `bin/python3`、`bin/node`；目录复制后改写进程命令为包内相对路径。完整 Python/Node 解释器发布包在 M21 验收。
+
+打包核心与宿主来自工具同目录或显式 `--runtime-dir`。有 Cargo 清单的项目使用指定 target 构建 release，并从 Cargo JSON 消息取得产物；部署配置中的插件引用对应具体库路径或带 `cordis-plugin.toml` 的目录。Rust 进程插件交付可执行文件、清单与页面资源，脚本插件按目录交付运行源码和依赖。
+
+应用无参启动从可执行文件位置定位 `Contents/Resources/cordis.toml`。`pack.state_dir` 指定包外状态目录，缺省为用户 `Library/Application Support/<identifier>`；状态、业务数据、安装的新插件及宿主缓存分别位于该目录、`data/`、`plugins/` 和 `.cordis/lib/`。包内发布来源与验证副本保持只读，运行中的新版本通过包外安装目录参与发现。
+
+`--sign` 对核心、宿主、原生库和进程程序使用同一身份并启用 hardened runtime；`--allow-third-party` 为 Host 设置 library-validation entitlement。启用验证门时，签名后字节变化的库重新执行原契约套件，成功结果与完整验证副本一起交付。Host 可重复接收 `--verified-dir`，同时接受包内与包外验证根；相对验证副本路径在发布包移动后继续解析。
 
 ## 13 范围外与后续
 
@@ -606,11 +627,11 @@ mathbook-studio-1.0-macos-arm64/
 | `M13` 验证门 | 原 `M12`；`cordis-dev verify` 启动独立的 `cordis run` 进程运行契约套件与被测插件（§3.1） | `M12` | 原 `M12` 测试 |
 | `M14` 第二阶段验收 | 原 `M13`；`AC-*` 按 §14 修订；`AU-1`、`AU-2`、`AU-8`–`AU-11`、`AU-16`、`AU-18`；`RM-10` | `M13` | `AC-1`–`AC-9` 与所列 `AU-*` |
 | `M15` 插件编写 skill | Codex 编写；Rust 插件部分；模板与 `cordis new-plugin` 共用 | `M14` | `SK-1`–`SK-3` |
-| `M16` 发布打包与窗口插件 | `cordis-dev pack`；目标平台检查；`.app` 与压缩包；`--sign`；`runtimes/` 机制（以 Rust 编写的进程插件测试替身验证命令改写）；`plugins/window`（§11.6），窗口库的选择写 ADR | `M14` | `AU-12`、`AU-17` |
+| `M16` 发布打包与窗口插件 | `cordis-dev pack`；目标平台检查；`.app` 与压缩包；`--sign`；`runtimes/` 机制（以真实 Rust 进程插件验证命令改写）；`plugins/window`、window-api（ADR-0037）；HTTP 静态服务与 web-api（ADR-0038）；Bundle 包外状态与多根验证目录（ADR-0036） | `M14` | `AU-12`、`AU-17`、真实 HTTP 请求与连接清理 |
 | `M17` 接口描述语言 | `cordis-dev idl gen`；`kv-api` 改为由 `kv.wit` 生成 | `M14` | 生成的 Rust 代码与手写版本行为一致；§7 映射表每一行有用例 |
 | `M18` Python SDK | `sdks/python`（含 §6.4 的 `isolate`、`intercept`、`plugin`、`scoped`）；`plugins/kv-py`、`plugins/counter-py`；`cordis new-plugin --python` | `M17` | 跨插口互调两个方向；热替换与状态迁移；`kv-contract` 验证 `kv-py`；`AU-18` 以 Python 提供方重做 |
 | `M19` TypeScript SDK | `sdks/typescript`；`plugins/kv-ts`；`cordis new-plugin --ts` | `M17` | 同 `M18` |
-| `M20` 前端插件与全栈插件 | `plugins/http`（静态资源、`cordis.web@1`、WebSocket 转发）；核心侧转发通道与页面子实例（§11.2、§11.3）；网页宿主 `cordis-web`；清单 `socket = "web"` 与 `[web]` 段；示例：一个前端插件、一个 Rust 后端的全栈插件、一个 Python 后端的全栈插件；`cordis new-plugin --web` | `M18`、`M19` | 资源登记与撤回；页面关闭后子实例与效应回收；前端注入 Rust、Python、TypeScript 提供的服务；无头浏览器验证局部更新与回滚；`AU-7`、`AU-14`、`AU-15` |
+| `M20` 前端插件与全栈插件 | HTTP 插件追加资源登记、版本路径、入口清单与 WebSocket 转发；核心侧转发通道与页面子实例（§11.2、§11.3）；网页宿主 `cordis-web`；清单 `socket = "web"` 与 `[web]` 段；示例：一个前端插件、一个 Rust 后端的全栈插件、一个 Python 后端的全栈插件；`cordis new-plugin --web` | `M18`、`M19` | 资源登记与撤回；页面关闭后子实例与效应回收；前端注入 Rust、Python、TypeScript 提供的服务；无头浏览器验证局部更新与回滚；`AU-7`、`AU-14`、`AU-15` |
 | `M21` 第三阶段验收 | §16 全部场景；`RM-7`–`RM-9`；`cordis pack` 附带 Python 与 Node 运行时的发布包；skill 增加 Python、TypeScript、全栈与打包章节 | `M20`、`M16` | §16 全部通过 |
 
 Codex 从 `M9` 连续推进到 `M21`，包括 `M15` 的 skill 与 `M21` 的 skill 章节；设计方只负责设计文档、ADR 与复核。

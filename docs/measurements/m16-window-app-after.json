@@ -1,0 +1,29 @@
+{
+  "action" : "inspect",
+  "bundle" : "org.cordis.window-recovery",
+  "name" : "window-recovery",
+  "pid" : 65170,
+  "policy" : 0,
+  "regular_pids" : [
+    65170
+  ],
+  "windows" : [
+    {
+      "kCGWindowAlpha" : 1,
+      "kCGWindowBounds" : {
+        "Height" : 712,
+        "Width" : 960,
+        "X" : 276,
+        "Y" : 78
+      },
+      "kCGWindowIsOnscreen" : true,
+      "kCGWindowLayer" : 0,
+      "kCGWindowMemoryUsage" : 2432,
+      "kCGWindowNumber" : 34886,
+      "kCGWindowOwnerName" : "window-recovery",
+      "kCGWindowOwnerPID" : 65170,
+      "kCGWindowSharingState" : 0,
+      "kCGWindowStoreType" : 1
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+[package]
+name = "cordis-window"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+license.workspace = true
+description = "System WebView windows managed by Cordis through UP/1."
+
+[dependencies]
+cordis-up.workspace = true
+tokio = { workspace = true, features = ["io-std"] }
+serde.workspace = true
+parking_lot.workspace = true
+tao = "=0.37.2"
+wry = "=0.57.2"
+muda = "=0.21.2"

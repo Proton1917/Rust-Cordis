@@ -15,4 +15,10 @@ cordis-up.workspace = true
 cordis-process.workspace = true
 cordis-types.workspace = true
 tokio.workspace = true
+semver.workspace = true
+object = { version = "=0.41.0", default-features = false, features = ["read", "std"] }
+tar = "=0.4.46"
+flate2 = "=1.1.11"
+plist = "=1.10.3"
+pathdiff = "=0.2.3"
 

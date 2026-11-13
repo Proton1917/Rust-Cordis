@@ -1,0 +1,17 @@
+[package]
+name = "window-probe"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "MIT"
+publish = false
+
+[workspace]
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+cordis-sdk = { path = "../../../cordis-sdk" }
+window-api = { path = "../../../../plugins/window-api" }
+serde = { version = "=1.0.229", features = ["derive"] }

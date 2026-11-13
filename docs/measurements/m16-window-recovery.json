@@ -1,0 +1,19 @@
+{
+  "app_signature": "valid",
+  "core_pid": 52717,
+  "exit_code": 0,
+  "first_probe": {
+    "activation": 1,
+    "window": 6
+  },
+  "previous_window_pid": 52725,
+  "recovery_ms": 875,
+  "remaining_processes": [],
+  "restart_count": 1,
+  "restored_probe": {
+    "activation": 2,
+    "window": 6
+  },
+  "restored_window_pid": 52735,
+  "scenario": "AU-17 process recovery"
+}

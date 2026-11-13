@@ -20,6 +20,10 @@ members = [
     "plugins/console-log",
     "plugins/kv-file",
     "plugins/kv-contract",
+    "plugins/web-api",
+    "plugins/http",
+    "plugins/window-api",
+    "plugins/window",
 ]
 exclude = ["target/tmp", "crates/cordis-up/fuzz", "crates/cordis-supervisor/fixtures/process-plugin", "crates/cordis-supervisor/fixtures/manager-plugin", "crates/cordis-host/tests/fixtures", "crates/cordis-host/tests/driver", "crates/cordis-runtime/fuzz", "crates/cordis-runtime/fixtures/plugin", "crates/cordis-runtime/fixtures/watch-fails", "crates/cordis-runtime/fixtures/console-emitter"]
 resolver = "3"
@@ -58,3 +62,5 @@ cordis-contract = { path = "crates/cordis-contract" }
 kv-api = { path = "plugins/kv-api" }
 kv-mem = { path = "plugins/kv-mem" }
 counter = { path = "plugins/counter" }
+web-api = { path = "plugins/web-api" }
+window-api = { path = "plugins/window-api" }

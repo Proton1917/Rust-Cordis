@@ -310,6 +310,7 @@ impl Controller {
                     packages,
                     &self.project,
                     &self.configuration.runtime,
+                    &self.locations,
                 )?));
             }
         }

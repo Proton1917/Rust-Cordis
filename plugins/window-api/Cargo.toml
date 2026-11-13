@@ -1,0 +1,12 @@
+[package]
+name = "window-api"
+version.workspace = true
+edition.workspace = true
+rust-version = "1.85"
+publish.workspace = true
+license.workspace = true
+description = "Cordis system window interface and lifecycle events."
+
+[dependencies]
+cordis-sdk.workspace = true
+serde.workspace = true

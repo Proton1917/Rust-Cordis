@@ -212,13 +212,18 @@ fn rejected_versions(project: &Path, id: &mut u64, artifacts: &Artifacts) {
     let before = count(project, id);
     let failed = replace(project, id, "store", &artifacts.failed);
     assert_eq!(failed["ok"], false, "{failed}");
-    let restored = active(project, "counter");
-    assert!(
-        restored["last_swap"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|report| report["plugin"] == "kv" && report["rolled_back"] == true)
+    until(
+        "失败候选的回滚报告与 counter Active 一起发布",
+        || {
+            status(project).filter(|snapshot| {
+                instance(snapshot, "counter").is_some_and(|instance| instance["state"] == "active")
+                    && snapshot["last_swap"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .any(|report| report["plugin"] == "kv" && report["rolled_back"] == true)
+            })
+        },
     );
     assert!(count(project, id) >= before);
     let before = active(project, "store");
@@ -257,8 +262,15 @@ fn continuous_counter_migrates_rolls_back_rejects_and_restores_across_compilers(
     let before_old_compiler = count(&project, &mut id);
     let changed = replace(&project, &mut id, "counter", &artifacts.counter_185);
     assert_eq!(changed["ok"], true, "{changed}");
-    let snapshot = active(&project, "counter");
-    assert!(active_build(&snapshot, "counter", "1.85.0"));
+    until(
+        "Rust 1.85 counter 的活跃库与实例状态发布",
+        || {
+            status(&project).filter(|snapshot| {
+                instance(snapshot, "counter").is_some_and(|instance| instance["state"] == "active")
+                    && active_build(snapshot, "counter", "1.85.0")
+            })
+        },
+    );
     let old_compiler_value = count(&project, &mut id);
     assert!(old_compiler_value >= before_old_compiler);
     checked(Command::new("/bin/kill").args(["-TERM", &core.0.as_ref().unwrap().id().to_string()]));

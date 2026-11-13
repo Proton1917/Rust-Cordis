@@ -10,27 +10,50 @@ use std::{
     path::{Path, PathBuf},
 };
 
-/// SW-2：印记指向配置目录内的保留副本，候选的完整字节比较成功后返回印记。
+/// SW-2、ADR-0036：绝对引用属于配置根，相对引用按各根的完整字节选择副本。
 pub(crate) fn before_open(
     source: &Path,
     candidate: &Path,
-    verified_dir: &Path,
+    verified_dirs: &[PathBuf],
 ) -> Result<VerificationReceipt> {
     let receipt: VerificationReceipt =
         serde_json::from_reader(File::open(receipt_path(source)).map_err(io_error)?)
             .map_err(|error| Error::new(2, format!("验证印记读取失败：{error}")))?;
-    if !receipt.verified_copy.is_absolute() {
-        return Err(Error::new(2, "验证副本需要使用绝对路径"));
+    let roots = verification_roots(verified_dirs)?;
+    if receipt.verified_copy.is_absolute() {
+        let verified = receipt.verified_copy.canonicalize().map_err(io_error)?;
+        if !roots.iter().any(|root| verified.starts_with(root)) {
+            return Err(Error::new(2, "验证副本位于配置目录之外"));
+        }
+        if files_equal(candidate, &verified)? {
+            return Ok(receipt);
+        }
+    } else {
+        for root in roots {
+            let verified = match root.join(&receipt.verified_copy).canonicalize() {
+                Ok(path) => path,
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+                Err(error) => return Err(io_error(error)),
+            };
+            if verified.starts_with(&root) && files_equal(candidate, &verified)? {
+                return Ok(receipt);
+            }
+        }
     }
-    let root = verified_dir.canonicalize().map_err(io_error)?;
-    let verified = receipt.verified_copy.canonicalize().map_err(io_error)?;
-    if !verified.starts_with(root) {
-        return Err(Error::new(2, "验证副本位于配置目录之外"));
+    Err(Error::new(2, "配置验证目录中缺少与候选完整字节相同的副本"))
+}
+
+/// ADR-0036：可写验证目录在首次验证或更新时创建，缺席目录保留为后续来源。
+fn verification_roots(directories: &[PathBuf]) -> Result<Vec<PathBuf>> {
+    let mut roots = Vec::new();
+    for directory in directories {
+        match directory.canonicalize() {
+            Ok(root) => roots.push(root),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(io_error(error)),
+        }
     }
-    if !files_equal(candidate, &verified)? {
-        return Err(Error::new(2, "候选内容与已验证副本存在差异"));
-    }
-    Ok(receipt)
+    Ok(roots)
 }
 
 /// DOC-15 §8.7、SW-2：已接受缓存库携带同一印记，分组重启继续执行完整准入检查。

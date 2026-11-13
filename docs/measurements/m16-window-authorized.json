@@ -1,0 +1,27 @@
+{
+  "scenario": "AU-17 authorized native interface inspection",
+  "core_pid": 64904,
+  "previous_window_pid": 64939,
+  "restored_window_pid": 65170,
+  "recovery_ms": 982,
+  "restarts": 1,
+  "backend_contexts_unchanged": { "http": 5, "store": 7 },
+  "regular_application_count_before": 1,
+  "window_name": "window-recovery",
+  "capture": {
+    "exit_code": 1,
+    "error": "屏幕录制权限等待用户允许；截图状态：等待权限 [main.Failure:1]",
+    "image_created": false
+  },
+  "command_q": {
+    "exit_code": 1,
+    "error": "辅助功能权限等待用户允许；Cmd-Q 状态：待发送 [main.Failure:1]",
+    "key_sent": false
+  },
+  "cleanup": {
+    "method": "SIGTERM",
+    "core_exit_code": 0,
+    "remaining_processes": [],
+    "app_signature": "valid"
+  }
+}

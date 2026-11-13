@@ -34,8 +34,8 @@ struct Arguments {
     allow_panic_abort: bool,
     #[arg(long)]
     require_verified: bool,
-    #[arg(long, default_value = ".cordis/verified")]
-    verified_dir: PathBuf,
+    #[arg(long = "verified-dir", default_value = ".cordis/verified")]
+    verified_dirs: Vec<PathBuf>,
     #[arg(long, default_value_t = 2)]
     native_workers: usize,
     #[arg(long, default_value_t = 30_000)]
@@ -69,7 +69,7 @@ async fn run(args: Arguments) -> cordis_host::Result<i32> {
             libraries: args.libraries,
             library: LibraryOptions {
                 directory: args.cache_dir,
-                verified_dir: args.verified_dir,
+                verified_dirs: args.verified_dirs,
                 require_verified: args.require_verified,
                 unload: match args.unload {
                     Unload::Never => UnloadPolicy::Never,

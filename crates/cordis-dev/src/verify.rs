@@ -1,9 +1,9 @@
 //! DOC-11 §8、ADR-0017：固定被测库副本，取得描述符，再启动两阶段契约验证部署。
 
-use crate::{Result, receipts};
+use crate::{Result, receipts, tooling};
 use clap::Args;
 use cordis_types::ContractReport;
-use cordis_up::{Limits, payload};
+use cordis_up::payload;
 use std::{
     env, fs,
     path::{Path, PathBuf},
@@ -101,8 +101,10 @@ async fn prepare(project: &Path, source: &Path, options: &Options) -> Result<Dep
     let suite = plugins.join(format!("suite{}", env::consts::DLL_SUFFIX));
     fs::copy(source, &plugin)?;
     fs::copy(options.suite.canonicalize()?, &suite)?;
-    let subject = describe(&plugin, &directory, options.timeout_ms).await?;
-    let contract = describe(&suite, &directory, options.timeout_ms).await?;
+    let host = tooling::executable("cordis-host", None)?;
+    let timeout = Duration::from_millis(options.timeout_ms);
+    let subject = tooling::describe(&host, &plugin, &directory, timeout).await?;
+    let contract = tooling::describe(&host, &suite, &directory, timeout).await?;
     let component = select(&subject, options.component.as_deref())?;
     let suite_component = select(&contract, options.suite_component.as_deref())?;
     let interfaces = covered(component, suite_component)?;
@@ -125,28 +127,6 @@ async fn prepare(project: &Path, source: &Path, options: &Options) -> Result<Dep
         contract,
         interfaces,
     })
-}
-
-/// Q0、CP-4/CP-7：描述符由 cordis-host 子进程读取，开发工具保持纯数据调用路径。
-async fn describe(path: &Path, project: &Path, timeout: u64) -> Result<payload::Plugin> {
-    let command = vec![
-        executable("cordis-host")?.to_string_lossy().into_owned(),
-        "--describe".into(),
-        path.to_string_lossy().into_owned(),
-        "--cache-dir".into(),
-        project
-            .join(".cordis/lib/discovery")
-            .to_string_lossy()
-            .into_owned(),
-    ];
-    let output = cordis_process::run_capture(
-        &command,
-        project,
-        Duration::from_millis(timeout),
-        Limits::DEFAULT.max_frame,
-    )
-    .await?;
-    Ok(serde_json::from_slice(&output)?)
 }
 
 fn select<'a>(plugin: &'a payload::Plugin, name: Option<&str>) -> Result<&'a payload::Component> {
@@ -236,7 +216,9 @@ fn write_configuration(
 async fn execute(deployment: &Deployment, timeout: u64) -> Result<ContractReport> {
     let report = deployment.directory.join("contract-report.json");
     let command = vec![
-        executable("cordis")?.to_string_lossy().into_owned(),
+        tooling::executable("cordis", None)?
+            .to_string_lossy()
+            .into_owned(),
         "run".into(),
         "--contract-suite".into(),
         "suite".into(),
@@ -247,11 +229,10 @@ async fn execute(deployment: &Deployment, timeout: u64) -> Result<ContractReport
         "--contract-timeout-ms".into(),
         timeout.to_string(),
     ];
-    let executed = cordis_process::run_capture(
-        &command,
+    let executed = tooling::command(
+        command,
         &deployment.directory,
         Duration::from_millis(timeout).saturating_add(Duration::from_secs(30)),
-        Limits::DEFAULT.max_frame,
     )
     .await;
     let result: ContractReport = match fs::metadata(&report) {
@@ -264,26 +245,9 @@ async fn execute(deployment: &Deployment, timeout: u64) -> Result<ContractReport
     };
     if let Err(problem) = executed {
         if result.finished && result.passed {
-            return Err(problem.into());
+            return Err(problem);
         }
         eprintln!("验证核心：{problem}");
     }
     Ok(result)
-}
-
-fn executable(name: &str) -> Result<PathBuf> {
-    let current = env::current_exe()?;
-    let sibling = current.parent().expect("可执行文件父目录").join(name);
-    if sibling.is_file() {
-        return Ok(sibling);
-    }
-    if let Some(path) = env::var_os("PATH") {
-        for directory in env::split_paths(&path) {
-            let candidate = directory.join(name);
-            if candidate.is_file() {
-                return Ok(candidate);
-            }
-        }
-    }
-    Err(format!("程序 {name} 安装路径缺席").into())
 }

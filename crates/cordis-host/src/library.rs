@@ -21,7 +21,7 @@ use std::{
 #[derive(Clone, Debug)]
 pub struct LibraryOptions {
     pub directory: PathBuf,
-    pub verified_dir: PathBuf,
+    pub verified_dirs: Vec<PathBuf>,
     pub require_verified: bool,
     pub unload: UnloadPolicy,
     pub allow_panic_abort: bool,
@@ -187,7 +187,7 @@ impl LibraryStore {
                 Some(verification::before_open(
                     source,
                     &staged,
-                    &self.options.verified_dir,
+                    &self.options.verified_dirs,
                 )?)
             } else {
                 None

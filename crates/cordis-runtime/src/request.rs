@@ -1,9 +1,6 @@
 //! DOC-15 §3.2、ADR-0031：管理参数解码、有界串行队列与响应后提交。
 
-use crate::{
-    config::{self, Configuration, Result, parameter},
-    storage,
-};
+use crate::config::{Configuration, Result, parameter};
 use cordis_supervisor::manager::CallContext;
 use cordis_up::{Value, WireError};
 use serde::de::DeserializeOwned;
@@ -235,7 +232,7 @@ impl Handle {
 
 /// DOC-15 §3.2：读取本窗口配置并检查核心版本要求，格式和版本错误保持来源。
 fn load_configuration(path: &Path) -> Result<Configuration> {
-    let configuration = config::parse(&storage::read(path)?)?;
+    let configuration = crate::deployment::load(path)?;
     configuration
         .check_version(&semver::Version::parse(env!("CARGO_PKG_VERSION")).map_err(parameter)?)?;
     Ok(configuration)

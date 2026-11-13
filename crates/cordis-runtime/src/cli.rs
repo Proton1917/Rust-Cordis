@@ -127,7 +127,7 @@ pub fn forward(arguments: &[OsString]) -> Result<i32> {
 /// DOC-11 §10：按配置定位已发布状态文件，读取和 JSON 格式错误直接返回。
 pub fn status(configuration: &Path) -> Result<String> {
     let configuration = configuration.canonicalize().map_err(io_error)?;
-    let parsed = config::parse(&storage::read(&configuration)?)?;
+    let parsed = crate::deployment::load(&configuration)?;
     let directory = config::resolve_path(
         configuration.parent().expect("configuration parent"),
         &parsed.runtime.state_dir,
@@ -136,4 +136,9 @@ pub fn status(configuration: &Path) -> Result<String> {
         serde_json::from_slice(&storage::read(&directory.join("status.json"))?)
             .map_err(parameter)?;
     serde_json::to_string_pretty(&value).map_err(parameter)
+}
+
+/// ADR-0036：Finder 启动沿可执行文件定位 Bundle 部署，命令行沿当前目录。
+pub async fn run_default() -> Result<()> {
+    crate::run(crate::deployment::default_configuration()?).await
 }

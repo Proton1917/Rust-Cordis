@@ -7,6 +7,7 @@ pub mod cli;
 pub mod config;
 pub mod contract;
 mod control;
+mod deployment;
 mod executor;
 mod install;
 pub mod manifest;

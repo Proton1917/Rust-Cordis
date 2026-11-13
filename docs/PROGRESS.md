@@ -6,11 +6,11 @@
 
 | 项 | 值 |
 |---|---|
-| 最近完成的仓库里程碑 | `M15`；用户目录 skill 链接待授权 |
-| 进行中的里程碑 | 第三阶段 M16 |
-| 下一步 | 接入 M16 已验证的发布包、窗口、HTTP 与运行目录实现；按授权结果完成 skill 用户目录链接及窗口界面验收 |
-| 阻塞项 | 用户目录的 skill 链接、按窗口 PID 使用外部界面测试接口等待授权；项目内工作继续 |
-| 最后更新 | 2026-11-13（Asia/Shanghai），SK-1b、窗口恢复与发布包候选 |
+| 最近完成的实现与检查 | `M16`；发布包、HTTP、窗口与运行目录已接入正式工作区，阶段检查通过 |
+| 当前里程碑 | M17 接口描述语言；Codex skill 链接已按授权安装 |
+| 下一步 | M17 接口描述语言：接入 WIT 与宏职责拆分候选，按正式差异执行对应验收 |
+| 遗留验收 | AU-17 的截图与 Cmd-Q 命令分别返回屏幕录制、辅助功能权限请求；用户已许可记录缺项并继续交付 |
+| 最后更新 | 2026-11-12（America/Los_Angeles），M16 阶段检查、授权界面命令结果与测量记录 |
 
 ## 环境
 
@@ -412,21 +412,83 @@ cargo test --workspace -- \
 - 服务安装：实现按 DOC-15 §5.1 生成持久服务位置；macOS 使用标准 LaunchAgents/LaunchDaemons，systemd 使用用户单元目录并 enable --now。`--output` 和 `--dry-run` 生成供检查的配置；uninstall 停止服务并删除对应配置。默认目录与缺席服务保留相邻文件的行为由两条单元测试检查。实际 launchd 验收在工作区内生成配置并显式 bootstrap，ThrottleInterval 生效后 RM-10 为 1038 ms，检查点 73 覆盖新配置 29，旧 Host 已退出、临时服务已回收，结果见 [M15 核心恢复](measurements/m15-core-recovery.json)。
 - 代码量：runtime 4898 代码行 / 5392 总行，dev 692 / 770；六核心合计 16820 / 18823。统计来自 target/m15-source-lines.log，其余核心实现沿用 M14。supervisor 的后续增量依 DOC-13 先提取 cordis-routing 并写 ADR。
 - 解释页：M15 进度区与独立 HTML 已同步；1440 桌面和 390 移动画面已查看，移动表格横向滚动可读。截图为 target/explainer-m15-desktop.png、target/explainer-m15-mobile.png、target/explainer-m15-mobile-details.png；控制台 0 错误，页面与本次 HTTP 服务已退出。
-- 安装目标：`/Users/gordongauerk/.codex/skills/cordis-plugin` 与 `/Users/gordongauerk/.claude/skills/cordis-plugin`，均采用符号链接指向 `/Users/gordongauerk/Projects/Rust-cordis/skills/cordis-plugin`，仓库手册为共同来源。两个目标路径当前缺席，用户目录写入待用户授权。
+- 用户安装：按用户授权创建 `/Users/gordongauerk/.codex/skills/cordis-plugin`，指向 `/Users/gordongauerk/Projects/Rust-cordis/skills/cordis-plugin`。创建前 `ls -ld` 返回 No such file or directory；随后 `ln -s` 成功。`ls -l` 实际输出为 `lrwxr-xr-x@ 1 gordongauerk staff 61 Nov 12 15:44 /Users/gordongauerk/.codex/skills/cordis-plugin -> /Users/gordongauerk/Projects/Rust-cordis/skills/cordis-plugin`（终端本地日期）。安装范围为 Codex 用户目录。
 - 持续任务修订：SK-1 生成的计数循环通过 `frozen.check()?` 传播暂停错误，并在 KV 写入前提交本地计数。原库在独立部署中按 checkpoint_ms=1、counter_interval_ms=250 固定观察 30 秒，139 次 KV 读取均为 100、1840 次导出均为 100、递增记录为 0，三个实例均 Active。动态证据确认停滞，code 4 的具体退出路径由 SDK/Host/生成插件的源码调用链确定；本次原观察者记录 KV 读值，后台错误事件记录缺项。证据为 target/skill-eval/sk1-checkpoint/evidence/{observations,interpretation,cleanup}.json；退出 0，两个进程均已回收。资源指南已补充冻结期等待、跨服务在途操作和提交语义。
 - SK-1b：全新线程 `01a1d1bb-202b-7292-99d8-f5c1dbf70cd7` 使用修订手册，CLI 退出 0。独立观察者处于另一个宿主；固定 30 秒、checkpoint_ms=1、counter_interval_ms=250，118 条有效读取由 4 增至 108，六个 5 秒分段均增长。旧版状态 58，新版继承 58 后读到 59；有序退出时本地状态与 KV 均为 109。成功导出累计 1735 次，KV 冻结等待 4 次后持续增长；替换 succeeded，暂停 124 ms，全部进程回收。原始 JSON 保存为 [检查点与热替换观测](measurements/m15-skill-checkpoints.json)，命令及原始记录位于 target/skill-eval/sk1b/counter-demo/evidence，完整回复为 target/skill-eval/sk1b-final.txt。本次重验针对已确认的后台停滞问题，修订后达到持续运行与状态继承要求。
-- Y-9–Y-10：进度、参考指南与解释页已更新；仓库提交主题为 `M15: 交付插件编写手册与持久服务安装`，推送 origin/main。用户 skill 目录链接作为单独的环境安装项等待授权，仓库内容可通过明确路径使用。
-- 后续：接入 M16 候选；用户目录的链接按授权结果执行并记录。pack 候选保存在 target/pack-m16；M16 窗口和 HTTP 候选同样保存在 target。
+- Y-9–Y-10：进度、参考指南与解释页已更新；仓库提交 `ce7c89e`，主题为 `M15: 交付插件编写手册与持久服务安装`，已推送 origin/main。用户环境安装按上条授权结果完成。
+- 后续：M16 的正式实现与验收见下一节。
 
-### M16 候选实现与验收状态
+### M16 发布打包、页面入口与窗口进程
 
-- 打包：target/pack-m16 保存 pack、Host 多验证根和 ADR-0036 候选。原生 tar、解释器命令改写、签名后真实契约重验与移动、app 包外写入及签名保持、多验证根、显式静态资源均取得定向成功证据；日志分别为 release-state-fixed.log、signed-cdylib-fixed.log、app-test.log、assets-test.log，位于该目录。候选 pack/Host 全 targets clippy 通过，2.73/2.47 秒。
-- Bundle 运行：target/runtime-m16 把 Bundle 源目录与状态目录内的安装副本、宿主缓存区分；无参运行从 Contents/MacOS 定位部署，普通部署保持原目录。路径测试 1 条通过，release 构建 12.67 秒，全 targets clippy 0.97 秒；config.rs、manifest.rs、storage.rs 的解析函数保持既有源码。真实 app 无参启动后插件 Active、verified=true，退出后签名校验通过，见 target/pack-m16/app-test.log。
-- HTTP：target/http-m16 保存 web-api、真实原生 HTTP 插件及 ADR-0038 候选。静态服务与 Web.entry 前移到 M16 以满足窗口依赖；通道转发仍在 M20。真实 HTTP 专项 1 条 / 0.07 秒，覆盖页面、静态资源、会话令牌与连接清理；workspace/all-targets clippy 2.87 秒。首次构建 11.90 秒，最终源码构建 0.78 秒。
-- 窗口：target/window-m16 保存主线程 tao/wry/muda 窗口进程、UP/1 接口、window-api、真实原生使用方和 ADR-0037 候选。第一次组合运行的 HTTP、窗口、KV、使用方全部 Active，open/close 返回编号与异步 closed 事件均为 6；SIGTERM 退出 0，全部进程回收。标准输入关闭的实际程序退出 0。当前代码在导出时只记录已显示窗口，异步修改在冻结期间等候 thaw。
-- 窗口故障修复：第一次 app 故障注入中窗口已恢复，但使用方恰逢周期检查点而收到冻结错误，进入 Failed；原始状态为 target/window-m16/app-recovery-failed.json。修复后按同一 250 ms 检查点重做一次：窗口与使用方 890 ms 恢复，核心 PID 29117 保持，HTTP/store 的 context 分别保持 5/7，window 为 9→14、probe 为 11→16，重启次数恰为 1。证据为 target/window-m16/recovery-fixed/app-recovery.json。随后 SIGTERM 退出 0，5 个进程均已回收，运行后 codesign --verify --strict 通过。状态导出辅助函数提取后的定向 clippy 0.51 秒。
-- 界面验收：macOS 应用信息显示唯一 Regular 进程为窗口 PID 28022，应用名 CordisWindowAcceptance；记录为 target/window-m16/app-window-before.json。CUA 按共同 Bundle 标识选择后台核心，报 cgWindowNotFound；系统截图命令返回无法生成图像，当前保留真实画面和 Cmd-Q 验收缺项。外部界面测试程序已准备在 target/window-m16/inspect_window.swift，等待用户对本次按 PID 读取、截图和 Cmd-Q 的授权。全部窗口验收进程已停止。
-- 后续：取得界面验收结果后将候选迁入正式 workspace，执行 M16 退出检查并提交；M17 的 WIT 候选由既有代理在 target/idl-m17 准备。target/macros-m17 已按职责拆分 interface/plugin 的 expand，候选构建 4.01 秒、clippy 0.96 秒通过，1283 代码行 / 1399 总行；生成代码行为随 M17 接入时使用既有 SDK/Host 用例检验。
+- 正式实现：cordis-dev 的 pack、共享 tooling/receipts；Runtime 的 Bundle 入口与 Locations；Host 的多验证根；plugins/web-api、http、window-api、window。设计依据为 ADR-0036–0038。运行状态、安装副本、宿主缓存均支持包外目录；窗口异步修改在冻结期排队至 thaw。config.rs、manifest.rs、storage.rs 的解析源码保持既有版本，M12 对应 fuzz 结果继续有效。
+- 构建：正式 Runtime/Host 构建通过，7.48 秒；dev/window/http 构建通过，20.36 秒，日志 target/m16-new-crates-build.log。窗口过程测试自行构建当前核心、开发工具、宿主、HTTP、窗口、KV 和真实 probe。
+- 发布验收：`cargo test -p cordis-dev --test pack -- --nocapture` 五条通过，44.69 秒，见 target/m16-pack-tests.log。覆盖离开构建目录的真实原生 tar 包运行、Rust 进程使用 runtimes 命令改写、显式静态资源、签名后真实契约重验和移动，以及 app 包外写入与多验证根。场景目录为 target/pack-tests/{native,runtime,assets,signed,app}-48256；macOS 签名检查均沿实际产物执行。
+- HTTP：正式 workspace 的真实请求用例通过，1 条 / 0.08 秒，覆盖默认页面、自定义入口与静态资源、会话信息、停用后的连接和端口释放。Web.entry 返回实际监听地址及本次激活令牌，M20 继续资源登记与 WebSocket 通道。
+- 窗口过程验收：`cargo test -p cordis-runtime --test window -- --nocapture` 一条通过，29.76 秒，外层编译 2.43 秒。周期检查点为 250 ms，四实例 Active 后只注入一次 SIGKILL；窗口 PID 52725→52735，875 ms 恢复，重启次数 1，核心 PID 52717 保持。HTTP/KV context 保持 5/7，window 为 9→14，probe 为 11→16。probe 的真实 apply 标记 1→2，两次窗口编号均为 6，called 与 closed 按同一标记配对。SIGTERM 后退出 0、残留进程 0，`codesign --verify --strict` 通过。结果保存为 [M16 窗口过程恢复](measurements/m16-window-recovery.json)，原始证据为 target/window-tests/recovery-51816/{result,before-crash,after-crash}.json 与 core.log。M16 分段退出检查中的同一目标通过，7.23 秒，见 target/m16-runtime-remaining.log。
+- 状态发布验收：migration 等待本次 KV rolled_back 报告与 counter Active，同文件跨编译器替换等待 Rust 1.85 活跃库；stress 按候选库编号区别前后两轮报告。隔离当前源码固定连续执行指定 migration 测试 20 次，20/20 通过，总耗时 234.848 秒，测试主体累计 214.25 秒。首轮命令 44.132 秒，后续测试主体 8.62–10.96 秒；结束时残留进程 0。提交证据包括[固定条件](measurements/m16-migration-plan.json)、[逐轮结果](measurements/m16-migration-rounds.json)和[最终结果](measurements/m16-migration-summary.json)，保留原始命令、源码范围、日志和场景路径。原始文件位于 target/m16-migration-review/evidence/{rounds,plan,summary}.json，日志为 round-01.log 至 round-20.log；完整进度素材为该目录上一级的 progress.txt。隔离构建缓存已清理，源码与验收产物保留。
+- Y-1–Y-2：工作区 fmt 与 clippy/all-targets 通过；clippy 15.91 秒。日志 target/m16-fmt.log、target/m16-clippy.log。fixture 的 JSON 发布修复与 Rust 1.96 条件语法调整后，定向 clippy 通过，0.14 秒，日志 target/m16-fixture-clippy-fixed.log；该次独立构建目录已清理。
+- Y-3：299 条运行测试与 2 条文档测试形成完整 workspace 覆盖。首次执行中 267 条通过，隔离域用例读取写入中 JSON 遇到 EOF；fixture 的 store/reader 观察值随后与既有 admin 回复共用先写 next、再 rename 的 publish 实现，该用例定向通过，1 条 / 1.61 秒，其余已成功结果复用。随后按执行中断位置完成 Runtime 的 skill_examples/stress/watch/window 共 4 条、其余包 27 条与文档测试 2 条。日志分别为 target/m16-workspace-tests.log、target/m16-realms-fixed.log、target/m16-runtime-remaining.log、target/m16-remaining-tests.log、target/m16-doctests.log。固定 20 次迁移验收作为重复运行样本单列。
+- Y-4：177 条上游矩阵通过，8 条移植、166 条改写、3 条不适用，见 target/m16-conformance.log。
+- Y-5：正式 workspace 的 `unsafe_is_localized_and_documents_its_contract` 源码审计通过，0.62 秒，结果见 target/m16-workspace-tests.log。核心依赖树保存在 target/m16-core-dependencies.txt；对 ABI、SDK、contract、GUI、监视、WIT 与动态库装载依赖的查询结果为空，符合 Q0 的进程职责划分。
+- Y-6–Y-7：本阶段 Miri 的 13 条 ABI 边界用例通过，3.41 秒；布局比较通过，0.94 秒。原生布局用例在 workspace 执行中通过。Miri 日志为 target/m16-miri.log，ABI 保持 v1.0。
+- Y-8：cloc 2.10 按各成员 src 中的 Rust 文件统计，参数为 `--skip-uniqueness --sdir=target/tmp --include-lang=Rust --by-file --json`，原始结果 target/m16-source-lines.json。各 crate 均满足 DOC-13 上限；下表列代码行 / 总行。六个核心 crate 为 cordis、cordis-up、cordis-supervisor、cordis-runtime、cordis-types、cordis-process，合计 16972 / 18991。
+- Y-9：DOC-13 的 crate、依赖、包外目录与接口，DOC-15 的 M16/M20 职责、窗口和打包规则，以及 README 发布说明已同步。解释页 M16/M17 进度区及独立 HTML 已更新；实际查看 1440 桌面与 390 移动画面，截图为 target/explainer-m16-desktop.png、target/explainer-m16-mobile.png；移动表格可横向阅读，控制台 0 错误，页面与本次 HTTP 服务已退出。
+- Y-10：提交主题 `M16: 实现发布打包与独立窗口进程`，推送目标 origin/main；AU-17 的系统权限缺项按用户许可保留。
+- AU-17 授权界面验收：按用户授权运行 target/window-m16/inspect_window.swift，对本次窗口 PID 读取系统应用信息、截图和发送 Cmd-Q。窗口 PID 64939→65170，982 ms 恢复，核心 PID 64904 保持，HTTP/KV context 保持 5/7。[恢复前应用信息](measurements/m16-window-app-before.json)和[恢复后应用信息](measurements/m16-window-app-after.json)的系统列表各记录一个 Regular 进程。截图命令返回 1，原因是屏幕录制权限等待允许；Cmd-Q 命令返回 1，原因是辅助功能权限等待允许，按键发送停在权限请求。真实画面、Dock 外观及快捷键退出结果保留缺项。随后以 SIGTERM 有序退出，返回 0，5 个进程均退出，应用签名有效。[授权执行结果](measurements/m16-window-authorized.json)保留本次实际观测，原始信息、错误输出和结果位于 target/window-m16/authorized-{before,after,result}.json、authorized-capture.stderr.log 与 authorized-quit.stderr.log。
+- 阶段状态：M16 实现与阶段检查完成；用户已明确许可 GUI 命令失败时记录缺项并继续交付。M15 的 Codex 用户 skill 链接已按授权安装，路径与创建结果见上一节。M16 的提交与推送在本阶段交付时记录。
+- 后续：继续 M17 接口描述语言。WIT 候选位于 target/idl-m17，宏拆分候选位于 target/macros-m17；其行为在正式接入时按实际差异验证。正式构建缓存继续供后续里程碑使用。
+
+Y-3 的完整执行与按中断位置继续的命令为：
+
+```bash
+cargo test --workspace
+cargo test -p cordis-runtime --test runtime \
+  deployment_realms_resolve_separate_providers -- --exact --nocapture
+cargo test --workspace --tests \
+  --exclude console-log --exclude cordis --exclude cordis-abi \
+  --exclude cordis-contract --exclude cordis-dev --exclude cordis-host \
+  --exclude cordis-http --exclude cordis-process --exclude cordis-runtime
+cargo test -p cordis-runtime \
+  --test skill_examples --test stress --test watch --test window
+cargo test --workspace --doc
+```
+
+| crate | 代码行 / 总行 |
+|---|---:|
+| cordis | 4230 / 5112 |
+| cordis-testkit | 161 / 181 |
+| cordis-abi | 2285 / 2700 |
+| cordis-sdk | 693 / 800 |
+| cordis-sdk-macros | 1179 / 1280 |
+| cordis-up | 1613 / 1752 |
+| cordis-supervisor | 5500 / 5918 |
+| cordis-types | 205 / 239 |
+| cordis-process | 374 / 410 |
+| cordis-host | 2491 / 2766 |
+| cordis-dev | 1902 / 2071 |
+| cordis-runtime | 5050 / 5560 |
+| cordis-contract | 31 / 47 |
+| kv-api | 17 / 27 |
+| kv-mem | 73 / 84 |
+| counter | 81 / 89 |
+| cordis-watch | 579 / 623 |
+| console-log | 465 / 515 |
+| kv-file | 130 / 143 |
+| kv-contract | 57 / 67 |
+| web-api | 12 / 18 |
+| cordis-http | 358 / 399 |
+| window-api | 11 / 17 |
+| cordis-window | 943 / 1020 |
+| 六个核心 crate 合计 | 16972 / 18991 |
+
+| 超过目标的 crate | 当前职责与上限 |
+|---|---|
+| cordis-up | RPC 引用所有权、背压与取消共用协议实现；1613 高于目标 1500，上限 2500 |
+| cordis-types | 公开替换报告和批次结果的数据模型；205 高于目标 200，上限 400 |
+| cordis-supervisor | 隔离、组合、原生替换、原快照回滚和有状态重启；5500 达到上限，后续增量先按 DOC-13 提取 cordis-routing |
+| cordis-host | ABI 对象寿命、组内直连、故障回收和多根验证副本；2491 高于目标 2000，上限 3500 |
+| cordis-runtime | 管理事务、契约会话、检查点、服务安装和 Bundle 目录解析；5050 高于目标 4500，上限 5500 |
+| cordis-dev | 脚手架、真实验证、归档、运行时命令改写及签名后重验；1902 高于目标 1500，上限 2500 |
 
 ## 第二阶段候选与恢复记录
 

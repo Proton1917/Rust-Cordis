@@ -222,7 +222,13 @@ fn memory(snapshot: &Value) -> Value {
 }
 
 /// RM-3/RM-4：依据实际公开报告等待最终统计，21/42轮包含整组重启带来的 idle。
-fn round_snapshot(project: &Path, reference: &Value, changed: usize) -> Value {
+fn round_snapshot(project: &Path, reference: &Value, changed: usize, previous: &Value) -> Value {
+    let previous_candidate = previous["last_swap"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|report| report["plugin"] == "loader-fixture")
+        .map(|report| &report["candidate_library"]);
     until("本轮完整替换报告发布", || {
         let snapshot = status(project)?;
         let report = snapshot["last_swap"]
@@ -231,6 +237,7 @@ fn round_snapshot(project: &Path, reference: &Value, changed: usize) -> Value {
             .find(|report| report["plugin"] == "loader-fixture")?;
         (active(&snapshot, 5)
             && instance(&snapshot, "store")["reference"] == *reference
+            && Some(&report["candidate_library"]) != previous_candidate
             && report["succeeded"] == true
             && report["affected_instances"] == changed)
             .then_some(snapshot)
@@ -332,7 +339,7 @@ fn replace_rounds(
         );
         let harness_wall_ms = started.elapsed().as_secs_f64() * 1000.0;
         current_counter(project, round, version);
-        let snapshot = round_snapshot(project, reference, if restarted { 4 } else { 3 });
+        let snapshot = round_snapshot(project, reference, if restarted { 4 } else { 3 }, &previous);
         let observation = observed(project, native_pid(&snapshot), version, 137);
         let rss = restart_observation(&previous, &snapshot, &previous_memory, restarted, round);
         let report = &snapshot["last_swap"]

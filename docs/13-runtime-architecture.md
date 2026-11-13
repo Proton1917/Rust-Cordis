@@ -1,4 +1,4 @@
-# 13 第二阶段架构：crate 划分、内核改动与运行时
+# 13 运行时架构：crate 划分、内核改动与插件进程
 
 | 项 | 内容 |
 |---|---|
@@ -30,7 +30,10 @@
 | `plugins/kv-mem`、`plugins/kv-file` | kv@1 的内存和文件实现 |
 | `plugins/kv-contract`、`plugins/counter`、`plugins/console-log` | 契约套件、计数使用方、终端日志 |
 | `plugins/watch` | 持有管理授权的文件监视与自动替换插件 |
-| `plugins/window` | M16 的独立进程窗口插件，主线程运行界面并提供 window@1 |
+| `plugins/web-api` | cordis.web@1.0 页面入口及会话令牌的共享接口 |
+| `plugins/http` | 原生 HTTP 插件，提供静态资源、页面入口和每次激活的令牌 |
+| `plugins/window-api` | window@1.0 开关窗口接口与 window.closed@1.0 事件 |
+| `plugins/window` | 独立进程窗口插件，主线程运行系统 WebView，另一线程处理 UP/1 |
 | `fixtures/` | 真实行为与故障测试插件 |
 | `docs/abi/v1-layout.txt` | ABI 布局记录，由测试生成 |
 
@@ -43,6 +46,9 @@
 | cordis-process | cordis-up |
 | cordis-host | cordis-up、cordis-abi、cordis-types |
 | cordis-dev | cordis-up、cordis-process、cordis-types；通过子进程使用 cordis、cordis-host |
+| cordis-http | cordis-sdk、web-api |
+| cordis-window | cordis-up |
+| web-api、window-api | cordis-sdk |
 | 原生插件、契约辅助与原生 fixture | cordis-sdk；接口 crate |
 | cordis-sdk | cordis-abi、cordis-sdk-macros、cordis-types |
 
@@ -120,6 +126,7 @@
 | 模块 | 职责 |
 |---|---|
 | `library` | 复制到唯一路径（`SW-1`）、`libloading` 打开、握手、描述符校验 |
+| `verification` | 按显式验证根解析印记，打开前比较完整库字节，握手后核对契约覆盖 |
 | `lease` | `LibraryId` 分配、租约计数、静止判定 |
 | `adapt` | 实现 HostV1：provide、get、effect/defer、on、emit、export_state 经 UP/1 登记到核心；now、sleep 由宿主执行器完成；log 转发到核心 |
 | 库替换资源 | 按核心的替换与回滚决策准备候选库、切换对象来源、释放旧库租约 |
@@ -130,6 +137,8 @@
 
 取得服务、提供服务和登记效应都经核心记录。get 的应答指向同组对象时，宿主交出本地 AbiObject，后续方法通过 ABI 类型化方法表直接调用；跨进程对象由 UP/1 代理实现。M11 验证宿主依赖树与内核 crate 分离，并验证同组 A 依赖 B 时，替换 B 由核心安排 A 先清理、B 后卸载，随后 A 的直连引用指向新 B。
 
+`--verified-dir` 可重复传入。绝对验证副本路径归属于其中一个规范化目录；相对路径按各根查找，以与候选完整字节匹配的副本确定来源。应用可以同时使用包内只读验证目录和包外可写验证目录，缺席的可写根在首次创建后参与检查。宿主缓存库保留同一印记，替换、发布包移动与有状态重启沿用该解析规则（ADR-0036）。
+
 ### 3.5 `cordis-runtime`
 
 - 可执行文件 cordis 提供 run、status、service install、service uninstall、version（服务的安装位置与卸载见 DOC-15 §5.1）；其余命令原样转交同目录或 PATH 中的 cordis-dev（ADR-0024）。
@@ -137,10 +146,20 @@
 - 配置：`cordis.toml`（`DOC-11` §10）。配置解析失败时启动失败；运行中配置文件变为无效时保持当前状态并记录错误。
 - 管理接口 cordis.manage@1 按配置中的 grants 检查每个方法，串行执行变更并保存 state/instances.toml 叠加层。watch 插件经此接口触发安装、替换和配置重读。
 - 状态目录布局：`state/<实例名>.state`、`state/consumed/`、`state/data/<插件名>/`（`cordis.data-dir@1`）、`state/status.json`。
-- `status.json`：每个库的插件名、版本、副本序号和路径、是否验证、租约数、静止状态；每个实例的状态、纪元、最近一次替换报告。
+- `status.json`：每个库的插件名、版本、副本序号和路径、是否验证、租约数、静止状态；每个实例的状态、纪元、最近一次替换报告。StatusWriter 每 100 ms 发布一次快照，管理回复到达时文件可能仍保留上一帧；调用结果以管理回复为准，批次的受理与完成按 BatchTicket 和 last_batch 区分。使用文件观察操作完成时，同时等待对应的替换报告、批次编号及所需实例状态。
 - 信号：`SIGTERM`/`SIGINT` 触发 `DOC-11` §9 的有序退出。
 
-cordis-dev 提供 new、new-plugin、verify、pack、idl gen，随对应里程碑接入。原生描述符由 cordis-host --describe 读取；验证由独立 cordis run 部署执行；模板与 M15 skill 共用。开发工具使用协议数据和子进程，产品依赖与内核、ABI、SDK 分离。
+`deployment::Locations` 统一启动、status、配置重读与原生宿主参数中的目录。普通部署使用配置指定的插件与状态目录。macOS 应用从当前可执行文件定位 `Contents/Resources/cordis.toml`，包内插件作为发布来源保存；运行中的写入按下表放在包外。`pack.state_dir` 可指定状态位置，缺省为用户 `Library/Application Support/<pack.identifier>`（ADR-0036）。
+
+| 内容 | macOS 应用位置 |
+|---|---|
+| 发布配置、插件来源 | `Contents/Resources/cordis.toml`、`Contents/Resources/plugins/` |
+| 状态、叠加层与业务数据 | `state_dir`，内部布局沿用普通部署 |
+| 管理接口安装的新版本 | `state_dir/plugins/` |
+| 宿主库缓存与描述符探测副本 | `state_dir/.cordis/lib/` |
+| 验证副本 | `Contents/Resources/.cordis/verified/` 与 `state_dir/.cordis/verified/` |
+
+cordis-dev 提供 new、new-plugin、verify、pack，M17 接入 idl gen。原生描述符由 cordis-host --describe 读取；验证由独立 cordis run 部署执行；模板与 M15 skill 共用。`tooling` 统一开发工具的运行程序发现、受控子进程与描述符探测，`receipts` 保存真实契约结果和验证副本。打包模块从 Cargo 结构化输出取得目标产物，生成部署配置、运行时相对命令、归档或 Bundle，并按签名后的实际字节处理验证印记。开发工具使用协议数据和子进程，产品依赖与内核、ABI、SDK 分离。
 
 ### 3.6 `cordis-contract`
 
@@ -155,6 +174,8 @@ cordis-up 保存双方共用的消息类型、帧大小约束、CBOR 深度与�
 ### 3.8 后续阶段的职责安排
 
 M13 的契约会话属于运行时，验证命令和印记生成属于开发工具；二者复用监管器已有的挂载、状态导出和组替换接口。M16 的打包代码进入 cordis-dev，窗口的界面事件循环进入独立进程插件，进程监管继续使用既有组接口。
+
+M16 的 HTTP 插件及 web-api 提供窗口所需的真实静态页面和入口服务（ADR-0038）。HTTP 监听器、服务器线程、自有 Tokio 运行时和连接归组件效应所有，停用时等待释放。窗口插件采用 tao、wry 和 muda 管理主线程界面、系统 WebView 与菜单；异步开关窗口在检查点冻结期间等待 thaw，清理时回收等待者和窗口（ADR-0037）。M20 在既有 HTTP 插件上增加资源登记、版本路径、WebSocket 转发及页面子实例。
 
 后续核心侧增量按以下职责组织；任一里程碑在 supervisor 增加代码前，先完成第 1 步的提取与 ADR。第 2、3 步安排在 M20 的转发通道与网页接入阶段：
 
@@ -219,6 +240,16 @@ pub trait Kv: Send + Sync {
 
 运行时通过 UP/1 通知发布 `cordis.log@1`，载荷含 level、message、instance。跨进程监听器异步接收，服务调用承担需要返回值的交互（DOC-15 §6.3）。
 
+### 5.4 页面与窗口的插件接口
+
+| 接口 | 提供方 | 方法与数据 |
+|---|---|---|
+| `cordis.web@1.0` | HTTP 插件 | 同步 `entry() -> WebEntry`，返回 `url: String`、`token: String` |
+| `window@1.0` | 窗口进程插件 | 异步 `open(url, title, width, height) -> u64` 与 `close(id)` |
+| `window.closed@1.0` | 窗口进程插件 | 异步事件 `{ id: u64 }`，对应已关闭的实际窗口 |
+
+入口 URL 在片段中携带 `cordis_token`，`/_cordis/session.js` 提供同一次 HTTP 激活的入口信息并使用 `Cache-Control: no-store`。窗口声明 Web 与 Manage 依赖，部署为其授予 `shutdown`。原生调用方使用 web-api/window-api 中的 SDK 接口；窗口进程按相同的数据结构经 UP/1 调用，生命周期继续由核心中的唯一内核决定。
+
 ## 6 架构规则
 
 | 编号 | 规则 |
@@ -241,20 +272,25 @@ pub trait Kv: Send + Sync {
 | crate | 用途 | 使用者 |
 |---|---|---|
 | `serde` | 配置、DTO、状态块的序列化 | `cordis-abi`、`cordis-sdk`、`cordis-runtime`、`cordis-types`、`cordis-up`、插件 |
-| `serde_json` | JSON 验证印记、状态与报告 | `cordis-host`、`cordis-runtime`、`cordis-dev` |
-| `semver` | 插件版本解析与接口数值版本处理 | `cordis-host`、`cordis-supervisor`、`cordis-runtime` |
+| `serde_json` | JSON 验证印记、状态、报告与页面启动信息 | `cordis-host`、`cordis-runtime`、`cordis-dev`、`plugins/http` |
+| `semver` | 插件版本解析与接口数值版本处理 | `cordis-host`、`cordis-supervisor`、`cordis-runtime`、`cordis-dev` |
 | `clap` | 命令行参数与子命令解析 | `cordis-runtime`、`cordis-host`、`cordis-dev` |
 | `ciborium` | CBOR 编解码（`ADR-0010`） | `cordis-abi`、`cordis-sdk`、`cordis-host`、`cordis-up` |
 | `libloading` | 打开动态库 | `cordis-host` |
-| `tokio` | 执行器、计时、双向消息与子进程 I/O | `cordis-runtime`、`cordis-supervisor`、`cordis-host`、`cordis-up`、`cordis-process`、`cordis-dev` |
+| `tokio` | 执行器、计时、双向消息、子进程 I/O 与插件自有网络运行时 | `cordis-runtime`、`cordis-supervisor`、`cordis-host`、`cordis-up`、`cordis-process`、`cordis-dev`、`plugins/http`、`plugins/window` |
 | `nix` | 安全的 POSIX 进程组信号接口（ADR-0021） | `cordis-process` |
 | `rustix` | 安全的 waitid 状态观察与待回收子进程管理（ADR-0027） | `cordis-process` |
 | `libfuzzer-sys` | CP-9 输入模糊测试（ADR-0021） | 独立 fuzz 工作区的开发构建 |
 | `notify` | 目录监视 | `plugins/watch` |
-| `uuid` | 随机批次请求标识（ADR-0031） | `plugins/watch` |
+| `uuid` | 随机批次请求标识与页面会话令牌（ADR-0031、ADR-0038） | `plugins/watch`、`plugins/http` |
 | `chrono` | 终端日志时间格式（ADR-0032） | `plugins/console-log` |
 | `toml` | 解析 `cordis.toml` 与生成项目配置 | `cordis-runtime`、`cordis-dev` |
 | `syn`、`quote`、`proc-macro2` | 过程宏 | `cordis-sdk-macros` |
 | `parking_lot`、`futures-util`、`thiserror` | 与内核相同 | 各 crate |
+| `object` 0.41.0 | 读取发布产物的 ELF/Mach-O 机器类型（ADR-0036） | `cordis-dev` |
+| `tar` 0.4.46、`flate2` 1.1.11 | 生成 tar.gz 发布包（ADR-0036） | `cordis-dev` |
+| `plist` 1.10.3、`pathdiff` 0.2.3 | Bundle/entitlement 文件与包内相对路径（ADR-0036） | `cordis-dev` |
+| `tao` 0.37.2、`wry` 0.57.2、`muda` 0.21.2 | 窗口事件循环、系统 WebView 与原生菜单（ADR-0037） | `plugins/window` |
+| `axum` 0.8.9、`tower-http` 0.7.1、`url` 2.5.8 | HTTP 路由、静态文件和页面地址（ADR-0038） | `plugins/http` |
 
 开发依赖不受此表限制，但需要在 `PROGRESS.md` 记录新增项。

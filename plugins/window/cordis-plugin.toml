@@ -1,0 +1,5 @@
+name = "window"
+version = "0.1.0"
+socket = "process"
+protocol = 1
+command = ["./cordis-window"]

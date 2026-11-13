@@ -1,8 +1,10 @@
 #![forbid(unsafe_code)]
 //! DOC-15 §3.1、§12.1：独立开发命令生成项目与插件，运行管理交由 cordis。
 
+mod pack;
 mod receipts;
 mod scaffold;
+mod tooling;
 mod verify;
 
 use clap::{Args, Parser, Subcommand};
@@ -25,6 +27,8 @@ enum Action {
     NewPlugin(NewPlugin),
     /// 通过独立核心运行契约套件，保存已验证库副本。
     Verify(verify::Options),
+    /// 构建并装配包含核心、宿主与插件的发布包。
+    Pack(pack::Options),
     /// 显示开发工具版本与支持的核心版本范围。
     Version,
 }
@@ -70,6 +74,7 @@ async fn run(cli: Cli) -> Result<()> {
             println!("已创建插件 plugins/{}", options.name);
         }
         Action::Verify(options) => verify::run(options).await?,
+        Action::Pack(options) => pack::run(options).await?,
         Action::Version => println!(
             "cordis-dev {}\n支持核心 >=0.1.0,<0.2.0",
             env!("CARGO_PKG_VERSION")

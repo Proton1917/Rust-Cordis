@@ -3,6 +3,7 @@
 use crate::{
     cli,
     config::{Result, RuntimeSettings, Unload, parameter},
+    deployment::Locations,
     manifest::{self, Entry},
     storage::{self, io_error},
 };
@@ -40,8 +41,8 @@ impl Catalog {
     pub async fn discover(
         &mut self,
         directory: &Path,
-        project: &Path,
         options: &RuntimeSettings,
+        locations: &Locations,
     ) -> Result<BTreeMap<String, String>> {
         let mut errors = BTreeMap::new();
         let mut paths = fs::read_dir(directory)
@@ -61,7 +62,7 @@ impl Catalog {
                 continue;
             }
             if path.join("cordis-plugin.toml").is_file() || native(&path) {
-                match inspect(reference.clone(), path, project, options).await {
+                match inspect(reference.clone(), path, options, locations).await {
                     Ok(package) => {
                         self.packages.insert(reference, package);
                     }
@@ -108,8 +109,8 @@ fn missing_reference(reference: &str) -> cordis_up::WireError {
 pub async fn inspect(
     reference: String,
     source: PathBuf,
-    project: &Path,
     options: &RuntimeSettings,
+    locations: &Locations,
 ) -> Result<Package> {
     let source = source.canonicalize().map_err(io_error)?;
     let (declared, directory, entry) = if source.is_dir() {
@@ -131,7 +132,7 @@ pub async fn inspect(
         other => other,
     };
     let descriptor = if let Entry::Native { library } = &entry {
-        let descriptor = native_description(library, &directory, project, options).await?;
+        let descriptor = native_description(library, &directory, options, locations).await?;
         if let Some(declared) = &declared
             && (declared.name != descriptor.name || declared.version != descriptor.version)
         {
@@ -161,8 +162,8 @@ pub async fn inspect(
 async fn native_description(
     library: &Path,
     directory: &Path,
-    project: &Path,
     options: &RuntimeSettings,
+    locations: &Locations,
 ) -> Result<payload::Plugin> {
     let host = cli::executable("cordis-host")?;
     let mut command = vec![
@@ -170,20 +171,14 @@ async fn native_description(
         "--describe".into(),
         library.to_string_lossy().into_owned(),
         "--cache-dir".into(),
-        project
-            .join(".cordis/lib/discovery")
+        locations
+            .cache
+            .join("discovery")
             .to_string_lossy()
             .into_owned(),
     ];
     if options.require_verified {
-        command.extend([
-            "--require-verified".into(),
-            "--verified-dir".into(),
-            project
-                .join(".cordis/verified")
-                .to_string_lossy()
-                .into_owned(),
-        ]);
+        locations.verification_arguments(&mut command);
     }
     let bytes = cordis_supervisor::run_capture(
         &command,
@@ -201,13 +196,14 @@ pub fn plan(
     packages: &[Package],
     project: &Path,
     options: &RuntimeSettings,
+    locations: &Locations,
 ) -> Result<GroupSpec> {
     let first = packages
         .first()
         .ok_or_else(|| parameter("分组需要至少一个插件"))?;
     let (command, directory, restart) = match &first.entry {
         Entry::Native { .. } => (
-            native_command(group, packages, project, options)?,
+            native_command(group, packages, options, locations)?,
             project.to_owned(),
             RestartPolicy {
                 max: options.restart_max,
@@ -244,19 +240,15 @@ pub fn plan(
 fn native_command(
     group: &str,
     packages: &[Package],
-    project: &Path,
     options: &RuntimeSettings,
+    locations: &Locations,
 ) -> Result<Vec<String>> {
     let mut command = vec![
         cli::executable("cordis-host")?
             .to_string_lossy()
             .into_owned(),
         "--cache-dir".into(),
-        project
-            .join(".cordis/lib")
-            .join(group)
-            .to_string_lossy()
-            .into_owned(),
+        locations.cache.join(group).to_string_lossy().into_owned(),
         "--unload".into(),
         match options.unload {
             Unload::Never => "never",
@@ -267,14 +259,7 @@ fn native_command(
         options.invoke_timeout_ms.to_string(),
     ];
     if options.require_verified {
-        command.extend([
-            "--require-verified".into(),
-            "--verified-dir".into(),
-            project
-                .join(".cordis/verified")
-                .to_string_lossy()
-                .into_owned(),
-        ]);
+        locations.verification_arguments(&mut command);
     }
     for package in packages {
         let Entry::Native { library } = &package.entry else {

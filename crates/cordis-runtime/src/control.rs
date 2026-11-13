@@ -11,6 +11,7 @@ use crate::{
     builtins::{Logs, Management, Permissions},
     catalog::{self, Catalog, Package},
     config::{self, Configuration, InstanceSettings, Overlay, OverlayEntry, Result, parameter},
+    deployment::Locations,
     install,
     manifest::Entry,
     request::{Handle, Operation, Request},
@@ -54,6 +55,7 @@ pub struct Controller {
     pub path: PathBuf,
     pub project: PathBuf,
     pub plugins: PathBuf,
+    locations: Locations,
     pub store: Store,
     pub overlay: Overlay,
     pub diagnostics: Arc<Mutex<Diagnostics>>,
@@ -82,7 +84,7 @@ impl Controller {
         manager: Arc<Manager>,
         configuration: Configuration,
         path: PathBuf,
-        plugins: PathBuf,
+        locations: Locations,
         store: Store,
         overlay: Overlay,
         services: ControlServices,
@@ -94,6 +96,7 @@ impl Controller {
             logs,
         } = services;
         let project = path.parent().expect("configuration parent").to_owned();
+        let plugins = locations.installed.clone();
         let outcomes = Arc::new(Mutex::new(BatchOutcomes::new(
             store.directory.join("batches.json"),
             diagnostics.clone(),
@@ -112,6 +115,7 @@ impl Controller {
             path,
             project,
             plugins,
+            locations,
             store,
             overlay,
             diagnostics,
@@ -200,6 +204,7 @@ impl Controller {
                 &packages,
                 &self.project,
                 &self.configuration.runtime,
+                &self.locations,
             );
             let result = match plan {
                 Ok(plan) => self.manager.attach_group(plan).await.map(|_| ()),
@@ -306,8 +311,8 @@ impl Controller {
         let package = catalog::inspect(
             reference.clone(),
             self.plugins.join(&reference),
-            &self.project,
             &self.configuration.runtime,
+            &self.locations,
         )
         .await?;
         self.catalog.packages.insert(reference.clone(), package);
@@ -363,10 +368,21 @@ impl Controller {
     /// DOC-15 §3.2：重读插件目录并刷新来源诊断，已有安装副本继续可用。
     async fn discover(&mut self) -> Result<()> {
         self.installed.clear();
-        let errors = self
+        let mut errors = self
             .catalog
-            .discover(&self.plugins, &self.project, &self.configuration.runtime)
+            .discover(
+                &self.locations.sources,
+                &self.configuration.runtime,
+                &self.locations,
+            )
             .await?;
+        if self.locations.sources != self.plugins {
+            errors.extend(
+                self.catalog
+                    .discover(&self.plugins, &self.configuration.runtime, &self.locations)
+                    .await?,
+            );
+        }
         self.diagnostics.lock().plugin_errors = errors;
         Ok(())
     }
@@ -377,6 +393,13 @@ impl Controller {
             return Ok(package.clone());
         }
         let source = self.catalog.get(reference)?;
+        if self.locations.app
+            && (source.source.starts_with(&self.locations.sources)
+                || source.reference.starts_with("installed-"))
+        {
+            self.installed.insert(reference.into(), source.clone());
+            return Ok(source);
+        }
         let installed =
             install::install(&source.source, &self.project, &self.project, &self.plugins)?;
         let package = if installed == source.reference {
@@ -385,8 +408,8 @@ impl Controller {
             catalog::inspect(
                 installed.clone(),
                 self.plugins.join(&installed),
-                &self.project,
                 &self.configuration.runtime,
+                &self.locations,
             )
             .await?
         };
@@ -472,7 +495,13 @@ impl Controller {
             return Err(parameter("同组同逻辑插件需要一致的安装引用"));
         }
         packages.push(package.clone());
-        let plan = catalog::plan(group, &packages, &self.project, &self.configuration.runtime)?;
+        let plan = catalog::plan(
+            group,
+            &packages,
+            &self.project,
+            &self.configuration.runtime,
+            &self.locations,
+        )?;
         if self.groups.contains_key(group) {
             self.manager.replace_group(plan).await?;
         } else {
@@ -1045,7 +1074,13 @@ impl Controller {
             Entry::Process { .. } => {
                 self.manager
                     .restore_group(
-                        catalog::plan(group, packages, &self.project, &self.configuration.runtime)?,
+                        catalog::plan(
+                            group,
+                            packages,
+                            &self.project,
+                            &self.configuration.runtime,
+                            &self.locations,
+                        )?,
                         states,
                     )
                     .await?;

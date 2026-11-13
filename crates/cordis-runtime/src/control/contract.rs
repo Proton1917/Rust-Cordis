@@ -42,6 +42,7 @@ impl Controller {
             &self.groups[&subject.group],
             &self.project,
             &self.configuration.runtime,
+            &self.locations,
         )?;
         self.manager.replace_group(plan).await?;
         next_stage();

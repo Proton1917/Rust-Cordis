@@ -5,22 +5,17 @@ use crate::{
     config::{self, Configuration, Result, parameter},
     contract::{Plan, Session},
     control::{ControlServices, Controller},
+    deployment::Locations,
     executor::Executor,
     request::{Handle, Operation, Request},
     status::{self, Diagnostics, View},
-    storage::{self, Store, io_error},
+    storage::{Store, io_error},
 };
 use cordis::{Context, ExporterOptions, LogLevel, LogValue};
 use cordis_supervisor::manager::{Manager, ManagerOptions};
 use cordis_up::WireError;
 use parking_lot::Mutex;
-use std::{
-    collections::BTreeMap,
-    fs,
-    path::{Path, PathBuf},
-    sync::Arc,
-    time::Duration,
-};
+use std::{collections::BTreeMap, path::PathBuf, sync::Arc, time::Duration};
 use tokio::{
     signal::unix::{Signal, SignalKind, signal},
     sync::{mpsc, watch},
@@ -37,7 +32,7 @@ pub async fn run(path: PathBuf) -> Result<()> {
 pub async fn run_with_contract(path: PathBuf, plan: Option<Plan>) -> Result<()> {
     let session = plan.map(Session::new).transpose()?;
     let path = path.canonicalize().map_err(io_error)?;
-    let configuration = config::parse(&storage::read(&path)?)?;
+    let configuration = crate::deployment::load(&path)?;
     configuration
         .check_version(&semver::Version::parse(env!("CARGO_PKG_VERSION")).map_err(parameter)?)?;
     let mut terminate = signal(SignalKind::terminate()).map_err(io_error)?;
@@ -74,7 +69,11 @@ async fn create_controller(
     configuration: Configuration,
 ) -> Result<(Controller, mpsc::Receiver<Request>, View)> {
     let project = path.parent().expect("configuration parent");
-    let (plugins, store) = prepare_storage(project, &configuration)?;
+    let locations = Locations::create(project, &configuration)?;
+    let store = Store::create(config::resolve_path(
+        project,
+        &configuration.runtime.state_dir,
+    ))?;
     let overlay = store.overlay()?;
     let settings = &configuration.runtime;
     let options = ManagerOptions {
@@ -100,7 +99,7 @@ async fn create_controller(
         manager,
         configuration,
         path,
-        plugins,
+        locations,
         store,
         overlay,
         ControlServices {
@@ -111,18 +110,6 @@ async fn create_controller(
         },
     );
     Ok((controller, requests, view))
-}
-
-/// DOC-11 §10：插件库存与状态目录按项目配置创建，文件系统错误在启动时返回。
-fn prepare_storage(project: &Path, configuration: &Configuration) -> Result<(PathBuf, Store)> {
-    let plugins = config::resolve_path(project, &configuration.runtime.plugin_dir);
-    fs::create_dir_all(&plugins).map_err(io_error)?;
-    let plugins = plugins.canonicalize().map_err(io_error)?;
-    let store = Store::create(config::resolve_path(
-        project,
-        &configuration.runtime.state_dir,
-    ))?;
-    Ok((plugins, store))
 }
 
 /// ADR-0017、CP-5：注册纯数据内置接口，日志在内核锁外转发给插件。

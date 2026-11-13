@@ -213,6 +213,82 @@ macOS 动态库扩展名为 `.dylib`，Linux 使用 `.so`。验证成功后，�
 
 执行 `cordis service uninstall --name com.example.cordis.demo` 可停止服务、删除安装配置，并查看实际删除的路径。
 
+## 发布压缩包与 macOS 应用
+
+`cordis pack` 在目标平台执行构建和装配，目前接受 `aarch64-apple-darwin` 与 `x86_64-unknown-linux-gnu`。部署配置中的 `instance.plugin` 使用具体动态库路径或带 `cordis-plugin.toml` 的插件目录。下面在仓库根目录准备一个实际内存 KV 部署：
+
+```bash
+cargo build --release --target-dir target \
+  -p cordis-runtime -p cordis-host -p cordis-dev -p kv-mem
+mkdir -p target/pack-demo/plugins
+cp target/release/libkv_mem.dylib target/pack-demo/plugins/
+```
+
+保存以下内容为 `target/pack-demo/cordis.toml`：
+
+```toml
+requires_core = "^0.1"
+
+[pack]
+name = "cordis-demo"
+version = "0.1.0"
+
+[runtime]
+plugin_dir = "plugins"
+
+[instance.store]
+plugin = "libkv_mem.dylib"
+component = "kv-store"
+```
+
+执行发布命令：
+
+```bash
+target/release/cordis pack \
+  --project target/pack-demo \
+  --target aarch64-apple-darwin \
+  --runtime-dir "$PWD/target/release" \
+  --out dist/
+```
+
+产物为 `target/pack-demo/dist/cordis-demo-0.1.0-aarch64-apple-darwin.tar.gz`。解开后包含核心、宿主、插件、部署配置和 `service/install.sh`；在解开的目录执行 `./cordis run` 即可启动。Linux 使用 `.so` 库与 `x86_64-unknown-linux-gnu` 目标。有 Cargo 清单的插件项目会按指定 target 构建 release，工具从 Cargo 结构化产物记录取得库和可执行文件。
+
+macOS 桌面部署可继续加入 HTTP 和窗口插件：
+
+```bash
+cargo build --release --target-dir target -p cordis-http -p cordis-window
+mkdir -p target/pack-demo/plugins/window
+cp target/release/libcordis_http.dylib target/pack-demo/plugins/
+cp target/release/cordis-window plugins/window/cordis-plugin.toml \
+  target/pack-demo/plugins/window/
+```
+
+在同一份部署配置中追加：
+
+```toml
+[instance.http]
+plugin = "libcordis_http.dylib"
+component = "http"
+
+[instance.window]
+plugin = "window"
+component = "window"
+grants = { "cordis.manage@1" = ["shutdown"] }
+config = { title = "Cordis Demo" }
+```
+
+```bash
+target/release/cordis pack \
+  --project target/pack-demo \
+  --target aarch64-apple-darwin \
+  --runtime-dir "$PWD/target/release" \
+  --app --out applications/
+```
+
+生成的 `target/pack-demo/applications/cordis-demo.app` 从自身位置读取部署配置，窗口通过 `cordis.web@1.0` 取得 HTTP 启动页。HTTP 的 `assets` 可指定静态目录；同时把该相对路径加入 `pack.assets`，页面资源便随发布包交付。状态默认保存到用户 `Library/Application Support/org.cordis.cordis-demo`，也可以通过 `pack.state_dir` 指定包外绝对目录；安装的新插件和宿主缓存分别位于该状态目录的 `plugins/` 与 `.cordis/lib/`。
+
+`--sign` 指定本机签名身份并启用 hardened runtime，`--allow-third-party` 为宿主设置第三方库装载权限。启用 `require_verified` 的部署在签名改变库字节后重新执行原契约套件，验证副本及真实结果一起发布。`pack.runtimes` 与 `pack.runtime_paths` 可附带独立 Python/Node 目录并改写进程命令；完整语言运行时发布包的验收安排在 M21。配置、签名及可移动验证副本的规则见 [ADR-0036](docs/adr/0036-release-packaging.md)。
+
 ## 进度
 
 第一阶段 `M0`–`M6` 交付内核，第二阶段推进独立核心、插件宿主与开发工具，每个里程碑一个提交。
@@ -233,12 +309,17 @@ macOS 动态库扩展名为 `.dylib`，Linux 使用 `.so`。验证成功后，�
 | `M13` | 独立进程中的契约验证与验证印记 |
 | `M14` | 系统验收、替换指标与使用文档 |
 | `M15` | 插件编写 skill、共享模板与独立新会话验收 |
+| `M16` | 发布压缩包与 `.app`、可移动验证副本、HTTP 页面入口与独立窗口进程 |
 
-`M0`–`M15` 的仓库交付及评审修复已完成。插件编写手册经过独立新会话的热替换、周期检查点与 KV 契约验证，ABI v1.0 已冻结。M12 的三个产品解析目标均完成固定 1800 秒 fuzz，正式源码与被测源码已逐字节比较。M14 的固定 50 次替换、直接调用、隔离与核心恢复结果见 [运行时验收与测量](docs/measurements/m14-acceptance.md)。当前推进 M16 发布打包与窗口插件；各里程碑结果和用户环境安装状态记录在 `docs/PROGRESS.md`。
+`M0`–`M15` 的仓库交付及评审修复已完成。插件编写手册经过独立新会话的热替换、周期检查点与 KV 契约验证，ABI v1.0 已冻结。M12 的三个产品解析目标均完成固定 1800 秒 fuzz，正式源码与被测源码已逐字节比较。M14 的固定 50 次替换、直接调用、隔离与核心恢复结果见 [运行时验收与测量](docs/measurements/m14-acceptance.md)。
+
+M16 的实现与阶段检查已完成。Apple Silicon macOS 上的五项发布打包测试通过，覆盖运行产物交付、签名后契约重验、包外状态和多验证根；窗口过程验收记录 875 ms 恢复及依赖方重建。工作区覆盖 299 条运行测试与 2 条文档测试，固定 20 次迁移验收全部通过。Codex 用户目录的 skill 链接已按授权安装。
+
+AU-17 的外部界面命令已获授权并执行。系统应用列表在窗口恢复前后均记录一个 Regular 进程；截图与 Cmd-Q 命令分别停在屏幕录制、辅助功能权限请求，真实画面、Dock 外观和快捷键退出结果保留缺项。用户已许可据此继续 M16 交付与后续里程碑。原始测量与阶段检查见 [PROGRESS](docs/PROGRESS.md)，下一步为 M17 WIT 接口描述语言。
 
 ## 后续阶段
 
-第二阶段交付 Rust 原生插件、通用协议、契约验证与插件编写 skill。第三阶段按 `docs/15-universal-socket.md` 继续发布打包、WIT、Python 与 TypeScript SDK、浏览器前端插件和全栈插件，验收推进至 M21。
+第二阶段交付 Rust 原生插件、通用协议、契约验证与插件编写 skill。第三阶段在 M16 的发布与窗口能力上，按 `docs/15-universal-socket.md` 继续 WIT、Python 与 TypeScript SDK、浏览器前端插件和全栈插件，验收推进至 M21。
 
 ## 文档
 

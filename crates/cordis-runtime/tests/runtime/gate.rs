@@ -142,7 +142,7 @@ fn reject_changed_candidate(artifacts: &Artifacts, project: &Path, reference: &s
         rejected["value"]
             .as_str()
             .unwrap()
-            .contains("候选内容与已验证副本存在差异"),
+            .contains("配置验证目录中缺少与候选完整字节相同的副本"),
         "{rejected}"
     );
     assert_eq!(rejected["detail"]["committed"], false, "{rejected}");

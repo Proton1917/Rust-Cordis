@@ -1,0 +1,35 @@
+{
+  "started_at": "2026-11-12T22:28:40.384647+00:00",
+  "rounds": 20,
+  "command": [
+    "cargo",
+    "test",
+    "--manifest-path",
+    "/Users/gordongauerk/Projects/Rust-cordis/target/m16-migration-review/source/Cargo.toml",
+    "-p",
+    "cordis-runtime",
+    "--test",
+    "runtime",
+    "--target-dir",
+    "/Users/gordongauerk/Projects/Rust-cordis/target/m16-migration-review/build",
+    "migration::continuous_counter_migrates_rolls_back_rejects_and_restores_across_compilers",
+    "--",
+    "--exact",
+    "--nocapture"
+  ],
+  "source": "/Users/gordongauerk/Projects/Rust-cordis/target/m16-migration-review/source",
+  "stop_on_first_failure": true,
+  "base_commit": "ce7c89ec3c1866d7471b8d299c013461754d7152",
+  "source_copy": "当前工作区跟踪文件及 git 未忽略的新文件，包含 M16 源码与本次测试修复",
+  "frozen_scope": [
+    "cordis-runtime",
+    "cordis-host",
+    "相关 fixtures"
+  ],
+  "test_changes": [
+    "runtime/migration.rs：等待回滚报告和 Active，以及 Rust 1.85 活跃库",
+    "stress.rs：等待不同于上一轮候选库编号的本轮报告",
+    "runtime/gate.rs：匹配 M16 多根验证目录错误原因"
+  ],
+  "cargo_target_dir": "/Users/gordongauerk/Projects/Rust-cordis/target/m16-migration-review/build"
+}
