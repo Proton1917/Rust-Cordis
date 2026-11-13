@@ -28,20 +28,33 @@ pub struct Entry {
     pub mount: String,
 }
 #[derive(Clone)]
-struct Registration {
-    info: WebRegistration,
+pub(super) struct Registration {
+    pub info: WebRegistration,
     root: PathBuf,
     prefix: String,
 }
 #[derive(Default)]
-struct State {
-    versions: HashMap<u64, Registration>,
+pub(super) struct State {
+    pub versions: HashMap<u64, Registration>,
     active: BTreeMap<String, u64>,
+    pub routes: BTreeMap<String, super::routes::Slot>,
 }
-#[derive(Default)]
 pub struct Registry {
-    next: AtomicU64,
-    state: Mutex<State>,
+    pub(super) pages: std::sync::Arc<super::page::Pages>,
+    pub(super) next: AtomicU64,
+    pub(super) state: Mutex<State>,
+    pub(super) changed: tokio::sync::watch::Sender<()>,
+}
+
+impl Default for Registry {
+    fn default() -> Self {
+        Self {
+            pages: std::sync::Arc::new(super::page::Pages::default()),
+            next: AtomicU64::new(0),
+            state: Mutex::new(State::default()),
+            changed: tokio::sync::watch::channel(()).0,
+        }
+    }
 }
 
 impl Registry {
@@ -69,10 +82,15 @@ impl Registry {
             return Err(Error::new(2, "网页入口需要位于资源目录内"));
         }
         let prefix = format!("/_cordis/{}/{}/", info.name, info.sequence);
+        let mut state = self.state.lock().unwrap();
+        if state.routes.iter().any(|(prefix, slot)| {
+            matches!(slot, super::routes::Slot::Active(_))
+                && super::routes::overlaps(prefix, &info.mount)
+        }) {
+            return Err(Error::new(2, "网页挂载路径与 HTTP 路由重叠"));
+        }
         let id = self.next.fetch_add(1, Ordering::Relaxed) + 1;
-        self.state
-            .lock()
-            .unwrap()
+        state
             .versions
             .insert(id, Registration { info, root, prefix });
         Ok(id)

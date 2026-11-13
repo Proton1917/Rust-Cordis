@@ -2,7 +2,9 @@
 #![forbid(unsafe_code)]
 
 mod listen;
+mod page;
 mod registry;
+mod routes;
 mod server;
 mod socket;
 #[cfg(test)]
@@ -22,11 +24,20 @@ use web_api::{Web, WebEntry, WebRegistration};
 #[derive(Clone, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Config {
+    pub title: String,
     #[serde(deserialize_with = "listen_address")]
     pub listen: SocketAddr,
     pub assets: Option<PathBuf>,
     pub index: PathBuf,
     pub shutdown_ms: u64,
+    pub inline_body_bytes: u64,
+    pub max_body_bytes: u64,
+    pub stream_chunk_bytes: u32,
+    pub route_timeout_ms: u64,
+    pub body_idle_ms: u64,
+    pub replace_grace_ms: u64,
+    pub public_origins: Vec<String>,
+    pub page_headers: Vec<String>,
 }
 
 /// DOC-15 §11.3：部署配置中的监听地址通过标准库按文本解析，跨CBOR保持同一表示。
@@ -40,10 +51,23 @@ fn listen_address<'de, D: serde::Deserializer<'de>>(
 impl Default for Config {
     fn default() -> Self {
         Self {
+            title: String::new(),
             listen: ([127, 0, 0, 1], 0).into(),
             assets: None,
             index: "index.html".into(),
             shutdown_ms: 2000,
+            inline_body_bytes: 1024 * 1024,
+            max_body_bytes: 16 * 1024 * 1024,
+            stream_chunk_bytes: 1024 * 1024,
+            route_timeout_ms: 30_000,
+            body_idle_ms: 30_000,
+            replace_grace_ms: 2000,
+            public_origins: Vec::new(),
+            page_headers: vec![
+                "cookie".into(),
+                "user-agent".into(),
+                "accept-language".into(),
+            ],
         }
     }
 }
@@ -73,7 +97,10 @@ impl Component for Http {
     type Config = Config;
 
     fn provides() -> Provides {
-        Provides::new().with::<dyn Web>()
+        Provides::new()
+            .with::<dyn Web>()
+            .with::<dyn http_api::Http>()
+            .with::<dyn http_api::HttpPage>()
     }
 
     fn inject() -> Inject {
@@ -98,6 +125,7 @@ impl Component for Http {
         if config.shutdown_ms == 0 {
             return Err(Error::new(2, "shutdown_ms需要为正整数"));
         }
+        routes::validate_config(config)?;
         Ok(())
     }
 
@@ -120,6 +148,10 @@ fn start(scope: EffectScope, mut config: Config, finished: oneshot::Sender<()>) 
     let (address, binding) = listen::restore(scope.context(), config.listen)?;
     config.listen = address;
     let registry = Arc::new(registry::Registry::default());
+    scope
+        .context()
+        .provide::<dyn http_api::HttpPage>(registry.pages.clone())?;
+    routes::provide(scope.context(), registry.clone(), &config)?;
     let forward = match scope.context().get::<dyn Forward>() {
         Ok(forward) => Some(socket::Bridge {
             context: scope.context().clone(),
@@ -143,10 +175,11 @@ fn start(scope: EffectScope, mut config: Config, finished: oneshot::Sender<()>) 
     })?;
     let (ready, started) = std::sync::mpsc::sync_channel(1);
     let pages = registry.clone();
+    let context = scope.context().clone();
     let thread = std::thread::Builder::new()
         .name("cordis-http".into())
         .spawn(move || {
-            let result = server::run(config, stopping, ready, registry, forward, binding);
+            let result = server::run(config, stopping, ready, registry, forward, binding, context);
             let _disposed = finished.send(());
             result
         })

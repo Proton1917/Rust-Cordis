@@ -6,6 +6,24 @@ import cbor2
 from .errors import CordisError
 
 
+class OwnedResource:
+    """ADR-0046 §3.8：出口共享本地资源，最后一个远端持有者释放时关闭。"""
+
+    def __init__(self):
+        self._exports = 0
+
+    def retain(self):
+        self._exports += 1
+
+    def release(self):
+        self._exports -= 1
+        if self._exports == 0:
+            self.close()
+
+    def close(self):
+        raise NotImplementedError
+
+
 class Reference:
     """DOC-16 §6：共享一份进口持有权，最后一个 Python 引用归还核心别名。"""
 
@@ -73,6 +91,14 @@ class Service:
         return await self.binding.dispatch(
             self.provider, transport, self.interface, method, values
         )
+
+    def retain(self):
+        if isinstance(self.provider, OwnedResource):
+            self.provider.retain()
+
+    def close(self):
+        if isinstance(self.provider, OwnedResource):
+            self.provider.release()
 
     async def _forward(self, transport, method, values):
         """ADR-0039：中转服务按生成类型导入再导出，建立各次转交的独立持有。"""

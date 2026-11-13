@@ -1,0 +1,5 @@
+name = "http-echo-py"
+version = "0.1.0"
+socket = "process"
+protocol = 1
+command = ["python", "-B", "main.py"]

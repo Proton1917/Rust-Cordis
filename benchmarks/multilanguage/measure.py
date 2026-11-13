@@ -75,7 +75,7 @@ class Running:
         if snapshot:
             return next((item for item in snapshot["instances"] if item["name"] == name and item["state"] == "active"), None)
 
-    def request(self, role, interface, method, arguments):
+    def request(self, role, interface, method, arguments, *, expect_success=True):
         self.serial += 1
         filename = f"{self.serial:03}.json"
         command = self.project / f"{role}-commands" / filename
@@ -86,7 +86,8 @@ class Running:
         result = self.project / f"{role}-results" / filename
         reply = self.wait(lambda: json.loads(result.read_text()) if result.exists() else None, f"{method}完成")
         elapsed = time.perf_counter_ns() - started
-        assert reply["ok"], reply
+        if expect_success:
+            assert reply["ok"], reply
         return reply, elapsed
 
     def stop(self):

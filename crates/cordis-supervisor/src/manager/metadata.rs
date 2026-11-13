@@ -4,8 +4,8 @@
 
 use super::*;
 pub(super) use cordis_routing::metadata::{
-    LOG_BYTES, MetadataLease, RetainedError, RetainedInfo, clipped, component_bytes,
-    descriptor_bytes, saved_error, strings, value_bytes,
+    LOG_BYTES, MetadataLease, RetainedError, RetainedInfo, clipped, descriptor_bytes, saved_error,
+    strings, value_bytes,
 };
 
 impl Manager {
@@ -33,32 +33,10 @@ impl Manager {
         connection: &Connection,
         problem: &WireError,
     ) -> Result<RetainedError> {
-        if !connection.is_alive() {
-            return Ok(RetainedError {
-                value: saved_error(problem),
-                _budget: None,
-            });
-        }
-        let bytes = problem
-            .message
-            .len()
-            .checked_add(value_bytes(&problem.detail)?)
-            .ok_or_else(|| error(8, "诊断长度超出地址空间"))?;
-        match self.retain_metadata(connection, bytes) {
-            Ok(budget) => Ok(RetainedError {
-                value: problem.clone(),
-                _budget: Some(budget),
-            }),
-            Err(problem_budget) if problem_budget.code == 8 => {
-                let exhausted = error(
-                    8,
-                    format!("保留错误超出预算，原始错误code={}", problem.code),
-                );
-                connection.terminate(&exhausted.message);
-                self.0.context.logger().error(exhausted.to_string());
-                Err(exhausted)
-            }
-            Err(problem) => Err(problem),
-        }
+        self.0
+            .metadata
+            .retain_error(connection, problem, |failure| {
+                self.0.context.logger().error(failure.to_string());
+            })
     }
 }

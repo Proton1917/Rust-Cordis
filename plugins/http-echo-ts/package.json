@@ -1,0 +1,9 @@
+{
+  "name": "http-echo-ts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {"build": "node node_modules/typescript/bin/tsc -p tsconfig.json"},
+  "dependencies": {"cordis-sdk": "file:../../sdks/typescript/cordis-sdk"},
+  "devDependencies": {"@types/node": "22.15.30", "typescript": "5.9.3"}
+}

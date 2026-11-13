@@ -29,6 +29,11 @@ members = [
     "plugins/web-api",
     "plugins/forward-api",
     "plugins/http",
+    "plugins/http-api",
+    "plugins/stream-api",
+    "plugins/http-echo",
+    "plugins/secrets-api",
+    "plugins/secrets",
     "plugins/window-api",
     "plugins/window",
 ]
@@ -75,4 +80,7 @@ kv-mem-component = { path = "plugins/kv-mem-component" }
 counter-component = { path = "plugins/counter-component" }
 web-api = { path = "plugins/web-api" }
 forward-api = { path = "plugins/forward-api" }
+http-api = { path = "plugins/http-api" }
+stream-api = { path = "plugins/stream-api" }
+secrets-api = { path = "plugins/secrets-api" }
 window-api = { path = "plugins/window-api" }

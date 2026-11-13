@@ -6,19 +6,25 @@
 
 | 项 | 值 |
 |---|---|
-| 最近完成的实现与检查 | M21：三语言总验收、完整 Python/Node 签名发布包、RM-7/8/9 与插件编写 skill |
-| 当前里程碑 | M21 退出检查通过，第三阶段验收完成 |
-| 当前验证 | cargo test --workspace 一次通过：325 条运行用例与 2 条文档用例；全量负载期间 native 另连续五轮，各 14 条通过；fmt、clippy 与布局、unsafe 审计通过 |
-| 下一步 | M0–M21 交付范围已完成；后续独立事项为静态分派候选和测量方法研究 |
+| 最近完成的实现与检查 | M22：HTTP 路由、通用字节流、页面调用来源、密钥服务与三语言脚手架；AU-19–AU-26、RM-11 |
+| 当前里程碑 | M22 实现与验收完成，等待设计方复核；M21 已通过复核 |
+| 当前验证 | 工作区 336 项用例（含 2 项文档用例）通过；RM-11 独立测量通过。fmt、clippy、177 条矩阵、unsafe、Miri 13 条边界及布局通过。初次失败按影响范围修复与补测，完整记录见 M22 节 |
+| 下一步 | 等待 M22 设计方复核；通过后按 30f61b6a 发布 macOS arm64 v0.1.0、验证下载包并清理编译缓存，再按 ADR-0047 实施 M23。主会话独立执行，编译共用 target/shared |
+| M22 边界 | 按设计方三项裁决：内核、up、channels、types、process 与 ABI 相对 df05064 保持；supervisor 先提取到 routing 再添加受信调用元数据，结束时至多 5450 代码行；web-deployment 限页面来源，runtime 限 service install |
+| M22 受信信息 | 核心对 scoped 调用追加直接调用方 cordis.caller 与页面的 cordis.page；任何 intercept 来源提交 cordis.* 返回权限错误。secrets 以自己的 grants 配置结合可信调用方鉴权。机密由插件读取和解释，核心转交不透明载荷；AU-25/26 已搜索最详细日志、状态、检查点和错误中的测试值 |
+| M22 页面授权 | 22518c32 裁决：后端 caller={instance}，页面 caller={page_of} 且省略 instance；两者描述直接调用方。secrets 只接受 instance 授权，后端处理页面调用时仍以自己的 instance 读取密钥。三语言 helper 与全栈场景按此验证 |
+| M22 实际故障 | 独立线程 RPC 的 reactor 问题已按批准范围修复；Bridge::invoke 与 sleep/plugin/effect_wait/emit_async 进入宿主执行器。普通线程、自有 Tokio、取消与取消后继续调用场景通过，原失败和修复日志归档在 target/http-m22/evidence |
+| 发布准备 | macOS arm64 六个程序/库的路径重映射 release 编译已通过，30.92 秒，产物在 target/shared/release，日志在 target/release-v0.1.0/evidence；标签、上传、下载验证与清理均待 M22 后的发布安排 |
 | M20 评审跟进 | segmentation_fault_isolates_group 的等待修正及五轮稳定性验收已完成；supervisor 保持 5480/5500 代码行 |
 | M21 性能结果 | RM-7 三方向各 10000 次，RM-8 三次替换完成。RM-9 首轮中位数比 1.07711183；停载重测中位数比 0.95774113、最大值比 0.90793525，满足原 1.05/1.15 判据。完整样本与测量条件并列归档 |
 | 后续事项 | ADR-0045 静态分派候选保持暂停，保存在 target/phase3-acceptance/m21/rm9-candidate 与 rm9-analysis。两轮前 1–4 轮偏高、比值相差约 12%；预热长度与交替采样方法留作独立研究 |
 | 清理 | 用户授权清理已执行，target 从 60G 降至 30G；代理编译根、主编译 incremental 和旧里程碑二进制已释放。具体路径与空间实测见 M21 小节 |
-| 并行安排 | 两个 Astra/high 子代理已完成测量、skill 和解释页任务，运行进程均已退出；主会话沿默认 target/debug 与 target/shared 保留编译缓存 |
+| 执行安排 | 用户要求关闭全部子代理，由主会话独立完成 M22 与后续 M23；编译沿默认 target/debug 与 target/shared |
+| 后续顺序 | 555a5e1f：M22 提交并经设计方复核 → v0.1.0（M22 标签）与缓存清理 → 按 ADR-0047 实施 M23 动态调用 → 复核后 v0.2.0。ADR-0047 与设计方阶段表改动随 M22 提交 |
 | 验收资料 | docs/measurements/m21-acceptance.md 汇总 AU-1–AU-18；性能、语言、完整运行时和 native 稳定性另有原始 JSON。网页状态与操作见 docs/design/flow/index.html |
 | 文档交付 | README 三张表、guide、DOC-13/15、ADR-0043、skill、解释页与独立 HTML 已同步 |
 | 窗口界面验收 | AU-17 已归档；用户运行记录为恢复 802 ms，截图、Cmd-Q、检查点与进程退出通过 |
-| 最后更新 | 2026-11-13（Asia/Shanghai），M21 验收、性能与清理结果 |
+| 最后更新 | 2026-11-14（Asia/Shanghai），M22 实现、完整验收与资料归档 |
 
 ## 环境
 
@@ -726,6 +732,77 @@ RM-9 两次均为每实现固定 9 轮、每轮预热 10000 次、计量 100000 
 | Python SDK | 838 / 987 |
 | TypeScript SDK / 网页宿主 | 1163/1261；206/231 |
 | 核心九个 crate 合计 | 18910 / 21151 |
+
+### M22 外部接入
+
+- 职责：HTTP 方法、头部、状态码、页面属性与网络背压放在 http 插件，依据第一性原理第 3、4 条；大文件接口及文件适配在 stream-api 与语言 SDK，复用已有服务对象转交，依据第 5 条。可信调用方与页面身份由 supervisor/web-deployment 建立，密钥文件及 grants 判定留在 secrets 插件，依据第 3、4、6 条。服务环境变量归 runtime 原有 service install，按名称拒绝机密变量。
+- 文档：50cdcd5a 的 README 架构三层表格、官方插件说明和 symbols.caller 对应关系，以及 ADR-0046 §3.11 第 6 条均为设计方新增内容，随 M22 保留并提交。
+- 页面外壳：60aa1001 追加 http.title、中性默认页和异常连接提示；guide 与 web skill 补自定义外壳模板。设计方已确认按 document.title、body.innerText、错误正文与响应头检查品牌，协议路径、DOM 挂载标识、导入名与会话对象保持。
+- 提取步骤：先把协议描述符的名称、接口和字节计量、远端对象信息查询及诊断额度逻辑从 supervisor 移入 routing。选择该单元是因为它处理 UP/1 的对象描述与保留预算，已有 routing 的 Interface、MetadataBudget 正是其拥有者；内核定义构造、纪元持有与诊断上报继续由 supervisor 负责。公开 Manager 调用路径与签名保持，提取验证随后执行。
+- 提取验证：`cargo test --target-dir target/shared -p cordis-supervisor` 的 14 条 manager 与 4 条 process 全部通过，耗时 18.06 / 0.55 秒；日志 `target/http-m22/evidence/supervisor-extraction.log`。格式化后 supervisor 为 5385 / 5828、routing 为 736 / 828，记录 `target/http-m22/evidence/extraction-lines.md`；受信调用来源在此基础上实现。
+- 宿主缺陷：真实 HTTP POST 返回 500。host/wire.rs 的 Bridge::invoke 原先把 RPC Future 交给插件自有 Tokio 轮询，rpc.rs:359 的 timeout_at 缺少宿主 reactor；失败记录为 target/http-m22/evidence/smoke-before-host-fix.log。设计方已批准复用 NativeExecutor.start 执行 RPC 并传播取消，依据第一性原理第 3、5 条。普通线程、自有 Tokio 与取消回归纳入本阶段验收；其余 HostV1 入口按同类故障要求核对。
+- 同类入口：sleep、plugin、effect_wait、emit_async 的 Future 同样进入宿主执行器；查询/等待可取消，装入、释放与事件登记完成已受理的操作。get、provide、context_derive、effect/defer、on、同步 emit、log、is_current、export_state 已经经 request_sync/NativeExecutor.wait 进入宿主；effect_release 与对象释放使用同步簿记、有界通知或明确持有的 RuntimeHandle。now/config/inherited_state 读取本地状态。Bridge import/export 与 incoming 在已有宿主任务内处理。
+- 初次实际行为：三语言路由与重复 Cookie、方法/路径/查询串/头部/正文、405 Allow、路径段匹配、500/502 已通过，`target/http-m22/evidence/routes-test.log`，18.85 秒。三语言各 64 MiB 上传下载逐字节相同、已知长度与分块超限 413、HTTP RSS 增量低于 32 MiB 已通过，`target/http-m22/evidence/files-test.log`，10.82 秒；原结果 `target/test-evidence/files-24929-0/http-sdk/files-24929-0/result.json`。
+- 字节表示：依据第一性原理第 5 条和 ADR-0039 的 M22 修订，统一所有 WIT list<u8> 写成字节串，同时接受已有整数数组。SDK Bytes、宏的读取分支、IDL Rust/脚本类型与字段编码已接入，ABI 槽位与布局保持。三语言 record/variant/map/option/result 各 1 MiB、M21 KV 检查点的三语言读取已通过，记录 target/test-evidence/bytes-33517-0/http-sdk/bytes-33517-0/result.json；HTTP 默认 1 MiB 内联体逐字节往返通过，记录 target/test-evidence/routes-48321-0/http-sdk/routes-48321-0/result.json。
+- 页面与冲突：target/test-evidence/web-47547-0/http-sdk/web-47547-0/result.json 记录两页 Cookie、page_of、后端授权、伪造保留键、关闭后属性撤回、反向代理、公开来源、两种登记顺序的冲突、最长段前缀、HTTP 强杀重连。default-shell.png、custom-shell-replaced.png、custom-shell-mobile.png、not-found.png 已实际查看；自定义壳替换保持同一文档，390×844 移动视口布局正常。浏览器控制台的 502 来自 HTTP 强杀阶段，404 来自资源缺席场景。
+- 定向验收：自有线程 target/test-evidence/threads-34625-0、密钥与服务环境 target/test-evidence/secrets-36047-0、脚手架 target/test-evidence/scaffold-42965-0、通用流 target/test-evidence/streams-45697-0、替换与故障 target/test-evidence/lifecycle-46516-0 均已通过。最后一项在 50 请求/秒期间完成三次替换与失败回滚，验证超时、处理方强杀、其他路由继续服务、恢复登记与最终卸下。
+
+- Y-1/Y-2：`cargo fmt --all --check` 与 `cargo clippy --workspace --all-targets -- -D warnings` 通过；后续 HTTP 职责拆分和夹具调整对应的 `cordis-http`、`cordis-runtime`、`cordis-supervisor` 检查通过，记录 `target/http-m22/evidence/fmt-final.log`、`clippy-complete.log`、`clippy-affected.log`。
+- Y-3：工作区覆盖 336 项用例，含 2 项文档用例。初次 `cargo test --workspace` 在 HTTP 413 用例停止；已完成目标的成功结果保留，随后执行 cordis-dev 余下 8 个测试目标，以及排除已完成包的 workspace 余下目标。初次合计 10 项失败均已修复并定向通过，余下用例通过；RM-11 为独立执行的 1 项忽略测量用例。记录 `workspace.log`、`workspace-dev-remaining.log`、`workspace-remaining.log`、`early-doc-tests.log`。汇总排除 console-log 在剩余命令中的 6 项重复结果。
+- 413 验收：已知 Content-Length 超限时服务提前返回 413，原客户端继续写正文而遇到 BrokenPipe。用例改为发送超限请求头后读取响应，验证读取正文前的拒绝；分块超限继续实际上传验证。`files-early-response.log` 通过。三语言各 64 MiB 上下行完整字节一致；RSS 从 12,042,240 增至 21,725,184，增量 9,682,944 字节。
+- 规范兼容：WIT 夹具按 ADR-0039 使用 Bytes 和字节串期望，Node Buffer 按 Uint8Array 的字节值比较；KV 主版本迁移夹具在方法 Vec 与 Snapshot Bytes 之间转换，持久化断言直接读取 CBOR 字节串。Scoped 夹具按 ADR-0046 接收基础视图的可信身份，复用普通服务方法，并继续验证绑定缓存。通过记录为 `idl-bytes-complete.log`、`native-identity.log`、`runtime-fixtures-fixed.log`、`supervisor-scoped-complete.log`。
+- HTTP 结构：启动函数把 Scoped 登记交给 routes 模块，HTTP 服务器按协议入口、静态入口、请求转换及处理方调用拆分。受影响的页面和替换场景在 `http-routes-extraction.log` 通过；最终行为记录为 [页面](measurements/m22-web.json)、[生命周期](measurements/m22-lifecycle.json)。
+- Y-4/Y-5：177 条上游用例矩阵与 unsafe 审计通过，记录 `conformance.log`、`unsafe.log`。Y-6/Y-7：`cargo +nightly miri test --target-dir target/shared -p cordis-abi` 的 13 条边界用例与布局比较通过，记录 `miri.log`；原生布局检查在 workspace 中通过。ABI v1.0 源码与布局保持。
+- AU-8：相对 df05064 的内核、up、channels、types、process、ABI 差异为空，`frozen-boundary.diff` 为 0 字节；runtime 产品改动限 service install，web-deployment 限页面来源。核心产品依赖树保持插件侧依赖隔离，记录 `core-dependencies.txt`。supervisor/routing 注释行合计为 227→236，记录 `comment-counts.json`。
+- RM-11：每语言固定 10000 次 HTTP/1.1 keep-alive GET，范围为客户端发送前至完整响应读取后。Rust/Python/TypeScript 中位数为 472.3125/401.0420/348.3750 µs，P99 为 611.750/478.291/451.667 µs；独立测量期间完成，完整样本见 [RM-11](measurements/m22-latency.json)。
+- Y-8：cloc 2.10、`--skip-uniqueness`，按 Rust/Python/TypeScript 规则排除注释和空行；下表记录代码行与总行。supervisor、runtime、routing、host、up、types、SDK 宏保留各自现有职责，超出目标且处于上限以内；cordis-dev 复用既有生成与打包步骤后为 2577 行，其 3000 行上限与职责依据见 ADR-0048。核心九个 crate 合计 19137 / 21406。
+
+| crate | 代码行 / 总行 |
+|---|---:|
+| console-log | 465 / 515 |
+| cordis | 4230 / 5112 |
+| cordis-abi | 2407 / 2846 |
+| cordis-channels | 250 / 277 |
+| cordis-contract | 31 / 47 |
+| cordis-dev | 2577 / 2815 |
+| cordis-host | 2730 / 3020 |
+| cordis-idl | 2331 / 2475 |
+| cordis-process | 374 / 410 |
+| cordis-routing | 736 / 828 |
+| cordis-runtime | 5400 / 5933 |
+| cordis-sdk | 888 / 1024 |
+| cordis-sdk-macros | 1427 / 1558 |
+| cordis-supervisor | 5444 / 5895 |
+| cordis-testkit | 502 / 571 |
+| cordis-types | 205 / 239 |
+| cordis-up | 1628 / 1773 |
+| cordis-web-deployment | 870 / 939 |
+| counter | 6 / 9 |
+| counter-component | 75 / 85 |
+| forward-api | 17 / 21 |
+| http | 1686 / 1831 |
+| http-api | 135 / 152 |
+| http-echo | 162 / 176 |
+| kv-api | 23 / 37 |
+| kv-contract | 56 / 66 |
+| kv-file | 135 / 148 |
+| kv-mem | 6 / 9 |
+| kv-mem-component | 73 / 86 |
+| sdks/python/cordis_sdk | 967 / 1162 |
+| sdks/typescript/cordis-sdk | 1293 / 1408 |
+| sdks/typescript/cordis-web | 207 / 232 |
+| secrets | 87 / 97 |
+| secrets-api | 6 / 9 |
+| stream-api | 110 / 128 |
+| watch | 578 / 622 |
+| web-api | 25 / 32 |
+| window | 943 / 1020 |
+| window-api | 11 / 17 |
+| 核心进程 crate 合计 | 19137 / 21406 |
+
+- Y-9：README、guide、DOC-13/15、ADR-0039/0041/0046/0048、skill、解释页与页面流程同步。skill 的 quick_validate 通过；三语言 HTTP 模板已真实构建运行。设计方 ADR-0047 与阶段表一并提交，M23 按后续顺序执行。
+- 可视资料：新增四张业务画面已查看并写入 `docs/design/flow/screenshots/`。流程图的应用外壳组、详情导航及移动布局已查看，文档画面在 `target/http-m22/evidence/docs/`；内置浏览器服务返回不可用后沿项目既有 Playwright 流程执行，浏览器进程在 finally 中退出。
+- 发布与缓存：v0.1.0 等待 M22 复核后发布，原 M21 release 编译作为早期准备保留；发布构建将使用 M22 源码及路径重映射。当前编译缓存服务于复核和发布，清理按已授权的发布后顺序执行。
 
 ## 第二阶段候选与恢复记录
 

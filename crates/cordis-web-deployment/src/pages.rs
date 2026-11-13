@@ -141,6 +141,17 @@ impl Deployment {
             None => live.context.clone(),
         };
         let parent = self.manager.page_context(&parent, id);
+        let parent = self.manager.caller_context(
+            &parent,
+            &live.spec.instance,
+            vec![
+                ("cordis.page".into(), page.source.clone()),
+                (
+                    "cordis.caller".into(),
+                    Value::Map(vec![("page_of".into(), live.spec.instance.clone().into())]),
+                ),
+            ],
+        );
         self.module(page, live).await?;
         if !live.context.is_current() {
             return Ok(());
@@ -193,7 +204,7 @@ impl Deployment {
     }
 
     /// DOC-16 §11：每个页面独立握手，描述仅接受当前发布的插件身份。
-    async fn page(self: Arc<Self>, connection: Connection) -> Result<()> {
+    async fn page(self: Arc<Self>, connection: Connection, source: Value) -> Result<()> {
         let id = connection.id();
         let group = format!("web-page-{id}");
         let snapshot = self
@@ -212,6 +223,7 @@ impl Deployment {
             }
         }
         let page = Page {
+            source,
             group: group.clone(),
             connection: connection.clone(),
             plugins: Arc::new(Mutex::new(
@@ -308,8 +320,12 @@ async fn release_registration(
 #[derive(Deserialize)]
 struct Origin {
     context: u64,
-    #[serde(rename = "page")]
-    _page: Value,
+    page: PageKey,
+}
+
+#[derive(Deserialize)]
+struct PageKey {
+    key: Vec<u8>,
 }
 
 impl Handler for Deployment {
@@ -333,6 +349,10 @@ impl Handler for Deployment {
             if !(self.allowed)(&caller.instance) {
                 return Err(WireError::new(9, "配置实例缺少forwarder授权"));
             }
+            let source = Value::Map(vec![
+                ("forwarder".into(), caller.instance.clone().into()),
+                ("key".into(), value(&origin.page.key)?),
+            ]);
             self.channels.authorize(parent.id());
             let id = self.manager.reserve_connection_id();
             let connection =
@@ -346,7 +366,7 @@ impl Handler for Deployment {
                 .upgrade()
                 .ok_or_else(|| WireError::new(4, "网页部署已结束"))?;
             tokio::spawn(async move {
-                if let Err(problem) = deployment.clone().page(connection).await {
+                if let Err(problem) = deployment.clone().page(connection, source).await {
                     deployment
                         .manager
                         .context()

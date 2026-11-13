@@ -1,0 +1,17 @@
+package test:payload@1.0.0;
+
+/// ```cordis
+/// name = "test.byte-payload"
+/// ```
+interface exchange {
+    record part { data: list<u8> }
+    variant selection { data(list<u8>), empty }
+    record bundle {
+        record-value: part,
+        variant-value: selection,
+        map-value: map<string, list<u8>>,
+        option-value: option<list<u8>>,
+        result-value: result<list<u8>, string>,
+    }
+    exchange: async func(value: bundle) -> result<bundle, string>;
+}

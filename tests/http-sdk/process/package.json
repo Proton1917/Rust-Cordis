@@ -1,0 +1,9 @@
+{
+  "name": "http-test-process",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {"build": "node node_modules/typescript/bin/tsc -p tsconfig.json"},
+  "dependencies": {"cordis-sdk": "file:../../../sdks/typescript/cordis-sdk", "http-proxy": "1.18.1"},
+  "devDependencies": {"@types/node": "22.15.30", "@types/http-proxy": "1.17.16", "typescript": "5.9.3"}
+}

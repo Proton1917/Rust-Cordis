@@ -1,7 +1,10 @@
 //! CP-3、ADR-0041：连接保留的接口描述、对象信息和诊断内容使用共同字节额度。
 
-use crate::{Result, error};
-use cordis_up::{Value, WireError, payload, rpc::Connection};
+use crate::{Interface, Result, decode, error, value};
+use cordis_up::{
+    Value, WireError, payload,
+    rpc::{Connection, RemoteObject},
+};
 use parking_lot::Mutex;
 use std::{
     collections::HashMap,
@@ -9,6 +12,7 @@ use std::{
         Arc,
         atomic::{AtomicUsize, Ordering},
     },
+    time::Duration,
 };
 
 pub const LOG_BYTES: usize = 4096;
@@ -110,6 +114,70 @@ impl MetadataBudget {
     /// CP-6：连接目录退役，已在调用中持有的租约按各自引用周期释放。
     pub fn reclaim(&self, connection: u64) {
         self.counters.lock().remove(&connection);
+    }
+
+    /// DOC-15 CP-3、CP-6：保留真实错误；额度耗尽时结束连接并交回有界诊断。
+    pub fn retain_error(
+        &self,
+        connection: &Connection,
+        problem: &WireError,
+        exhausted: impl FnOnce(&WireError),
+    ) -> Result<RetainedError> {
+        if !connection.is_alive() {
+            return Ok(RetainedError {
+                value: saved_error(problem),
+                _budget: None,
+            });
+        }
+        let bytes = problem
+            .message
+            .len()
+            .checked_add(value_bytes(&problem.detail)?)
+            .ok_or_else(|| error(8, "诊断长度超出地址空间"))?;
+        match self.retain(connection, bytes) {
+            Ok(budget) => Ok(RetainedError {
+                value: problem.clone(),
+                _budget: Some(budget),
+            }),
+            Err(problem_budget) if problem_budget.code == 8 => {
+                let failure = error(
+                    8,
+                    format!("保留错误超出预算，原始错误code={}", problem.code),
+                );
+                connection.terminate(&failure.message);
+                exhausted(&failure);
+                Err(failure)
+            }
+            Err(problem) => Err(problem),
+        }
+    }
+
+    /// DOC-16 对象信息：从实际对象取得接口与方法表，结果与额度租约共同持有。
+    pub async fn remote_info(
+        &self,
+        object: &RemoteObject,
+        timeout: Duration,
+    ) -> Result<Arc<RetainedInfo>> {
+        let response = object
+            .peer()
+            .request(
+                "object_info",
+                value(&payload::ObjectInfoRequest {
+                    object: object.id(),
+                })?,
+                timeout,
+            )
+            .await;
+        if response.as_ref().is_err_and(|problem| problem.code == 6) {
+            object.peer().terminate("object_info 生命周期请求超时");
+        }
+        let mut info: payload::ObjectInfo = decode(response?.value())?;
+        Interface::parse(&info.interface)?;
+        info.local = Some(payload::LocalObject {
+            process: object.peer().id(),
+            object: object.id(),
+        });
+        self.retain_info(object.peer(), info).map(Arc::new)
     }
 }
 

@@ -92,3 +92,26 @@ DOC-15 §7 每行都有明确用例；真实 KV 的生成接口与现有实现�
 三语言共享同一份定义和传输约定，语言特有代码负责相应对象与调用形式。M17 的宏职责拆分与新增资源编解码分别保留变更来源，按最终接口组合验证；核心 ABI 布局和协议版本维持现有值。
 
 依据：WebAssembly/component-model 的 [WIT 规范](https://github.com/WebAssembly/component-model/blob/main/design/mvp/WIT.md)、wit-parser 0.263.0 的 TypeDefKind/FunctionKind/Resolve 定义、DOC-12 §5/§7/§8、ADR-0020。
+
+## 修订（M22，设计方 2026-11-13）：`list<u8>` 在任何位置都编码为 CBOR 字节串
+
+问题：本 ADR“数据表示”一节规定，方法位置的 `list<u8>` 编码为字节串，记录、变体、map、option、result 等聚合内部的 `list<u8>` 编码为整数数组。同一个 WIT 类型因位置不同而有两种表示。整数数组受 UP/1 `max_collection = 65536` 约束，所以聚合内部的字节字段超过 64 KiB 时调用失败；每个字节占一个数组元素，体积约为字节串的两倍。M22 的 HTTP 内联体（ADR-0046 §3.1，缺省 1 MiB）首先撞到这个上限。任何在结构中携带字节的接口都会遇到同一问题。
+
+选项：
+
+| 选项 | 内容 | 判断 |
+|---|---|---|
+| 标注 | 在 WIT 别名上加 `cordis bytes=true`，仅对标注处使用字节串 | 保留两种表示；接口作者遗漏标注即在 64 KiB 处失败 |
+| 统一 | `list<u8>` 在任何位置都编码为字节串 | 一种类型一种表示；在首次发布之前修改，没有外部使用方 |
+
+决定：采用统一。
+
+1. 三种语言的生成器与 Rust SDK 在写出时，`list<u8>` 在任何位置都编码为 CBOR 字节串（主类型 2）。
+2. 读取时同时接受字节串与整数数组，这样 M17–M21 写出的检查点、状态快照（例如 kv 的 `Snapshot.entries`）仍可读取。整数数组仍受 `max_collection` 约束。v0.x 期间保持双读，移除时另立 ADR。
+3. Rust SDK 提供 `cordis_sdk::Bytes`（或等价的字段编解码属性），实现上述写出与双读。生成的 Rust 代码在聚合内的 `list<u8>` 字段上使用它。手写 `#[cordis_sdk::interface]` 接口的结构体字段，需要字节串表示时使用同一类型；guide 与 skill 写明这一点。
+4. 核心、ABI、UP/1 的预算与协议版本不变。核心转交的载荷不透明，同组 typed 直接调用不经过 CBOR，均不受影响。
+5. 验收：
+   - 每种语言各有用例，覆盖记录、变体、map、option、result 中的 1 MiB `list<u8>` 往返；
+   - 用 M21 写出的 kv 快照做跨语言状态继承，读取成功；
+   - kv-contract 对三种语言实现全部通过；
+   - 跨语言迁移（AU-5）与 M21 的跨语言测试全部通过。

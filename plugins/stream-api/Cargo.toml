@@ -1,0 +1,11 @@
+[package]
+name = "stream-api"
+version.workspace = true
+edition.workspace = true
+rust-version = "1.85"
+publish.workspace = true
+license.workspace = true
+description = "Bounded pull streams for Cordis plugin data transfer."
+
+[dependencies]
+cordis-sdk.workspace = true

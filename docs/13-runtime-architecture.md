@@ -38,6 +38,9 @@
 | `plugins/web-api` | cordis.web@1.1 页面入口、资源登记与会话令牌的共享接口 |
 | `plugins/forward-api` | cordis.forward@1.0 转发能力与回程接收接口 |
 | `plugins/http` | 原生 HTTP 插件，提供静态资源、版本路由、页面入口与 WebSocket 终结 |
+| `plugins/http-api`、`plugins/stream-api` | HTTP 登记与处理对象、页面属性查询、通用分块字节流及共享 WIT（ADR-0046） |
+| `plugins/secrets-api`、`plugins/secrets` | 密钥服务定义、文件读取与按可信实例身份授权 |
+| `plugins/http-echo`、`plugins/http-echo-py`、`plugins/http-echo-ts` | 三语言 HTTP 路由、文件上传与下载示例 |
 | `plugins/window-api` | window@1.0 开关窗口接口与 window.closed@1.0 事件 |
 | `plugins/window` | 独立进程窗口插件，主线程运行系统 WebView，另一线程处理 UP/1 |
 | `sdks/python/cordis_sdk` | Python UP/1、组件与上下文、资源引用及 WIT 绑定适配（ADR-0040） |
@@ -60,9 +63,12 @@
 | cordis-process | cordis-up |
 | cordis-host | cordis-up、cordis-abi、cordis-types |
 | cordis-dev | cordis-up、cordis-process、cordis-types、cordis-idl；通过子进程使用 cordis、cordis-host |
-| cordis-http | cordis-sdk、web-api、forward-api |
+| cordis-http | cordis-sdk、web-api、forward-api、http-api、stream-api |
 | cordis-window | cordis-up |
 | web-api、window-api、forward-api | cordis-sdk |
+| http-api | cordis-sdk、stream-api |
+| stream-api、secrets-api | cordis-sdk |
+| cordis-secrets | cordis-sdk、secrets-api |
 | 原生插件、契约辅助与原生 fixture | cordis-sdk；接口 crate |
 | cordis-sdk | cordis-abi、cordis-sdk-macros、cordis-types |
 
@@ -87,7 +93,7 @@
 | `cordis-web-deployment` | 1000 | 1500（ADR-0041） |
 | `cordis-host` | 2000 | 3500 |
 | `cordis-runtime` | 4500 | 5500（ADR-0034） |
-| `cordis-dev` | 1500 | 2500 |
+| `cordis-dev` | 1500 | 3000（ADR-0048） |
 | `cordis-idl` | 2500 | 4000（ADR-0039） |
 | `cordis-contract` | 500 | 1000 |
 
@@ -273,6 +279,10 @@ pub trait Kv: Send + Sync {
 | `cordis.forward-receiver@1.0` | HTTP 插件的页面连接 | 异步 `frame(bytes)`、`close(reason)`，接收本通道回程数据 |
 | `window@1.0` | 窗口进程插件 | 异步 `open(url, title, width, height) -> u64` 与 `close(id)` |
 | `window.closed@1.0` | 窗口进程插件 | 异步事件 `{ id: u64 }`，对应已关闭的实际窗口 |
+| `cordis.http@1.0`、`cordis.http-handler@1.0` | HTTP 插件、路由处理方 | `route(spec, handler)`、`unroute(id)`；`handle(request)` 返回响应 |
+| `cordis.byte-stream@1.0` | 数据发送方 | `read(max_bytes)` 按需拉取，最后引用归还时释放底层资源 |
+| `cordis.http-page@1.0` | HTTP 插件 | `attributes(key)` 查询页面连接的请求头与对端快照 |
+| `cordis.secrets@1.0` | 密钥插件 | `get(name)` 按可信调用方实例及自身 grants 读取值 |
 
 入口 URL 在片段中携带 `cordis_token`，`/_cordis/session.js` 提供同一次 HTTP 激活的入口信息并使用 `Cache-Control: no-store`。窗口声明 Web 与 Manage 依赖，部署为其授予 `shutdown`。原生调用方使用 web-api/window-api 中的 SDK 接口；窗口进程按相同的数据结构经 UP/1 调用，生命周期继续由核心中的唯一内核决定。
 
@@ -322,5 +332,6 @@ pub trait Kv: Send + Sync {
 | `tao` 0.37.2、`wry` 0.57.2、`muda` 0.21.2 | 窗口事件循环、系统 WebView 与原生菜单（ADR-0037） | `plugins/window` |
 | `axum` 0.8.9、`tower` 0.5.3、`tower-http` 0.7.1 | HTTP/WebSocket 路由、静态文件和响应（ADR-0038、ADR-0041） | `plugins/http` |
 | `url` 2.5.8 | 页面地址与版本资源 URL（ADR-0038、ADR-0041） | `plugins/http`、`cordis-web-deployment` |
+| `dotenv-parser` 0.1.3 | 密钥文件的 .env 语法与字面值解析（ADR-0046 §3.10） | `plugins/secrets` |
 
 开发依赖不受此表限制，但需要在 `PROGRESS.md` 记录新增项。

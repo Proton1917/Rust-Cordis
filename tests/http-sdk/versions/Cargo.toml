@@ -1,0 +1,10 @@
+[workspace]
+members = ["v1", "v2", "v3", "failed"]
+resolver = "3"
+
+[workspace.dependencies]
+cordis-sdk = { path = "../../../crates/cordis-sdk" }
+http-api = { path = "../../../plugins/http-api" }
+stream-api = { path = "../../../plugins/stream-api" }
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = "=1.0.154"

@@ -144,15 +144,12 @@ impl Generator<'_> {
             Type::U64 | Type::S64 if !self.python => "bigint".into(),
             Type::ErrorContext => "ErrorContextClient".into(),
             Type::Id(id) => match &self.document.resolve.types[id].kind {
-                TypeDefKind::Resource => format!("{}Client", schema::class(self.document, id)),
-                TypeDefKind::Handle(handle) => format!(
-                    "{}Client",
-                    schema::class(
-                        self.document,
-                        match handle {
-                            wit_parser::Handle::Own(id) | wit_parser::Handle::Borrow(id) => *id,
-                        }
-                    )
+                TypeDefKind::Resource => schema::class(self.document, id),
+                TypeDefKind::Handle(handle) => schema::class(
+                    self.document,
+                    self.document.resource_type(match handle {
+                        wit_parser::Handle::Own(id) | wit_parser::Handle::Borrow(id) => *id,
+                    }),
                 ),
                 TypeDefKind::Future(_) | TypeDefKind::Stream(_) => format!(
                     "{}Client",
@@ -181,9 +178,7 @@ impl Generator<'_> {
                     format!("Option<{value}>")
                 }
             }
-            TypeDefKind::List(Type::U8) if method => {
-                if self.python { "bytes" } else { "Uint8Array" }.into()
-            }
+            TypeDefKind::List(Type::U8) => if self.python { "bytes" } else { "Uint8Array" }.into(),
             TypeDefKind::List(inner) | TypeDefKind::FixedLengthList(inner, _) => {
                 if self.python {
                     format!("list[{}]", child(*inner))

@@ -54,6 +54,8 @@ class Runtime:
         return reference
 
     def offer(self, resource):
+        if isinstance(resource, Service):
+            resource.retain()
         number = self.next_object
         self.next_object += 1
         self.exports[number] = resource
@@ -61,7 +63,9 @@ class Runtime:
 
     def release_exports(self, numbers):
         for number in numbers:
-            self.exports.pop(number, None)
+            resource = self.exports.pop(number, None)
+            if isinstance(resource, Service):
+                resource.close()
 
     def object(self, number):
         try:
@@ -224,7 +228,7 @@ class Runtime:
         for tasks in self.events.values():
             for task in tasks:
                 task.cancel()
-        self.exports.clear()
+        self.release_exports(list(self.exports))
         self.contexts.clear()
         self.imports.clear()
 

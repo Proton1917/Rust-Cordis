@@ -201,12 +201,9 @@ fn verified_runtime_install_replace_and_threshold_restart_use_real_receipts() {
         json!([9, 7, 5])
     );
     assert_eq!(send(&project, 9, "kv@1.0", "flush", json!([]))["ok"], true);
-    let bytes = fs::read(project.join("state/data/kv/runtime.cbor")).unwrap();
-    let persisted: Value = cordis_up::decode_value(&bytes, &cordis_up::Limits::DEFAULT)
-        .unwrap()
-        .deserialized()
-        .unwrap();
-    assert_eq!(persisted["entries"]["runtime"], json!([9, 7, 5]));
+    let persisted =
+        super::isolation::persisted_entries(&project.join("state/data/kv/runtime.cbor"));
+    assert_eq!(persisted["runtime"], cordis_up::Value::Bytes(vec![9, 7, 5]));
     assert_eq!(manage(&project, 10, "shutdown", json!([]))["ok"], true);
     core.finish();
     case.success();

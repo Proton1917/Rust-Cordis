@@ -6,6 +6,7 @@ import {CordisError} from "../../cordis-sdk/src/types.js";
 export {Context, Effect, Frozen, defineComponent, type Component} from "../../cordis-sdk/src/context.js";
 export {BindingTransport, Remote, close} from "../../cordis-sdk/src/bindings.js";
 export {CordisError};
+export {caller, type Caller} from "../../cordis-sdk/src/metadata.js";
 export {WebRuntime, type Entry};
 
 export interface Options {

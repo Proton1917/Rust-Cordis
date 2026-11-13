@@ -54,6 +54,21 @@ fn decode_file(path: &Path) -> Option<Value> {
         .ok()
 }
 
+/// ADR-0039：KV 持久化中的字节字段按实际 CBOR 值读取，保留字节串表示。
+pub(super) fn persisted_entries(
+    path: &Path,
+) -> std::collections::BTreeMap<String, cordis_up::Value> {
+    let bytes = fs::read(path).unwrap();
+    let mut snapshot: std::collections::BTreeMap<
+        String,
+        std::collections::BTreeMap<String, cordis_up::Value>,
+    > = cordis_up::decode_value(&bytes, &cordis_up::Limits::DEFAULT)
+        .unwrap()
+        .deserialized()
+        .unwrap();
+    snapshot.remove("entries").unwrap()
+}
+
 #[test]
 fn real_file_kv_instances_keep_tenant_data_separate() {
     let case = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "real-kv-domains");
@@ -111,12 +126,12 @@ fn real_file_kv_instances_keep_tenant_data_separate() {
         );
     }
     assert_eq!(
-        decode_file(&project.join("state/data/kv/a.cbor")).unwrap()["entries"]["shared"],
-        json!([1, 2])
+        persisted_entries(&project.join("state/data/kv/a.cbor"))["shared"],
+        cordis_up::Value::Bytes(vec![1, 2])
     );
     assert_eq!(
-        decode_file(&project.join("state/data/kv/b.cbor")).unwrap()["entries"]["shared"],
-        json!([9, 8])
+        persisted_entries(&project.join("state/data/kv/b.cbor"))["shared"],
+        cordis_up::Value::Bytes(vec![9, 8])
     );
     finish(&mut core);
     eprintln!(
@@ -205,7 +220,10 @@ fn kv_scoped_metadata_reaches_same_cross_and_process_providers() {
         let received = until("提供方记录真实Scoped元数据", || {
             decode_file(&metadata)
         });
-        assert_eq!(received, json!({"namespace":mode,"marker":17}));
+        assert_eq!(
+            received,
+            json!({"namespace":mode,"marker":17,"cordis.caller":{"instance":"client"}})
+        );
         let observed = until("原生使用方完成实际KV读写", || {
             decode_file(&project.join("state/data/kv-scoped/client.cbor"))
         });

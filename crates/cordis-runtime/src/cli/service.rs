@@ -6,6 +6,7 @@ use crate::{
 };
 use clap::{Args, Subcommand, ValueEnum};
 use std::{
+    collections::BTreeMap,
     env, fs,
     path::{Path, PathBuf},
     process::Command,
@@ -61,6 +62,12 @@ pub struct ServiceOptions {
     /// 在项目 service 目录生成配置，位置可由 --output 指定。
     #[arg(long)]
     pub dry_run: bool,
+    /// 为服务管理器设置一个非机密环境变量，可重复指定。
+    #[arg(long = "env", value_name = "NAME=VALUE")]
+    pub environment: Vec<String>,
+    /// 从当前进程继承指定的非机密环境变量，可重复指定。
+    #[arg(long, value_name = "NAME")]
+    pub inherit_env: Vec<String>,
 }
 
 #[derive(Args)]
@@ -74,12 +81,20 @@ pub struct UninstallOptions {
 /// DOC-15 §5.1：默认采用系统读取的安装目录；显式输出与 dry_run 生成可检查文件。
 pub fn service(options: ServiceOptions) -> Result<PathBuf> {
     validate_name(&options.name)?;
+    let environment = service_environment(&options.environment, &options.inherit_env)?;
     let configuration = options.config.canonicalize().map_err(io_error)?;
     config::parse(&storage::read(&configuration)?)?;
     let project = configuration.parent().expect("configuration parent");
     let binary = env::current_exe().map_err(io_error)?;
     let platform = options.platform.unwrap_or_default();
-    let generated = template::render(platform, &options.name, &binary, &configuration, project);
+    let generated = template::render(
+        platform,
+        &options.name,
+        &binary,
+        &configuration,
+        project,
+        &environment,
+    );
     let installation = if options.output.is_none() && !options.dry_run {
         Some(Location::current(platform, &options.name)?)
     } else {
@@ -119,6 +134,50 @@ fn validate_name(name: &str) -> Result<()> {
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'-' | b'_'))
     {
         return Err(parameter("服务名称需要字母、数字、点、短横线或下划线"));
+    }
+    Ok(())
+}
+
+/// ADR-0046 §3.10：服务安装只收取显式命名的非机密变量，配置写入前完成分类。
+fn service_environment(
+    values: &[String],
+    inherited: &[String],
+) -> Result<BTreeMap<String, String>> {
+    let mut environment = BTreeMap::new();
+    for name in inherited {
+        environment_name(name)?;
+        let value = env::var(name).map_err(|_| parameter(format!("读取环境变量 {name} 失败")))?;
+        environment.insert(name.clone(), value);
+    }
+    for value in values {
+        let (name, value) = value
+            .split_once('=')
+            .ok_or_else(|| parameter("环境变量参数需要 NAME=VALUE"))?;
+        environment_name(name)?;
+        environment.insert(name.into(), value.into());
+    }
+    Ok(environment)
+}
+
+fn environment_name(name: &str) -> Result<()> {
+    let mut bytes = name.bytes();
+    if !bytes
+        .next()
+        .is_some_and(|byte| byte.is_ascii_alphabetic() || byte == b'_')
+        || !bytes.all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+    {
+        return Err(parameter(
+            "环境变量名称需要字母、数字与下划线，并以字母或下划线开头",
+        ));
+    }
+    let normalized = name.to_ascii_uppercase();
+    if ["SECRET", "TOKEN", "PASSWORD", "KEY"]
+        .iter()
+        .any(|part| normalized.contains(part))
+    {
+        return Err(parameter(format!(
+            "变量 {name} 属于机密命名，请通过 secrets 插件提供"
+        )));
     }
     Ok(())
 }

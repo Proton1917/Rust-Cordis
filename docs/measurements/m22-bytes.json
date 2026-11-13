@@ -1,0 +1,73 @@
+{
+  "scenario": "bytes",
+  "result": {
+    "aggregate": {
+      "rust": {
+        "bytes_per_field": 1048576,
+        "fields": 5,
+        "equal": true
+      },
+      "python": {
+        "bytes_per_field": 1048576,
+        "fields": 5,
+        "equal": true
+      },
+      "typescript": {
+        "bytes_per_field": 1048576,
+        "fields": 5,
+        "equal": true
+      }
+    },
+    "m21_checkpoint": {
+      "rust": {
+        "ok": true,
+        "code": null,
+        "value": [
+          95,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "detail": null,
+        "rpc_wall_us": 853
+      },
+      "python": {
+        "ok": true,
+        "code": null,
+        "value": [
+          95,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "detail": null,
+        "rpc_wall_us": 1220
+      },
+      "typescript": {
+        "ok": true,
+        "code": null,
+        "value": [
+          95,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "detail": null,
+        "rpc_wall_us": 2544
+      }
+    }
+  },
+  "exit": 0
+}

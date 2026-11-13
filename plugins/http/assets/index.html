@@ -3,13 +3,13 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Cordis</title>
+  <title>{{title}}</title>
   <style>
     :root { color-scheme: light; --surface: #f5f5f3; --panel: #fcfcfb; --text: #151515; --muted: #525252; --line: #1515151a; --accent: #d97757; }
     * { box-sizing: border-box; }
     body { margin: 0; background: var(--surface); color: var(--text); font: 16px/1.6 system-ui, sans-serif; }
     header { max-width: 1080px; margin: auto; padding: 24px 28px; display: flex; justify-content: space-between; align-items: center; gap: 24px; border-bottom: 1px solid var(--line); }
-    header strong { font-size: 20px; font-weight: 600; letter-spacing: -.02em; }
+    header[hidden] { display: none; }
     #connection { color: var(--muted); font-size: 14px; }
     main { max-width: 1080px; padding: 32px 28px; margin: auto; display: grid; gap: 24px; }
     @media (max-width: 600px) { header { padding: 20px; } main { padding: 24px 20px; } }
@@ -17,12 +17,16 @@
   <script src="/_cordis/session.js"></script>
 </head>
 <body>
-  <header><strong>Cordis</strong><span id="connection" role="status">正在连接</span></header>
+  <header hidden><span id="connection" role="status"></span></header>
   <main id="cordis-components"></main>
   <script type="module">
     import {connect} from '/_cordis/cordis-web.js';
-    const labels = {connecting: '正在连接', active: '已连接', disconnected: '连接中断', closed: '连接已结束'};
-    connect({token: globalThis.CORDIS_SESSION.token, status(state) { document.querySelector('#connection').textContent = labels[state]; }});
+    const labels = {disconnected: '连接中断，正在重试', closed: '连接已结束'};
+    connect({token: globalThis.CORDIS_SESSION.token, status(state) {
+      const text = labels[state] || '';
+      document.querySelector('#connection').textContent = text;
+      document.querySelector('header').hidden = !text;
+    }});
   </script>
 </body>
 </html>

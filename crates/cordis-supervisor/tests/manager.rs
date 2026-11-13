@@ -1184,7 +1184,11 @@ async fn derived_scopes_cache_actual_binding_and_own_child_lifetime() {
         result.value,
         Value::Map(vec![
             ("prefix".into(), "new".into()),
-            ("limit".into(), 3u64.into())
+            ("limit".into(), 3u64.into()),
+            (
+                "cordis.caller".into(),
+                Value::Map(vec![("instance".into(), "a".into())])
+            )
         ])
     );
     let result: payload::PluginResult = core_call(

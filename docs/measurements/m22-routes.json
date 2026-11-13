@@ -1,0 +1,864 @@
+{
+  "scenario": "routes",
+  "result": {
+    "rust": {
+      "methods": [
+        {
+          "method": "GET",
+          "status": 200,
+          "echo": {
+            "body": [
+              0,
+              127,
+              255,
+              65
+            ],
+            "headers": [
+              [
+                "host",
+                "127.0.0.1:61547"
+              ],
+              [
+                "accept-encoding",
+                "identity"
+              ],
+              [
+                "content-length",
+                "4"
+              ],
+              [
+                "cookie",
+                "session=route-cookie"
+              ],
+              [
+                "x-test",
+                "route-header"
+              ],
+              [
+                "authorization",
+                "Bearer route-token"
+              ],
+              [
+                "x-forwarded-for",
+                "203.0.113.7"
+              ]
+            ],
+            "label": "rust",
+            "method": "GET",
+            "path": "/api/check%20path",
+            "peer": "127.0.0.1:61551",
+            "prefix": "/api",
+            "query": "name=a%2Fb&n=3"
+          },
+          "response_headers": [
+            [
+              "content-type",
+              "application/json"
+            ],
+            [
+              "set-cookie",
+              "session=one; HttpOnly; Secure"
+            ],
+            [
+              "set-cookie",
+              "locale=zh; Secure"
+            ],
+            [
+              "content-length",
+              "372"
+            ],
+            [
+              "date",
+              "Fri, 13 Nov 2026 19:14:20 GMT"
+            ]
+          ]
+        },
+        {
+          "method": "POST",
+          "status": 200,
+          "echo": {
+            "body": [
+              0,
+              127,
+              255,
+              65
+            ],
+            "headers": [
+              [
+                "host",
+                "127.0.0.1:61547"
+              ],
+              [
+                "accept-encoding",
+                "identity"
+              ],
+              [
+                "content-length",
+                "4"
+              ],
+              [
+                "cookie",
+                "session=route-cookie"
+              ],
+              [
+                "x-test",
+                "route-header"
+              ],
+              [
+                "authorization",
+                "Bearer route-token"
+              ],
+              [
+                "x-forwarded-for",
+                "203.0.113.7"
+              ]
+            ],
+            "label": "rust",
+            "method": "POST",
+            "path": "/api/check%20path",
+            "peer": "127.0.0.1:61552",
+            "prefix": "/api",
+            "query": "name=a%2Fb&n=3"
+          },
+          "response_headers": [
+            [
+              "content-type",
+              "application/json"
+            ],
+            [
+              "set-cookie",
+              "session=one; HttpOnly; Secure"
+            ],
+            [
+              "set-cookie",
+              "locale=zh; Secure"
+            ],
+            [
+              "content-length",
+              "373"
+            ],
+            [
+              "date",
+              "Fri, 13 Nov 2026 19:14:20 GMT"
+            ]
+          ]
+        },
+        {
+          "method": "PUT",
+          "status": 200,
+          "echo": {
+            "body": [
+              0,
+              127,
+              255,
+              65
+            ],
+            "headers": [
+              [
+                "host",
+                "127.0.0.1:61547"
+              ],
+              [
+                "accept-encoding",
+                "identity"
+              ],
+              [
+                "content-length",
+                "4"
+              ],
+              [
+                "cookie",
+                "session=route-cookie"
+              ],
+              [
+                "x-test",
+                "route-header"
+              ],
+              [
+                "authorization",
+                "Bearer route-token"
+              ],
+              [
+                "x-forwarded-for",
+                "203.0.113.7"
+              ]
+            ],
+            "label": "rust",
+            "method": "PUT",
+            "path": "/api/check%20path",
+            "peer": "127.0.0.1:61553",
+            "prefix": "/api",
+            "query": "name=a%2Fb&n=3"
+          },
+          "response_headers": [
+            [
+              "content-type",
+              "application/json"
+            ],
+            [
+              "set-cookie",
+              "session=one; HttpOnly; Secure"
+            ],
+            [
+              "set-cookie",
+              "locale=zh; Secure"
+            ],
+            [
+              "content-length",
+              "372"
+            ],
+            [
+              "date",
+              "Fri, 13 Nov 2026 19:14:20 GMT"
+            ]
+          ]
+        },
+        {
+          "method": "DELETE",
+          "status": 200,
+          "echo": {
+            "body": [
+              0,
+              127,
+              255,
+              65
+            ],
+            "headers": [
+              [
+                "host",
+                "127.0.0.1:61547"
+              ],
+              [
+                "accept-encoding",
+                "identity"
+              ],
+              [
+                "content-length",
+                "4"
+              ],
+              [
+                "cookie",
+                "session=route-cookie"
+              ],
+              [
+                "x-test",
+                "route-header"
+              ],
+              [
+                "authorization",
+                "Bearer route-token"
+              ],
+              [
+                "x-forwarded-for",
+                "203.0.113.7"
+              ]
+            ],
+            "label": "rust",
+            "method": "DELETE",
+            "path": "/api/check%20path",
+            "peer": "127.0.0.1:61554",
+            "prefix": "/api",
+            "query": "name=a%2Fb&n=3"
+          },
+          "response_headers": [
+            [
+              "content-type",
+              "application/json"
+            ],
+            [
+              "set-cookie",
+              "session=one; HttpOnly; Secure"
+            ],
+            [
+              "set-cookie",
+              "locale=zh; Secure"
+            ],
+            [
+              "content-length",
+              "375"
+            ],
+            [
+              "date",
+              "Fri, 13 Nov 2026 19:14:20 GMT"
+            ]
+          ]
+        }
+      ],
+      "inline_bytes": 1048576,
+      "inline_equal": true
+    },
+    "python": {
+      "methods": [
+        {
+          "method": "GET",
+          "status": 200,
+          "echo": {
+            "method": "GET",
+            "path": "/python/check%20path",
+            "prefix": "/python",
+            "query": "name=a%2Fb&n=3",
+            "headers": [
+              [
+                "host",
+                "127.0.0.1:61547"
+              ],
+              [
+                "accept-encoding",
+                "identity"
+              ],
+              [
+                "content-length",
+                "4"
+              ],
+              [
+                "cookie",
+                "session=route-cookie"
+              ],
+              [
+                "x-test",
+                "route-header"
+              ],
+              [
+                "authorization",
+                "Bearer route-token"
+              ],
+              [
+                "x-forwarded-for",
+                "203.0.113.7"
+              ]
+            ],
+            "peer": "127.0.0.1:61566",
+            "body": [
+              0,
+              127,
+              255,
+              65
+            ],
+            "label": "python"
+          },
+          "response_headers": [
+            [
+              "content-type",
+              "application/json"
+            ],
+            [
+              "set-cookie",
+              "session=one; HttpOnly; Secure"
+            ],
+            [
+              "set-cookie",
+              "locale=zh; Secure"
+            ],
+            [
+              "content-length",
+              "411"
+            ],
+            [
+              "date",
+              "Fri, 13 Nov 2026 19:14:20 GMT"
+            ]
+          ]
+        },
+        {
+          "method": "POST",
+          "status": 200,
+          "echo": {
+            "method": "POST",
+            "path": "/python/check%20path",
+            "prefix": "/python",
+            "query": "name=a%2Fb&n=3",
+            "headers": [
+              [
+                "host",
+                "127.0.0.1:61547"
+              ],
+              [
+                "accept-encoding",
+                "identity"
+              ],
+              [
+                "content-length",
+                "4"
+              ],
+              [
+                "cookie",
+                "session=route-cookie"
+              ],
+              [
+                "x-test",
+                "route-header"
+              ],
+              [
+                "authorization",
+                "Bearer route-token"
+              ],
+              [
+                "x-forwarded-for",
+                "203.0.113.7"
+              ]
+            ],
+            "peer": "127.0.0.1:61567",
+            "body": [
+              0,
+              127,
+              255,
+              65
+            ],
+            "label": "python"
+          },
+          "response_headers": [
+            [
+              "content-type",
+              "application/json"
+            ],
+            [
+              "set-cookie",
+              "session=one; HttpOnly; Secure"
+            ],
+            [
+              "set-cookie",
+              "locale=zh; Secure"
+            ],
+            [
+              "content-length",
+              "412"
+            ],
+            [
+              "date",
+              "Fri, 13 Nov 2026 19:14:20 GMT"
+            ]
+          ]
+        },
+        {
+          "method": "PUT",
+          "status": 200,
+          "echo": {
+            "method": "PUT",
+            "path": "/python/check%20path",
+            "prefix": "/python",
+            "query": "name=a%2Fb&n=3",
+            "headers": [
+              [
+                "host",
+                "127.0.0.1:61547"
+              ],
+              [
+                "accept-encoding",
+                "identity"
+              ],
+              [
+                "content-length",
+                "4"
+              ],
+              [
+                "cookie",
+                "session=route-cookie"
+              ],
+              [
+                "x-test",
+                "route-header"
+              ],
+              [
+                "authorization",
+                "Bearer route-token"
+              ],
+              [
+                "x-forwarded-for",
+                "203.0.113.7"
+              ]
+            ],
+            "peer": "127.0.0.1:61568",
+            "body": [
+              0,
+              127,
+              255,
+              65
+            ],
+            "label": "python"
+          },
+          "response_headers": [
+            [
+              "content-type",
+              "application/json"
+            ],
+            [
+              "set-cookie",
+              "session=one; HttpOnly; Secure"
+            ],
+            [
+              "set-cookie",
+              "locale=zh; Secure"
+            ],
+            [
+              "content-length",
+              "411"
+            ],
+            [
+              "date",
+              "Fri, 13 Nov 2026 19:14:20 GMT"
+            ]
+          ]
+        },
+        {
+          "method": "DELETE",
+          "status": 200,
+          "echo": {
+            "method": "DELETE",
+            "path": "/python/check%20path",
+            "prefix": "/python",
+            "query": "name=a%2Fb&n=3",
+            "headers": [
+              [
+                "host",
+                "127.0.0.1:61547"
+              ],
+              [
+                "accept-encoding",
+                "identity"
+              ],
+              [
+                "content-length",
+                "4"
+              ],
+              [
+                "cookie",
+                "session=route-cookie"
+              ],
+              [
+                "x-test",
+                "route-header"
+              ],
+              [
+                "authorization",
+                "Bearer route-token"
+              ],
+              [
+                "x-forwarded-for",
+                "203.0.113.7"
+              ]
+            ],
+            "peer": "127.0.0.1:61569",
+            "body": [
+              0,
+              127,
+              255,
+              65
+            ],
+            "label": "python"
+          },
+          "response_headers": [
+            [
+              "content-type",
+              "application/json"
+            ],
+            [
+              "set-cookie",
+              "session=one; HttpOnly; Secure"
+            ],
+            [
+              "set-cookie",
+              "locale=zh; Secure"
+            ],
+            [
+              "content-length",
+              "414"
+            ],
+            [
+              "date",
+              "Fri, 13 Nov 2026 19:14:20 GMT"
+            ]
+          ]
+        }
+      ],
+      "inline_bytes": 1048576,
+      "inline_equal": true
+    },
+    "typescript": {
+      "methods": [
+        {
+          "method": "GET",
+          "status": 200,
+          "echo": {
+            "method": "GET",
+            "path": "/typescript/check%20path",
+            "prefix": "/typescript",
+            "query": "name=a%2Fb&n=3",
+            "headers": [
+              [
+                "host",
+                "127.0.0.1:61547"
+              ],
+              [
+                "accept-encoding",
+                "identity"
+              ],
+              [
+                "content-length",
+                "4"
+              ],
+              [
+                "cookie",
+                "session=route-cookie"
+              ],
+              [
+                "x-test",
+                "route-header"
+              ],
+              [
+                "authorization",
+                "Bearer route-token"
+              ],
+              [
+                "x-forwarded-for",
+                "203.0.113.7"
+              ]
+            ],
+            "peer": "127.0.0.1:61578",
+            "body": [
+              0,
+              127,
+              255,
+              65
+            ],
+            "label": "typescript"
+          },
+          "response_headers": [
+            [
+              "content-type",
+              "application/json"
+            ],
+            [
+              "set-cookie",
+              "session=one; HttpOnly; Secure"
+            ],
+            [
+              "set-cookie",
+              "locale=zh; Secure"
+            ],
+            [
+              "content-length",
+              "392"
+            ],
+            [
+              "date",
+              "Fri, 13 Nov 2026 19:14:20 GMT"
+            ]
+          ]
+        },
+        {
+          "method": "POST",
+          "status": 200,
+          "echo": {
+            "method": "POST",
+            "path": "/typescript/check%20path",
+            "prefix": "/typescript",
+            "query": "name=a%2Fb&n=3",
+            "headers": [
+              [
+                "host",
+                "127.0.0.1:61547"
+              ],
+              [
+                "accept-encoding",
+                "identity"
+              ],
+              [
+                "content-length",
+                "4"
+              ],
+              [
+                "cookie",
+                "session=route-cookie"
+              ],
+              [
+                "x-test",
+                "route-header"
+              ],
+              [
+                "authorization",
+                "Bearer route-token"
+              ],
+              [
+                "x-forwarded-for",
+                "203.0.113.7"
+              ]
+            ],
+            "peer": "127.0.0.1:61579",
+            "body": [
+              0,
+              127,
+              255,
+              65
+            ],
+            "label": "typescript"
+          },
+          "response_headers": [
+            [
+              "content-type",
+              "application/json"
+            ],
+            [
+              "set-cookie",
+              "session=one; HttpOnly; Secure"
+            ],
+            [
+              "set-cookie",
+              "locale=zh; Secure"
+            ],
+            [
+              "content-length",
+              "393"
+            ],
+            [
+              "date",
+              "Fri, 13 Nov 2026 19:14:20 GMT"
+            ]
+          ]
+        },
+        {
+          "method": "PUT",
+          "status": 200,
+          "echo": {
+            "method": "PUT",
+            "path": "/typescript/check%20path",
+            "prefix": "/typescript",
+            "query": "name=a%2Fb&n=3",
+            "headers": [
+              [
+                "host",
+                "127.0.0.1:61547"
+              ],
+              [
+                "accept-encoding",
+                "identity"
+              ],
+              [
+                "content-length",
+                "4"
+              ],
+              [
+                "cookie",
+                "session=route-cookie"
+              ],
+              [
+                "x-test",
+                "route-header"
+              ],
+              [
+                "authorization",
+                "Bearer route-token"
+              ],
+              [
+                "x-forwarded-for",
+                "203.0.113.7"
+              ]
+            ],
+            "peer": "127.0.0.1:61580",
+            "body": [
+              0,
+              127,
+              255,
+              65
+            ],
+            "label": "typescript"
+          },
+          "response_headers": [
+            [
+              "content-type",
+              "application/json"
+            ],
+            [
+              "set-cookie",
+              "session=one; HttpOnly; Secure"
+            ],
+            [
+              "set-cookie",
+              "locale=zh; Secure"
+            ],
+            [
+              "content-length",
+              "392"
+            ],
+            [
+              "date",
+              "Fri, 13 Nov 2026 19:14:20 GMT"
+            ]
+          ]
+        },
+        {
+          "method": "DELETE",
+          "status": 200,
+          "echo": {
+            "method": "DELETE",
+            "path": "/typescript/check%20path",
+            "prefix": "/typescript",
+            "query": "name=a%2Fb&n=3",
+            "headers": [
+              [
+                "host",
+                "127.0.0.1:61547"
+              ],
+              [
+                "accept-encoding",
+                "identity"
+              ],
+              [
+                "content-length",
+                "4"
+              ],
+              [
+                "cookie",
+                "session=route-cookie"
+              ],
+              [
+                "x-test",
+                "route-header"
+              ],
+              [
+                "authorization",
+                "Bearer route-token"
+              ],
+              [
+                "x-forwarded-for",
+                "203.0.113.7"
+              ]
+            ],
+            "peer": "127.0.0.1:61581",
+            "body": [
+              0,
+              127,
+              255,
+              65
+            ],
+            "label": "typescript"
+          },
+          "response_headers": [
+            [
+              "content-type",
+              "application/json"
+            ],
+            [
+              "set-cookie",
+              "session=one; HttpOnly; Secure"
+            ],
+            [
+              "set-cookie",
+              "locale=zh; Secure"
+            ],
+            [
+              "content-length",
+              "395"
+            ],
+            [
+              "date",
+              "Fri, 13 Nov 2026 19:14:20 GMT"
+            ]
+          ]
+        }
+      ],
+      "inline_bytes": 1048576,
+      "inline_equal": true
+    }
+  },
+  "exit": 0
+}

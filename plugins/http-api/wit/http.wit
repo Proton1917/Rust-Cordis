@@ -1,0 +1,63 @@
+package cordis:http@1.0.0;
+
+/// ```cordis
+/// name = "cordis.http"
+/// ```
+interface http {
+    use cordis:byte-stream/streams@1.0.0.{byte-stream};
+
+    record stream-body {
+        length: option<u64>,
+        source: own<byte-stream>,
+    }
+
+    variant body {
+        empty,
+        inline(list<u8>),
+        %stream(stream-body),
+    }
+
+    record route-spec {
+        prefix: string,
+        methods: list<string>,
+        max-body-bytes: option<u64>,
+        timeout-ms: option<u64>,
+    }
+
+    record http-request {
+        method: string,
+        path: string,
+        prefix: string,
+        query: string,
+        headers: list<tuple<string, string>>,
+        peer: string,
+        body: body,
+    }
+
+    record http-response {
+        status: u16,
+        headers: list<tuple<string, string>>,
+        body: body,
+    }
+
+    /// ```cordis
+    /// name = "cordis.http-handler"
+    /// ```
+    resource http-handler {
+        handle: async func(request: http-request) -> result<http-response, string>;
+    }
+
+    route: async func(spec: route-spec, handler: own<http-handler>) -> result<u64, string>;
+    unroute: async func(id: u64) -> result<_, string>;
+}
+
+/// ```cordis
+/// name = "cordis.http-page"
+/// ```
+interface pages {
+    record page-attributes {
+        headers: list<tuple<string, string>>,
+        peer: string,
+    }
+    attributes: async func(key: list<u8>) -> result<option<page-attributes>, string>;
+}

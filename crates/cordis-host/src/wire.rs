@@ -20,7 +20,7 @@ pub struct Bridge {
 }
 
 impl Bridge {
-    /// DOC-15 V-1、V-4：调用按方法名和 CBOR 数组发送，资源随消息成功入队转交。
+    /// DOC-15 V-1、V-4、ADR-0046：宿主执行器轮询 RPC，插件线程接收结果；丢弃句柄传播取消。
     pub fn invoke(&self, object: &RemoteObject, method: &str, args: &[u8]) -> Result<InvokeFuture> {
         let mut params = payload::Invoke {
             object: object.id(),
@@ -37,7 +37,7 @@ impl Bridge {
             Outgoing::with_commit(cordis_abi::to_value(&params)?, move || exports.commit());
         let bridge = self.clone();
         let object = object.clone();
-        make_invoke_future(
+        let task = self.executor.start(
             async move {
                 let response = object
                     .peer()
@@ -48,8 +48,9 @@ impl Bridge {
                     cordis_abi::from_value(response.value().clone())?;
                 bridge.incoming(&response, result.value).await
             },
-            abi::environment(),
-        )
+            true,
+        );
+        make_invoke_future(task, abi::environment())
     }
 
     /// DOC-16 资源协议：结果中的本地拥有资源转换为待提交的协议编号。

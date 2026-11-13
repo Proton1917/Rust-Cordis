@@ -3,18 +3,25 @@
 use crate::Result;
 use flate2::{Compression, write::GzEncoder};
 use std::{
+    collections::BTreeSet,
     fs,
     path::{Path, PathBuf},
 };
 
 /// DOC-15 §12.2：逐目录复制；符号链接按实际目标重新写为包内相对链接。
-pub fn copy_tree(source: &Path, destination: &Path) -> Result<()> {
+pub fn copy_tree(source: &Path, destination: &Path, excluded: &BTreeSet<PathBuf>) -> Result<()> {
     let root = source.canonicalize()?;
     fs::create_dir_all(destination)?;
-    copy_entries(&root, destination, &root, destination)
+    copy_entries(&root, destination, &root, destination, excluded)
 }
 
-fn copy_entries(source: &Path, destination: &Path, root: &Path, output: &Path) -> Result<()> {
+fn copy_entries(
+    source: &Path,
+    destination: &Path,
+    root: &Path,
+    output: &Path,
+    excluded: &BTreeSet<PathBuf>,
+) -> Result<()> {
     for entry in fs::read_dir(source)? {
         let entry = entry?;
         let name = entry.file_name();
@@ -23,6 +30,9 @@ fn copy_entries(source: &Path, destination: &Path, root: &Path, output: &Path) -
         }
         let target = destination.join(&name);
         let kind = entry.file_type()?;
+        if !kind.is_dir() && excluded.contains(&entry.path().canonicalize()?) {
+            continue;
+        }
         if kind.is_symlink() {
             let resolved = entry.path().canonicalize()?;
             let relative = resolved
@@ -33,7 +43,7 @@ fn copy_entries(source: &Path, destination: &Path, root: &Path, output: &Path) -
             std::os::unix::fs::symlink(link, target)?;
         } else if kind.is_dir() {
             fs::create_dir(&target)?;
-            copy_entries(&entry.path(), &target, root, output)?;
+            copy_entries(&entry.path(), &target, root, output, excluded)?;
         } else if kind.is_file() {
             fs::copy(entry.path(), target)?;
         }

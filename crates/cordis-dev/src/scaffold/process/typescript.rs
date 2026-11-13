@@ -5,6 +5,26 @@ use std::{fs, path::Path};
 
 const SDK: &[(&str, &str)] = &[
     (
+        "metadata.ts",
+        include_str!("../../../../../sdks/typescript/cordis-sdk/src/metadata.ts"),
+    ),
+    (
+        "resources.ts",
+        include_str!("../../../../../sdks/typescript/cordis-sdk/src/resources.ts"),
+    ),
+    (
+        "streams.ts",
+        include_str!("../../../../../sdks/typescript/cordis-sdk/src/streams.ts"),
+    ),
+    (
+        "streams-node.ts",
+        include_str!("../../../../../sdks/typescript/cordis-sdk/src/streams-node.ts"),
+    ),
+    (
+        "http.ts",
+        include_str!("../../../../../sdks/typescript/cordis-sdk/src/http.ts"),
+    ),
+    (
         "index.ts",
         include_str!("../../../../../sdks/typescript/cordis-sdk/src/index.ts"),
     ),
@@ -48,16 +68,25 @@ pub fn typescript_plugin(project: &Path, name: &str) -> Result<()> {
 
 /// ADR-0040：模板入口与 SDK 共用 src，依赖安装保持普通文件，构建产物进入 dist。
 fn write_typescript(directory: &Path, name: &str) -> Result<()> {
+    typescript_sources(
+        directory,
+        name,
+        include_str!("../../../templates/typescript/main.ts"),
+    )
+}
+
+pub(in crate::scaffold) fn typescript_sources(
+    directory: &Path,
+    name: &str,
+    main: &str,
+) -> Result<()> {
     fs::create_dir(directory)?;
     fs::create_dir_all(directory.join("src/cordis_sdk"))?;
     for (filename, source) in SDK {
         write_new(&directory.join("src/cordis_sdk").join(filename), source)?;
     }
     for (path, source) in [
-        (
-            "src/main.ts",
-            include_str!("../../../templates/typescript/main.ts"),
-        ),
+        ("src/main.ts", main),
         (
             "package.json",
             include_str!("../../../templates/typescript/package.json"),

@@ -1,12 +1,10 @@
 //! DOC-11 SW-1–SW-9、DOC-15 CP-4/CP-6/CP-7：核心持有分组与实例的生命周期决策。
 //! 事务在有界工作队列中执行，等待者取消后仍完成提交或回滚；失败清理覆盖候选资源。
 use super::*;
+use cordis_routing::description::{self, validate_name};
 use futures_util::future::{join_all, poll_fn};
 use generation::{Binding, Configuration, Exporter};
-use std::{
-    path::{Component as PathComponent, Path},
-    task::{Poll, Waker},
-};
+use std::task::{Poll, Waker};
 
 /// SW-5：原状态与导出器持有关系；提交或解冻完成后统一释放。
 #[derive(Default)]
@@ -279,46 +277,23 @@ impl Manager {
         }
         let budget = self.retain_metadata(&connection, metadata::descriptor_bytes(&descriptor)?)?;
         let descriptor = Arc::new(descriptor);
-        let mut plugins = HashSet::new();
         let mut components = HashMap::new();
         let mut definitions = HashMap::new();
-        for plugin in &descriptor.plugins {
-            validate_name(&plugin.name)?;
-            semver::Version::parse(&plugin.version)
-                .map_err(|problem| error(2, problem.to_string()))?;
-            if !matches!(plugin.format, 1 | 2) {
-                return Err(error(3, "插件格式需要为原生或通用进程"));
-            }
-            if plugin.format == 1 && plugin.library.is_none_or(|library| library == 0) {
-                return Err(error(2, "原生插件描述需要正库编号"));
-            }
-            if !plugins.insert(plugin.name.clone()) {
-                return Err(error(2, "插件名称重复"));
-            }
-            for info in &plugin.components {
-                info.name.split('/').try_for_each(validate_name)?;
-                if !info.state_schema.is_empty() && info.state_version_min > info.state_version_max
-                {
-                    return Err(error(2, "继承状态版本范围无效"));
-                }
-                let key = (plugin.name.clone(), info.name.clone());
-                if components.contains_key(&key) {
-                    return Err(error(2, "组件名称重复"));
-                }
-                let component = self.component_from_description(
-                    group,
-                    &connection,
-                    plugin,
-                    info,
-                    &descriptor,
-                    &budget,
-                )?;
-                definitions.insert(
-                    key.clone(),
-                    generation::definition(Arc::downgrade(&self.0), component.clone()),
-                );
-                components.insert(key, component);
-            }
+        for (plugin, info) in description::components(&descriptor)? {
+            let key = (plugin.name.clone(), info.name.clone());
+            let component = self.component_from_description(
+                group,
+                &connection,
+                plugin,
+                info,
+                &descriptor,
+                &budget,
+            )?;
+            definitions.insert(
+                key.clone(),
+                generation::definition(Arc::downgrade(&self.0), component.clone()),
+            );
+            components.insert(key, component);
         }
         Ok(Arc::new(GroupGeneration {
             connection,
@@ -340,40 +315,12 @@ impl Manager {
         descriptor: &Arc<payload::Describe>,
         budget: &Arc<MetadataLease>,
     ) -> Result<Arc<RemoteComponent>> {
-        let inject = info
-            .inject
-            .iter()
-            .map(|dependency| {
-                Ok((
-                    Interface::parse(&dependency.interface)?,
-                    dependency.required,
-                ))
-            })
-            .collect::<Result<Vec<_>>>()?;
-        let provides = info
-            .provides
-            .iter()
-            .map(|interface| Interface::parse(interface))
-            .collect::<Result<Vec<_>>>()?;
-        for event in &info.listens {
-            Interface::parse(event)?;
-        }
-        let copied = metadata::component_bytes(info)?
-            .checked_add(metadata::strings([group, plugin.name.as_str()])?)
-            .ok_or_else(|| error(8, "组件元数据长度超出地址空间"))?;
-        let parsed = metadata::strings(
-            inject
-                .iter()
-                .map(|(interface, _)| interface)
-                .chain(provides.iter())
-                .flat_map(|interface| [interface.full.as_str(), interface.key.as_str()]),
-        )?;
-        let retained = self.retain_metadata(
-            connection,
-            copied
-                .checked_add(parsed)
-                .ok_or_else(|| error(8, "组件元数据长度超出地址空间"))?,
-        )?;
+        let description::ComponentTypes {
+            inject,
+            provides,
+            bytes,
+        } = description::component_types(group, plugin, info)?;
+        let retained = self.retain_metadata(connection, bytes)?;
         Ok(Arc::new(RemoteComponent {
             group: group.into(),
             plugin: plugin.name.clone(),
@@ -1753,13 +1700,5 @@ impl Manager {
         let discarded = std::mem::take(&mut self.0.catalog.lock().instances);
         drop(discarded);
         failure.map_or(Ok(()), Err)
-    }
-}
-
-fn validate_name(name: &str) -> Result<()> {
-    let mut parts = Path::new(name).components();
-    match (parts.next(), parts.next()) {
-        (Some(PathComponent::Normal(part)), None) if part == name => Ok(()),
-        _ => Err(error(2, "名称需要为一个完整名称段")),
     }
 }

@@ -55,6 +55,7 @@ struct Live {
 }
 #[derive(Clone)]
 struct Page {
+    source: Value,
     group: String,
     connection: Connection,
     plugins: Arc<Mutex<HashMap<String, (String, String)>>>,

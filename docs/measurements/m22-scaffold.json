@@ -1,0 +1,18 @@
+{
+  "scenario": "scaffold",
+  "result": {
+    "native": {
+      "status": 200,
+      "body": "GET /native\n"
+    },
+    "python": {
+      "status": 200,
+      "body": "GET /python\n"
+    },
+    "node": {
+      "status": 200,
+      "body": "GET /node\n"
+    }
+  },
+  "exit": 0
+}

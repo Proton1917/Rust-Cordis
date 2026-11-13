@@ -212,23 +212,10 @@ impl Manager {
                 let Target::Remote(object) = &route.target else {
                     return Err(error(4, "内置对象元数据缺席"));
                 };
-                let response = self
-                    .lifecycle_request(
-                        object.peer(),
-                        "object_info",
-                        value(&payload::ObjectInfoRequest {
-                            object: object.id(),
-                        })?,
-                        self.0.options.invoke_timeout,
-                    )
-                    .await?;
-                let mut info: payload::ObjectInfo = decode(response.value())?;
-                Interface::parse(&info.interface)?;
-                info.local = Some(payload::LocalObject {
-                    process: object.peer().id(),
-                    object: object.id(),
-                });
-                self.retain_info(object.peer(), info).map(Arc::new)
+                self.0
+                    .metadata
+                    .remote_info(object, self.0.options.invoke_timeout)
+                    .await
             })
             .await?;
         Ok(info.value.clone())
@@ -256,25 +243,16 @@ impl Manager {
                 if !object.peer().is_alive() {
                     return Err(error(4, "服务进程已结束"));
                 }
-                let meta = generation
-                    .context
-                    .named_meta(&requested.key)
-                    .and_then(|meta| meta.downcast::<Value>().ok());
-                let meta = meta.filter(|meta| match meta.as_ref() {
-                    Value::Null => false,
-                    Value::Map(fields) => !fields.is_empty(),
-                    _ => true,
-                });
-                let route = match meta.filter(|_| binding.scoped) {
-                    Some(meta) => {
-                        let cached = self.scoped_slot(generation, &binding)?;
-                        cached
-                            .value
-                            .get_or_try_init(|| self.bind_scoped(&binding, object, &meta))
-                            .await?
-                            .clone()
-                    }
-                    None => binding.route.clone(),
+                let route = if binding.scoped {
+                    let meta = self.scoped_metadata(generation, &requested.key)?;
+                    let cached = self.scoped_slot(generation, &binding)?;
+                    cached
+                        .value
+                        .get_or_try_init(|| self.bind_scoped(&binding, object, &meta))
+                        .await?
+                        .clone()
+                } else {
+                    binding.route.clone()
                 };
                 let Target::Remote(object) = &route.target else {
                     unreachable!("remote scoped target")

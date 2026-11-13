@@ -177,8 +177,8 @@ fn sample() -> Sample {
         delta: i64::MIN,
         ratio: 1.5,
         active: true,
-        bytes: vec![0, 128, 255],
-        pairs: BTreeMap::from([("k".into(), vec![7, 8])]),
+        bytes: vec![0, 128, 255].into(),
+        pairs: BTreeMap::from([("k".into(), vec![7, 8].into())]),
         coordinates: (-3, 0.5),
         window: [4; 40],
         choice: Choice::Empty(()),
@@ -202,13 +202,13 @@ fn field<'a>(value: &'a CborValue, name: &str) -> &'a CborValue {
         .unwrap()
 }
 
-/// 独立期望值覆盖数组、分支、64 位精度与 Some(None) 标签。
+/// ADR-0039：独立期望值覆盖字节串、分支、64 位精度与 Some(None) 标签。
 fn inspect_wire() -> Result<()> {
     let bytes = cordis_sdk::encode(&sample())?;
     let value = cordis_abi::decode_value(&bytes)?;
     assert_eq!(
         field(&value, "bytes"),
-        &CborValue::Array(vec![0.into(), 128.into(), 255.into()])
+        &CborValue::Bytes(vec![0, 128, 255])
     );
     assert_eq!(
         field(&value, "nested"),
@@ -223,12 +223,12 @@ fn inspect_wire() -> Result<()> {
         &CborValue::Map(vec![("err".into(), "business".into())])
     );
     let snapshot = kv::Snapshot {
-        entries: BTreeMap::from([("a".into(), vec![1, 2])]),
+        entries: BTreeMap::from([("a".into(), vec![1, 2].into())]),
     };
     let value = cordis_abi::to_value(&snapshot)?;
     assert_eq!(
         field(field(&value, "entries"), "a"),
-        &CborValue::Array(vec![1.into(), 2.into()])
+        &CborValue::Bytes(vec![1, 2])
     );
     std::fs::write(
         concat!(env!("CORDIS_IDL_GENERATED"), "/rust-sample.cbor"),
@@ -344,8 +344,8 @@ fn script_results_preserve_wit_values_in_rust() -> Result<()> {
         assert_eq!(value.marker, '𝄞');
         assert_eq!(value.count, u64::MAX);
         assert_eq!(value.delta, i64::MIN);
-        assert_eq!(value.bytes, [0, 128, 255]);
-        assert_eq!(value.pairs["k"], [7, 8]);
+        assert_eq!(value.bytes.as_ref(), [0, 128, 255]);
+        assert_eq!(value.pairs["k"].as_ref(), [7, 8]);
         assert_eq!(value.nested, Some(None));
         assert_eq!(value.options, [None, Some(None), Some(Some(9))]);
         assert_eq!(value.outcome, Err("business".into()));

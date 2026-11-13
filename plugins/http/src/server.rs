@@ -8,7 +8,7 @@ use super::{
 use axum::{
     Json, Router,
     http::{HeaderMap, StatusCode, header},
-    response::{Html, IntoResponse},
+    response::{Html, IntoResponse, Response},
     routing::get,
 };
 use cordis_sdk::{Error, Result};
@@ -33,6 +33,7 @@ pub(super) fn run(
     registry: Arc<Registry>,
     bridge: Option<Bridge>,
     binding: Option<super::listen::Binding>,
+    context: cordis_sdk::Context,
 ) -> Result<()> {
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -46,6 +47,11 @@ pub(super) fn run(
         }
     };
     runtime.block_on(async move {
+        let routing = Arc::new(super::routes::State {
+            registry: registry.clone(),
+            context,
+            config: config.clone(),
+        });
         let prepared = prepare(&config, registry, bridge, stop.clone(), binding).await;
         let (listener, router, entry) = match prepared {
             Ok(prepared) => prepared,
@@ -57,12 +63,16 @@ pub(super) fn run(
         ready
             .send(Ok(entry))
             .map_err(|_| Error::new(7, "HTTP启动接收方已结束"))?;
+        let router = router.layer(axum::middleware::from_fn_with_state(
+            routing,
+            super::routes::dispatch,
+        ));
         serve(listener, router, stop, config.shutdown_ms).await
     })
 }
 
 /// DOC-15 §11.3：绑定实际地址并生成本次激活的随机令牌，页面URL使用标准URL编码。
-async fn prepare(
+pub(super) async fn prepare(
     config: &Config,
     registry: Arc<Registry>,
     bridge: Option<Bridge>,
@@ -95,48 +105,67 @@ fn routes(
     bridge: Option<Bridge>,
     stop: watch::Receiver<bool>,
 ) -> Result<Router> {
-    let bootstrap = format!(
-        "globalThis.CORDIS_SESSION = {};\n",
-        serde_json::to_string(entry).map_err(problem)?
-    );
     let origin = url::Url::parse(&entry.url)
         .map_err(problem)?
         .origin()
         .ascii_serialization();
     let socket = SocketState {
+        pages: registry.pages.clone(),
+        page_headers: config.page_headers.clone(),
         origin,
+        public_origins: config.public_origins.clone(),
         token: entry.token.clone(),
         bridge,
         stop,
     };
-    let session = entry.clone();
     let token = entry.token.clone();
     let entries = registry.clone();
     let assets = registry.clone();
     let router = Router::new()
         .route("/_cordis/socket", get(super::socket::upgrade))
         .with_state(socket)
+        .merge(bootstrap_routes(entry)?)
         .route(
             "/_cordis/manifest.json",
             get(move |headers: HeaderMap| {
                 let expected = format!("Bearer {token}");
                 let entries = entries.clone();
-                async move {
-                    if headers
-                        .get(header::AUTHORIZATION)
-                        .and_then(|value| value.to_str().ok())
-                        != Some(expected.as_str())
-                    {
-                        return StatusCode::FORBIDDEN.into_response();
-                    }
-                    (
-                        [(header::CACHE_CONTROL, "no-store")],
-                        Json(entries.entries()),
-                    )
-                        .into_response()
-                }
+                async move { manifest(headers, &expected, &entries) }
             }),
         )
+        .route(
+            "/_cordis/{plugin}/{sequence}/{*file}",
+            get(move |request| {
+                let registry = assets.clone();
+                async move { registry.serve(request).await }
+            }),
+        );
+    static_routes(config, registry, router)
+}
+
+fn manifest(headers: HeaderMap, expected: &str, entries: &Registry) -> Response {
+    if headers
+        .get(header::AUTHORIZATION)
+        .and_then(|value| value.to_str().ok())
+        != Some(expected)
+    {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+    (
+        [(header::CACHE_CONTROL, "no-store")],
+        Json(entries.entries()),
+    )
+        .into_response()
+}
+
+/// DOC-15 §11：同次激活共享入口信息，浏览器从固定协议地址取得模块与令牌。
+fn bootstrap_routes(entry: &WebEntry) -> Result<Router> {
+    let bootstrap = format!(
+        "globalThis.CORDIS_SESSION = {};\n",
+        serde_json::to_string(entry).map_err(problem)?
+    );
+    let session = entry.clone();
+    Ok(Router::new()
         .route(
             "/_cordis/session.json",
             get(move || {
@@ -154,13 +183,6 @@ fn routes(
             }),
         )
         .route(
-            "/_cordis/{plugin}/{sequence}/{*file}",
-            get(move |request| {
-                let registry = assets.clone();
-                async move { registry.serve(request).await }
-            }),
-        )
-        .route(
             "/_cordis/session.js",
             get(move || {
                 let body = bootstrap.clone();
@@ -174,7 +196,11 @@ fn routes(
                     )
                 }
             }),
-        );
+        ))
+}
+
+/// ADR-0046：应用资源拥有页面外壳；缺省入口使用经过转义的配置标题。
+fn static_routes(config: &Config, registry: Arc<Registry>, router: Router) -> Result<Router> {
     if let Some(root) = &config.assets {
         let root = root.canonicalize().map_err(problem)?;
         let index = root.join(&config.index).canonicalize().map_err(problem)?;
@@ -185,8 +211,20 @@ fn routes(
             .route_service("/", ServeFile::new(index))
             .fallback_service(ServeDir::new(root)))
     } else {
+        let title = config
+            .title
+            .replace('&', "&amp;")
+            .replace('<', "&lt;")
+            .replace('>', "&gt;");
+        let page = DEFAULT_PAGE.replace("{{title}}", &title);
         Ok(router
-            .route("/", get(|| async { Html(DEFAULT_PAGE) }))
+            .route(
+                "/",
+                get(move || {
+                    let page = page.clone();
+                    async move { Html(page) }
+                }),
+            )
             .route("/favicon.ico", get(|| async { StatusCode::NO_CONTENT }))
             .fallback(move |request| {
                 let registry = registry.clone();
@@ -196,15 +234,18 @@ fn routes(
 }
 
 /// PR-6：先等待 HTTP 连接正常关闭，截止后释放运行时持有的连接任务。
-async fn serve(
+pub(super) async fn serve(
     listener: tokio::net::TcpListener,
     router: Router,
     stop: watch::Receiver<bool>,
     shutdown_ms: u64,
 ) -> Result<()> {
-    let server = axum::serve(listener, router)
-        .with_graceful_shutdown(stopping(stop.clone()))
-        .into_future();
+    let server = axum::serve(
+        listener,
+        router.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+    )
+    .with_graceful_shutdown(stopping(stop.clone()))
+    .into_future();
     tokio::pin!(server);
     tokio::select! {
         result = &mut server => result.map_err(problem),

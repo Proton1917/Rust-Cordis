@@ -330,7 +330,8 @@ impl Component for Composition {
     }
     async fn apply(ctx: Context, config: CompositionConfig) -> Result<()> {
         let base = ctx.get::<dyn ScopedCounter>()?;
-        if base.value()? != 100 || base.bindings()? != 0 {
+        // ADR-0046 §3.11：基础视图携带可信调用身份，形成一次 Scoped 绑定。
+        if base.value()? != 100 || base.bindings()? != 1 {
             return Err(Error::new(1011, "基视图计数应为100"));
         }
         let view = ctx.intercept::<dyn ScopedCounter, _>(&Metadata {
@@ -339,7 +340,7 @@ impl Component for Composition {
         })?;
         let bound = view.get::<dyn ScopedCounter>()?;
         let repeated = view.get::<dyn ScopedCounter>()?;
-        if bound.value()? != 107 || repeated.value()? != 107 || base.bindings()? != 1 {
+        if bound.value()? != 107 || repeated.value()? != 107 || base.bindings()? != 2 {
             return Err(Error::new(1012, "同一视图应复用一次绑定结果"));
         }
         if bound.clone_object()?.has_typed_methods() != config.expected_typed {
@@ -360,7 +361,7 @@ impl Component for Composition {
         let nested = view.intercept::<dyn ScopedCounter, _>(&Offset { offset: 10 })?;
         drop(view);
         let inherited = nested.get::<dyn ScopedCounter>()?;
-        if inherited.value()? != 110 || inherited.label()? != "outer" || base.bindings()? != 2 {
+        if inherited.value()? != 110 || inherited.label()? != "outer" || base.bindings()? != 3 {
             return Err(Error::new(1014, "内层元数据应覆盖offset并继承label"));
         }
         let a = ctx.isolate::<dyn ScopedCounter>(Some("native-a"))?;

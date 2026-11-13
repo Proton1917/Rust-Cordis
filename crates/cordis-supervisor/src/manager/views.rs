@@ -131,6 +131,7 @@ impl Manager {
             context = context.isolate_named(key, realm);
         }
         for interception in &options.intercept {
+            self.check_interception(&context, &interception.meta)?;
             let key = Interface::key(&interception.interface)?;
             payload::persistent_value(&interception.meta)
                 .map_err(|problem| error(2, problem.to_string()))?;

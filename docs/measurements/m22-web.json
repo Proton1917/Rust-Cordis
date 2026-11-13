@@ -1,0 +1,291 @@
+{
+  "scenario": "web",
+  "result": {
+    "identity": {
+      "pages": [
+        {
+          "attributes": {
+            "headers": [
+              [
+                "cookie",
+                "session=m22-page-one-cookie"
+              ],
+              [
+                "accept-language",
+                "zh-CN,zh;q=0.9"
+              ],
+              [
+                "user-agent",
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/157.0.0.0 Safari/537.36"
+              ]
+            ],
+            "peer": "127.0.0.1:63484"
+          },
+          "metadata": {
+            "cordis.caller": {
+              "page_of": "identity"
+            },
+            "cordis.page": {
+              "forwarder": "http",
+              "key": [
+                80,
+                35,
+                155,
+                189,
+                246,
+                17,
+                78,
+                6,
+                184,
+                130,
+                250,
+                110,
+                200,
+                137,
+                14,
+                144,
+                223,
+                60,
+                39,
+                200,
+                65,
+                56,
+                68,
+                57,
+                184,
+                65,
+                95,
+                201,
+                60,
+                36,
+                51,
+                48
+              ]
+            }
+          },
+          "secret_obtained": true,
+          "forgedCode": 9,
+          "secretCode": 9,
+          "trusted": {
+            "page_of": "identity"
+          }
+        },
+        {
+          "attributes": {
+            "headers": [
+              [
+                "cookie",
+                "session=m22-page-two-cookie"
+              ],
+              [
+                "accept-language",
+                "zh-CN,zh;q=0.9"
+              ],
+              [
+                "user-agent",
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/157.0.0.0 Safari/537.36"
+              ]
+            ],
+            "peer": "127.0.0.1:63505"
+          },
+          "metadata": {
+            "cordis.caller": {
+              "page_of": "identity"
+            },
+            "cordis.page": {
+              "forwarder": "http",
+              "key": [
+                42,
+                70,
+                234,
+                151,
+                57,
+                95,
+                65,
+                168,
+                156,
+                3,
+                81,
+                228,
+                218,
+                67,
+                206,
+                242,
+                204,
+                13,
+                231,
+                157,
+                103,
+                128,
+                73,
+                74,
+                139,
+                122,
+                10,
+                105,
+                231,
+                110,
+                203,
+                152
+              ]
+            }
+          },
+          "secret_obtained": true,
+          "forgedCode": 9,
+          "secretCode": 9,
+          "trusted": {
+            "page_of": "identity"
+          }
+        }
+      ],
+      "backend": {
+        "attributes": null,
+        "metadata": {
+          "cordis.caller": {
+            "instance": "backend-probe"
+          }
+        },
+        "secret_obtained": true
+      },
+      "closed_key_released": true,
+      "websockets": [
+        "ws://127.0.0.1:63412/_cordis/socket",
+        "ws://127.0.0.1:63412/_cordis/socket",
+        "ws://127.0.0.1:63412/_cordis/socket",
+        "ws://127.0.0.1:63412/_cordis/socket"
+      ]
+    },
+    "conflicts": {
+      "routes": [
+        {
+          "code": 2,
+          "prefix": "/api"
+        },
+        {
+          "code": 2,
+          "prefix": "/_cordis/entry"
+        },
+        {
+          "code": 2,
+          "prefix": "/identity"
+        },
+        {
+          "code": 2,
+          "prefix": "/identity/child"
+        },
+        {
+          "code": 2,
+          "prefix": "/"
+        }
+      ],
+      "web_after_route": {
+        "ok": false,
+        "code": 2,
+        "value": "网页挂载路径与 HTTP 路由重叠",
+        "detail": {
+          "group": "batch",
+          "plugin": null,
+          "committed": false,
+          "cause": null
+        },
+        "rpc_wall_us": 18613
+      },
+      "longest_prefix": true
+    },
+    "restart": {
+      "core_pid": 66595,
+      "old_http_pid": 66678,
+      "restored_page": {
+        "attributes": {
+          "headers": [
+            [
+              "cookie",
+              "session=m22-page-two-cookie"
+            ],
+            [
+              "accept-language",
+              "zh-CN,zh;q=0.9"
+            ],
+            [
+              "user-agent",
+              "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/157.0.0.0 Safari/537.36"
+            ]
+          ],
+          "peer": "127.0.0.1:63568"
+        },
+        "metadata": {
+          "cordis.caller": {
+            "page_of": "identity"
+          },
+          "cordis.page": {
+            "forwarder": "http",
+            "key": [
+              149,
+              48,
+              153,
+              248,
+              87,
+              218,
+              65,
+              249,
+              141,
+              26,
+              95,
+              115,
+              188,
+              64,
+              147,
+              80,
+              76,
+              97,
+              164,
+              255,
+              40,
+              131,
+              74,
+              153,
+              175,
+              163,
+              14,
+              231,
+              247,
+              74,
+              130,
+              139
+            ]
+          }
+        },
+        "secret_obtained": true,
+        "forgedCode": 9,
+        "secretCode": 9,
+        "trusted": {
+          "page_of": "identity"
+        }
+      }
+    },
+    "shell": {
+      "before": {
+        "time": 1794597991695.4,
+        "mark": "28c6aed1-a79f-4fbb-a700-8aff7f74b4ab",
+        "title": "应用外壳"
+      },
+      "after": {
+        "time": 1794597991695.4,
+        "mark": "28c6aed1-a79f-4fbb-a700-8aff7f74b4ab",
+        "title": "应用外壳"
+      },
+      "not_found": 404
+    },
+    "proxy": {
+      "port": 63412,
+      "pid": 66727
+    },
+    "invalid_origin": 403,
+    "private_core_outputs": [
+      "stdout.log",
+      "stderr.log",
+      "state/status.json"
+    ]
+  },
+  "exit": 0
+}

@@ -8,6 +8,7 @@ mod metadata;
 mod model;
 mod native;
 mod routing;
+mod trusted;
 mod views;
 
 pub use batch::{BatchInstance, BatchReplacement};

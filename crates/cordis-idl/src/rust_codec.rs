@@ -158,12 +158,13 @@ fn expression(
                 )
             }
         }
-        TypeDefKind::List(Type::U8) if method => {
+        TypeDefKind::List(Type::U8) => {
             if encoding {
                 format!("Ok::<_, String>(abi::CborValue::Bytes({value}.to_vec()))")
             } else {
+                let converted = if method { ".map(|bytes| bytes.0)" } else { "" };
                 format!(
-                    "match {value} {{ abi::CborValue::Bytes(bytes) => Ok(bytes), _ => Err(\"参数需要 CBOR 字节串\".into()) }}"
+                    "{value}.deserialized::<::cordis_sdk::Bytes>(){converted}.map_err(|error| error.to_string())"
                 )
             }
         }

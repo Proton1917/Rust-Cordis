@@ -6,10 +6,23 @@ use toml_edit::{Array, DocumentMut, Item, value};
 
 mod typescript;
 pub use typescript::typescript_plugin;
+pub(super) use typescript::typescript_sources;
 
 const MAIN: &str = include_str!("../../templates/python/main.py");
 const REQUIREMENTS: &str = include_str!("../../../../sdks/python/requirements.txt");
 const SDK: &[(&str, &str)] = &[
+    (
+        "metadata.py",
+        include_str!("../../../../sdks/python/cordis_sdk/metadata.py"),
+    ),
+    (
+        "streams.py",
+        include_str!("../../../../sdks/python/cordis_sdk/streams.py"),
+    ),
+    (
+        "http.py",
+        include_str!("../../../../sdks/python/cordis_sdk/http.py"),
+    ),
     (
         "__init__.py",
         include_str!("../../../../sdks/python/cordis_sdk/__init__.py"),
@@ -83,12 +96,16 @@ pub(super) fn create_deployment(
 
 /// DOC-15 M18：启动代码与 SDK 一起复制，依赖安装位置归该插件目录所有。
 fn write_python(directory: &Path, name: &str) -> Result<()> {
+    python_sources(directory, name, MAIN)
+}
+
+pub(super) fn python_sources(directory: &Path, name: &str, main: &str) -> Result<()> {
     fs::create_dir(directory)?;
     fs::create_dir(directory.join("cordis_sdk"))?;
     for (filename, source) in SDK {
         write_new(&directory.join("cordis_sdk").join(filename), source)?;
     }
-    write_new(&directory.join("main.py"), &MAIN.replace("{{name}}", name))?;
+    write_new(&directory.join("main.py"), &main.replace("{{name}}", name))?;
     write_new(&directory.join("requirements.txt"), REQUIREMENTS)?;
     write_new(
         &directory.join(".gitignore"),

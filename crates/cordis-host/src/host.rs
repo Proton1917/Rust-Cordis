@@ -321,6 +321,18 @@ impl Host {
         self.0.executor.wait(self.request(method, params))
     }
 
+    /// ADR-0046：异步宿主操作在拥有执行器上运行；查询可取消，已受理的生命周期操作继续完成。
+    fn scheduled<F, T>(&self, future: F, cancellable: bool) -> Result<RemoteFuture<T>>
+    where
+        F: std::future::Future<Output = Result<T>> + Send + 'static,
+        T: Send + 'static,
+    {
+        make_future(
+            self.0.executor.start(future, cancellable),
+            abi::environment(),
+        )
+    }
+
     pub fn log(&self, context: u64, level: u32, message: &str) -> Result<()> {
         if context != 0 {
             self.context(context)?;
@@ -343,12 +355,12 @@ impl Host {
 
     pub fn sleep(&self, context: u64, nanos: u64) -> Result<RemoteFuture<AbiUnit>> {
         self.context(context)?;
-        make_future(
+        self.scheduled(
             async move {
                 tokio::time::sleep(Duration::from_nanos(nanos)).await;
                 Ok(AbiUnit::default())
             },
-            abi::environment(),
+            true,
         )
     }
 
@@ -425,12 +437,12 @@ impl Host {
             component: component.into(),
             config: decode_value(config)?,
         };
-        make_future(
+        self.scheduled(
             async move {
                 let response = host.request("plugin", to_value(&request)?).await?;
                 Ok(from_value::<payload::PluginResult>(response.value().clone())?.instance)
             },
-            abi::environment(),
+            false,
         )
     }
 
@@ -474,7 +486,7 @@ impl Host {
 
     pub fn effect_wait(&self, effect: u64, dispose: bool) -> Result<RemoteFuture<AbiUnit>> {
         let host = self.clone();
-        make_future(
+        self.scheduled(
             async move {
                 host.request(
                     if dispose {
@@ -487,7 +499,7 @@ impl Host {
                 .await?;
                 Ok(AbiUnit::default())
             },
-            abi::environment(),
+            !dispose,
         )
     }
 
@@ -613,12 +625,12 @@ impl Host {
     ) -> Result<RemoteFuture<AbiUnit>> {
         let message = self.emit_message(context, event, bytes, true)?;
         let host = self.clone();
-        make_future(
+        self.scheduled(
             async move {
                 host.request("emit", message).await?;
                 Ok(AbiUnit::default())
             },
-            abi::environment(),
+            false,
         )
     }
 

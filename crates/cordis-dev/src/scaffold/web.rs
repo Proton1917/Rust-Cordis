@@ -58,6 +58,7 @@ fn write_native(directory: &Path, name: &str) -> Result<()> {
         name,
         &super::PLUGIN.replace("{{name}}", name),
         false,
+        toml::Table::new(),
     )?;
     write_new(
         &directory.join("cordis-plugin.toml"),

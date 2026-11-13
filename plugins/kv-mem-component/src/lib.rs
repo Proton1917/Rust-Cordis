@@ -13,13 +13,19 @@ struct MemoryStore {
 #[cordis_sdk::interface]
 impl Kv for MemoryStore {
     fn get(&self, key: &str) -> Result<Option<Vec<u8>>> {
-        Ok(self.snapshot.lock().unwrap().entries.get(key).cloned())
+        Ok(self
+            .snapshot
+            .lock()
+            .unwrap()
+            .entries
+            .get(key)
+            .map(|bytes| bytes.0.clone()))
     }
 
     fn put(&self, key: &str, value: Vec<u8>) -> Result<()> {
         let mut snapshot = self.snapshot.lock().unwrap();
         self.frozen.check()?;
-        snapshot.entries.insert(key.to_owned(), value);
+        snapshot.entries.insert(key.to_owned(), value.into());
         drop(snapshot);
         self.ctx.emit(Changed {
             key: key.to_owned(),

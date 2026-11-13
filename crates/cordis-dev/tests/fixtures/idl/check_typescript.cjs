@@ -44,7 +44,8 @@ async function main() {
     assert.equal(types.decodeValue({kind: 'u64'}, shortCount, null), 17n);
     assert.equal(sample.label, '数据'); assert.equal(sample.marker, '𝄞');
     assert.equal(sample.count, 18446744073709551615n); assert.equal(sample.delta, -9223372036854775808n);
-    assert.deepEqual(sample.bytes, [0, 128, 255]); assert.deepEqual(sample.pairs, new Map([['k', [7, 8]]]));
+    assert.deepEqual(Array.from(sample.bytes), [0, 128, 255]);
+    assert.deepEqual(Array.from(sample.pairs, ([key, value]) => [key, Array.from(value)]), [['k', [7, 8]]]);
     assert.deepEqual(sample.window, Array(40).fill(4));
     assert.deepEqual(sample.choice, { kind: 'empty' }); assert.equal(sample.state, 'ready');
     assert.deepEqual(sample.permissions, { readValue: true, writeValue: false });

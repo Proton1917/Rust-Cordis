@@ -443,8 +443,8 @@ footer { font-size: 13px; color: var(--muted); border-top: 1px solid var(--line)
   <section aria-labelledby="prog-title">
     <div class="sec-head">
       <div class="eyebrow">进度</div>
-      <h2 id="prog-title">实现进度（2026-11-13）</h2>
-      <p class="lead">M21 第三阶段验收已完成。Rust、Python、TypeScript 的六方向调用、持续计数迁移与契约验证通过；完整 Python/Node 解释器包完成签名、独立运行和原生扩展调用。固定性能测量已归档，同组调用的空闲条件对照通过；工作区全部 327 项用例及全量负载下五轮 native 套件通过。</p>
+      <h2 id="prog-title">实现进度（2026-11-14）</h2>
+      <p class="lead">M22 外部接入已完成实现与验收，等待设计方复核。三种语言的 HTTP 请求、64 MiB 文件传输、持续请求中的替换回滚、页面与后端授权均已通过；工作区 336 项用例通过，三种语言各 10000 次 HTTP 往返测量已归档。复核后发布 v0.1.0，再实施 M23 的 SDK 动态调用。</p>
     </div>
     <div class="progress">
       <table>
@@ -463,12 +463,16 @@ footer { font-size: 13px; color: var(--muted); border-top: 1px solid var(--line)
           <tr><td>TypeScript SDK</td><td class="mono">M19</td><td><span class="st done">运行验证通过</span></td><td>Node 双向调用、KV 契约、资源与事件转交、迁移回退、脚手架热替换通过</td></tr>
           <tr><td>前端与全栈插件</td><td class="mono">M20</td><td><span class="st done">功能与退出检查通过</span></td><td>八个真实浏览器场景通过；同名页面域隔离、三语言依赖恢复、批次替换回退与 HTTP 重连</td></tr>
           <tr><td>第三阶段综合验收</td><td class="mono">M21</td><td><span class="st done">阶段验收完成</span></td><td>三语言调用、迁移与契约；完整解释器签名包；固定性能记录、插件编写手册及五轮 native 稳定性验收</td></tr>
+          <tr><td>外部接入</td><td class="mono">M22</td><td><span class="st done">完成，待复核</span></td><td>HTTP 路由与通用流；可信页面及后端身份、密钥授权、三语言处理方与自定义页面外壳</td></tr>
+          <tr><td>SDK 动态调用</td><td class="mono">M23</td><td><span class="st">计划中</span></td><td>按已声明依赖的接口名与方法名调用服务，沿现有依赖与替换机制执行</td></tr>
         </tbody>
       </table>
     </div>
     <div class="notes" id="web-mechanisms">
       <div class="note"><b>页面实例与依赖恢复</b>每页的前端组件在核心中各有一个子实例，归属于网页实例或活动后端。页面服务按页面编号隔离，显式命名域也属于当前页面。必需提供方撤回时，子实例进入 Pending 并清理界面；提供方插回后重新执行 apply。关闭一页会回收该页子实例，其余页面继续运行。</div>
       <div class="note"><b>版本替换与连接恢复</b>替换时逐页导出状态、清理旧组件，再加载带新序号的模块，保持同一页面文档。全栈替换先激活后端，再更新页面；候选失败时共同恢复原版本。HTTP 重启沿原地址轮换令牌，各页完成本地清理后重连。消息和在途调用预算按页面连接分别计算。</div>
+      <div class="note"><b>外部 HTTP 与大文件</b>处理方在激活时登记普通路由，卸下时撤回。HTTP 插件解析方法、头部、Cookie 和正文；通用字节流以服务对象转交，接收方按需拉取，取消时释放文件和套接字。页面外壳由应用提供，组件替换保持同一页面文档。</div>
+      <div class="note"><b>调用身份与授权</b>核心写入直接调用方：后端为 instance，页面为 page_of；页面键指向 HTTP 插件保存的连接属性。各插件决定授权，密钥插件按自己的 grants 读取文件并提供值。后端处理页面调用期间，仍以自身实例身份访问其他服务。</div>
     </div>
     <p class="callout"><a href="../design/flow/index.html">查看网页插件状态与替换流程</a>：真实截图展示全栈替换、依赖撤回和恢复、动态装配及 HTTP 重连的界面状态。</p>
   </section>

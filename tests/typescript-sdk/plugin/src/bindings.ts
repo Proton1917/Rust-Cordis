@@ -78,8 +78,8 @@ export function encodeValue(input: Spec, value: any, transport: Transport, metho
             return wire === null || wire instanceof Tagged && wire.tag === 60001 ? new Tagged(60001, wire) : wire;
         }
         case "list":
-            if (method && resolved(spec.item).kind === "u8" && spec.length === undefined) {
-                if (!(value instanceof Uint8Array)) throw new TypeError("方法字节值需要 Uint8Array");
+            if (resolved(spec.item).kind === "u8" && spec.length === undefined) {
+                if (!(value instanceof Uint8Array)) throw new TypeError("字节值需要 Uint8Array");
                 return value;
             }
             if (!Array.isArray(value) || spec.length !== undefined && value.length !== spec.length) throw new TypeError("列表形状错误");
@@ -123,9 +123,10 @@ export function decodeValue(input: Spec, value: any, transport: Transport, metho
             return result === null || result instanceof Some ? new Some(result) : result;
         }
         case "list":
-            if (method && resolved(spec.item).kind === "u8" && spec.length === undefined) {
-                if (!(value instanceof Uint8Array)) throw new TypeError("方法字节值需要 CBOR 字节串");
-                return value;
+            if (resolved(spec.item).kind === "u8" && spec.length === undefined) {
+                if (value instanceof Uint8Array) return value;
+                if (Array.isArray(value)) return new Uint8Array(value.map(item => scalar("u8", item) as number));
+                throw new TypeError("字节值需要字节串或 u8 数组");
             }
             if (!Array.isArray(value) || spec.length !== undefined && value.length !== spec.length) throw new TypeError("列表形状错误");
             return value.map((item) => decodeValue(spec.item, item, transport));
@@ -389,7 +390,7 @@ export class KvClient {
 }
 
 export interface Snapshot {
-    entries: Map<string, Array<number>>;
+    entries: Map<string, Uint8Array>;
 }
 
 export interface Changed {

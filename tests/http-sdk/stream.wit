@@ -1,0 +1,9 @@
+package test:stream-files@1.0.0;
+
+/// ```cordis
+/// name = "test.stream-files"
+/// ```
+interface files {
+    use cordis:byte-stream/streams@1.0.0.{byte-stream};
+    open: func() -> result<own<byte-stream>, string>;
+}

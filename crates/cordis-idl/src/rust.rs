@@ -183,11 +183,14 @@ impl Generator<'_> {
                         self.intrinsic(self.document.intrinsics.by_type[&id])
                     }
                     TypeDefKind::Handle(Handle::Own(resource)) => {
-                        format!("::cordis_sdk::Service<dyn {}>", self.named(*resource))
+                        format!(
+                            "::cordis_sdk::Service<dyn {}>",
+                            self.named(self.document.resource_type(*resource))
+                        )
                     }
                     TypeDefKind::Handle(Handle::Borrow(resource)) => format!(
                         "::cordis_sdk::BorrowedService<{lifetime}, dyn {}>",
-                        self.named(*resource)
+                        self.named(self.document.resource_type(*resource))
                     ),
                     _ if !method && self.document.types.contains_key(&id) => {
                         let generic = if self.document.properties[&id].borrowed {
@@ -204,14 +207,15 @@ impl Generator<'_> {
     }
 
     pub fn structure(&self, id: TypeId, method: bool, lifetime: &str) -> String {
-        let child = |ty| self.ty(ty, method, lifetime);
+        let child = |ty| self.ty(ty, false, lifetime);
         match &self.document.resolve.types[id].kind {
             TypeDefKind::Resource
             | TypeDefKind::Handle(_)
             | TypeDefKind::Future(_)
             | TypeDefKind::Stream(_) => self.ty(Type::Id(id), method, lifetime),
             TypeDefKind::Type(ty) => child(*ty),
-            TypeDefKind::Option(ty) => format!("Option<{}>", child(*ty)),
+            TypeDefKind::Option(ty) => format!("Option<{}>", self.ty(*ty, method, lifetime)),
+            TypeDefKind::List(Type::U8) if !method => "::cordis_sdk::Bytes".into(),
             TypeDefKind::List(ty) => format!("Vec<{}>", child(*ty)),
             TypeDefKind::FixedLengthList(ty, length) => format!("[{}; {length}]", child(*ty)),
             TypeDefKind::Map(key, value) => format!(

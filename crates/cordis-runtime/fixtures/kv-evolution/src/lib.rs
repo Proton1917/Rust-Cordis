@@ -24,12 +24,18 @@ mod next_interface {
     #[cordis_sdk::interface]
     impl Kv for Store {
         fn get(&self, key: &str) -> Result<Option<Vec<u8>>> {
-            Ok(self.entries.lock().unwrap().entries.get(key).cloned())
+            Ok(self
+                .entries
+                .lock()
+                .unwrap()
+                .entries
+                .get(key)
+                .map(|value| value.0.clone()))
         }
         fn put(&self, key: &str, value: Vec<u8>) -> Result<()> {
             let mut entries = self.entries.lock().unwrap();
             self.frozen.check()?;
-            entries.entries.insert(key.to_owned(), value);
+            entries.entries.insert(key.to_owned(), value.into());
             Ok(())
         }
         fn keys(&self) -> Result<Vec<String>> {

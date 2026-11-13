@@ -2,7 +2,7 @@
 
 use axum::{
     extract::{
-        State, WebSocketUpgrade,
+        ConnectInfo, State, WebSocketUpgrade,
         ws::{Message, WebSocket},
     },
     http::{HeaderMap, StatusCode, header},
@@ -20,7 +20,10 @@ pub struct Bridge {
 }
 #[derive(Clone)]
 pub struct SocketState {
+    pub pages: Arc<super::page::Pages>,
+    pub page_headers: Vec<String>,
     pub origin: String,
+    pub public_origins: Vec<String>,
     pub token: String,
     pub bridge: Option<Bridge>,
     pub stop: watch::Receiver<bool>,
@@ -48,6 +51,7 @@ impl ForwardReceiver for Receiver {
 /// DOC-15 §11.3：Origin 与本次激活令牌在升级边界同时验证。
 pub async fn upgrade(
     State(state): State<SocketState>,
+    ConnectInfo(peer): ConnectInfo<std::net::SocketAddr>,
     headers: HeaderMap,
     websocket: WebSocketUpgrade,
 ) -> Response {
@@ -59,23 +63,28 @@ pub async fn upgrade(
         .and_then(|value| value.to_str().ok())
         .unwrap_or("");
     let expected = format!("cordis-token.{}", state.token);
-    if origin != Some(state.origin.as_str())
-        || !protocol.split(',').any(|part| part.trim() == expected)
+    if !origin.is_some_and(|origin| {
+        origin == state.origin || state.public_origins.iter().any(|allowed| allowed == origin)
+    }) || !protocol.split(',').any(|part| part.trim() == expected)
     {
         return StatusCode::FORBIDDEN.into_response();
     }
     if state.bridge.is_none() {
         return StatusCode::SERVICE_UNAVAILABLE.into_response();
     }
+    let page = match state.pages.open(&headers, &state.page_headers, peer) {
+        Ok(page) => page,
+        Err(status) => return status.into_response(),
+    };
     websocket
         .protocols(["cordis-up1"])
         .max_frame_size(16 * 1024 * 1024)
         .max_message_size(16 * 1024 * 1024)
-        .on_upgrade(move |socket| serve(socket, state))
+        .on_upgrade(move |socket| serve(socket, state, page))
 }
 
 /// PR-3、DOC-16 §11：每个升级连接独立占有 Receiver 与有界发送队列。
-async fn serve(mut socket: WebSocket, mut state: SocketState) {
+async fn serve(mut socket: WebSocket, mut state: SocketState, page: super::page::Page) {
     let bridge = state.bridge.take().expect("upgraded forwarding capability");
     let (sender, mut output) = mpsc::channel(64);
     let receiver = match bridge
@@ -85,7 +94,15 @@ async fn serve(mut socket: WebSocket, mut state: SocketState) {
         Ok(receiver) => receiver,
         Err(_) => return,
     };
-    let metadata = cordis_sdk::CborValue::Map(vec![("origin".into(), state.origin.into())]);
+    let metadata = cordis_sdk::CborValue::Map(vec![(
+        "key".into(),
+        cordis_sdk::CborValue::Array(
+            page.key
+                .iter()
+                .map(|byte| u64::from(*byte).into())
+                .collect(),
+        ),
+    )]);
     let channel = match bridge.forward.open(metadata, receiver).await {
         Ok(channel) => channel,
         Err(_) => return,

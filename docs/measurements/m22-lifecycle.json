@@ -1,0 +1,819 @@
+{
+  "scenario": "lifecycle",
+  "result": {
+    "replacement": {
+      "accepted": [
+        {
+          "ok": true,
+          "code": null,
+          "value": null,
+          "detail": null,
+          "rpc_wall_us": 119856
+        },
+        {
+          "ok": true,
+          "code": null,
+          "value": null,
+          "detail": null,
+          "rpc_wall_us": 126717
+        },
+        {
+          "ok": true,
+          "code": null,
+          "value": null,
+          "detail": null,
+          "rpc_wall_us": 240818
+        }
+      ],
+      "rejected": {
+        "ok": false,
+        "code": 1001,
+        "value": "HTTP 处理方候选拒绝激活",
+        "detail": {
+          "group": "rust",
+          "plugin": "http-echo",
+          "committed": false,
+          "cause": null
+        },
+        "rpc_wall_us": 140792
+      },
+      "rollback": {
+        "plugin": "http-echo",
+        "previous_library": 6,
+        "candidate_library": 7,
+        "affected_instances": 0,
+        "pause_ms": 0,
+        "quiescence_ms": null,
+        "committed": false,
+        "succeeded": false,
+        "rolled_back": true,
+        "failure": "HTTP 处理方候选拒绝激活"
+      },
+      "traffic": {
+        "rate_per_second": 50,
+        "start_ns": 1244137103659666,
+        "requests": [
+          {
+            "submitted_ns": 1244137103742250,
+            "status": 200,
+            "version": "0.1.0"
+          },
+          {
+            "submitted_ns": 1244137142867166,
+            "status": 200,
+            "version": "0.1.0"
+          },
+          {
+            "submitted_ns": 1244137150457000,
+            "status": 200,
+            "version": "0.1.0"
+          },
+          {
+            "submitted_ns": 1244137176884875,
+            "status": 200,
+            "version": "0.1.0"
+          },
+          {
+            "submitted_ns": 1244137238493708,
+            "status": 200,
+            "version": "0.1.0"
+          },
+          {
+            "submitted_ns": 1244137238518375,
+            "status": 200,
+            "version": "0.1.0"
+          },
+          {
+            "submitted_ns": 1244137238745833,
+            "status": 200,
+            "version": "0.1.0"
+          },
+          {
+            "submitted_ns": 1244137271420208,
+            "status": 200,
+            "version": "0.1.0"
+          },
+          {
+            "submitted_ns": 1244137271444458,
+            "status": 200,
+            "version": "0.1.0"
+          },
+          {
+            "submitted_ns": 1244137294234791,
+            "status": 200,
+            "version": "0.1.0"
+          },
+          {
+            "submitted_ns": 1244137341837375,
+            "status": 200,
+            "version": "0.1.0"
+          },
+          {
+            "submitted_ns": 1244137341864833,
+            "status": 200,
+            "version": "0.1.0"
+          },
+          {
+            "submitted_ns": 1244137358760916,
+            "status": 200,
+            "version": "0.1.0"
+          },
+          {
+            "submitted_ns": 1244137372903166,
+            "status": 200,
+            "version": "0.1.0"
+          },
+          {
+            "submitted_ns": 1244137462824291,
+            "status": 200,
+            "version": "0.1.0"
+          },
+          {
+            "submitted_ns": 1244137462843583,
+            "status": 200,
+            "version": "0.1.0"
+          },
+          {
+            "submitted_ns": 1244137462848166,
+            "status": 200,
+            "version": "0.1.0"
+          },
+          {
+            "submitted_ns": 1244137462852125,
+            "status": 200,
+            "version": "0.1.0"
+          },
+          {
+            "submitted_ns": 1244137468654625,
+            "status": 200,
+            "version": "0.1.0"
+          },
+          {
+            "submitted_ns": 1244137589544916,
+            "status": 200,
+            "version": "0.1.0"
+          },
+          {
+            "submitted_ns": 1244137589563166,
+            "status": 200,
+            "version": "0.1.0"
+          },
+          {
+            "submitted_ns": 1244137589567666,
+            "status": 200,
+            "version": "0.1.0"
+          },
+          {
+            "submitted_ns": 1244137589570958,
+            "status": 200,
+            "version": "0.1.0"
+          },
+          {
+            "submitted_ns": 1244137589573875,
+            "status": 200,
+            "version": "0.1.0"
+          },
+          {
+            "submitted_ns": 1244137589986875,
+            "status": 200,
+            "version": "0.1.0"
+          },
+          {
+            "submitted_ns": 1244137625414291,
+            "status": 200,
+            "version": "0.1.0"
+          },
+          {
+            "submitted_ns": 1244137625428166,
+            "status": 200,
+            "version": "0.1.0"
+          },
+          {
+            "submitted_ns": 1244137675185416,
+            "status": 200,
+            "version": "0.1.0"
+          },
+          {
+            "submitted_ns": 1244137675209916,
+            "status": 200,
+            "version": "0.1.0"
+          },
+          {
+            "submitted_ns": 1244137720470541,
+            "status": 200,
+            "version": "0.1.0"
+          },
+          {
+            "submitted_ns": 1244137720489291,
+            "status": 200,
+            "version": "0.1.0"
+          },
+          {
+            "submitted_ns": 1244137742176208,
+            "status": 200,
+            "version": "0.1.0"
+          },
+          {
+            "submitted_ns": 1244137756179791,
+            "status": 200,
+            "version": "0.1.0"
+          },
+          {
+            "submitted_ns": 1244137786536625,
+            "status": 200,
+            "version": "0.1.0"
+          },
+          {
+            "submitted_ns": 1244137786554708,
+            "status": 200,
+            "version": "0.1.0"
+          },
+          {
+            "submitted_ns": 1244137823095583,
+            "status": 200,
+            "version": "0.1.1"
+          },
+          {
+            "submitted_ns": 1244137823792458,
+            "status": 200,
+            "version": "0.1.1"
+          },
+          {
+            "submitted_ns": 1244137875682541,
+            "status": 200,
+            "version": "0.1.1"
+          },
+          {
+            "submitted_ns": 1244137875711333,
+            "status": 200,
+            "version": "0.1.1"
+          },
+          {
+            "submitted_ns": 1244137886281875,
+            "status": 200,
+            "version": "0.1.1"
+          },
+          {
+            "submitted_ns": 1244137962376041,
+            "status": 200,
+            "version": "0.1.1"
+          },
+          {
+            "submitted_ns": 1244137962400583,
+            "status": 200,
+            "version": "0.1.1"
+          },
+          {
+            "submitted_ns": 1244137962404916,
+            "status": 200,
+            "version": "0.1.1"
+          },
+          {
+            "submitted_ns": 1244137967164416,
+            "status": 200,
+            "version": "0.1.1"
+          },
+          {
+            "submitted_ns": 1244138038542625,
+            "status": 200,
+            "version": "0.1.1"
+          },
+          {
+            "submitted_ns": 1244138038566750,
+            "status": 200,
+            "version": "0.1.1"
+          },
+          {
+            "submitted_ns": 1244138038574791,
+            "status": 200,
+            "version": "0.1.1"
+          },
+          {
+            "submitted_ns": 1244138051109750,
+            "status": 200,
+            "version": "0.1.1"
+          },
+          {
+            "submitted_ns": 1244138074163291,
+            "status": 200,
+            "version": "0.1.1"
+          },
+          {
+            "submitted_ns": 1244138151745416,
+            "status": 200,
+            "version": "0.1.1"
+          },
+          {
+            "submitted_ns": 1244138151763208,
+            "status": 200,
+            "version": "0.1.1"
+          },
+          {
+            "submitted_ns": 1244138151766916,
+            "status": 200,
+            "version": "0.1.1"
+          },
+          {
+            "submitted_ns": 1244138151769375,
+            "status": 200,
+            "version": "0.1.1"
+          },
+          {
+            "submitted_ns": 1244138181982958,
+            "status": 200,
+            "version": "0.1.1"
+          },
+          {
+            "submitted_ns": 1244138197706500,
+            "status": 200,
+            "version": "0.1.1"
+          },
+          {
+            "submitted_ns": 1244138231124666,
+            "status": 200,
+            "version": "0.1.1"
+          },
+          {
+            "submitted_ns": 1244138231141583,
+            "status": 200,
+            "version": "0.1.1"
+          },
+          {
+            "submitted_ns": 1244138253169708,
+            "status": 200,
+            "version": "0.1.1"
+          },
+          {
+            "submitted_ns": 1244138296407166,
+            "status": 200,
+            "version": "0.1.1"
+          },
+          {
+            "submitted_ns": 1244138296434208,
+            "status": 200,
+            "version": "0.1.1"
+          },
+          {
+            "submitted_ns": 1244138320877625,
+            "status": 200,
+            "version": "0.1.1"
+          },
+          {
+            "submitted_ns": 1244138332837333,
+            "status": 200,
+            "version": "0.1.1"
+          },
+          {
+            "submitted_ns": 1244138348565916,
+            "status": 200,
+            "version": "0.1.1"
+          },
+          {
+            "submitted_ns": 1244138372767750,
+            "status": 200,
+            "version": "0.1.1"
+          },
+          {
+            "submitted_ns": 1244138394920250,
+            "status": 200,
+            "version": "0.1.1"
+          },
+          {
+            "submitted_ns": 1244138409001541,
+            "status": 200,
+            "version": "0.1.1"
+          },
+          {
+            "submitted_ns": 1244138433200583,
+            "status": 200,
+            "version": "0.1.1"
+          },
+          {
+            "submitted_ns": 1244138469517791,
+            "status": 200,
+            "version": "0.1.1"
+          },
+          {
+            "submitted_ns": 1244138469536666,
+            "status": 200,
+            "version": "0.1.1"
+          },
+          {
+            "submitted_ns": 1244138486419750,
+            "status": 200,
+            "version": "0.1.2"
+          },
+          {
+            "submitted_ns": 1244138532800416,
+            "status": 200,
+            "version": "0.1.2"
+          },
+          {
+            "submitted_ns": 1244138532829333,
+            "status": 200,
+            "version": "0.1.2"
+          },
+          {
+            "submitted_ns": 1244138585795875,
+            "status": 200,
+            "version": "0.1.2"
+          },
+          {
+            "submitted_ns": 1244138585853250,
+            "status": 200,
+            "version": "0.1.2"
+          },
+          {
+            "submitted_ns": 1244138585858458,
+            "status": 200,
+            "version": "0.1.2"
+          },
+          {
+            "submitted_ns": 1244138615328833,
+            "status": 200,
+            "version": "0.1.2"
+          },
+          {
+            "submitted_ns": 1244138631100958,
+            "status": 200,
+            "version": "0.1.2"
+          },
+          {
+            "submitted_ns": 1244138661469916,
+            "status": 200,
+            "version": "0.1.2"
+          },
+          {
+            "submitted_ns": 1244138677608916,
+            "status": 200,
+            "version": "0.1.2"
+          },
+          {
+            "submitted_ns": 1244138707407791,
+            "status": 200,
+            "version": "0.1.2"
+          },
+          {
+            "submitted_ns": 1244138707428166,
+            "status": 200,
+            "version": "0.1.2"
+          },
+          {
+            "submitted_ns": 1244138732815541,
+            "status": 200,
+            "version": "0.1.2"
+          },
+          {
+            "submitted_ns": 1244138817571291,
+            "status": 200,
+            "version": "0.1.2"
+          },
+          {
+            "submitted_ns": 1244138817601625,
+            "status": 200,
+            "version": "0.1.2"
+          },
+          {
+            "submitted_ns": 1244138817606708,
+            "status": 200,
+            "version": "0.1.2"
+          },
+          {
+            "submitted_ns": 1244138817609500,
+            "status": 200,
+            "version": "0.1.2"
+          },
+          {
+            "submitted_ns": 1244138872816083,
+            "status": 200,
+            "version": "0.1.2"
+          },
+          {
+            "submitted_ns": 1244138872836791,
+            "status": 200,
+            "version": "0.1.2"
+          },
+          {
+            "submitted_ns": 1244138872840833,
+            "status": 200,
+            "version": "0.1.2"
+          },
+          {
+            "submitted_ns": 1244138935313583,
+            "status": 200,
+            "version": "0.1.2"
+          },
+          {
+            "submitted_ns": 1244138935331666,
+            "status": 200,
+            "version": "0.1.2"
+          },
+          {
+            "submitted_ns": 1244138935335250,
+            "status": 200,
+            "version": "0.1.2"
+          },
+          {
+            "submitted_ns": 1244138981979708,
+            "status": 200,
+            "version": "0.1.2"
+          },
+          {
+            "submitted_ns": 1244138982002041,
+            "status": 200,
+            "version": "0.1.2"
+          },
+          {
+            "submitted_ns": 1244138995713750,
+            "status": 200,
+            "version": "0.1.2"
+          },
+          {
+            "submitted_ns": 1244139007815416,
+            "status": 200,
+            "version": "0.1.2"
+          },
+          {
+            "submitted_ns": 1244139027977666,
+            "status": 200,
+            "version": "0.1.2"
+          },
+          {
+            "submitted_ns": 1244139056612208,
+            "status": 200,
+            "version": "0.1.2"
+          },
+          {
+            "submitted_ns": 1244139080917000,
+            "status": 200,
+            "version": "0.1.2"
+          },
+          {
+            "submitted_ns": 1244139086818583,
+            "status": 200,
+            "version": "0.1.2"
+          },
+          {
+            "submitted_ns": 1244139131973375,
+            "status": 200,
+            "version": "0.1.2"
+          },
+          {
+            "submitted_ns": 1244139132039000,
+            "status": 200,
+            "version": "0.1.2"
+          },
+          {
+            "submitted_ns": 1244139158401041,
+            "status": 200,
+            "version": "0.1.2"
+          },
+          {
+            "submitted_ns": 1244139176981958,
+            "status": 200,
+            "version": "0.1.2"
+          },
+          {
+            "submitted_ns": 1244139191066416,
+            "status": 200,
+            "version": "0.1.2"
+          },
+          {
+            "submitted_ns": 1244139226150083,
+            "status": 200,
+            "version": "0.1.2"
+          },
+          {
+            "submitted_ns": 1244139226169833,
+            "status": 200,
+            "version": "0.1.2"
+          },
+          {
+            "submitted_ns": 1244139249619166,
+            "status": 200,
+            "version": "0.1.2"
+          },
+          {
+            "submitted_ns": 1244139318109625,
+            "status": 200,
+            "version": "0.1.3"
+          },
+          {
+            "submitted_ns": 1244139318137500,
+            "status": 200,
+            "version": "0.1.3"
+          },
+          {
+            "submitted_ns": 1244139318142958,
+            "status": 200,
+            "version": "0.1.3"
+          },
+          {
+            "submitted_ns": 1244139328909458,
+            "status": 200,
+            "version": "0.1.3"
+          },
+          {
+            "submitted_ns": 1244139458295125,
+            "status": 200,
+            "version": "0.1.3"
+          },
+          {
+            "submitted_ns": 1244139458315750,
+            "status": 200,
+            "version": "0.1.3"
+          },
+          {
+            "submitted_ns": 1244139458319708,
+            "status": 200,
+            "version": "0.1.3"
+          },
+          {
+            "submitted_ns": 1244139458322708,
+            "status": 200,
+            "version": "0.1.3"
+          },
+          {
+            "submitted_ns": 1244139458325250,
+            "status": 200,
+            "version": "0.1.3"
+          },
+          {
+            "submitted_ns": 1244139458327541,
+            "status": 200,
+            "version": "0.1.3"
+          },
+          {
+            "submitted_ns": 1244139491595958,
+            "status": 200,
+            "version": "0.1.3"
+          },
+          {
+            "submitted_ns": 1244139491614125,
+            "status": 200,
+            "version": "0.1.3"
+          },
+          {
+            "submitted_ns": 1244139504037875,
+            "status": 200,
+            "version": "0.1.3"
+          },
+          {
+            "submitted_ns": 1244139540391916,
+            "status": 200,
+            "version": "0.1.3"
+          },
+          {
+            "submitted_ns": 1244139547210458,
+            "status": 200,
+            "version": "0.1.3"
+          },
+          {
+            "submitted_ns": 1244139579829708,
+            "status": 200,
+            "version": "0.1.3"
+          },
+          {
+            "submitted_ns": 1244139600381666,
+            "status": 200,
+            "version": "0.1.3"
+          },
+          {
+            "submitted_ns": 1244139607019916,
+            "status": 200,
+            "version": "0.1.3"
+          },
+          {
+            "submitted_ns": 1244139631259125,
+            "status": 200,
+            "version": "0.1.3"
+          },
+          {
+            "submitted_ns": 1244139663325333,
+            "status": 200,
+            "version": "0.1.3"
+          },
+          {
+            "submitted_ns": 1244139665329791,
+            "status": 200,
+            "version": "0.1.3"
+          },
+          {
+            "submitted_ns": 1244139685396541,
+            "status": 200,
+            "version": "0.1.3"
+          },
+          {
+            "submitted_ns": 1244139765681041,
+            "status": 200,
+            "version": "0.1.3"
+          },
+          {
+            "submitted_ns": 1244139765734250,
+            "status": 200,
+            "version": "0.1.3"
+          },
+          {
+            "submitted_ns": 1244139765742875,
+            "status": 200,
+            "version": "0.1.3"
+          },
+          {
+            "submitted_ns": 1244139765746750,
+            "status": 200,
+            "version": "0.1.3"
+          },
+          {
+            "submitted_ns": 1244139785862500,
+            "status": 200,
+            "version": "0.1.3"
+          },
+          {
+            "submitted_ns": 1244139808447916,
+            "status": 200,
+            "version": "0.1.3"
+          },
+          {
+            "submitted_ns": 1244139840058666,
+            "status": 200,
+            "version": "0.1.3"
+          },
+          {
+            "submitted_ns": 1244139861513333,
+            "status": 200,
+            "version": "0.1.3"
+          },
+          {
+            "submitted_ns": 1244139881456000,
+            "status": 200,
+            "version": "0.1.3"
+          },
+          {
+            "submitted_ns": 1244139891908875,
+            "status": 200,
+            "version": "0.1.3"
+          },
+          {
+            "submitted_ns": 1244139912311500,
+            "status": 200,
+            "version": "0.1.3"
+          },
+          {
+            "submitted_ns": 1244139935949083,
+            "status": 200,
+            "version": "0.1.3"
+          },
+          {
+            "submitted_ns": 1244139954915416,
+            "status": 200,
+            "version": "0.1.3"
+          },
+          {
+            "submitted_ns": 1244139982122833,
+            "status": 200,
+            "version": "0.1.3"
+          },
+          {
+            "submitted_ns": 1244139986205875,
+            "status": 200,
+            "version": "0.1.3"
+          },
+          {
+            "submitted_ns": 1244140011744833,
+            "status": 200,
+            "version": "0.1.3"
+          },
+          {
+            "submitted_ns": 1244140024959250,
+            "status": 200,
+            "version": "0.1.3"
+          },
+          {
+            "submitted_ns": 1244140069149916,
+            "status": 200,
+            "version": "0.1.3"
+          },
+          {
+            "submitted_ns": 1244140069169958,
+            "status": 200,
+            "version": "0.1.3"
+          },
+          {
+            "submitted_ns": 1244140091520541,
+            "status": 200,
+            "version": "0.1.3"
+          }
+        ]
+      }
+    },
+    "faults": {
+      "timeout": 504,
+      "crashed_request": 503,
+      "healthy_route": 200,
+      "recovered_route": 200,
+      "old_pid": 66619
+    },
+    "removed_status": 404
+  },
+  "exit": 0
+}

@@ -1,0 +1,39 @@
+{
+  "scenario": "streams",
+  "result": {
+    "transfers": {
+      "same": {
+        "bytes": 67108864,
+        "cancelled": false,
+        "chunk_limit": 1048576,
+        "source_typed": true
+      },
+      "rust": {
+        "bytes": 67108864,
+        "cancelled": false,
+        "chunk_limit": 1048576,
+        "source_typed": false
+      },
+      "python": {
+        "bytes": 67108864,
+        "chunk_limit": 1048576,
+        "frame_limit": 4198400
+      },
+      "typescript": {
+        "bytes": 67108864,
+        "chunk_limit": 1048576,
+        "frame_limit": 4198400
+      }
+    },
+    "cancelled": {
+      "bytes": 1048576,
+      "cancelled": true,
+      "chunk_limit": 1048576,
+      "source_typed": false
+    },
+    "sender_pid": 53438,
+    "sender_file_closed": true,
+    "source_bytes": 67108864
+  },
+  "exit": 0
+}

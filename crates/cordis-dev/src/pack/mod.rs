@@ -4,12 +4,14 @@ mod artifacts;
 mod files;
 mod platform;
 mod plugins;
+mod secrets;
 mod signing;
 
 use crate::{Result, tooling};
 use artifacts::Artifacts;
 use clap::Args;
 use std::{
+    collections::{BTreeMap, BTreeSet},
     fs,
     path::{Path, PathBuf},
     time::Duration,
@@ -47,6 +49,8 @@ struct Plan {
     core: PathBuf,
     host: PathBuf,
     platform: platform::Platform,
+    descriptions: BTreeMap<PathBuf, cordis_up::payload::Plugin>,
+    secret_paths: BTreeSet<PathBuf>,
 }
 
 /// AU-12：输出目录由本次命令创建；失败保留装配目录与具体错误。
@@ -54,6 +58,7 @@ pub async fn run(options: Options) -> Result<()> {
     let mut plan = plan(&options).await?;
     let target_dir = absolute(&plan.project, &options.target_dir);
     let artifacts = artifacts::build(&plan.project, &options.target, &target_dir).await?;
+    secrets::sources(&mut plan, &artifacts).await?;
     let out = absolute(&plan.project, &options.out);
     fs::create_dir_all(&out)?;
     let staging = plan.project.join("target/pack");
@@ -143,6 +148,8 @@ async fn plan(options: &Options) -> Result<Plan> {
         core,
         host,
         platform,
+        descriptions: BTreeMap::new(),
+        secret_paths: BTreeSet::new(),
     })
 }
 
@@ -253,12 +260,15 @@ fn assets(plan: &Plan, deployment: &Path) -> Result<()> {
             return Err("发布资源使用独立于运行目录的相对路径".into());
         }
         let source = plan.project.join(path);
+        if plan.secret_paths.contains(&source.canonicalize()?) {
+            continue;
+        }
         let destination = deployment.join(path);
         fs::create_dir_all(destination.parent().ok_or("资源需要目录路径")?)?;
         let metadata = fs::metadata(&source)?;
         if metadata.is_dir() {
             fs::create_dir(&destination)?;
-            files::copy_tree(&source, &destination)?;
+            files::copy_tree(&source, &destination, &plan.secret_paths)?;
         } else {
             let mut output = fs::OpenOptions::new()
                 .write(true)

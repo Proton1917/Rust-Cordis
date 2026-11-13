@@ -87,7 +87,7 @@ async def main():
     sample = types.decode_value(sample_spec, wire, None)
     assert sample.label == "数据" and sample.marker == "𝄞"
     assert sample.count == 2**64 - 1 and sample.delta == -(2**63)
-    assert sample.bytes == [0, 128, 255] and sample.pairs == {"k": [7, 8]}
+    assert sample.bytes == bytes([0, 128, 255]) and sample.pairs == {"k": bytes([7, 8])}
     assert sample.window == [4] * 40
     assert isinstance(sample.choice, types.ChoiceEmpty)
     assert sample.state == types.State.READY

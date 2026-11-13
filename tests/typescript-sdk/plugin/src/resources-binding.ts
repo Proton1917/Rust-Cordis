@@ -78,8 +78,8 @@ export function encodeValue(input: Spec, value: any, transport: Transport, metho
             return wire === null || wire instanceof Tagged && wire.tag === 60001 ? new Tagged(60001, wire) : wire;
         }
         case "list":
-            if (method && resolved(spec.item).kind === "u8" && spec.length === undefined) {
-                if (!(value instanceof Uint8Array)) throw new TypeError("方法字节值需要 Uint8Array");
+            if (resolved(spec.item).kind === "u8" && spec.length === undefined) {
+                if (!(value instanceof Uint8Array)) throw new TypeError("字节值需要 Uint8Array");
                 return value;
             }
             if (!Array.isArray(value) || spec.length !== undefined && value.length !== spec.length) throw new TypeError("列表形状错误");
@@ -123,9 +123,10 @@ export function decodeValue(input: Spec, value: any, transport: Transport, metho
             return result === null || result instanceof Some ? new Some(result) : result;
         }
         case "list":
-            if (method && resolved(spec.item).kind === "u8" && spec.length === undefined) {
-                if (!(value instanceof Uint8Array)) throw new TypeError("方法字节值需要 CBOR 字节串");
-                return value;
+            if (resolved(spec.item).kind === "u8" && spec.length === undefined) {
+                if (value instanceof Uint8Array) return value;
+                if (Array.isArray(value)) return new Uint8Array(value.map(item => scalar("u8", item) as number));
+                throw new TypeError("字节值需要字节串或 u8 数组");
             }
             if (!Array.isArray(value) || spec.length !== undefined && value.length !== spec.length) throw new TypeError("列表形状错误");
             return value.map((item) => decodeValue(spec.item, item, transport));
@@ -347,27 +348,27 @@ export const SCHEMA: Schema = {
 };
 
 export interface Resources {
-    make(value: string): ItemClient;
-    borrowValue(value: ItemClient): Promise<string>;
-    mirror(value: ItemClient): ItemClient;
+    make(value: string): Item;
+    borrowValue(value: Item): Promise<string>;
+    mirror(value: Item): Item;
 }
 export class ResourcesClient {
     constructor(private readonly transport: Transport) {}
-    async make(value: string): Promise<ItemClient> {
-        return await invoke(this.transport, "resources@1.0", 0, [value]) as ItemClient;
+    async make(value: string): Promise<Item> {
+        return await invoke(this.transport, "resources@1.0", 0, [value]) as Item;
     }
-    async borrowValue(value: ItemClient): Promise<string> {
+    async borrowValue(value: Item): Promise<string> {
         return await invoke(this.transport, "resources@1.0", 1, [value]) as string;
     }
-    async mirror(value: ItemClient): Promise<ItemClient> {
-        return await invoke(this.transport, "resources@1.0", 2, [value]) as ItemClient;
+    async mirror(value: Item): Promise<Item> {
+        return await invoke(this.transport, "resources@1.0", 2, [value]) as Item;
     }
 }
 
 export interface Item {
     read(): string;
     wait(): Promise<string>;
-    echo(value: ItemClient): ItemClient;
+    echo(value: Item): Item;
 }
 export class ItemClient {
     constructor(private readonly transport: Transport) {}
@@ -377,13 +378,13 @@ export class ItemClient {
     async wait(): Promise<string> {
         return await invoke(this.transport, "resources.item@1.0", 1, []) as string;
     }
-    async echo(value: ItemClient): Promise<ItemClient> {
-        return await invoke(this.transport, "resources.item@1.0", 2, [value]) as ItemClient;
+    async echo(value: Item): Promise<Item> {
+        return await invoke(this.transport, "resources.item@1.0", 2, [value]) as Item;
     }
 }
 
 export interface Offered {
-    item: ItemClient;
+    item: Item;
 }
 
 

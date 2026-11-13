@@ -142,6 +142,7 @@ fn definition(document: &Document, id: TypeId) -> Value {
 }
 
 fn resource(document: &Document, id: TypeId, borrowed: bool) -> Value {
+    let id = document.resource_type(id);
     let info = &document.types[&id];
     let interface = document.interface(info.interface.expect("资源所属接口"));
     let resource = interface

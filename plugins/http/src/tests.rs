@@ -14,17 +14,25 @@ impl Running {
         let (stop, stopping) = watch::channel(false);
         let (ready, started) = std::sync::mpsc::sync_channel(1);
         let thread = std::thread::spawn(move || {
-            server::run(
-                config,
-                stopping,
-                ready,
-                Arc::new(registry::Registry::default()),
-                None,
-                None,
-            )
+            tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap()
+                .block_on(async move {
+                    let (listener, router, entry) = server::prepare(
+                        &config,
+                        Arc::new(registry::Registry::default()),
+                        None,
+                        stopping.clone(),
+                        None,
+                    )
+                    .await?;
+                    ready.send(entry).unwrap();
+                    server::serve(listener, router, stopping, config.shutdown_ms).await
+                })
         });
         Self {
-            entry: started.recv().unwrap().unwrap(),
+            entry: started.recv().unwrap(),
             stop,
             thread: Some(thread),
         }

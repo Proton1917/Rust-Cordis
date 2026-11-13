@@ -656,18 +656,15 @@ impl Shared {
     }
     async fn invoke(self: &Arc<Self>, request: payload::Invoke) -> Result<Value> {
         let resource = self.object(request.object)?;
-        if let Resource::Scoped { session, meta, .. } = resource.as_ref() {
-            let session = session
-                .upgrade()
-                .ok_or_else(|| WireError::new(4, "scoped context retired"))?;
-            return match request.method.as_str() {
-                "meta" => Ok(meta.clone()),
-                "get" => Ok(session.counter.read()?.into()),
-                _ => Err(WireError::new(3, "unknown scoped method")),
-            };
-        }
-        let Resource::Service { session, .. } = resource.as_ref() else {
-            return Err(WireError::new(2, "object is not a service"));
+        let session = match resource.as_ref() {
+            Resource::Scoped { session, meta, .. } => {
+                if request.method == "meta" {
+                    return Ok(meta.clone());
+                }
+                session
+            }
+            Resource::Service { session, .. } => session,
+            _ => return Err(WireError::new(2, "object is not a service")),
         };
         let session = session
             .upgrade()

@@ -485,7 +485,7 @@ export default defineComponent({
 2. 浏览器中不运行任何内核。上游 JS 版 cordis 不用作前端内核：那会在浏览器中形成第二个内核，与 `Q0` 推论 5 冲突。
 3. 每个打开的页面对应核心中的一条连接。核心为每个页面上的每个前端组件建立一个子实例，挂在该组件的实例之下；页面关闭时这些子实例被卸下，它们登记的效应、服务与监听器由核心回收。
 4. 每个页面是一个独立的 realm（`isolate`）：页面上的前端组件提供的服务只在该页面内可见，不进入后端，也不进入其他页面。
-5. 前端组件经 `UP/1` 注入任何插口上提供的服务（`get`、`invoke`），订阅后端事件（`on`，按 §6.3 为通知）。前端与后端之间不另设 HTTP 接口。
+5. 前端组件经 `UP/1` 注入任何插口上提供的服务（`get`、`invoke`），订阅后端事件（`on`，按 §6.3 为通知）。前端组件与后端之间不另设 HTTP 接口；体系外的 HTTP 调用方经 §11.7 的路由接入。
 6. 前端组件的依赖不可用时，各页面上的子实例转为 `Pending`，清理回调撤下界面；依赖恢复后自动重建。
 
 ### 11.3 `http` 插件与转发
@@ -528,6 +528,19 @@ M16 按 ADR-0038 交付静态服务与页面入口，供窗口加载真实页面
 5. 在 `.app` 中，窗口进程代表整个应用：Dock 中只出现一个应用图标，名称为应用名。Cmd-Q，以及关闭最后一个窗口（可配置），经 `cordis.manage@1` 的 `shutdown()` 请求核心有序退出。核心进程不显示界面。
 6. `title`、`width`、`height`、`quit_on_last_window` 的缺省值分别为 `Cordis`、`1000`、`720`、`true`。窗口配置及已显示页面组成 `window.snapshot`。检查点冻结期间，异步 open、close 和显示动作按上下文等待 thaw；清理回收等待者与窗口。
 7. WebView 使用临时浏览会话；页面组件状态通过核心导出和继承，长期数据经后端服务保存。Web 提供方重建后，默认启动页取得当前入口地址和令牌。
+
+### 11.7 HTTP 路由（M22，ADR-0046）
+
+体系外的调用方（外部服务、带令牌的代理程序、支付回调）只发送普通 HTTP 请求。`http` 插件为它们提供路由，核心与 ABI 不变。
+
+1. `plugins/http-api` 定义 `cordis.http@1.0`（`route`、`unroute`）、`cordis.http-handler@1.0`（`handle`）与 `cordis.http-page@1.0`（`attributes`），并附 WIT；请求体与响应体使用第 5 条的通用字节流。处理方插件在 `apply` 中登记路径前缀与处理对象，登记是该插件的效应。
+2. 小请求体与响应体内联传输；超过 `inline_body_bytes` 或长度未知时以流对象分块传输，单块不超过 UP/1 帧上限，总量受 `max_body_bytes` 限制。
+3. 处理方卸下、崩溃或 `http` 重启时，路由随之撤回并在处理方重建后重新登记；替换期间 `replace_grace_ms` 内的请求等待新版本。
+4. 路由请求不检查会话令牌，认证由处理方负责。`public_origins` 允许反向代理后的外部 origin 通过 WebSocket 握手；TLS 由反向代理承担。
+5. 通用字节流 `cordis.byte-stream@1.0`（`plugins/stream-api`）供任意插件之间传递超过帧上限的数据，HTTP 请求体与响应体是它的使用方之一。
+6. 页面调用来源：`http` 为每个页面连接生成不透明的页面键并保存该连接的请求头；核心只保存页面键，并在页面子实例调用 `scoped` 提供方时以元数据 `cordis.page` 交出；核心另以受信元数据 `cordis.caller` 标明调用方实例；`cordis.` 开头的元数据键只由核心写入（ADR-0046 §3.11）；提供方凭页面键向 `http` 的 `cordis.http-page@1.0` 查询请求头与对端地址。核心不解析 HTTP 内容。
+7. 密钥由插件 `plugins/secrets` 提供（`cordis.secrets@1.0`），授权写在密钥插件自己的 `grants` 配置中，按 `cordis.caller` 判定调用方；核心不读取密钥，也不解释授权。`cordis service install` 增加 `--env`、`--inherit-env`，只用于非机密变量。
+8. 完整的接口、状态码、配置、职责划分与验收见 ADR-0046。
 
 ## 12 项目脚手架与发布打包
 
@@ -653,7 +666,9 @@ ADR-0043 规定脚本运行时的签名职责：按解析后的实际解释器�
 | `M20` 前端插件与全栈插件 | HTTP 插件追加资源登记、版本路径、入口清单与 WebSocket 转发；核心侧转发通道与页面子实例（§11.2、§11.3）；网页宿主 `cordis-web`；清单 `socket = "web"` 与 `[web]` 段；示例：一个前端插件、一个 Rust 后端的全栈插件、一个 Python 后端的全栈插件；`cordis new-plugin --web` | `M18`、`M19` | 资源登记与撤回；页面关闭后子实例与效应回收；前端注入 Rust、Python、TypeScript 提供的服务；无头浏览器验证局部更新与回滚；`AU-7`、`AU-14`、`AU-15` |
 | `M21` 第三阶段验收 | §16 全部场景；`RM-7`–`RM-9`；`cordis pack` 附带 Python 与 Node 运行时的发布包；skill 增加 Python、TypeScript、全栈与打包章节 | `M20`、`M16` | §16 全部通过 |
 
-Codex 从 `M9` 连续推进到 `M21`，包括 `M15` 的 skill 与 `M21` 的 skill 章节；设计方只负责设计文档、ADR 与复核。
+| `M22` 外部接入 | §11.7、ADR-0046：`plugins/http-api`、`plugins/stream-api`；`http` 插件的路由、流式请求体与响应体、替换宽限、`public_origins`、页面键与 `cordis.http-page@1.0`；网页部署的 `cordis.page` 元数据；`plugins/secrets`、`plugins/secrets-api`；`cordis service install --env`；三种语言的示例处理方与 SDK 辅助函数；`cordis new-plugin --http`；guide、skill、README | `M21` | `AU-19`–`AU-26`；`RM-11`；`AU-8` 复查：内核、channels、`cordis-abi` 相对 `df05064` 无改动；supervisor 先按 ADR-0041 提取，再加受信调用元数据（ADR-0046 §3.11），完成后不超过 5450 代码行；routing、网页部署与 runtime 的改动范围符合 ADR-0046 §5 |
+
+Codex 从 `M9` 连续推进到 `M21`，包括 `M15` 的 skill 与 `M21` 的 skill 章节；设计方只负责设计文档、ADR 与复核。`M22` 由用户 2026-11-13 追加，排在首次 GitHub Release 之前。
 
 ## 16 验收场景
 
@@ -684,6 +699,9 @@ Codex 从 `M9` 连续推进到 `M21`，包括 `M15` 的 skill 与 `M21` 的 skil
 | `RM-8` | 插件进程的替换停顿 | 同 `RM-4`，按插口种类分别记录 |
 | `RM-9` | 同组原生插件之间的调用时延 | 与第二阶段的直接调用基准对比 |
 | `RM-10` | 核心崩溃到全部插件恢复 `Active` 的时长 | `AU-11` 中计时 |
+| `RM-11` | 一次 HTTP 路由请求的往返时延 | ADR-0046 §5：Rust、Python、TypeScript 处理方各 10000 个小 GET，记录中位数与 99 分位 |
+
+`AU-19`–`AU-26`（M22 的外部接入场景）的完整定义见 ADR-0046 §5。
 
 ## 17 已确认的事项
 

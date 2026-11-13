@@ -8,7 +8,7 @@ default = true
     #[derive(Clone, Debug, serde::Serialize, serde::Deserialize, PartialEq, Default)]
     pub struct Snapshot {
         #[serde(rename = "entries")]
-        pub entries: ::std::collections::BTreeMap<String, Vec<u8>>,
+        pub entries: ::std::collections::BTreeMap<String, ::cordis_sdk::Bytes>,
     }
     /**每次成功写入后派发的通知。
 ```cordis

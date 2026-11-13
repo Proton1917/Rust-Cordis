@@ -62,6 +62,9 @@ struct NewPlugin {
     /// 生成网页部分，可与后端语言组合。
     #[arg(long)]
     web: bool,
+    /// 生成普通 HTTP 路由处理方。
+    #[arg(long, conflicts_with = "web")]
+    http: bool,
 }
 
 #[tokio::main]
@@ -96,7 +99,17 @@ async fn run(cli: Cli) -> Result<()> {
 
 /// DOC-15 §12.1：后端语言与网页部分分别选择，按生成内容给出构建入口。
 fn create_plugin(options: NewPlugin) -> Result<()> {
-    if options.web {
+    if options.http {
+        let language = if options.python {
+            scaffold::Backend::Python
+        } else if options.typescript {
+            scaffold::Backend::TypeScript
+        } else {
+            scaffold::Backend::Rust
+        };
+        scaffold::http_plugin(&options.project, &options.name, language)?;
+        println!("HTTP 路由与构建方法：plugins/{}/README.md", options.name);
+    } else if options.web {
         let backend = if options.python {
             Some(scaffold::Backend::Python)
         } else if options.typescript {

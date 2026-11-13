@@ -3,13 +3,12 @@
 mod verification;
 
 use super::{Artifacts, Plan, absolute, artifacts, files, string};
-use crate::{Result, tooling};
+use crate::Result;
 use cordis_up::payload;
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs,
     path::{Path, PathBuf},
-    time::Duration,
 };
 use toml::{Table, Value};
 
@@ -80,7 +79,7 @@ pub async fn assemble(
 }
 
 /// DOC-15 §12.2：按部署引用合并同一个库的组件配置。
-fn requested(configuration: &Table) -> Result<BTreeMap<String, Vec<Table>>> {
+pub(super) fn requested(configuration: &Table) -> Result<BTreeMap<String, Vec<Table>>> {
     let instances = configuration
         .get("instance")
         .and_then(Value::as_table)
@@ -137,7 +136,7 @@ async fn directory(
                 .get(&filename)
                 .cloned()
                 .unwrap_or(original);
-            assets(source, destination, &manifest)?;
+            assets(plan, source, destination, &manifest)?;
             native_package(plan, library, destination, Some(manifest)).await
         }
         "process" => {
@@ -145,9 +144,9 @@ async fn directory(
                 return Err("进程插件需要 UP/1".into());
             }
             if source.join("Cargo.toml").is_file() {
-                assets(source, destination, &manifest)?;
+                assets(plan, source, destination, &manifest)?;
             } else {
-                files::copy_tree(source, destination)?;
+                files::copy_tree(source, destination, &plan.secret_paths)?;
             }
             process_command(
                 plan,
@@ -168,7 +167,7 @@ async fn directory(
             if manifest.get("web").is_none() {
                 return Err("网页插件需要 web 资源声明".into());
             }
-            assets(source, destination, &manifest)?;
+            assets(plan, source, destination, &manifest)?;
             fs::write(
                 destination.join("cordis-plugin.toml"),
                 toml::to_string_pretty(&manifest)?,
@@ -185,9 +184,11 @@ async fn native_package(
     destination: &Path,
     declared: Option<Table>,
 ) -> Result<Option<Native>> {
-    plan.platform.binary(&source)?;
-    let descriptor =
-        tooling::describe(&plan.host, &source, &plan.project, Duration::from_secs(30)).await?;
+    let descriptor = plan
+        .descriptions
+        .get(&source.canonicalize()?)
+        .ok_or("原生发布描述符缺席")?
+        .clone();
     let mut manifest = declared.unwrap_or_default();
     for (name, value) in [
         ("name", descriptor.name.as_str()),
@@ -217,7 +218,7 @@ async fn native_package(
     }))
 }
 
-fn assets(source: &Path, destination: &Path, manifest: &Table) -> Result<()> {
+fn assets(plan: &Plan, source: &Path, destination: &Path, manifest: &Table) -> Result<()> {
     if let Some(web) = manifest.get("web").and_then(Value::as_table) {
         let assets = string(web, "assets")?.ok_or("web 需要 assets")?;
         let path = Path::new(assets);
@@ -228,7 +229,11 @@ fn assets(source: &Path, destination: &Path, manifest: &Table) -> Result<()> {
         {
             return Err("发布 assets 需要插件目录内的相对路径".into());
         }
-        files::copy_tree(&source.join(path), &destination.join(path))?;
+        files::copy_tree(
+            &source.join(path),
+            &destination.join(path),
+            &plan.secret_paths,
+        )?;
     }
     Ok(())
 }
@@ -259,7 +264,7 @@ pub(super) fn runtimes(plan: &Plan, deployment: &Path) -> Result<BTreeMap<String
         let source = string(sources, name)?.ok_or_else(|| format!("runtime_paths 缺少 {name}"))?;
         let source = absolute(&plan.project, Path::new(source));
         let destination = deployment.join("runtimes").join(name);
-        files::copy_tree(&source, &destination)?;
+        files::copy_tree(&source, &destination, &plan.secret_paths)?;
         let binary = destination.join("bin").join(executable);
         plan.platform.binary(&binary)?;
         paths.insert(name.to_owned(), binary);

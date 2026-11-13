@@ -85,6 +85,7 @@ export class Runtime {
         return reference;
     }
     offer(resource: object): Identifier {
+        if (resource instanceof Service) resource.retain();
         const id = this.next++;
         this.exports.set(id, resource);
         return id;

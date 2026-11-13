@@ -1,0 +1,22 @@
+[workspace]
+
+[package]
+name = "http-test-native"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+cordis-sdk = { path = "../../../crates/cordis-sdk" }
+http-api = { path = "../../../plugins/http-api" }
+stream-api = { path = "../../../plugins/stream-api" }
+secrets-api = { path = "../../../plugins/secrets-api" }
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = "=1.0.154"
+tokio = { version = "=1.54.1", features = ["rt", "time", "sync"] }
+futures-util = "=0.3.34"
+futures-channel = "=0.3.34"
+futures-executor = "=0.3.34"

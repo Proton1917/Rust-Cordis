@@ -1,0 +1,50 @@
+{
+  "scenario": "files",
+  "result": {
+    "transfers": {
+      "rust": {
+        "bytes": 67108864,
+        "uploaded_equal": true,
+        "downloaded_equal": true
+      },
+      "python": {
+        "bytes": 67108864,
+        "uploaded_equal": true,
+        "downloaded_equal": true
+      },
+      "typescript": {
+        "bytes": 67108864,
+        "uploaded_equal": true,
+        "downloaded_equal": true
+      }
+    },
+    "http_pid": 54919,
+    "rss_baseline": 12042240,
+    "rss_maximum": 21725184,
+    "rss_increase": 9682944,
+    "rss_samples": [
+      12042240,
+      15892480,
+      19087360,
+      21233664,
+      21233664,
+      21233664,
+      21446656,
+      21659648,
+      21659648,
+      21659648,
+      21659648,
+      21692416,
+      21692416,
+      21692416,
+      21708800,
+      21708800,
+      21708800,
+      21708800,
+      21708800,
+      21725184
+    ],
+    "oversized_status": 413
+  },
+  "exit": 0
+}

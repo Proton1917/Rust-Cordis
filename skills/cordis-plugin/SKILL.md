@@ -20,6 +20,7 @@ description: 编写、验证和部署 Cordis Rust、Python、TypeScript 与网�
 | `cordis new-plugin hello --ts` | Node 中的 TypeScript 插件 | [TypeScript 插件](references/typescript.md) |
 | `cordis new-plugin hello --web` | 浏览器组件 | [网页与全栈插件](references/web.md) |
 | `cordis new-plugin hello --rust --web` | Rust 后端与浏览器组件 | 同上；后端也可选择 `--python`、`--ts` |
+| `cordis new-plugin api --rust --http` | HTTP 处理方；也可选择 Python、TypeScript | [HTTP、流与身份](references/http.md) |
 
 创建项目与插件由 cordis-dev 的现有脚手架完成。[模板来源](references/templates.md) 说明共用模板与生成路径。Rust 原生插件和接口库支持 Rust 1.85，Python SDK 使用 Python 3.11 及以上，TypeScript 进程 SDK 使用 Node 22 及以上。
 
@@ -30,6 +31,8 @@ description: 编写、验证和部署 Cordis Rust、Python、TypeScript 与网�
 使用 Context 取得和提供服务，通过效应取得资源并登记清理；后台工作与其取消、等待共同归属该效应。需要状态迁移时声明状态模式，在导出时冻结写入，在激活时读取继承状态。[资源与状态](references/resources-state.md) 保留 Rust 的具体写法，各语言章节给出对应 API。
 
 服务方法、事件和资源参数按接口声明编码。通过 `cordis idl gen` 从同一 WIT 生成 Rust、Python 或 TypeScript 绑定，提供方和使用方共同维护该定义。替换保持逻辑插件名、组件名及服务接口主版本；兼容追加方法时提升接口次版本。
+
+结构中的字节字段采用 `cordis_sdk::Bytes`、Python `bytes` 或 TypeScript `Uint8Array`；WIT 绑定统一写出字节串并兼容旧数组。超过消息上限的数据经通用字节流分块传递。外部 HTTP 调用、页面身份与密钥授权见 [HTTP、流与身份](references/http.md)。
 
 ## 运行与交付
 

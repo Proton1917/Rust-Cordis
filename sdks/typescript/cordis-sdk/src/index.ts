@@ -5,3 +5,8 @@ export { CordisError, type Binding, type Transport } from "./types.js";
 export { run } from "./node.js";
 export { currentSignal, withSignal } from "./runtime.js";
 export { DEFAULT_LIMITS, type Limits } from "./wire.js";
+export { OwnedResource } from "./resources.js";
+export { fromChunks, copyStream, type ByteStream } from "./streams.js";
+export { fromFile, streamToFile } from "./streams-node.js";
+export { registerRoute, pageAttributes } from "./http.js";
+export { caller, type Caller } from "./metadata.js";

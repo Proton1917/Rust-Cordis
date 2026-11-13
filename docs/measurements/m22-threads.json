@@ -1,0 +1,20 @@
+{
+  "scenario": "threads",
+  "result": {
+    "plain": {
+      "after": 100,
+      "before": 42,
+      "effect_cleaned": true,
+      "mode": "plain",
+      "remote_cancelled": true
+    },
+    "tokio": {
+      "after": 100,
+      "before": 42,
+      "effect_cleaned": true,
+      "mode": "tokio",
+      "remote_cancelled": true
+    }
+  },
+  "exit": 0
+}

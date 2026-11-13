@@ -1,0 +1,14 @@
+[package]
+name = "http-echo-v3"
+version = "0.1.3"
+edition = "2024"
+publish = false
+[lib]
+crate-type = ["cdylib"]
+path = "../../../../plugins/http-echo/src/lib.rs"
+[dependencies]
+cordis-sdk.workspace = true
+http-api.workspace = true
+stream-api.workspace = true
+serde.workspace = true
+serde_json.workspace = true

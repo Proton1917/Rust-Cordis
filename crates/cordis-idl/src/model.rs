@@ -120,6 +120,14 @@ impl Document {
         &self.interfaces[self.by_interface[&id]]
     }
 
+    /// ADR-0046：跨包导入资源沿别名取得原定义，接口身份与客户端类型共用此结果。
+    pub(crate) fn resource_type(&self, mut id: TypeId) -> TypeId {
+        while let TypeDefKind::Type(Type::Id(original)) = self.resolve.types[id].kind {
+            id = original;
+        }
+        id
+    }
+
     pub fn root_interfaces(&self) -> impl Iterator<Item = &InterfaceInfo> {
         self.interfaces.iter().filter(|interface| interface.root)
     }

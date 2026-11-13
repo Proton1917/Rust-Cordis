@@ -2552,6 +2552,17 @@ var Connection = class {
   }
 };
 
+// cordis-sdk/src/resources.ts
+var OwnedResource = class {
+  exports = 0;
+  retain() {
+    this.exports++;
+  }
+  release() {
+    if (--this.exports === 0) this.close();
+  }
+};
+
 // cordis-sdk/src/bindings.ts
 var services = /* @__PURE__ */ new WeakMap();
 var references = /* @__PURE__ */ new WeakMap();
@@ -2615,6 +2626,10 @@ var Service = class _Service {
   }
   close() {
     if (this.provider instanceof Remote) this.provider.close();
+    if (this.provider instanceof OwnedResource) this.provider.release();
+  }
+  retain() {
+    if (this.provider instanceof OwnedResource) this.provider.retain();
   }
   async invoke(runtime, method, args, payload) {
     const transport = new BindingTransport(runtime, this.binding);
@@ -3071,6 +3086,7 @@ var Runtime = class {
     return reference;
   }
   offer(resource) {
+    if (resource instanceof Service) resource.retain();
     const id = this.next++;
     this.exports.set(id, resource);
     return id;
@@ -3412,6 +3428,16 @@ var Socket = class {
   }
 };
 
+// cordis-sdk/src/metadata.ts
+function caller(metadata) {
+  const value = metadata.get("cordis.caller");
+  if (value === void 0) return null;
+  if (!(value instanceof Map) || value.size !== 1) throw new CordisError(2, "\u8C03\u7528\u8EAB\u4EFD\u9700\u8981 instance \u6216 page_of");
+  if (typeof value.get("instance") === "string") return { instance: value.get("instance") };
+  if (typeof value.get("page_of") === "string") return { page_of: value.get("page_of") };
+  throw new CordisError(2, "\u8C03\u7528\u8EAB\u4EFD\u540D\u79F0\u9700\u8981\u5B57\u7B26\u4E32");
+}
+
 // cordis-web/src/index.ts
 function connect(options) {
   let stopped = false;
@@ -3482,6 +3508,7 @@ export {
   Frozen,
   Remote,
   WebRuntime,
+  caller,
   close,
   connect,
   defineComponent

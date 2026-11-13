@@ -265,6 +265,11 @@ impl Manager {
         component: Arc<RemoteComponent>,
         configuration: Configuration,
     ) -> cordis::Result<Arc<Generation>> {
+        let context = if context.extension::<trusted::TrustedCall>().is_some() {
+            context
+        } else {
+            self.caller_context(&context, &configuration.instance.name, Vec::new())
+        };
         let id = self.id();
         let generation = Arc::new_cyclic(|weak| {
             let base = Arc::new(ViewRecord::new(

@@ -948,9 +948,12 @@ fn deployment_realms_resolve_separate_providers() {
     });
     assert_eq!(
         serde_json::from_str::<Value>(&meta_a).unwrap(),
-        json!({ "namespace": "alpha" })
+        json!({ "namespace": "alpha", "cordis.caller": { "instance": "read-a" } })
     );
-    assert_eq!(serde_json::from_str::<Value>(&meta_b).unwrap(), Value::Null);
+    assert_eq!(
+        serde_json::from_str::<Value>(&meta_b).unwrap(),
+        json!({"cordis.caller":{"instance":"read-b"}})
+    );
     let pid = core.0.as_ref().unwrap().id();
     assert!(
         Command::new("/bin/kill")

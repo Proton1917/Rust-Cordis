@@ -16,7 +16,10 @@
 10. [Python 进程插件](#python-进程插件)
 11. [TypeScript 进程插件](#typescript-进程插件)
 12. [网页插件与全栈插件](#网页插件与全栈插件)
-13. [里程碑验收摘要（M0–M18）](#里程碑验收摘要m0m18)
+13. [HTTP 路由插件](#http-路由插件)
+14. [通用字节流与调用身份](#通用字节流与调用身份)
+15. [密钥与服务环境](#密钥与服务环境)
+16. [里程碑验收摘要（M0–M18）](#里程碑验收摘要m0m18)
 
 ## 内核概念与接口
 
@@ -396,6 +399,158 @@ entry = "index.js"
 
 `watch` 将本插件目录的文件变化作为替换来源。多个插件在同一防抖窗口变化时，`replace_batch` 统一决定提交或恢复。页面关闭回收本页子实例；移除插件撤回它的资源路由与各页界面。网页服务之间的共享限定在同一页，跨页面数据由后端服务持有。
 
+### 自定义页面外壳
+
+正式应用应提供自己的外壳。HTTP 实例的 `assets` 指向应用页面目录，`index` 选择该目录中的入口文件。下面的 `web/index.html` 为页面组件保留挂载点，并建立网页宿主连接：
+
+```html
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>应用工作台</title>
+  <script src="/_cordis/session.js"></script>
+</head>
+<body>
+  <header>应用工作台</header>
+  <main id="cordis-components"></main>
+  <script type="module">
+    import {connect} from '/_cordis/cordis-web.js';
+    connect({token: globalThis.CORDIS_SESSION.token});
+  </script>
+</body>
+</html>
+```
+
+```toml
+[instance.http.config]
+listen = "127.0.0.1:8080"
+assets = "web"
+index = "index.html"
+```
+
+组件替换回退自身登记的 DOM，页面外壳和整页导航状态继续保留。页面源码中的协议路径与挂载标识属于协议，用户可见文本采用应用自己的名称。默认开发页的标题来自 `http.title`，缺省为空，此时浏览器使用地址；正常连接时隐藏状态提示，中断或结束时显示中性提示。
+
+## HTTP 路由插件
+
+体系外的 REST 客户端、上传下载和支付回调通过 HTTP 路由接入。处理方注入 `cordis.http@1.0`，把 `HttpHandler` 对象交给 `route`；登记和异步 `unroute` 归属组件效应。生成处理方时选择语言：
+
+```sh
+cordis new-plugin api --rust --http
+cordis new-plugin webhook --python --http
+cordis new-plugin files --ts --http
+```
+
+部署中同时登记 HTTP 提供方与处理方。以下配置使用原生回显示例，并允许 100 MiB 上传：
+
+```toml
+[runtime]
+plugin_dir = "plugins"
+
+[instance.http]
+plugin = "libcordis_http.dylib"
+component = "http"
+forwarder = true
+config = { listen = "127.0.0.1:8080", max_body_bytes = 104857600 }
+
+[instance.api]
+plugin = "libhttp_echo.dylib"
+component = "http-echo"
+config = { prefix = "/api" }
+```
+
+Rust、Python 与 TypeScript 的示例分别位于 `plugins/http-echo`、`plugins/http-echo-py` 和 `plugins/http-echo-ts`。普通请求回显方法、原编码路径、命中前缀、查询串、请求头、对端与正文；`PUT /api/file` 保存上传，`GET /api/file` 分块下载，`DELETE /api/file` 删除保存的数据。
+
+前缀按路径段选择最长者，例如 `/api` 匹配 `/api` 与 `/api/items`。同名路由、协议地址和网页挂载的重叠登记返回冲突错误。方法集合外的请求得到 405 与 Allow；处理错误、超时、处理方退出和非法响应状态分别由 HTTP 提供方转换为固定状态及中性正文。
+
+| HTTP 配置 | 缺省值 | 用途 |
+|---|---:|---|
+| inline_body_bytes | 1048576 | 已知小请求使用内联字节串，最大 4 MiB |
+| max_body_bytes | 16777216 | 请求体总量上限；单路由可进一步收紧 |
+| stream_chunk_bytes | 1048576 | 流读取的单块上限，最大 4 MiB |
+| route_timeout_ms | 30000 | 等待处理方响应头的截止时间 |
+| body_idle_ms | 30000 | 流读取的空闲截止时间 |
+| replace_grace_ms | 2000 | 撤回前缀后等待新处理方的宽限 |
+
+HTTP 过滤逐跳头，其余端到端字段按原值转交，重复 Set-Cookie 保持顺序。处理方负责认证与转发头的信任策略。浏览器组件继续经 UP/1 注入后端服务；登录和退出由应用路由完成后，通过页面导航建立带最新 Cookie 的连接。
+
+### 反向代理
+
+TLS 由反向代理终结。HTTP 保持本机监听，并把浏览器实际使用的外部 origin 放入 `public_origins`：
+
+```toml
+[instance.http.config]
+listen = "127.0.0.1:8080"
+public_origins = ["https://app.example.com"]
+max_body_bytes = 104857600
+```
+
+Nginx 的同源代理配置可采用：
+
+```nginx
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    '' close;
+}
+server {
+    listen 443 ssl;
+    server_name app.example.com;
+    ssl_certificate /etc/nginx/certs/app.pem;
+    ssl_certificate_key /etc/nginx/certs/app.key;
+    client_max_body_size 100m;
+    location / {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_request_buffering off;
+        proxy_buffering off;
+    }
+}
+```
+
+页面、WebSocket 与 `/api` 共用该域名。HTTP 握手接受本次监听地址的 origin 以及 `public_origins`，会话令牌继续保护页面连接和入口清单。
+
+## 通用字节流与调用身份
+
+`cordis.byte-stream@1.0` 把数据作为拥有型服务对象传递。接收方调用 `read(max_bytes)` 拉取，读到空值结束；读取上限接受 1 字节至 4 MiB。Rust 的 `stream_api::from_file`、Python 的 `cordis_sdk.streams.from_file`、TypeScript 的 `fromFile` 创建文件流；相应 `to_file`、`streamToFile` 按块写入。迭代器与回调适配分别为 `from_chunks`/`fromChunks` 和 `copy_to`/`copyStream`。
+
+WIT 的 `list<u8>` 在方法、记录、变体和容器中统一编码为 CBOR 字节串，读取同时兼容旧整数数组。Rust 聚合字段使用 `cordis_sdk::Bytes`，可通过 `Vec<u8>.into()` 构造；Python 使用 `bytes`，TypeScript 使用 `Uint8Array`。已有 v0.x 的 KV 状态继续按相同模式与版本继承。
+
+Rust 插件可以在自己拥有的线程或 Tokio 运行时中调用 SDK。宿主接管跨进程调用、计时器和生命周期操作的执行；丢弃普通调用 Future 会向远端传播取消，已受理的组件装入和效应清理继续完成。插件通过效应清理等待自有线程退出，并在退出前释放服务与资源引用。
+
+Scoped 提供方通过三种 SDK 的 `caller(metadata)` 取得直接调用方：后端为 `{ instance }`，页面为 `{ page_of }`。服务页面的插件按 `page_of` 显式授权。后端处理页面请求期间继续使用自己的实例身份调用其他服务。
+
+`cordis.page` 提供 HTTP 实例名和不透明页面键。HTTP 持有连接升级时的 `page_headers` 快照与直接对端，缺省选择 Cookie、User-Agent、Accept-Language，总量上限为 8 KiB。页面关闭后键失效；登录或退出成功后进行页面导航，以新连接更新快照。原生 `http_api::page_attributes`、Python `page_attributes` 和 TypeScript `pageAttributes` 辅助查询当前依赖域内的 HTTP 属性。
+
+## 密钥与服务环境
+
+密钥服务由 `secrets` 插件提供。部署系统写入 NAME=VALUE 文件，属主为运行用户、权限至多 0600；包含空白或井号的值使用引号。插件按自己的 grants 配置授权后端实例：
+
+```toml
+[instance.secrets]
+plugin = "libcordis_secrets.dylib"
+component = "secrets"
+config = { file = "private/credentials.env", grants = { api = ["PAYMENT_SIGNING_KEY"] } }
+```
+
+处理方声明 `cordis.secrets@1.0` 依赖，通过 `get` 读取获准的名字。页面身份得到权限错误；`cordis.` 元数据由核心建立。密钥的读取、解释与保存归插件，跨进程值以不透明载荷转交。`cordis pack` 按密钥服务的实际声明排除配置引用的密钥文件，安装环境另外提供该文件。
+
+PATH、LANG 等普通变量可交给服务管理器：
+
+```sh
+cordis service install --name com.example.app \
+  --output service/app.plist \
+  --env PATH=/opt/homebrew/bin:/usr/bin:/bin \
+  --inherit-env LANG
+```
+
+变量名含 SECRET、TOKEN、PASSWORD 或 KEY 时返回错误，并提示使用密钥插件。显式值优先于继承值；`--output` 在指定位置生成服务配置。
+
 ## 里程碑验收摘要（M0–M18）
 
 第一阶段 `M0`–`M6` 交付内核，第二阶段推进独立核心、插件宿主与开发工具，每个里程碑一个提交。
@@ -424,4 +579,4 @@ entry = "index.js"
 
 M16 的实现与阶段检查已完成。Apple Silicon macOS 上的五项发布打包测试通过，覆盖运行产物交付、签名后契约重验、包外状态和多验证根；窗口过程验收记录 875 ms 恢复及依赖方重建。工作区覆盖 299 条运行测试与 2 条文档测试，固定 20 次迁移验收全部通过。Codex 用户目录的 skill 链接已按授权安装。
 
-M18 已通过阶段检查：Python SDK 与原生插件双向调用、8 项 KV 契约、资源与事件转交、隔离域和跨插口双向替换均通过；工作区共 306 条用例通过。`new-plugin --python` 生成的插件与 Rust 成员共同构建运行，watch 可替换修改后的 Python 源码。M17 的 WIT 三语言绑定及 ABI v1.0 保持有效，AU-17 已记录截图与 Cmd-Q 的完整成功结果。原始测量与阶段检查见 [PROGRESS](PROGRESS.md)，下一步为 M19 TypeScript SDK。
+M18 阶段检查覆盖 Python SDK 与原生插件双向调用、8 项 KV 契约、资源与事件转交、隔离域和跨插口双向替换，当时工作区共 306 条用例通过。`new-plugin --python` 生成的插件与 Rust 成员共同构建运行，watch 可替换修改后的 Python 源码。M17 的 WIT 三语言绑定及 ABI v1.0 保持有效，AU-17 已记录截图与 Cmd-Q 的完整成功结果。各里程碑的测量与检查结果见 [PROGRESS](PROGRESS.md)。

@@ -54,7 +54,7 @@ async def apply(context, config):
     await context.export_state(
         "kv.snapshot",
         1,
-        lambda: {"entries": {key: list(value) for key, value in values.items()}},
+        lambda: {"entries": dict(values)},
         frozen,
     )
     await context.provide("kv@1.0", store, bindings, scoped=True)

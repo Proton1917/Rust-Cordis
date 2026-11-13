@@ -1,0 +1,8 @@
+package test:identity@1.0.0;
+
+/// ```cordis
+/// name = "test.identity"
+/// ```
+interface identity {
+    inspect: async func() -> result<string, string>;
+}

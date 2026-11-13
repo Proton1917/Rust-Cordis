@@ -80,9 +80,9 @@ def encode_value(spec, value, transport, method=False):
         wire = encode_value(spec["item"], inner, transport, method)
         return Tagged(60001, wire) if wire is None or isinstance(wire, Tagged) and wire.tag == 60001 else wire
     if kind == "list":
-        if method and _resolved(spec["item"])["kind"] == "u8" and "length" not in spec:
+        if _resolved(spec["item"])["kind"] == "u8" and "length" not in spec:
             if not isinstance(value, bytes):
-                raise ValueError("方法字节值需要 bytes")
+                raise ValueError("字节值需要 bytes")
             return value
         if "length" in spec and len(value) != spec["length"]:
             raise ValueError("固定数组长度错误")
@@ -120,10 +120,12 @@ def decode_value(spec, value, transport, method=False):
         result = decode_value(spec["item"], inner, transport, method)
         return Some(result) if result is None or isinstance(result, Some) else result
     if kind == "list":
-        if method and _resolved(spec["item"])["kind"] == "u8" and "length" not in spec:
-            if not isinstance(value, bytes):
-                raise ValueError("方法字节值需要 CBOR 字节串")
-            return value
+        if _resolved(spec["item"])["kind"] == "u8" and "length" not in spec:
+            if isinstance(value, bytes):
+                return value
+            if isinstance(value, list):
+                return bytes(_scalar("u8", item) for item in value)
+            raise ValueError("字节值需要字节串或 u8 数组")
         if not isinstance(value, list) or "length" in spec and len(value) != spec["length"]:
             raise ValueError("列表形状错误")
         return [decode_value(spec["item"], item, transport) for item in value]
@@ -204,7 +206,7 @@ class KvClient:
 
 @dataclass
 class Snapshot:
-    entries: dict[str, list[int]]
+    entries: dict[str, bytes]
 
 @dataclass
 class Changed:

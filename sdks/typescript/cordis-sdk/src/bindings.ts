@@ -9,6 +9,7 @@ import {
     type Transport,
 } from "./types.js";
 import type { Runtime } from "./runtime.js";
+import { OwnedResource } from "./resources.js";
 
 const services = new WeakMap<object, Service>();
 const references = new WeakMap<object, Reference>();
@@ -79,6 +80,10 @@ export class Service {
     }
     close(): void {
         if (this.provider instanceof Remote) this.provider.close();
+        if (this.provider instanceof OwnedResource) this.provider.release();
+    }
+    retain(): void {
+        if (this.provider instanceof OwnedResource) this.provider.retain();
     }
     async invoke(
         runtime: Runtime,

@@ -33,6 +33,28 @@ cargo build -p cordis-http
 
 默认 HTTP 页面已经调用 connect。自定义页面加载 `/_cordis/session.js`，再执行 `connect({token: globalThis.CORDIS_SESSION.token})`；每个页面建立一条宿主连接。connect 返回 `{close, completed}`，close 请求结束连接与重连循环，completed 等待整个连接流程结束。
 
+正式应用应提供自己的页面外壳。HTTP 的 `assets` 指向外壳目录，`index` 选择其中的入口文件；该入口保留以下协议连接：
+
+```html
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>应用工作台</title>
+<script src="/_cordis/session.js"></script>
+<body>
+  <header>应用工作台</header>
+  <main id="cordis-components"></main>
+  <script type="module">
+    import {connect} from '/_cordis/cordis-web.js';
+    connect({token: globalThis.CORDIS_SESSION.token});
+  </script>
+</body>
+</html>
+```
+
+协议路径、会话对象与挂载标识属于宿主接口，用户可见文本由应用定义。默认开发外壳的标题来自 HTTP 的 `title`，缺省为空；连接状态在中断或结束时显示中性提示。组件的替换清理限定在它登记的 DOM 与效应，外壳由应用保留。
+
 可选字段 endpoint、manifest 分别默认为 `/_cordis/socket` 和 `/_cordis/manifest.json`；reconnectAttempts 表示初次连接后的重连次数上限，默认为20次，reconnectDelayMs 默认为500毫秒。status 回调接收 connecting、active、disconnected、closed；active 对应 WebSocket 已打开，组件是否已完成 apply 由核心实例状态和实际界面确认。页面 pagehide 触发关闭，重连前从 `/_cordis/session.json` 取得当前令牌。
 
 ## 服务与页面域

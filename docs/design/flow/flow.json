@@ -1,9 +1,25 @@
 {
   "project": "Cordis 网页插件",
   "title": "网页插件状态与替换流程",
-  "note": "截图来自真实 Chrome 场景。全栈替换、动态装配与服务依赖采用 web.rs 本次归档图片；移除后的单个笔记组件和 HTTP 恢复图沿用先前对应场景。管理操作由 cordis.manage@1.1 发起，页面在同一文档内更新；桌面视口为 1100 × 850，移动视口为 390 × 844。",
-  "roots": ["rust", "generated", "http", "dependencies-active"],
+  "note": "截图来自真实 Chrome 场景。全栈替换、动态装配、服务依赖与连接恢复保存 M20–M21 的实际画面；页面来源及应用外壳保存 M22 的实际画面。管理操作由 cordis.manage@1.1 发起，页面在同一文档内更新；桌面视口为 1100 × 850，移动视口为 390 × 844。",
+  "roots": ["rust", "generated", "http", "dependencies-active", "page-identity"],
   "nodes": [
+    {
+      "id": "page-identity", "title": "页面调用来源", "group": "应用外壳",
+      "kind": "页面状态", "route": "/", "state": "默认中性页面挂载组件；后端根据可信页面键取得连接属性。正常连接时状态提示隐藏。",
+      "image": "screenshots/page-identity-image-0.png", "evidence": "observed"
+    },
+    {
+      "id": "application-shell", "title": "替换后的自定义外壳", "group": "应用外壳",
+      "kind": "页面状态", "route": "/", "state": "应用通过 assets 与 index 提供页面；组件更新后标题、页面时间起点和应用外壳保持，桌面及移动视口正常显示。",
+      "image": "screenshots/application-shell-image-0.png",
+      "extra": ["screenshots/application-shell-extra-0.png"], "evidence": "observed"
+    },
+    {
+      "id": "missing-resource", "title": "资源缺席响应", "group": "应用外壳",
+      "kind": "错误页面", "route": "/missing-page", "state": "缺席资源返回 HTTP 404 与中性正文。",
+      "image": "screenshots/missing-resource-image-0.png", "evidence": "observed"
+    },
     {
       "id": "rust", "title": "Rust 数据便笺", "group": "全栈替换",
       "kind": "页面状态", "route": "/", "state": "Rust 后端已保存跨语言共享内容；两页本地计数分别为 1 和 2。",
@@ -55,6 +71,8 @@
     }
   ],
   "edges": [
+    {"from": "page-identity", "to": "application-shell", "action": "配置 assets/index，再替换页面组件", "evidence": "observed"},
+    {"from": "application-shell", "to": "missing-resource", "action": "访问 /missing-page", "evidence": "observed"},
     {"from": "rust", "to": "python", "action": "管理接口 replace：Rust → Python 0.2.0", "evidence": "observed"},
     {"from": "python", "to": "restored", "action": "替换为网页激活失败的 0.3.0 候选，事务恢复原版本", "evidence": "observed"},
     {"from": "generated", "to": "removed", "action": "管理接口 remove：page-counter", "evidence": "observed"},

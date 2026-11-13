@@ -1,0 +1,11 @@
+[package]
+name = "secrets-api"
+version.workspace = true
+edition.workspace = true
+rust-version = "1.85"
+publish.workspace = true
+license.workspace = true
+description = "Instance-authorized secret access for Cordis plugins."
+
+[dependencies]
+cordis-sdk.workspace = true

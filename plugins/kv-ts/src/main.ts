@@ -21,7 +21,7 @@ class Store {
     async flush(): Promise<void> {}
 }
 
-/** DOC-11 §5.3：继承和导出使用 Rust KV 的 entries 数组表示。 */
+/** DOC-11 §5.3、ADR-0039：继承兼容数组与字节串，导出统一使用字节串。 */
 async function apply(context: Context): Promise<void> {
     const state = context.inherited as Map<string, any> | null;
     if (state && (state.get("schema") !== "kv.snapshot" || state.get("version") !== 1)) {
@@ -31,7 +31,7 @@ async function apply(context: Context): Promise<void> {
     const values = new Map([...entries].map(([key, value]) => [key, new Uint8Array(value)]));
     const frozen = new Frozen();
     await context.exportState("kv.snapshot", 1, () => ({
-        entries: new Map([...values].map(([key, value]) => [key, [...value]])),
+        entries: new Map(values),
     }), frozen);
     await context.provide("kv@1.0", new Store(context, values, frozen), binding, true);
 }

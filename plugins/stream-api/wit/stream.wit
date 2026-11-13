@@ -1,0 +1,10 @@
+package cordis:byte-stream@1.0.0;
+
+interface streams {
+    /// ```cordis
+    /// name = "cordis.byte-stream"
+    /// ```
+    resource byte-stream {
+        read: async func(max-bytes: u32) -> result<option<list<u8>>, string>;
+    }
+}

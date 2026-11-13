@@ -263,7 +263,7 @@ impl Mapping {
             }
             Self::Bytes | Self::VecBytes => quote!(match #value {
                 ::cordis_sdk::__private::abi::CborValue::Bytes(bytes) => ::cordis_sdk::Result::Ok(bytes),
-                _ => ::cordis_sdk::Result::Err(::cordis_sdk::Error::new(2, "参数需要为 CBOR 字节串")),
+                value => ::cordis_sdk::__private::abi::from_value::<::cordis_sdk::Bytes>(value).map(|bytes| bytes.0),
             }),
             Self::Service(interface) => quote!(#environment.host().import_resource(&#value)
                 .and_then(::cordis_sdk::Service::<#interface>::from_object)),

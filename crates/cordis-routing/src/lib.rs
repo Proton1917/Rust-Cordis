@@ -1,6 +1,7 @@
 //! ADR-0041、DOC-16 §6：核心对象出口目录与拥有型服务转发。
 #![forbid(unsafe_code)]
 
+pub mod description;
 mod directory;
 mod interface;
 mod local;

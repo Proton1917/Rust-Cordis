@@ -1,0 +1,10 @@
+[package]
+name = "http-echo-failed"
+version = "0.1.4"
+edition = "2024"
+publish = false
+[lib]
+crate-type = ["cdylib"]
+[dependencies]
+cordis-sdk.workspace = true
+http-api.workspace = true

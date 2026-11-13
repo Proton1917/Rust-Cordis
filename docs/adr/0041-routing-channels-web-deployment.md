@@ -33,6 +33,8 @@ Router 提供 `route`、`export`、`batch`、`release`、`reclaim`、`transfer`�
 
 Arguments、CallContext、LocalReply、LocalService 移入 cordis-routing，通过 `cordis_supervisor::manager` 重导出。调用方保持既有路径和签名。对象元数据的保留预算、纯字节计量、Interface 标识解析和有界诊断值构造归入 routing；诊断上报、错误回收、版本匹配和 Scoped 服务建立继续由 supervisor 处理。
 
+ADR-0046 的受信调用来源沿此分层实现：协议描述符的名称、接口解析与字节计量，以及对象信息查询和诊断额度归入 routing。supervisor 继续保留公开入口、内核定义构造、纪元持有、Scoped 缓存和诊断上报。描述符检查只产生解析结果，组件定义的安装与退出仍由 supervisor 决定。
+
 ## Forward 接口与冻结 ABI
 
 插件侧增加 forward-api，定义 `cordis.forward@1.0`：
@@ -100,3 +102,14 @@ TypeScript Runtime 通过构造参数接收连接与调用信号作用域，Cont
 routing 提取复用现有 supervisor manager/process 测试，核验资源转交、连接回收、Scoped、清理、替换与失败路径。保留正式公开路径的重导出，并用既有源代码行工具记录提取前后各 crate 的代码行与总行。
 
 M20 验收沿 AU-7、AU-14、AU-15：页面局部替换与全栈回退；两个页面的依赖失效与恢复、单页关闭；单页异常隔离和 HTTP 重启后的重连。浏览器验收保存实际查看的画面及运行证据。新增核心 crate 与 supervisor、runtime 合并统计，使拆分后的整体实现可比较。
+
+ADR-0046 的 M22 提取与受信身份实现后，代码行与总行如下。supervisor 为页面及后端提供直接调用方事实，具体授权仍由插件决定；runtime 增量来自服务安装环境变量。
+
+| crate | 目标 / 上限 | 实际代码行 / 总行 |
+|---|---:|---:|
+| cordis-routing | 500 / 800 | 736 / 828 |
+| cordis-supervisor | 4500 / 5500；M22 结束至多 5450 | 5444 / 5895 |
+| cordis-channels | 700 / 1200 | 250 / 277 |
+| cordis-web-deployment | 1000 / 1500 | 870 / 939 |
+| cordis-runtime | 4500 / 5500 | 5400 / 5933 |
+| cordis-host | 2000 / 3500 | 2730 / 3020 |

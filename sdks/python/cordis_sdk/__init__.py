@@ -2,11 +2,14 @@
 from .bindings import BindingTransport, Remote
 from .context import Component, Context, Effect, Frozen
 from .errors import CordisError
+from .metadata import Caller, caller
 from .runtime import Runtime, run
 
 __all__ = [
     "BindingTransport",
     "Component",
+    "Caller",
+    "caller",
     "Context",
     "CordisError",
     "Effect",
