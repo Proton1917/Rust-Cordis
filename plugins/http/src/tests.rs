@@ -67,9 +67,11 @@ fn request(url: &str, output: &Path, format: &str) -> String {
 
 #[test]
 fn static_pages_bootstrap_tokens_and_connections_follow_server_lifetime() {
-    let directory = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../target/http-tests")
-        .join(format!("http-{}", std::process::id()));
+    let guard = cordis_testkit::cleanup::TestGuard::for_package(
+        Path::new(env!("CARGO_MANIFEST_DIR")),
+        "http-pages",
+    );
+    let directory = guard.directory("http-tests");
     fs::create_dir_all(directory.join("assets")).unwrap();
     let mut first = Running::start(Config::default());
     let url = url::Url::parse(&first.entry.url).unwrap();
@@ -108,6 +110,7 @@ fn static_pages_bootstrap_tokens_and_connections_follow_server_lifetime() {
     }
     assert!(TcpStream::connect_timeout(&address, Duration::from_millis(100)).is_err());
     custom_assets(&directory, &first.entry.token);
+    guard.success();
 }
 
 /// ADR-0038：自定义入口和资源使用同一服务，下一次激活取得新的令牌。

@@ -1,10 +1,10 @@
 use cordis_runtime::storage;
+use cordis_testkit::cleanup::{FixtureLease, SharedFixture, TestGuard};
 use serde_json::{Value, json};
 use std::{
     fs,
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
-    sync::OnceLock,
     thread,
     time::{Duration, Instant},
 };
@@ -78,11 +78,11 @@ impl Drop for Process {
     }
 }
 
-fn fixture() -> &'static Path {
-    static FIXTURE: OnceLock<PathBuf> = OnceLock::new();
-    FIXTURE.get_or_init(|| {
-        let package = Path::new(env!("CARGO_MANIFEST_DIR"));
-        let workspace = package.parent().and_then(Path::parent).unwrap();
+fn fixture() -> FixtureLease<PathBuf> {
+    static FIXTURE: SharedFixture<PathBuf> = SharedFixture::new();
+    let package = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let workspace = package.parent().and_then(Path::parent).unwrap();
+    FIXTURE.get_or_init(workspace, "runtime-fixture", |guard| {
         let _build = cordis_testkit::build::shared_build_lock(workspace).unwrap();
         let target = cordis_testkit::build::shared_target_dir(workspace);
         let output = Command::new(env!("CARGO"))
@@ -98,7 +98,7 @@ fn fixture() -> &'static Path {
             String::from_utf8_lossy(&output.stderr)
         );
         cordis_testkit::build::snapshot_artifacts(
-            workspace,
+            guard,
             "runtime-fixture",
             "debug",
             &["cordis-runtime-fixture"],
@@ -108,12 +108,8 @@ fn fixture() -> &'static Path {
     })
 }
 
-fn project(name: &str) -> PathBuf {
-    let package = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let workspace = package.parent().and_then(Path::parent).unwrap();
-    let project = workspace
-        .join("target/runtime-m12/cases")
-        .join(format!("{name}-{}", std::process::id()));
+fn project(case: &TestGuard, name: &str) -> PathBuf {
+    let project = case.directory(&format!("runtime-m12/cases/{name}"));
     fs::create_dir_all(project.join("plugins")).unwrap();
     fs::create_dir_all(project.join("sources")).unwrap();
     project
@@ -252,7 +248,9 @@ fn checkpoint(project: &Path, expected: u64) {
 // M12：真实管理调用验证权限、覆盖层、替换回滚、核心崩溃恢复与有序退出。
 #[test]
 fn management_and_checkpoints_survive_core_restart() {
-    let project = project("management");
+    let case = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "management");
+    let _fixture = fixture().for_case(&case);
+    let project = project(&case, "management");
     plugin(&project.join("plugins/store"), "store", "v1");
     plugin(&project.join("plugins/admin"), "admin", "v1");
     plugin(&project.join("plugins/client"), "client", "v1");
@@ -430,12 +428,15 @@ fn management_and_checkpoints_survive_core_restart() {
         u64::try_from(persisted.data.as_integer().unwrap()).unwrap(),
         46
     );
+    case.success();
 }
 
 /// DOC-11 §7：空原快照在回滚时恢复组件初值，并清除新版本检查点。
 #[test]
 fn rollback_restores_absent_state_after_new_version_exports() {
-    let project = managed_project("empty-rollback", "stateless");
+    let case = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "empty-rollback");
+    let _fixture = fixture().for_case(&case);
+    let project = managed_project(&case, "empty-rollback", "stateless");
     let mut core = Process::start(&project, "empty-first");
     active(&project, "admin");
     let installed = manage(
@@ -462,12 +463,18 @@ fn rollback_restores_absent_state_after_new_version_exports() {
     assert_eq!(restored["value"], 17, "{restored}");
     assert_eq!(manage(&project, 8, "shutdown", json!([]))["ok"], true);
     core.finish();
+    case.success();
 }
 
 /// DOC-11 SW-9：旧进程拒绝退役时，已提交的新版本跨核心重启继续生效。
 #[test]
 fn committed_replacement_error_persists_active_version() {
-    let project = managed_project("committed-retirement", "shutdown-fail");
+    let case = TestGuard::for_package(
+        Path::new(env!("CARGO_MANIFEST_DIR")),
+        "committed-retirement",
+    );
+    let _fixture = fixture().for_case(&case);
+    let project = managed_project(&case, "committed-retirement", "shutdown-fail");
     let mut core = Process::start(&project, "retirement-first");
     active(&project, "admin");
     let installed = manage(
@@ -501,12 +508,15 @@ fn committed_replacement_error_persists_active_version() {
     assert_eq!(restored["value"], 63, "{restored}");
     assert_eq!(manage(&project, 6, "shutdown", json!([]))["ok"], true);
     core.finish();
+    case.success();
 }
 
 /// ADR-0031：坏候选恢复整个窗口，联合新接口与新配置在同一事务中生效。
 #[test]
 fn batch_restores_configuration_and_accepts_joint_interface_change() {
-    let project = managed_project("batch", "v1");
+    let case = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "batch");
+    let _fixture = fixture().for_case(&case);
+    let project = managed_project(&case, "batch", "v1");
     plugin(&project.join("sources/client-fail"), "client", "fail");
     plugin(&project.join("sources/store-next"), "store", "next");
     plugin(&project.join("sources/client-next"), "client", "next");
@@ -594,12 +604,15 @@ fn batch_restores_configuration_and_accepts_joint_interface_change() {
     );
     assert_eq!(manage(&project, 12, "shutdown", json!([]))["ok"], true);
     core.finish();
+    case.success();
 }
 
 /// ADR-0031、SW-9：确认后的旧进程退役错误也恢复窗口前配置、版本和原快照。
 #[test]
 fn batch_restores_window_after_committed_retirement_failure() {
-    let project = managed_project("batch-retirement", "shutdown-fail");
+    let case = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "batch-retirement");
+    let _fixture = fixture().for_case(&case);
+    let project = managed_project(&case, "batch-retirement", "shutdown-fail");
     let mut core = Process::start(&project, "batch-retirement");
     active(&project, "admin");
     active(&project, "client");
@@ -638,12 +651,15 @@ fn batch_restores_window_after_committed_retirement_failure() {
         17
     );
     core.kill();
+    case.success();
 }
 
 /// ADR-0031：受理凭据与最终结果分离，同ID复用确定结果，中断后继续同一窗口。
 #[test]
 fn batch_tickets_replay_results_and_resume_after_core_restart() {
-    let project = managed_project("batch-tickets", "v1");
+    let case = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "batch-tickets");
+    let _fixture = fixture().for_case(&case);
+    let project = managed_project(&case, "batch-tickets", "v1");
     plugin(&project.join("sources/store-waiting"), "store", "waiting");
     let mut core = Process::start(&project, "tickets-first");
     active(&project, "admin");
@@ -652,12 +668,15 @@ fn batch_tickets_replay_results_and_resume_after_core_restart() {
     ticket_restart(&project, &mut core);
     assert_eq!(manage(&project, 20, "shutdown", json!([]))["ok"], true);
     core.finish();
+    case.success();
 }
 
 /// DOC-11 §10：相同基础来源的实例各自恢复确认版本，来源记录保持配置重读能力。
 #[test]
 fn confirmed_sources_preserve_group_versions_without_shadowing_configuration() {
-    let project = source_binding_project();
+    let case = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "source-bindings");
+    let _fixture = fixture().for_case(&case);
+    let project = source_binding_project(&case);
     let mut core = Process::start(&project, "sources-first");
     active(&project, "admin");
     active(&project, "other");
@@ -705,11 +724,12 @@ fn confirmed_sources_preserve_group_versions_without_shadowing_configuration() {
     );
     assert_eq!(manage(&project, 4, "shutdown", json!([]))["ok"], true);
     core.finish();
+    case.success();
 }
 
 /// ADR-0025、DOC-11 §10：两个进程组和隔离域使用同一来源，提供可独立替换的服务。
-fn source_binding_project() -> PathBuf {
-    let project = managed_project("source-bindings", "v1");
+fn source_binding_project(case: &TestGuard) -> PathBuf {
+    let project = managed_project(case, "source-bindings", "v1");
     let mut configuration: toml::Value =
         toml::from_str(&fs::read_to_string(project.join("cordis.toml")).unwrap()).unwrap();
     let instances = configuration["instance"].as_table_mut().unwrap();
@@ -870,8 +890,8 @@ fn ticket_restart(project: &Path, core: &mut Process) {
 }
 
 /// M12：为管理恢复场景建立真实进程插件与有授权的调用方。
-fn managed_project(name: &str, mode: &str) -> PathBuf {
-    let project = project(name);
+fn managed_project(case: &TestGuard, name: &str, mode: &str) -> PathBuf {
+    let project = project(case, name);
     plugin(&project.join("plugins/store"), "store", mode);
     plugin(&project.join("plugins/admin"), "admin", "v1");
     plugin(&project.join("plugins/client"), "client", "v1");
@@ -898,7 +918,9 @@ fn client_configuration(project: &Path) -> String {
 // M12、ADR-0025：部署隔离域连接相应提供方，拦截元数据进入提供方的scoped视图。
 #[test]
 fn deployment_realms_resolve_separate_providers() {
-    let project = project("realms");
+    let case = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "realms");
+    let _fixture = fixture().for_case(&case);
+    let project = project(&case, "realms");
     plugin(&project.join("plugins/store"), "store", "v1");
     plugin(&project.join("plugins/reader"), "reader", "v1");
     let configuration = format!(
@@ -938,4 +960,5 @@ fn deployment_realms_resolve_separate_providers() {
             .success()
     );
     core.finish();
+    case.success();
 }

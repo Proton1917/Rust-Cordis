@@ -167,6 +167,9 @@ export function decodeValue(input: Spec, value: any, transport: Transport, metho
             if (!(value instanceof Tagged) || value.tag !== 60000) throw new TypeError("服务值需要对象引用标签");
             return new CLIENTS[spec.class ?? "ErrorContext"](transport.importResource(value, spec.service ?? "cordis.error-context@1.0", spec.borrowed ?? false));
         default:
+            if ((spec.kind === "u64" || spec.kind === "s64") && typeof value === "number" && Number.isSafeInteger(value)) {
+                value = BigInt(value);
+            }
             return scalar(spec.kind, value);
     }
 }
@@ -186,7 +189,7 @@ export async function dispatch(provider: object, transport: Transport, service: 
     const values = args.map((value, index) => decodeValue(method.params[index].type, value, transport, true));
     const callback = (provider as Record<string, (...values: unknown[]) => unknown>)[method.typescript];
     let result = callback.apply(provider, values);
-    if (method.async) result = await result;
+    result = await result;
     return encodeValue(method.result, result, transport, true);
 }
 

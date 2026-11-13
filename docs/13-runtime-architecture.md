@@ -29,6 +29,7 @@
 | `crates/cordis-contract` | 插件侧契约断言辅助，复用 cordis.contract@1 的 SDK 接口 |
 | `plugins/kv-api` | kv@1 接口定义 |
 | `plugins/kv-mem`、`plugins/kv-file` | kv@1 的内存和文件实现 |
+| `plugins/kv-mem-component`、`plugins/counter-component` | 普通 Rust 组件库；动态入口与测试复用同一实现，依赖产物按 Cargo 编译单元区分（ADR-0042） |
 | `plugins/kv-contract`、`plugins/counter`、`plugins/console-log` | 契约套件、计数使用方、终端日志 |
 | `plugins/watch` | 持有管理授权的文件监视与自动替换插件 |
 | `plugins/web-api` | cordis.web@1.0 页面入口及会话令牌的共享接口 |
@@ -36,6 +37,8 @@
 | `plugins/window-api` | window@1.0 开关窗口接口与 window.closed@1.0 事件 |
 | `plugins/window` | 独立进程窗口插件，主线程运行系统 WebView，另一线程处理 UP/1 |
 | `sdks/python/cordis_sdk` | Python UP/1、组件与上下文、资源引用及 WIT 绑定适配（ADR-0040） |
+| `sdks/typescript/cordis-sdk` | Node UP/1、组件与上下文、显式资源释放和取消、WIT 绑定适配（ADR-0040） |
+| `plugins/kv-ts` | 与原生、Python KV 共享接口、状态和逻辑名称的 Node 进程实现 |
 | `plugins/kv-py`、`plugins/counter-py` | 与原生 kv、counter 共享接口和状态格式的 Python 进程实现 |
 | `fixtures/` | 真实行为与故障测试插件 |
 | `docs/abi/v1-layout.txt` | ABI 布局记录，由测试生成 |
@@ -216,7 +219,7 @@ pub trait Kv: Send + Sync {
 | `Context` 任务 | spawn、spawn_thread 返回 `Result<()>`；`is_current() -> Result<bool>`；sleep 异步返回 `Result<()>` |
 | `Context` 状态 | `inherited_state() -> Result<Option<StateBlob>>`；export_state 返回 Frozen；export_state_with 接收与写路径共享的 Frozen |
 | `Context` 事件 | on/emit 对应 SyncEvent；on_async/emit_async 对应 AsyncEvent；全部通过 Result 表达失败 |
-| `export_plugin!` | 导出入口、ABI 主版本和描述符；可选 rlib_feature 供回环测试链接，独立 cdylib 构建使用标准 C 符号 |
+| `export_plugin!` | 导出入口、ABI 主版本和描述符；生产 cdylib 使用标准 C 符号，cfg(test) 使用模块内 Rust 入口符号（ADR-0042） |
 
 完整可编译实现位于 `plugins/kv-api/src/lib.rs`、`plugins/kv-mem/src/lib.rs` 和 `plugins/counter/src/lib.rs`。kv-mem 在状态锁内检查 Frozen 后写入；导出时先设置冻结标志再取得状态锁。counter 成功写入 KV 后更新本地计数，加载时从继承状态与 KV 当前值中取较大者。`crates/cordis-sdk/tests/loopback.rs` 通过实际入口执行基础组件与宿主操作，effect_handles 检验外部效应句柄释放；28 槽 HostV1 的派生、子组件和 Scoped 路径由 `crates/cordis-host/tests/native.rs` 的同组、跨组真实宿主场景覆盖。
 

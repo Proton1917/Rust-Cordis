@@ -6,3 +6,7 @@
 .DS_Store
 __pycache__/
 *.py[cod]
+node_modules/
+/sdks/typescript/*/dist/
+/plugins/kv-ts/dist/
+/tests/typescript-sdk/plugin/dist/

@@ -7,10 +7,7 @@ publish.workspace = true
 license.workspace = true
 
 [lib]
-crate-type = ["cdylib", "rlib"]
-
-[features]
-rlib = []
+crate-type = ["cdylib"]
 
 [dependencies]
 cordis-sdk.workspace = true

@@ -451,8 +451,8 @@ footer { font-size: 13px; color: var(--muted); border-top: 1px solid var(--line)
   <section aria-labelledby="prog-title">
     <div class="sec-head">
       <div class="eyebrow">进度</div>
-      <h2 id="prog-title">实现进度（2026-11-12）</h2>
-      <p class="lead">Rust 原生插件系统已完成系统验收，发布包、窗口恢复、截图和 Cmd-Q 退出均通过验收。WIT 生成三种语言的接口绑定，Python SDK 已通过跨语言调用、状态迁移与隔离域验证。当前接入 TypeScript SDK；上方模拟同时包含后续阶段的前端场景。</p>
+      <h2 id="prog-title">实现进度（2026-11-13）</h2>
+      <p class="lead">Rust 原生插件系统已完成系统验收，发布包、窗口恢复、截图和 Cmd-Q 退出均通过验收。WIT 生成三种语言的接口绑定，Python 与 TypeScript SDK 已通过跨语言调用、状态迁移和隔离域验证。当前接入浏览器页面；上方模拟包含后续阶段的前端场景。</p>
     </div>
     <div class="progress">
       <table>
@@ -468,7 +468,7 @@ footer { font-size: 13px; color: var(--muted); border-top: 1px solid var(--line)
           <tr><td>发布打包与窗口插件</td><td class="mono">M16</td><td><span class="st done">运行验证通过</span></td><td>独立发布包、签名与窗口恢复通过；截图、Cmd-Q、检查点与退出验收通过</td></tr>
           <tr><td>WIT 接口描述语言</td><td class="mono">M17</td><td><span class="st done">运行验证通过</span></td><td>三语言绑定与 CBOR 互通通过；kv-api 由 WIT 生成，复合资源按调用期回收</td></tr>
           <tr><td>Python SDK 与插件脚手架</td><td class="mono">M18</td><td><span class="st done">运行验证通过</span></td><td>双向调用、KV 契约、跨插口迁移、隔离域与资源转交通过；源码变化触发热替换</td></tr>
-          <tr><td>TypeScript SDK</td><td class="mono">M19</td><td><span class="st doing">进行中</span></td><td>接入 Node 进程插件、生成接口与共享资源生命周期</td></tr>
+          <tr><td>TypeScript SDK</td><td class="mono">M19</td><td><span class="st done">运行验证通过</span></td><td>Node 双向调用、KV 契约、资源与事件转交、迁移回退、脚手架热替换通过</td></tr>
           <tr><td>前端与全栈插件</td><td class="mono">M20–M21</td><td><span class="st todo">候选准备</span></td><td>浏览器页面经 http 插件接入，独立连接与页面子实例由核心管理</td></tr>
         </tbody>
       </table>

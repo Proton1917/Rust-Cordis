@@ -1,0 +1,9 @@
+name = "kv"
+version = "0.1.0"
+socket = "process"
+protocol = 1
+command = ["node", "dist/main.js"]
+
+[restart]
+max = 5
+backoff_ms = 500

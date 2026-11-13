@@ -4,6 +4,16 @@ include!("support/interfaces.rs");
 #[path = "support/host.rs"]
 mod host;
 
+mod kv_plugin {
+    use kv_mem_component::KvStore;
+    cordis_sdk::export_plugin!(name = "kv", version = "0.1.0", components = [KvStore]);
+}
+
+mod counter_plugin {
+    use counter_component::Counter;
+    cordis_sdk::export_plugin!(name = "counter", version = "0.1.0", components = [Counter]);
+}
+
 use cordis_abi::testing::{LoadedPlugin, environment};
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -415,8 +425,8 @@ async fn exercise_generic_entrypoints(ctx: &Context, host: &host::Loopback) -> R
 }
 
 async fn exercise_examples(host: &host::Loopback) -> Result<()> {
-    let kv_plugin = LoadedPlugin::load(kv_mem::cordis_entry(), 1)?;
-    let counter_plugin = LoadedPlugin::load(counter::cordis_entry(), 2)?;
+    let kv_plugin = LoadedPlugin::load(kv_plugin::cordis_entry(), 1)?;
+    let counter_plugin = LoadedPlugin::load(counter_plugin::cordis_entry(), 2)?;
     assert_eq!(kv_plugin.name()?, "kv");
     let config = cordis_sdk::encode(&EmptyConfig {})?;
     let store = host.context(config.clone(), Vec::new(), None);

@@ -138,6 +138,5 @@ impl Component for KvStore {
 cordis_sdk::export_plugin!(
     name = "kv",
     version = env!("CARGO_PKG_VERSION"),
-    components = [KvStore],
-    rlib_feature = "rlib"
+    components = [KvStore]
 );

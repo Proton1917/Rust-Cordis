@@ -6,11 +6,14 @@
 
 | 项 | 值 |
 |---|---|
-| 最近完成的实现与检查 | `M18`；Python SDK、双向迁移、隔离域、资源与事件转交、Python 脚手架已通过阶段检查 |
-| 当前里程碑 | M18 提交；随后接入 M19 TypeScript SDK |
-| 下一步 | M19：接入 target/typescript-m19 的 SDK、kv-ts、IDL 模板适配与脚手架；随后整合 target/web-m20 的路由拆分、转发通道和网页部署。主会话编译使用默认 target/，夹具使用 target/shared |
+| 最近完成的实现与检查 | `M19`；TypeScript SDK、迁移回退与脚手架通过；测试现场清理的连续两轮验收通过 |
+| 当前里程碑 | M19 提交；接续 M20 网页插件 |
+| 当前验证 | target/cleanup-verification-m19-lifecycle 两轮各 311 条用例通过，耗时 277.188 / 247.984 秒；20 类现场的文件数、字节数、目录数增长均为 0 |
+| M19 进行中证据 | `target/test-evidence/typescript-sdk-behavior-72065-1/typescript-sdk/behavior-72065`（完整 SDK 场景）；`target/test-evidence/typescript-scaffold-72065-0/typescript-sdk/scaffold-72065`（真实 Node 脚手架热替换）；全局日志 target/m19-*.log |
+| 下一步 | M20：按 target/web-m20/routing 的 ADR-0041、integration.md 与 frontend/CONTINUATION.md 接入 routing/channels/web-deployment、HTTP 转发、cordis-web、页面子实例与三个示例；完成局部更新/全栈回退/多页隔离/重连验收。主会话使用默认 target/ 与 target/shared，两个代理各用现有共享根 |
+| 文档交付 | 保留设计方重写的 README 与新增 docs/guide.md；M19 更新 README 路线图状态及 sdks/typescript 行数，TypeScript 用法新增至 guide；同步解释页。后续详细用法统一进入 guide |
 | 窗口界面验收 | AU-17 通过；用户在 iTerm2 执行，窗口恢复 802 ms，截图、Cmd-Q、检查点与进程退出均通过 |
-| 最后更新 | 2026-11-12（America/Los_Angeles），M18 阶段检查与编译根收拢 |
+| 最后更新 | 2026-11-13（Asia/Shanghai），M19 完整验收与测试现场清理 |
 
 ## 环境
 
@@ -568,6 +571,39 @@ cargo test --manifest-path target/m17-review/source/Cargo.toml -p cordis --doc
 | Python SDK | 838 / 987 |
 | 六个核心 crate 合计 | 16978 / 18997 |
 
+### M19 TypeScript SDK、脚手架与测试现场管理
+
+- 正式实现：`sdks/typescript/cordis-sdk` 提供 Node UP/1、Component/Context、效应、冻结与继承、服务与事件资源、显式 close、调用取消和 §6.4 的组合能力。`plugins/kv-ts` 采用 kv@1.0、kv.snapshot@1，与原生及 Python 实现共享替换身份。WIT 的 u64/s64 在短整数 CBOR 表示下转换为 bigint；提供方按实际 Promise 等待返回值。依赖为 cbor-x 1.6.0，TypeScript 5.9.3 与 Node 类型声明归开发依赖，沿 ADR-0040。
+- `new-plugin --ts`：模板将 SDK 源码放入 src/cordis_sdk，统一编译到 dist；npm 的 bin-links=false 使安装副本保持普通文件。kv-ts 的本地 SDK 安装使用 install-links=true。实际生成项目的 Rust 成员及 Node 插件共同运行，重编译后 watch 执行新模块的 stderr 标记。Python 与 TypeScript 脚手架共用登记、Cargo exclude、watch 配置与测试工具构建。
+- Y-1：fmt 通过，`target/m19-component-fmt.log`。Y-2：完整工作区 clippy/all-targets 通过，13.38 秒，`target/m19-component-clippy.log`。TypeScript SDK 和 kv-ts 的 tsc 编译通过；正式 SDK 场景每次通过公开 IDL 命令生成绑定并自行构建工具和插件。
+- Y-3：按用户要求连续两次 `cargo test --workspace`，每轮 309 条运行用例、2 条文档用例通过，耗时 277.188 秒、247.984 秒。20 类测试现场在两轮之间的文件数、字节数、子目录数增长均为 0，详细统计为 [测试现场验收](measurements/m19-test-cleanup.json)。日志为 `target/cleanup-verification-m19-lifecycle/round-1.log`、`round-2.log`；执行脚本 `target/verify_test_cleanup_m19.py` 固定两轮，失败即停止。
+- SDK 实际验收：Rust↔TypeScript 字节调用、8 项原生 KV 契约、scoped 元数据、私有域子组件与父清理、命名域、资源借用/二次转交/事件导入、AbortSignal 取消、超帧后的继续调用、Rust→TypeScript→Rust 状态继承及失败回退均通过。第二轮实际结果汇入 [TypeScript SDK 验收](measurements/m19-typescript-sdk.json)，原始证据位于 `target/test-evidence/typescript-sdk-behavior-93487-0/typescript-sdk/behavior-93487`；脚手架证据位于 `target/test-evidence/typescript-scaffold-93487-1/typescript-sdk/scaffold-93487`。
+- 测试现场管理：公共 TestGuard 在断言和进程退出完成后标记成功，迁移 JSON、日志和状态证据后删除现场；失败保留。SharedFixture 静态保存 Weak，FixtureLease 保有程序副本并绑定测试结果，最后一个使用者释放；此前失败会保留共享现场。3 项实际文件用例覆盖成功归档、错误返回保留及跨租约失败保留。窗口、压力、watch、宿主、验证、打包、脚手架、语言 SDK 与各文件单元测试均已接入。
+- 共享目录修复：第一轮发现混合 cdylib/rlib 输出覆盖同名 rlib，形成 SDK trait 身份冲突。ADR-0042 将 KvStore、Counter 移至唯一的普通组件库，动态插件保留原名称的纯 cdylib 入口；SDK 测试和 kv-evolution 直接依赖组件库。保留现有缓存的迁移及 SDK 回环定向通过，随后两轮完整执行通过。原始失败日志位于 `target/cleanup-verification-m19/round-1.log`。
+- 状态观察修正：DOC-11 §7 要求旧组件重新 apply，回退测试等待旧版本引用、rolled_back 报告和持续计数；context 编号记录实际重建结果。旧断言读到延迟快照，错误地要求编号保持，失败记录位于 `target/cleanup-verification-m19-component/round-1.log`，定向修正结果 `target/m19-rollback-published.log`。
+- Y-4：177 条矩阵通过，8 条移植、166 条改写、3 条不适用，`target/m19-conformance.log`。Y-5：两轮中的 unsafe 审计通过，宏测试入口的符号规则按 ADR-0042 保持生产 ABI。核心产品依赖延续 Q0；组件库归插件侧，testkit 归测试依赖。
+- Y-6：ABI 实现代码保持 M17，复用该阶段 13 条 Miri 边界用例与布局比较，nightly 沿环境表。Y-7：两轮原生布局比较通过，ABI v1.0 保持。宏在 cfg(test) 下保留 Rust 符号名，生产导出名称及函数签名保持原值。
+- Y-8：cloc 2.10 统计各 src 的代码行/总行，完整结果为 `target/m19-source-lines.txt`；TypeScript SDK 为 1126/1222。变化项见下表，其他 crate 数值沿 M18，均符合 DOC-13 上限。
+- Y-9：README 采用设计方重写版本，只更新 M19 路线状态与 TypeScript 行数；Python 快速开始依赖路径与脚手架一致。完整用法保留于 docs/guide.md，新增 TypeScript 节。解释页已同步，实际查看 `target/explainer-m19-desktop.png`、`target/explainer-m19-mobile.png`，进度文字可读、控制台 0 错误；页面及本次服务已退出。
+- Y-10：提交主题 `M19: 接入 TypeScript SDK 并治理测试现场生命周期`，推送目标 origin/main。
+- 清理：旧编译 profile 41G→38G；旧测试现场 39G→32G，补充现场 33G→32G，各次目录占用实测和执行范围见“决策与发现”。已交付 AU-17 应用、Miri、现有活动编译根保留。双轮沿用已安装工具链、Cargo/npm 缓存及从 pip 缓存取得的本地 cbor2 wheel，环境设置保存在 `target/offline-env.sh`。
+
+| crate 或模块 | 代码行 / 总行 |
+|---|---:|
+| cordis-dev | 2141 / 2345 |
+| cordis-sdk-macros | 1427 / 1558 |
+| cordis-testkit | 468 / 532 |
+| kv-mem | 6 / 9 |
+| kv-mem-component | 67 / 80 |
+| counter | 6 / 9 |
+| counter-component | 75 / 85 |
+| kv-file | 129 / 142 |
+| kv-contract | 56 / 66 |
+| cordis-watch | 578 / 622 |
+| cordis-http | 361 / 402 |
+| TypeScript SDK | 1126 / 1222 |
+| 六个核心 crate 合计 | 16978 / 18997 |
+
 ## 第二阶段候选与恢复记录
 
 用户设置的 10 分钟计时于 2026-11-12 02:40:22 UTC 到期后暂停，随后按用户指令恢复。设计提交为 `478b3a4`，包含用户指定的序号和完整字节比对方案。M7 已完成验收，后续候选继续按下表接入。
@@ -607,6 +643,11 @@ M8 候选保留独立 `[workspace]` 以便隔离编译，正式接入时改为�
 ## 决策与发现
 
 实现过程中得到的、文档里没有的结论记在这里，每条写明日期、结论、依据（源码位置或用例编号）。需要改变 `DOC-01` 条款或 `DOC-02` 规则的结论另写 ADR，这里只留一行指向它。
+
+- 2026-11-12（UTC−08:00）：M19 恢复后完成旧候选清理，10 个带 Cargo 标记的 debug/release 目录已删除，`du -sh target` 从 41G 降至 38G；路径与结果为 `target/cache-cleanup-m19.json`。编译目录内的结果文件保存到 `target/cache-cleanup-m19-evidence`。默认 target/debug、target/shared、Miri、窗口辅助程序及 M20 正在使用的 agent-shared/agent-cleanup 保持；后两者分别承担路由提取和网页接入。
+- 2026-11-13（Asia/Shanghai）：按 e7df894d 清理已结束测试现场，共移除 264 个目录，其中 262 个属于文档未引用现场，2 项引用误归类的处理见后条。13 个引用现场保留文本、JSON、CBOR 与图像证据，清除 1234 个编译产物及依赖文件。`du -sh target` 从 39G 降至 32G，执行记录为 `target/test-residue-cleanup-m19.json`，脚本为 `target/prune_test_residue_m19.py`。公共守卫与测试调用迁移进行中，随后按要求连续执行两次工作区测试。
+- 2026-11-13（Asia/Shanghai）：旧现场清理的引用匹配漏识别全角括号，behavior-55112、scaffold-55112 两个 M19 进行中目录被误归入移除项；全局运行日志仍在。匹配已改为路径字符边界，当前状态引用第一轮完整执行后由守卫归档的新证据。旧目录的原始文件保持删除事实，新的归档来自实际重跑结果。
+- 2026-11-13（Asia/Shanghai）：补充清理同类旧现场，38 个未引用目录移除，14 个引用目录保留证据，删除 405 个编译产物；`du -sh target` 从 33G 降至 32G，记录为 `target/test-residue-additional-m19.json`。已交付的 `target/window-tests/recovery-51816/dist/window-recovery.app` 保持完整。
 
 - 2026-11-12（UTC−08:00）：设计方按用户授权清理旧候选与复核的 Cargo 缓存，`du -sh target` 从 68G 降至 27G；执行脚本与演练记录为 `target/claude-edits/clean_caches.py`、`clean-dryrun.txt`。后续构建按 AGENTS 规则 11 共用各编译根的 shared 目录，阶段结束保留编译缓存。
 - 2026-11-12（UTC−08:00）：M17 复核后的编译根收拢已执行。删除前进程查询确认 main-build 处于空闲，主会话统一使用默认 `target/` 与 `target/shared`，`target/main-build`、`target/m17-review/source` 已删除。原隔离现场的日志、JSON、CBOR 和生成源码迁至 `target/m17-review/evidence/isolated-target`，646 个可重建二进制及发布归档移除清单为该 evidence 目录的 artifact-cleanup.json。`du -sh target` 从 41G 降至 29G，保留证据 38M；默认 target/debug 18G，agent-shared 418M，agent-cleanup 的编译目录处于缺席状态。M17 段落中的原始源码与证据路径对应本次迁移前位置。

@@ -15,7 +15,7 @@ serde.workspace = true
 [dev-dependencies]
 cordis-abi = { workspace = true, features = ["test-support"] }
 kv-api.workspace = true
-kv-mem = { workspace = true, features = ["rlib"] }
-counter = { workspace = true, features = ["rlib"] }
+kv-mem-component.workspace = true
+counter-component.workspace = true
 tokio.workspace = true
 futures-util.workspace = true

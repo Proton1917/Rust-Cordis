@@ -1,9 +1,9 @@
 //! DOC-15 M11、AU-9、AU-18：真实动态库、独立进程与旧编译器组成原生验收。
 
+use cordis_testkit::cleanup::{SharedFixture, TestGuard};
 use std::{
     path::{Path, PathBuf},
     process::Command,
-    sync::OnceLock,
 };
 
 struct Driver {
@@ -11,14 +11,12 @@ struct Driver {
     executable: PathBuf,
 }
 
-static DRIVER: OnceLock<Result<Driver, String>> = OnceLock::new();
+static DRIVER: SharedFixture<Result<Driver, String>> = SharedFixture::new();
 
-fn build_driver() -> Result<Driver, String> {
+fn build_driver(guard: &TestGuard) -> Result<Driver, String> {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let workspace = root.parent().and_then(Path::parent).unwrap();
-    let target = workspace
-        .join("target/host-native")
-        .join(std::process::id().to_string());
+    let target = guard.directory("host-native");
     let shared = cordis_testkit::build::shared_target_dir(workspace);
     let status = Command::new(env!("CARGO"))
         .args(["run", "--manifest-path"])
@@ -41,8 +39,11 @@ fn build_driver() -> Result<Driver, String> {
 }
 
 fn scenario(name: &str) {
-    let driver = DRIVER
-        .get_or_init(build_driver)
+    let case = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), name);
+    let lease = DRIVER
+        .get_or_init(case.workspace(), "host-driver", build_driver)
+        .for_case(&case);
+    let driver = lease
         .as_ref()
         .unwrap_or_else(|error| panic!("原生场景 {name}：{error}"));
     let status = Command::new(&driver.executable)
@@ -54,6 +55,7 @@ fn scenario(name: &str) {
         .status()
         .unwrap_or_else(|error| panic!("启动原生场景 {name} 失败：{error}"));
     assert!(status.success(), "原生场景 {name} 失败：{status}");
+    case.success();
 }
 
 macro_rules! native_scenarios {

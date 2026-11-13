@@ -1,5 +1,6 @@
 //! DOC-15 §7、M17：开发命令生成三语言绑定，经真实 SDK 与 CBOR 往返执行。
 
+use cordis_testkit::cleanup::TestGuard;
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -30,20 +31,20 @@ struct Acceptance {
 
 impl Acceptance {
     /// 本次生成物与依赖属于独立目录，Rust 依赖编译复用项目内 Cargo 缓存。
-    fn new() -> Self {
+    fn new(guard: &TestGuard) -> Self {
         let root = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../..")
             .canonicalize()
             .unwrap();
         let fixture = root.join("crates/cordis-dev/tests/fixtures/idl");
-        let directory = root.join("target/idl-acceptance").join(format!(
+        let directory = guard.track(root.join("target/idl-acceptance").join(format!(
             "{}-{}",
             std::process::id(),
             SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .unwrap()
                 .as_nanos()
-        ));
+        )));
         let generated = directory.join("generated");
         fs::create_dir_all(generated.join("js")).unwrap();
         fs::create_dir_all(directory.join("tmp")).unwrap();
@@ -175,7 +176,8 @@ impl Acceptance {
 
 #[test]
 fn generated_bindings_preserve_types_and_service_behavior() {
-    let acceptance = Acceptance::new();
+    let case = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "idl-bindings");
+    let acceptance = Acceptance::new(&case);
     acceptance.generate();
     acceptance.prepare_scripts();
     acceptance.rust(
@@ -187,5 +189,9 @@ fn generated_bindings_preserve_types_and_service_behavior() {
         "behavior::script_results_preserve_wit_values_in_rust",
         "rust-script-results",
     );
-    eprintln!("IDL 验收证据：{}", acceptance.directory.display());
+    eprintln!(
+        "IDL 验收证据：{}",
+        case.evidence_for(&acceptance.directory).display()
+    );
+    case.success();
 }

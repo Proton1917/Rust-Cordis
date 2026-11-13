@@ -17,4 +17,4 @@ incompatible = []
 [dependencies]
 cordis-sdk = { path = "../../../../crates/cordis-sdk" }
 kv-api = { path = "../../../../plugins/kv-api" }
-kv-mem = { path = "../../../../plugins/kv-mem", features = ["rlib"] }
+kv-mem-component = { path = "../../../../plugins/kv-mem-component" }

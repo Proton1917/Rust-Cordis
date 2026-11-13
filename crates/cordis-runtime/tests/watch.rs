@@ -1,5 +1,6 @@
 //! DOC-15 §3.3、DOC-14 M12：真实文件事件驱动安装、替换、失败回滚与配置重读。
 
+use cordis_testkit::cleanup::TestGuard;
 use serde_json::Value;
 use std::{
     fs,
@@ -82,13 +83,21 @@ fn host_binary(workspace: &Path) -> PathBuf {
         .join("cordis-host")
 }
 
-fn prepare(workspace: &Path) -> (PathBuf, PathBuf) {
-    let fixtures = workspace
-        .join("target/host-native")
-        .join(std::process::id().to_string());
+fn prepare(guard: &TestGuard, workspace: &Path) -> (PathBuf, PathBuf) {
+    let fixtures = guard.track(
+        workspace
+            .join("target/host-native")
+            .join(std::process::id().to_string()),
+    );
+    guard.track(host_binary(workspace).parent().unwrap().to_owned());
+    guard.track(
+        workspace
+            .join("target/watch-plugin")
+            .join(std::process::id().to_string()),
+    );
     compile_host_fixtures(workspace, &fixtures);
     compile_watch(workspace, &fixtures);
-    let project = create_project(workspace, &fixtures, "window");
+    let project = create_project(guard, workspace, &fixtures, "window");
     (project, fixtures)
 }
 
@@ -168,10 +177,12 @@ fn compile_watch(workspace: &Path, fixtures: &Path) {
     .unwrap();
 }
 
-fn create_project(workspace: &Path, fixtures: &Path, label: &str) -> PathBuf {
-    let project = workspace
-        .join("target/watch-runtime")
-        .join(format!("{label}-{}", std::process::id()));
+fn create_project(guard: &TestGuard, workspace: &Path, fixtures: &Path, label: &str) -> PathBuf {
+    let project = guard.track(
+        workspace
+            .join("target/watch-runtime")
+            .join(format!("{label}-{}", std::process::id())),
+    );
     fs::create_dir_all(project.join("plugins")).unwrap();
     fs::create_dir_all(project.join("sources")).unwrap();
     let watch_target = workspace
@@ -291,12 +302,13 @@ fn consumers_built_with(snapshot: &Value, version: &str) -> bool {
 
 #[test]
 fn watch_replaces_rolls_back_suppresses_same_candidate_and_reloads() {
+    let guard = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "watch-transaction");
     let workspace = Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .unwrap()
         .parent()
         .unwrap();
-    let (project, artifacts) = prepare(workspace);
+    let (project, artifacts) = prepare(&guard, workspace);
     fs::write(project.join("cordis.toml"), configuration(false)).unwrap();
     let mut core = Core::start(&project, &project.join("cordis"));
     let initial = wait(&project, "全部初始实例加载", |snapshot| {
@@ -379,12 +391,13 @@ fn watch_replaces_rolls_back_suppresses_same_candidate_and_reloads() {
         },
     );
     core.finish();
-    self_replacement(workspace, &artifacts);
+    self_replacement(&guard, workspace, &artifacts);
+    guard.success();
 }
 
 /// ADR-0031：自身失败会清理原任务，新实例根据待确认窗口和核心结果抑制同内容重试。
-fn self_replacement(workspace: &Path, artifacts: &Path) {
-    let project = create_project(workspace, artifacts, "self");
+fn self_replacement(guard: &TestGuard, workspace: &Path, artifacts: &Path) {
+    let project = create_project(guard, workspace, artifacts, "self");
     let mut configuration: toml::Value = toml::from_str(&configuration(false)).unwrap();
     configuration["instance"]["watch"]["config"]["paths"] =
         toml::Value::Array(vec![toml::Value::String("plugins".into())]);

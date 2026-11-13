@@ -62,6 +62,5 @@ async fn exercise(suite: &Suite, store: &Service<dyn Kv>) -> Result<()> {
 cordis_sdk::export_plugin!(
     name = "kv-contract",
     version = env!("CARGO_PKG_VERSION"),
-    components = [KvContract],
-    rlib_feature = "rlib"
+    components = [KvContract]
 );

@@ -3,6 +3,7 @@
 #[path = "acceptance_support/mod.rs"]
 pub mod support;
 
+use cordis_testkit::cleanup::TestGuard;
 use serde_json::{Value, json};
 use std::{
     collections::BTreeMap,
@@ -21,12 +22,9 @@ struct Artifacts {
 }
 
 /// Y-3、AC-8：构建两个相同接口版本的真实提供方，使用方由 Rust 1.85 构建。
-fn artifacts(tools: &Tools) -> Artifacts {
+fn artifacts(guard: &TestGuard, tools: &Tools) -> Artifacts {
     let _build = cordis_testkit::build::shared_build_lock(&tools.root).unwrap();
-    let build = tools
-        .root
-        .join("target/stress-artifacts")
-        .join(std::process::id().to_string());
+    let build = guard.directory("stress-artifacts");
     let fixtures = tools
         .root
         .join("crates/cordis-host/tests/fixtures/Cargo.toml");
@@ -73,7 +71,7 @@ fn artifacts(tools: &Tools) -> Artifacts {
         std::env::consts::DLL_SUFFIX
     );
     let copied = cordis_testkit::build::snapshot_artifacts(
-        &tools.root,
+        guard,
         "stress-fixtures",
         "release",
         &[&consumer_name, "cordis-runtime-fixture"],
@@ -101,8 +99,8 @@ fn quote(path: &Path) -> String {
 }
 
 /// AC-9：管理者保持独立，线程使用方和 idle 与提供方共享原生宿主。
-fn deployment(tools: &Tools, artifacts: &Artifacts) -> PathBuf {
-    let project = tools.project("ac9");
+fn deployment(guard: &TestGuard, tools: &Tools, artifacts: &Artifacts) -> PathBuf {
+    let project = tools.project(guard, "ac9");
     fs::create_dir_all(project.join("plugins")).unwrap();
     fs::create_dir_all(project.join("sources")).unwrap();
     fs::create_dir_all(project.join("state/data/loader-consumer")).unwrap();
@@ -270,9 +268,10 @@ fn distribution(samples: &[Value], field: &str) -> Value {
 /// AC-9、AU-10：固定50轮，成功后只汇总既定原始观测。
 #[test]
 fn eight_threads_survive_fifty_native_replacements_with_stateful_restarts() {
-    let tools = tools();
-    let artifacts = artifacts(tools);
-    let project = deployment(tools, &artifacts);
+    let guard = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "native-stress");
+    let tools = tools().for_case(&guard);
+    let artifacts = artifacts(&guard, &tools);
+    let project = deployment(&guard, &tools, &artifacts);
     let mut running = tools.start(&project);
     let initial = until("压力部署全部Active", || {
         status(&project).filter(|snapshot| active(snapshot, 5))
@@ -306,7 +305,11 @@ fn eight_threads_survive_fifty_native_replacements_with_stateful_restarts() {
             "samples":samples
         }),
     );
-    eprintln!("AC-9/RM-3/RM-4/RM-6证据：{}", project.display());
+    eprintln!(
+        "AC-9/RM-3/RM-4/RM-6证据：{}",
+        guard.evidence_for(&project).display()
+    );
+    guard.success();
 }
 
 fn install_versions(project: &Path, artifacts: &Artifacts) -> [Value; 2] {

@@ -1,6 +1,7 @@
 //! DOC-15 AU-11、RM-10：项目内临时 launchd job 在核心退出后恢复状态。
 
-use crate::support::{active, command, status, tools, until, write_json};
+use crate::support::{Tools, active, command, status, tools, until, write_json};
+use cordis_testkit::cleanup::TestGuard;
 use serde_json::{Value as JsonValue, json};
 use std::{
     fs,
@@ -40,8 +41,10 @@ impl Drop for Job {
 }
 
 pub fn recover() {
-    let project = prepare_deployment();
-    let mut job = launch(&project);
+    let case = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "au11");
+    let tools = tools().for_case(&case);
+    let project = prepare_deployment(&case, &tools);
+    let mut job = launch(&tools, &project);
     let initial = until("服务管理器启动核心", || {
         status(&project).filter(|snapshot| active(snapshot, 1))
     });
@@ -56,16 +59,15 @@ pub fn recover() {
         &project.join("result.json"),
         &json!({"scenario":"AU-11", "RM-10_ms":recovery_ms,"previous_core":initial["pid"],"restored_core":restored_core,"previous_plugins":host_pids(&initial),"restored_plugins":restored_hosts,"inherited_value":73,"new_initial_value":29,"launchd_target":job.target,"service_removed":true}),
     );
-    fs::remove_dir_all(project.join("target")).unwrap();
     eprintln!(
         "AU-11 / RM-10 证据：{}，恢复 {recovery_ms} ms",
-        project.display()
+        case.evidence_for(&project).display()
     );
+    case.success();
 }
 
-fn prepare_deployment() -> PathBuf {
-    let tools = tools();
-    let project = tools.project("au11");
+fn prepare_deployment(case: &TestGuard, tools: &Tools) -> PathBuf {
+    let project = tools.project(case, "au11");
     tools.generate(&project);
     tools.plugin(&project, "recovery");
     prepare_plugin(&project);
@@ -78,8 +80,7 @@ fn prepare_deployment() -> PathBuf {
     project
 }
 
-fn launch(project: &Path) -> Job {
-    let tools = tools();
+fn launch(tools: &Tools, project: &Path) -> Job {
     let binaries = project.join("service/bin");
     fs::create_dir_all(&binaries).unwrap();
     let core = binaries.join("cordis");

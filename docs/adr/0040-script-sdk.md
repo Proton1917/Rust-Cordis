@@ -27,6 +27,8 @@ Python 脚手架将当前 SDK 源码放入插件目录，requirements.txt 声明
 
 开发工具使用 toml_edit 0.25.19 在 Cargo workspace 中追加排除项，并保持原文件的注释与格式。该依赖位于 cordis-dev，运行核心继续使用既有配置解析器。
 
+TypeScript 脚手架把 SDK TypeScript 源码放入插件的 src/cordis_sdk，与业务入口一次编译到 dist。npm 配置 bin-links=false，构建命令直接调用 TypeScript 编译器文件，安装目录由普通文件组成。kv-ts 示例使用 install-links=true 安装本地 SDK 的完整副本；先构建 SDK，再安装与构建插件。两种方式均满足运行时安装副本的普通文件约束。
+
 ## 后果与验收
 
 DOC-15 的 Python SDK、TypeScript SDK 依赖栏与 D-5 按上述成熟库更新。核心继续执行 UP/1 路由与生命周期管理。M18 和 M19 分别通过真实核心验证 Rust 与脚本 SDK 双向调用、KV 契约、替换状态迁移和 AU-18 的脚本提供方行为，覆盖清理、资源释放与调用取消。

@@ -4,6 +4,9 @@ use super::{Result, registration, write_new};
 use std::{fs, path::Path};
 use toml_edit::{Array, DocumentMut, Item, value};
 
+mod typescript;
+pub use typescript::typescript_plugin;
+
 const MAIN: &str = include_str!("../../templates/python/main.py");
 const REQUIREMENTS: &str = include_str!("../../../../sdks/python/requirements.txt");
 const SDK: &[(&str, &str)] = &[
@@ -35,6 +38,11 @@ const SDK: &[(&str, &str)] = &[
 
 /// DOC-15 §12.1：部署入口指向项目内源目录，版本副本由运行时管理。
 pub fn python_plugin(project: &Path, name: &str) -> Result<()> {
+    create(project, name, write_python)
+}
+
+/// DOC-15 §12.1：各进程语言共用项目登记、Cargo 排除项与 watch 源目录。
+fn create(project: &Path, name: &str, write: fn(&Path, &str) -> Result<()>) -> Result<()> {
     let project = project.canonicalize()?;
     let (configuration, addition, settings) = registration(&project, name, name.into())?;
     let cargo = project.join("Cargo.toml");
@@ -50,7 +58,7 @@ pub fn python_plugin(project: &Path, name: &str) -> Result<()> {
     if discoverable != directory && fs::symlink_metadata(&discoverable).is_ok() {
         return Err(format!("部署入口已存在：{}", discoverable.display()).into());
     }
-    write_python(&directory, name)?;
+    write(&directory, name)?;
     if discoverable != directory {
         fs::create_dir_all(discoverable.parent().expect("部署入口父目录"))?;
         let relative = pathdiff::diff_paths(&directory, discoverable.parent().unwrap())

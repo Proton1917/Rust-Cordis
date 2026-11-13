@@ -40,6 +40,8 @@ async function main() {
     const spec = Object.values(types.SCHEMA.types).find((spec) => spec.class === 'Sample');
     const wire = fromCbor(decoder.decode(fs.readFileSync(path.join(generated, 'rust-sample.cbor'))), types);
     const sample = types.decodeValue(spec, wire, null);
+    const shortCount = decoder.decode(Buffer.from([17]));
+    assert.equal(types.decodeValue({kind: 'u64'}, shortCount, null), 17n);
     assert.equal(sample.label, '数据'); assert.equal(sample.marker, '𝄞');
     assert.equal(sample.count, 18446744073709551615n); assert.equal(sample.delta, -9223372036854775808n);
     assert.deepEqual(sample.bytes, [0, 128, 255]); assert.deepEqual(sample.pairs, new Map([['k', [7, 8]]]));

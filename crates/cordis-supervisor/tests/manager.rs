@@ -6,6 +6,7 @@ use cordis_supervisor::{
         ManagerOptions, RestartPolicy,
     },
 };
+use cordis_testkit::cleanup::{FixtureLease, SharedFixture, TestGuard};
 use cordis_up::{
     ObjectRef, Value, WireError, payload,
     rpc::{HandlerFuture, RemoteObject},
@@ -14,7 +15,7 @@ use parking_lot::Mutex;
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
-    sync::{Arc, OnceLock},
+    sync::Arc,
     time::{Duration, Instant},
 };
 use tokio::sync::watch;
@@ -151,14 +152,14 @@ impl LocalService for Control {
     }
 }
 
-fn plugin() -> &'static Path {
-    static PLUGIN: OnceLock<PathBuf> = OnceLock::new();
-    PLUGIN.get_or_init(|| {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-        let workspace = root
-            .parent()
-            .and_then(Path::parent)
-            .expect("workspace package layout");
+fn plugin() -> FixtureLease<PathBuf> {
+    static PLUGIN: SharedFixture<PathBuf> = SharedFixture::new();
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let workspace = root
+        .parent()
+        .and_then(Path::parent)
+        .expect("workspace package layout");
+    PLUGIN.get_or_init(workspace, "manager-fixture", |guard| {
         let _build = cordis_testkit::build::shared_build_lock(workspace).unwrap();
         let destination = cordis_testkit::build::shared_target_dir(workspace);
         let result = std::process::Command::new(env!("CARGO"))
@@ -174,7 +175,7 @@ fn plugin() -> &'static Path {
             String::from_utf8_lossy(&result.stderr)
         );
         cordis_testkit::build::snapshot_artifacts(
-            workspace,
+            guard,
             "manager-fixture",
             "debug",
             &["cordis-manager-fixture"],
@@ -334,6 +335,8 @@ async fn until(duration: Duration, condition: impl Fn() -> bool) {
 // M10：同组依赖、事件登记和committed清理都由唯一核心决定。
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn core_orders_same_group_cleanup_and_rebuilds_dependencies() {
+    let case = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "manager-order");
+    let _fixture = plugin().for_case(&case);
     let (manager, control) = setup(options()).await;
     manager
         .attach_group(group("subject", "v1", "manager-fixture", no_restart()))
@@ -410,11 +413,14 @@ async fn core_orders_same_group_cleanup_and_rebuilds_dependencies() {
         assert_eq!(integer(&retired[a_end].value), 17);
     }
     manager.shutdown().await.unwrap();
+    case.success();
 }
 
 // CP-6：真实SIGKILL回收提供方，依赖转Pending，独立进程保持纪元，重启继承最近检查点。
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn process_failure_releases_dependencies_and_restores_checkpoint() {
+    let case = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "manager-failure");
+    let _fixture = plugin().for_case(&case);
     let (manager, control) = setup(options()).await;
     manager
         .attach_group(group(
@@ -508,11 +514,14 @@ async fn process_failure_releases_dependencies_and_restores_checkpoint() {
         1
     );
     manager.shutdown().await.unwrap();
+    case.success();
 }
 
 // CP-6、CP-11：五次真实退避重启后停止，恢复值来自core持有的最近快照。
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn restart_limit_uses_backoff_and_latest_snapshot() {
+    let case = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "manager-restart");
+    let _fixture = plugin().for_case(&case);
     let (manager, control) = setup(options()).await;
     manager
         .attach_group(group(
@@ -579,11 +588,14 @@ async fn restart_limit_uses_backoff_and_latest_snapshot() {
         assert_ne!(pair[0].context, pair[1].context);
     }
     manager.shutdown().await.unwrap();
+    case.success();
 }
 
 // 组替换的候选apply失败后，由core恢复旧进程实现与导出的真实状态。
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn failed_group_replacement_rolls_back_state() {
+    let case = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "manager-rollback");
+    let _fixture = plugin().for_case(&case);
     let (manager, control) = setup(options()).await;
     let original = manager
         .attach_group(group("subject", "v1", "manager-fixture", no_restart()))
@@ -621,11 +633,14 @@ async fn failed_group_replacement_rolls_back_state() {
             .any(|report| report.group == "subject" && report.rolled_back && !report.succeeded)
     );
     manager.shutdown().await.unwrap();
+    case.success();
 }
 
 // 已接收的组替换由core有界动作队列持有，丢弃调用方等待继续完成既定事务。
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn accepted_replacement_survives_waiter_cancellation() {
+    let case = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "manager-cancel");
+    let _fixture = plugin().for_case(&case);
     let (manager, control) = setup(options()).await;
     let original = manager
         .attach_group(group("subject", "v1", "manager-fixture", no_restart()))
@@ -679,11 +694,14 @@ async fn accepted_replacement_survives_waiter_cancellation() {
     })
     .await;
     manager.shutdown().await.unwrap();
+    case.success();
 }
 
 // 长寿命登记额度由真实效应和外部句柄共同释放；元数据按保留字节预算拒绝。
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn registration_and_metadata_quotas_recover_after_cleanup() {
+    let case = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "manager-quotas");
+    let _fixture = plugin().for_case(&case);
     let (manager, control) = setup(ManagerOptions {
         max_registrations_per_context: 7,
         ..options()
@@ -748,10 +766,13 @@ async fn registration_and_metadata_quotas_recover_after_cleanup() {
         8
     );
     manager.shutdown().await.unwrap();
+    case.success();
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn derived_scopes_cache_actual_binding_and_own_child_lifetime() {
+    let case = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "manager-scopes");
+    let _fixture = plugin().for_case(&case);
     let (manager, control) = setup(options()).await;
     manager
         .attach_group(group("subject", "v1", "manager-fixture", no_restart()))
@@ -899,10 +920,13 @@ async fn derived_scopes_cache_actual_binding_and_own_child_lifetime() {
         4
     );
     manager.shutdown().await.unwrap();
+    case.success();
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn named_realms_share_bindings_and_separate_other_instances() {
+    let case = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "manager-realms");
+    let _fixture = plugin().for_case(&case);
     let (manager, control) = setup(options()).await;
     manager
         .attach_group(group("subject", "v1", "manager-fixture", no_restart()))
@@ -982,10 +1006,13 @@ async fn named_realms_share_bindings_and_separate_other_instances() {
         Some(before)
     );
     manager.shutdown().await.unwrap();
+    case.success();
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn released_view_registration_recycles_and_effect_keeps_its_context() {
+    let case = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "manager-views");
+    let _fixture = plugin().for_case(&case);
     let (manager, control) = setup(ManagerOptions {
         max_registrations_per_context: 8,
         ..options()
@@ -1033,10 +1060,13 @@ async fn released_view_registration_recycles_and_effect_keeps_its_context() {
     core_call(&ready, "effect_release", &effect).await;
     context_retired(&ready, view.context).await;
     manager.shutdown().await.unwrap();
+    case.success();
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn selected_checkpoint_detach_and_shutdown_freeze_use_real_process_state() {
+    let case = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "manager-checkpoint");
+    let _fixture = plugin().for_case(&case);
     let (manager, control) = setup(options()).await;
     let subject = manager
         .attach_group(group(
@@ -1122,4 +1152,5 @@ async fn selected_checkpoint_detach_and_shutdown_freeze_use_real_process_state()
         4
     );
     manager.shutdown().await.unwrap();
+    case.success();
 }

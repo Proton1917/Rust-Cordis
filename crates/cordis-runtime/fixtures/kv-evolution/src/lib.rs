@@ -79,12 +79,12 @@ impl Component for Store {
         }
         #[cfg(not(feature = "incompatible"))]
         {
-            kv_mem::KvStore::provides()
+            kv_mem_component::KvStore::provides()
         }
     }
 
     fn state() -> StateSchema {
-        kv_mem::KvStore::state()
+        kv_mem_component::KvStore::state()
     }
 
     /// DOC-14 AC-3：失败版本在实际登记服务后返回错误，验证完整效应回滚。
@@ -95,7 +95,7 @@ impl Component for Store {
             next_interface::apply(context).await?;
         }
         #[cfg(not(feature = "incompatible"))]
-        kv_mem::KvStore::apply(context, config).await?;
+        kv_mem_component::KvStore::apply(context, config).await?;
         if cfg!(feature = "fails") {
             return Err(Error::new(1002, "KV新版本加载失败"));
         }

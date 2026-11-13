@@ -16,7 +16,9 @@ members = [
     "crates/cordis-contract",
     "plugins/kv-api",
     "plugins/kv-mem",
+    "plugins/kv-mem-component",
     "plugins/counter",
+    "plugins/counter-component",
     "plugins/watch",
     "plugins/console-log",
     "plugins/kv-file",
@@ -62,7 +64,7 @@ cordis-supervisor = { path = "crates/cordis-supervisor" }
 cordis-contract = { path = "crates/cordis-contract" }
 cordis-idl = { path = "crates/cordis-idl" }
 kv-api = { path = "plugins/kv-api" }
-kv-mem = { path = "plugins/kv-mem" }
-counter = { path = "plugins/counter" }
+kv-mem-component = { path = "plugins/kv-mem-component" }
+counter-component = { path = "plugins/counter-component" }
 web-api = { path = "plugins/web-api" }
 window-api = { path = "plugins/window-api" }

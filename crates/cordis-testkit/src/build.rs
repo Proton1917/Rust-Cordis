@@ -37,17 +37,18 @@ pub fn shared_build_lock(workspace: &Path) -> io::Result<File> {
 
 /// 项目规则 11：持锁复制本次实际运行的产物到证据目录，保留不同特性及编译器结果。
 pub fn snapshot_artifacts(
-    workspace: &Path,
+    guard: &crate::cleanup::TestGuard,
     label: &str,
     profile: &str,
     names: &[&str],
 ) -> io::Result<PathBuf> {
     static NEXT: AtomicU64 = AtomicU64::new(0);
-    let destination = workspace.join("target/test-artifacts").join(format!(
+    let workspace = guard.workspace();
+    let destination = guard.track(workspace.join("target/test-artifacts").join(format!(
         "{label}-{}-{}",
         std::process::id(),
         NEXT.fetch_add(1, Ordering::Relaxed)
-    ));
+    )));
     fs::create_dir_all(&destination)?;
     let source = shared_target_dir(workspace).join(profile);
     for name in names {

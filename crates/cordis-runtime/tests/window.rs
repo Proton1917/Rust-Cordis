@@ -1,6 +1,7 @@
 //! DOC-15 §11.6、AU-17：发布应用中的窗口调用、单次进程恢复与核心有序退出。
 #![cfg(target_os = "macos")]
 
+use cordis_testkit::cleanup::TestGuard;
 use serde_json::{Value, json};
 use std::{
     collections::BTreeSet,
@@ -22,7 +23,7 @@ fn command(command: &mut Command) {
 }
 
 /// Y-3、AU-17：当前源码自行构建工具和插件，产物目录显式位于项目 target。
-fn tools(root: &Path) -> PathBuf {
+fn tools(guard: &TestGuard, root: &Path) -> PathBuf {
     let _build = cordis_testkit::build::shared_build_lock(root).unwrap();
     let target = cordis_testkit::build::shared_target_dir(root);
     let mut build = Command::new(env!("CARGO"));
@@ -47,7 +48,7 @@ fn tools(root: &Path) -> PathBuf {
             .arg(&target),
     );
     cordis_testkit::build::snapshot_artifacts(
-        root,
+        guard,
         "window-tools",
         "release",
         &[
@@ -64,10 +65,8 @@ fn tools(root: &Path) -> PathBuf {
 }
 
 /// ADR-0036：正式 pack 接收真实运行产物，应用状态明确存放在本次场景目录。
-fn deployment(root: &Path, binaries: &Path) -> (PathBuf, PathBuf, PathBuf) {
-    let project = root
-        .join("target/window-tests")
-        .join(format!("recovery-{}", std::process::id()));
+fn deployment(guard: &TestGuard, root: &Path, binaries: &Path) -> (PathBuf, PathBuf, PathBuf) {
+    let project = guard.directory("window-tests");
     let plugins = project.join("plugins");
     let window = plugins.join("window");
     fs::create_dir_all(&window).unwrap();
@@ -264,12 +263,13 @@ fn stop(core: &mut Core, before: &Value, after: &Value) {
 
 #[test]
 fn packed_window_recovers_once_with_backend_contexts_and_signature_preserved() {
+    let guard = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "window-recovery");
     let root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
         .canonicalize()
         .unwrap();
-    let binaries = tools(&root);
-    let (project, state, app) = deployment(&root, &binaries);
+    let binaries = tools(&guard, &root);
+    let (project, state, app) = deployment(&guard, &root, &binaries);
     eprintln!("AU-17：运行发布应用 {}", app.display());
     let mut core = launch(&project, &app);
     let before = until("四个实例 Active", || active(&mut core, &state));
@@ -295,5 +295,9 @@ fn packed_window_recovers_once_with_backend_contexts_and_signature_preserved() {
             "exit_code":0, "remaining_processes":[], "app_signature":"valid"
         }),
     );
-    eprintln!("AU-17 真实窗口进程验收：{}", project.display());
+    eprintln!(
+        "AU-17 真实窗口进程验收：{}",
+        guard.evidence_for(&project).display()
+    );
+    guard.success();
 }

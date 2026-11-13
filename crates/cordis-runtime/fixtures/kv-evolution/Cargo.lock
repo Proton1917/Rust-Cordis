@@ -101,11 +101,11 @@ version = "0.2.0"
 dependencies = [
  "cordis-sdk",
  "kv-api",
- "kv-mem",
+ "kv-mem-component",
 ]
 
 [[package]]
-name = "kv-mem"
+name = "kv-mem-component"
 version = "0.1.0"
 dependencies = [
  "cordis-sdk",

@@ -9,7 +9,7 @@ struct Artifacts {
 }
 
 /// Y-3：测试自行构建核心、宿主、开发工具和真实DLL，产物目录固定在当前工作区。
-fn artifacts() -> Artifacts {
+fn artifacts(case: &TestGuard) -> Artifacts {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
         .canonicalize()
@@ -52,7 +52,7 @@ fn artifacts() -> Artifacts {
         )
     });
     let copied = cordis_testkit::build::snapshot_artifacts(
-        &root,
+        case,
         "runtime-gate",
         "debug",
         &[
@@ -117,8 +117,8 @@ fn installed_libraries(project: &Path) -> BTreeSet<String> {
 }
 
 /// SW-2、ADR-0017：普通进程插件调用管理与KV接口，原生库始终受验证门约束。
-fn deployment(artifacts: &Artifacts) -> (PathBuf, PathBuf) {
-    let project = project("verified-management");
+fn deployment(case: &TestGuard, artifacts: &Artifacts) -> (PathBuf, PathBuf) {
+    let project = project(case, "verified-management");
     plugin(&project.join("plugins/admin"), "admin", "v1");
     plugin(&project.join("plugins/client"), "kv-client", "v1");
     let memory = library(&project.join("plugins"), "memory");
@@ -180,8 +180,10 @@ fn reject_changed_candidate(artifacts: &Artifacts, project: &Path, reference: &s
 
 #[test]
 fn verified_runtime_install_replace_and_threshold_restart_use_real_receipts() {
-    let artifacts = artifacts();
-    let (project, file) = deployment(&artifacts);
+    let case = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "verified-management");
+    let _fixture = fixture().for_case(&case);
+    let artifacts = artifacts(&case);
+    let (project, file) = deployment(&case, &artifacts);
     let mut core = Process::start_binary(&artifacts.tools.join("cordis"), &project, "gate");
     active(&project, "store");
     active(&project, "admin");
@@ -207,4 +209,5 @@ fn verified_runtime_install_replace_and_threshold_restart_use_real_receipts() {
     assert_eq!(persisted["entries"]["runtime"], json!([9, 7, 5]));
     assert_eq!(manage(&project, 10, "shutdown", json!([]))["ok"], true);
     core.finish();
+    case.success();
 }

@@ -1,0 +1,9 @@
+{
+  "name": "cordis-typescript-fixtures",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {"build": "node node_modules/typescript/bin/tsc -p tsconfig.json"},
+  "dependencies": {"cordis-sdk": "file:../../../sdks/typescript/cordis-sdk"},
+  "devDependencies": {"typescript": "5.9.3", "@types/node": "22.15.30"}
+}

@@ -1,13 +1,13 @@
 //! AC-1、AU-11：验收进程与工作目录的显式拥有者，失败保留运行证据。
 
+use cordis_testkit::cleanup::{FixtureLease, SharedFixture, TestGuard};
 use serde_json::Value;
 use std::{
     env, fs,
     path::{Path, PathBuf},
     process::{Child, Command, Output, Stdio},
-    sync::OnceLock,
     thread,
-    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant},
 };
 
 pub struct Tools {
@@ -29,20 +29,20 @@ pub fn command(command: &mut Command) -> Output {
 }
 
 /// Y-3：测试自身构建运行程序，所有场景共享同一组已编译的最终源码产物。
-pub fn tools() -> &'static Tools {
-    static TOOLS: OnceLock<Tools> = OnceLock::new();
-    TOOLS.get_or_init(|| {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../..")
-            .canonicalize()
-            .unwrap();
+pub fn tools() -> FixtureLease<Tools> {
+    static TOOLS: SharedFixture<Tools> = SharedFixture::new();
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .canonicalize()
+        .unwrap();
+    TOOLS.get_or_init(&root, "acceptance-tools", |guard| {
         if let (Ok(core), Ok(dev), Ok(host)) = (
             env::var("CORDIS_CORE_BIN"),
             env::var("CORDIS_DEV_BIN"),
             env::var("CORDIS_HOST_BIN"),
         ) {
             return Tools {
-                root,
+                root: root.clone(),
                 core: core.into(),
                 dev: dev.into(),
                 host: host.into(),
@@ -67,14 +67,14 @@ pub fn tools() -> &'static Tools {
                 .arg(&build),
         );
         let copied = cordis_testkit::build::snapshot_artifacts(
-            &root,
+            guard,
             "acceptance-tools",
             "release",
             &["cordis", "cordis-dev", "cordis-host"],
         )
         .unwrap();
         Tools {
-            root,
+            root: root.clone(),
             core: copied.join("cordis"),
             dev: copied.join("cordis-dev"),
             host: copied.join("cordis-host"),
@@ -83,15 +83,8 @@ pub fn tools() -> &'static Tools {
 }
 
 impl Tools {
-    pub fn project(&self, label: &str) -> PathBuf {
-        let unique = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let project = self
-            .root
-            .join("target/acceptance-evidence")
-            .join(format!("{label}-{}-{unique}", std::process::id()));
+    pub fn project(&self, guard: &TestGuard, label: &str) -> PathBuf {
+        let project = guard.directory(&format!("acceptance-evidence/{label}"));
         fs::create_dir_all(project.parent().unwrap()).unwrap();
         project
     }

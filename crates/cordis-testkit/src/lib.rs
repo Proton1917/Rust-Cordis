@@ -1,6 +1,7 @@
 //! 确定性任务调度与可推进时钟。
 
 pub mod build;
+pub mod cleanup;
 
 use cordis::{Clock, Spawn, Task};
 use futures_util::{

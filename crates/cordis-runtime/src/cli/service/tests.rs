@@ -37,10 +37,11 @@ fn persistent_installation_uses_standard_service_directories() {
 
 #[test]
 fn absent_service_uninstall_preserves_neighboring_configuration() {
-    let workspace = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let directory = workspace
-        .join("target/service-errors")
-        .join(std::process::id().to_string());
+    let guard = cordis_testkit::cleanup::TestGuard::for_package(
+        Path::new(env!("CARGO_MANIFEST_DIR")),
+        "absent-service",
+    );
+    let directory = guard.directory("service-errors");
     fs::create_dir_all(&directory).unwrap();
     let other = directory.join("other.plist");
     fs::write(&other, b"existing service configuration").unwrap();
@@ -54,6 +55,5 @@ fn absent_service_uninstall_preserves_neighboring_configuration() {
     .unwrap_err();
     assert!(error.message.contains(&path.display().to_string()));
     assert_eq!(fs::read(&other).unwrap(), b"existing service configuration");
-    fs::remove_file(other).unwrap();
-    fs::remove_dir(directory).unwrap();
+    guard.success();
 }

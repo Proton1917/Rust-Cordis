@@ -36,6 +36,5 @@ impl Component for ContractSuite {
 cordis_sdk::export_plugin!(
     name = "{{name}}-contract",
     version = env!("CARGO_PKG_VERSION"),
-    components = [ContractSuite],
-    rlib_feature = "rlib"
+    components = [ContractSuite]
 );

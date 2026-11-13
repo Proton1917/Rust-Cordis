@@ -1,0 +1,428 @@
+{
+  "command": [
+    "cargo",
+    "test",
+    "--workspace"
+  ],
+  "before": {
+    "watch-runtime": {
+      "files": 0,
+      "bytes": 0,
+      "cases": 0
+    },
+    "host-native": {
+      "files": 0,
+      "bytes": 0,
+      "cases": 0
+    },
+    "verification-tests": {
+      "files": 0,
+      "bytes": 0,
+      "cases": 0
+    },
+    "pack-tests": {
+      "files": 116,
+      "bytes": 130902,
+      "cases": 5
+    },
+    "test-artifacts": {
+      "files": 12,
+      "bytes": 83455384,
+      "cases": 3
+    },
+    "typescript-sdk": {
+      "files": 749,
+      "bytes": 132512838,
+      "cases": 1
+    },
+    "python-sdk": {
+      "files": 159,
+      "bytes": 269308,
+      "cases": 2
+    },
+    "runtime-m12/cases": {
+      "files": 58,
+      "bytes": 69362,
+      "cases": 16
+    },
+    "dev-scaffold": {
+      "files": 0,
+      "bytes": 0,
+      "cases": 0
+    },
+    "idl-acceptance": {
+      "files": 0,
+      "bytes": 0,
+      "cases": 0
+    },
+    "skill-examples": {
+      "files": 0,
+      "bytes": 0,
+      "cases": 0
+    },
+    "window-tests": {
+      "files": 33,
+      "bytes": 16946132,
+      "cases": 1
+    },
+    "acceptance-evidence": {
+      "files": 772,
+      "bytes": 1467289,
+      "cases": 16
+    },
+    "m14-kv": {
+      "files": 0,
+      "bytes": 0,
+      "cases": 1
+    },
+    "stress-artifacts": {
+      "files": 0,
+      "bytes": 0,
+      "cases": 0
+    },
+    "runtime-outcomes": {
+      "files": 0,
+      "bytes": 0,
+      "cases": 0
+    },
+    "http-tests": {
+      "files": 0,
+      "bytes": 0,
+      "cases": 0
+    },
+    "testkit-cleanup": {
+      "files": 0,
+      "bytes": 0,
+      "cases": 0
+    },
+    "name-regression": {
+      "files": 0,
+      "bytes": 0,
+      "cases": 0
+    },
+    "service-errors": {
+      "files": 0,
+      "bytes": 0,
+      "cases": 0
+    }
+  },
+  "rounds": [
+    {
+      "round": 1,
+      "exit_code": 0,
+      "seconds": 277.188,
+      "directories": {
+        "watch-runtime": {
+          "files": 0,
+          "bytes": 0,
+          "cases": 0
+        },
+        "host-native": {
+          "files": 0,
+          "bytes": 0,
+          "cases": 0
+        },
+        "verification-tests": {
+          "files": 0,
+          "bytes": 0,
+          "cases": 0
+        },
+        "pack-tests": {
+          "files": 116,
+          "bytes": 130902,
+          "cases": 5
+        },
+        "test-artifacts": {
+          "files": 12,
+          "bytes": 83455384,
+          "cases": 3
+        },
+        "typescript-sdk": {
+          "files": 749,
+          "bytes": 132512838,
+          "cases": 1
+        },
+        "python-sdk": {
+          "files": 159,
+          "bytes": 269308,
+          "cases": 2
+        },
+        "runtime-m12/cases": {
+          "files": 58,
+          "bytes": 69362,
+          "cases": 16
+        },
+        "dev-scaffold": {
+          "files": 0,
+          "bytes": 0,
+          "cases": 0
+        },
+        "idl-acceptance": {
+          "files": 0,
+          "bytes": 0,
+          "cases": 0
+        },
+        "skill-examples": {
+          "files": 0,
+          "bytes": 0,
+          "cases": 0
+        },
+        "window-tests": {
+          "files": 33,
+          "bytes": 16946132,
+          "cases": 1
+        },
+        "acceptance-evidence": {
+          "files": 772,
+          "bytes": 1467289,
+          "cases": 17
+        },
+        "m14-kv": {
+          "files": 0,
+          "bytes": 0,
+          "cases": 1
+        },
+        "stress-artifacts": {
+          "files": 0,
+          "bytes": 0,
+          "cases": 0
+        },
+        "runtime-outcomes": {
+          "files": 0,
+          "bytes": 0,
+          "cases": 0
+        },
+        "http-tests": {
+          "files": 0,
+          "bytes": 0,
+          "cases": 0
+        },
+        "testkit-cleanup": {
+          "files": 0,
+          "bytes": 0,
+          "cases": 0
+        },
+        "name-regression": {
+          "files": 0,
+          "bytes": 0,
+          "cases": 0
+        },
+        "service-errors": {
+          "files": 0,
+          "bytes": 0,
+          "cases": 0
+        }
+      }
+    },
+    {
+      "round": 2,
+      "exit_code": 0,
+      "seconds": 247.984,
+      "directories": {
+        "watch-runtime": {
+          "files": 0,
+          "bytes": 0,
+          "cases": 0
+        },
+        "host-native": {
+          "files": 0,
+          "bytes": 0,
+          "cases": 0
+        },
+        "verification-tests": {
+          "files": 0,
+          "bytes": 0,
+          "cases": 0
+        },
+        "pack-tests": {
+          "files": 116,
+          "bytes": 130902,
+          "cases": 5
+        },
+        "test-artifacts": {
+          "files": 12,
+          "bytes": 83455384,
+          "cases": 3
+        },
+        "typescript-sdk": {
+          "files": 749,
+          "bytes": 132512838,
+          "cases": 1
+        },
+        "python-sdk": {
+          "files": 159,
+          "bytes": 269308,
+          "cases": 2
+        },
+        "runtime-m12/cases": {
+          "files": 58,
+          "bytes": 69362,
+          "cases": 16
+        },
+        "dev-scaffold": {
+          "files": 0,
+          "bytes": 0,
+          "cases": 0
+        },
+        "idl-acceptance": {
+          "files": 0,
+          "bytes": 0,
+          "cases": 0
+        },
+        "skill-examples": {
+          "files": 0,
+          "bytes": 0,
+          "cases": 0
+        },
+        "window-tests": {
+          "files": 33,
+          "bytes": 16946132,
+          "cases": 1
+        },
+        "acceptance-evidence": {
+          "files": 772,
+          "bytes": 1467289,
+          "cases": 17
+        },
+        "m14-kv": {
+          "files": 0,
+          "bytes": 0,
+          "cases": 1
+        },
+        "stress-artifacts": {
+          "files": 0,
+          "bytes": 0,
+          "cases": 0
+        },
+        "runtime-outcomes": {
+          "files": 0,
+          "bytes": 0,
+          "cases": 0
+        },
+        "http-tests": {
+          "files": 0,
+          "bytes": 0,
+          "cases": 0
+        },
+        "testkit-cleanup": {
+          "files": 0,
+          "bytes": 0,
+          "cases": 0
+        },
+        "name-regression": {
+          "files": 0,
+          "bytes": 0,
+          "cases": 0
+        },
+        "service-errors": {
+          "files": 0,
+          "bytes": 0,
+          "cases": 0
+        }
+      }
+    }
+  ],
+  "growth": {
+    "watch-runtime": {
+      "files": 0,
+      "bytes": 0,
+      "cases": 0
+    },
+    "host-native": {
+      "files": 0,
+      "bytes": 0,
+      "cases": 0
+    },
+    "verification-tests": {
+      "files": 0,
+      "bytes": 0,
+      "cases": 0
+    },
+    "pack-tests": {
+      "files": 0,
+      "bytes": 0,
+      "cases": 0
+    },
+    "test-artifacts": {
+      "files": 0,
+      "bytes": 0,
+      "cases": 0
+    },
+    "typescript-sdk": {
+      "files": 0,
+      "bytes": 0,
+      "cases": 0
+    },
+    "python-sdk": {
+      "files": 0,
+      "bytes": 0,
+      "cases": 0
+    },
+    "runtime-m12/cases": {
+      "files": 0,
+      "bytes": 0,
+      "cases": 0
+    },
+    "dev-scaffold": {
+      "files": 0,
+      "bytes": 0,
+      "cases": 0
+    },
+    "idl-acceptance": {
+      "files": 0,
+      "bytes": 0,
+      "cases": 0
+    },
+    "skill-examples": {
+      "files": 0,
+      "bytes": 0,
+      "cases": 0
+    },
+    "window-tests": {
+      "files": 0,
+      "bytes": 0,
+      "cases": 0
+    },
+    "acceptance-evidence": {
+      "files": 0,
+      "bytes": 0,
+      "cases": 0
+    },
+    "m14-kv": {
+      "files": 0,
+      "bytes": 0,
+      "cases": 0
+    },
+    "stress-artifacts": {
+      "files": 0,
+      "bytes": 0,
+      "cases": 0
+    },
+    "runtime-outcomes": {
+      "files": 0,
+      "bytes": 0,
+      "cases": 0
+    },
+    "http-tests": {
+      "files": 0,
+      "bytes": 0,
+      "cases": 0
+    },
+    "testkit-cleanup": {
+      "files": 0,
+      "bytes": 0,
+      "cases": 0
+    },
+    "name-regression": {
+      "files": 0,
+      "bytes": 0,
+      "cases": 0
+    },
+    "service-errors": {
+      "files": 0,
+      "bytes": 0,
+      "cases": 0
+    }
+  },
+  "passed": true
+}

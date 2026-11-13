@@ -11,14 +11,9 @@ pub fn expand(plugin: Plugin) -> syn::Result<TokenStream> {
         name,
         version,
         components,
-        rlib_feature,
     } = plugin;
-    let export = match rlib_feature {
-        // SAFETY: DOC-12 §3，每个动态库由此固定模板导出唯一入口及 ABI 版本符号。
-        Some(feature) => quote!(#[cfg_attr(not(feature = #feature), unsafe(no_mangle))]),
-        // SAFETY: DOC-12 §3，每个动态库由此固定模板导出唯一入口及 ABI 版本符号。
-        None => quote!(#[unsafe(no_mangle)]),
-    };
+    // SAFETY: DOC-12 §3、ADR-0042，动态库导出固定 C 符号，测试程序使用模块内 Rust 符号。
+    let export = quote!(#[cfg_attr(not(test), unsafe(no_mangle))]);
     let mut definitions = Vec::new();
     let mut callbacks = Vec::new();
     for (index, component) in components.iter().enumerate() {
@@ -37,6 +32,7 @@ pub fn expand(plugin: Plugin) -> syn::Result<TokenStream> {
         }
 
         // SAFETY: DOC-12 §3，每个插件 crate 导出一份固定 ABI 主版本符号。
+        #[cfg(not(test))]
         #export
         pub static CORDIS_PLUGIN_ABI: u32 = ::cordis_sdk::__private::abi::ABI_MAJOR;
 

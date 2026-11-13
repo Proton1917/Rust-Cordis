@@ -70,6 +70,5 @@ impl Component for Provider {
 cordis_sdk::export_plugin!(
     name = "{{name}}",
     version = env!("CARGO_PKG_VERSION"),
-    components = [Provider],
-    rlib_feature = "rlib"
+    components = [Provider]
 );

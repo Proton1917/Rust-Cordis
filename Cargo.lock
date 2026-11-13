@@ -470,6 +470,7 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "cordis-sdk",
+ "cordis-testkit",
  "serde",
  "serde_json",
  "tokio",
@@ -528,10 +529,10 @@ dependencies = [
  "cordis-abi",
  "cordis-sdk-macros",
  "cordis-types",
- "counter",
+ "counter-component",
  "futures-util",
  "kv-api",
- "kv-mem",
+ "kv-mem-component",
  "serde",
  "tokio",
 ]
@@ -654,6 +655,14 @@ dependencies = [
 
 [[package]]
 name = "counter"
+version = "0.1.0"
+dependencies = [
+ "cordis-sdk",
+ "counter-component",
+]
+
+[[package]]
+name = "counter-component"
 version = "0.1.0"
 dependencies = [
  "cordis-sdk",
@@ -1786,6 +1795,14 @@ dependencies = [
 
 [[package]]
 name = "kv-mem"
+version = "0.1.0"
+dependencies = [
+ "cordis-sdk",
+ "kv-mem-component",
+]
+
+[[package]]
+name = "kv-mem-component"
 version = "0.1.0"
 dependencies = [
  "cordis-sdk",

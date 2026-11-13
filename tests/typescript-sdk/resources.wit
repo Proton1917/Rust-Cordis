@@ -1,0 +1,19 @@
+package cordis:typescript-resources@1.0.0;
+
+interface resources {
+    resource item {
+        read: func() -> string;
+        wait: async func() -> string;
+        echo: func(value: own<item>) -> item;
+    }
+    make: func(value: string) -> item;
+    borrow-value: async func(value: borrow<item>) -> string;
+    mirror: func(value: own<item>) -> item;
+    /// ```cordis
+    /// event = "resources.offered"
+    /// kind = "sync"
+    /// ```
+    record offered {
+        item: own<item>,
+    }
+}

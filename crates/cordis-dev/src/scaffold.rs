@@ -5,7 +5,7 @@ use std::{fs, io::Write, path::Path};
 use toml::{Table, Value};
 
 mod process;
-pub use process::python_plugin;
+pub use process::{python_plugin, typescript_plugin};
 
 const REPOSITORY: &str = "https://github.com/Proton1917/Rust-Cordis.git";
 const SDK_REVISION: &str = env!("CORDIS_SOURCE_REVISION");
@@ -105,9 +105,6 @@ fn write_crate(project: &Path, name: &str, source: &str, watch: bool) -> Result<
     let mut manifest: Table = toml::from_str(PLUGIN_MANIFEST)?;
     manifest["package"]["name"] = Value::String(name.into());
     if watch {
-        let mut features = Table::new();
-        features.insert("rlib".into(), Value::Array(Vec::new()));
-        manifest.insert("features".into(), Value::Table(features));
         let dependencies = manifest["dependencies"].as_table_mut().expect("模板依赖表");
         dependencies.insert("notify".into(), Value::String("=8.2.0".into()));
         let mut uuid = Table::new();
@@ -219,9 +216,8 @@ mod tests {
     #[test]
     fn rejected_plugin_name_keeps_project_unchanged() {
         let crate_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
-        let project_dir = crate_dir
-            .join("../../target/name-regression")
-            .join(std::process::id().to_string());
+        let case = cordis_testkit::cleanup::TestGuard::for_package(crate_dir, "plugin-name");
+        let project_dir = case.directory("name-regression");
         fs::create_dir_all(project_dir.parent().unwrap()).unwrap();
         project(&project_dir, Some(&crate_dir.join("../cordis-sdk"))).unwrap();
         let configuration = fs::read(project_dir.join("cordis.toml")).unwrap();
@@ -236,5 +232,6 @@ mod tests {
                 configuration
             );
         }
+        case.success();
     }
 }

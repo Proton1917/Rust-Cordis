@@ -12,14 +12,12 @@ struct Artifacts {
     consumer: PathBuf,
 }
 
-fn artifacts() -> Artifacts {
+fn artifacts(case: &TestGuard) -> Artifacts {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
         .canonicalize()
         .unwrap();
-    let target = root
-        .join("target/m14-kv")
-        .join(std::process::id().to_string());
+    let target = case.directory("m14-kv");
     let _build = cordis_testkit::build::shared_build_lock(&root).unwrap();
     let shared = cordis_testkit::build::shared_target_dir(&root);
     checked(
@@ -47,7 +45,7 @@ fn artifacts() -> Artifacts {
         )
     });
     let tools = cordis_testkit::build::snapshot_artifacts(
-        &root,
+        case,
         "migration-tools",
         "debug",
         &["cordis-host", &names[0], &names[1], &names[2]],
@@ -96,7 +94,7 @@ fn artifacts() -> Artifacts {
         std::env::consts::DLL_SUFFIX
     );
     let old = cordis_testkit::build::snapshot_artifacts(
-        &root,
+        case,
         "migration-185",
         "debug",
         &[&names[0], &consumer],
@@ -112,8 +110,8 @@ fn artifacts() -> Artifacts {
     }
 }
 
-fn deploy(artifacts: &Artifacts) -> PathBuf {
-    let project = project("kv-migration");
+fn deploy(case: &TestGuard, artifacts: &Artifacts) -> PathBuf {
+    let project = project(case, "kv-migration");
     fs::copy(env!("CARGO_BIN_EXE_cordis"), project.join("cordis")).unwrap();
     fs::copy(
         artifacts.tools.join("cordis-host"),
@@ -268,8 +266,10 @@ fn rejected_versions(project: &Path, id: &mut u64, artifacts: &Artifacts) {
 
 #[test]
 fn continuous_counter_migrates_rolls_back_rejects_and_restores_across_compilers() {
-    let artifacts = artifacts();
-    let project = deploy(&artifacts);
+    let case = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "kv-migration");
+    let _fixture = fixture().for_case(&case);
+    let artifacts = artifacts(&case);
+    let project = deploy(&case, &artifacts);
     let mut core = Process::start_binary(&project.join("cordis"), &project, "migration");
     for name in ["store", "counter", "idle", "admin", "client"] {
         active(&project, name);
@@ -317,5 +317,6 @@ fn continuous_counter_migrates_rolls_back_rejects_and_restores_across_compilers(
     );
     restarted.finish();
     fs::write(project.join("acceptance.json"), serde_json::to_vec_pretty(&json!({"file_count":file_value,"memory_v2_count":memory_value,"rust_185_count":old_compiler_value,"shutdown_state":persisted,"restored_count":restored})).unwrap()).unwrap();
-    eprintln!("AC-2–5/AC-8证据：{}", project.display());
+    eprintln!("AC-2–5/AC-8证据：{}", case.evidence_for(&project).display());
+    case.success();
 }

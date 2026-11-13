@@ -62,7 +62,6 @@ pub struct Plugin {
     pub name: Expr,
     pub version: Expr,
     pub components: Vec<Type>,
-    pub rlib_feature: Option<LitStr>,
 }
 
 impl Parse for Plugin {
@@ -70,14 +69,12 @@ impl Parse for Plugin {
         let mut name = None;
         let mut version = None;
         let mut components = None;
-        let mut rlib_feature = None;
         while !input.is_empty() {
             let key: Ident = input.parse()?;
             input.parse::<Token![=]>()?;
             match key.to_string().as_str() {
                 "name" => name = Some(input.parse()?),
                 "version" => version = Some(input.parse()?),
-                "rlib_feature" => rlib_feature = Some(input.parse()?),
                 "components" => {
                     let content;
                     bracketed!(content in input);
@@ -91,7 +88,7 @@ impl Parse for Plugin {
                 _ => {
                     return Err(syn::Error::new_spanned(
                         key,
-                        "接受 name、version、components 与 rlib_feature",
+                        "接受 name、version 与 components",
                     ));
                 }
             }
@@ -103,7 +100,6 @@ impl Parse for Plugin {
             name: name.ok_or_else(|| input.error("请声明 name"))?,
             version: version.ok_or_else(|| input.error("请声明 version"))?,
             components: components.ok_or_else(|| input.error("请声明 components"))?,
-            rlib_feature,
         })
     }
 }

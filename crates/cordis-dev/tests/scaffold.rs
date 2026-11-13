@@ -1,5 +1,6 @@
 //! DOC-15 §12.1、AU-8：经核心转交生成项目，真实编译并启动独立插件宿主。
 
+use cordis_testkit::cleanup::TestGuard;
 use serde_json::Value;
 use std::{
     env, fs,
@@ -29,7 +30,7 @@ fn run(command: &mut Command) {
     );
 }
 
-fn binaries(root: &Path) -> (PathBuf, PathBuf) {
+fn binaries(root: &Path, guard: &TestGuard) -> (PathBuf, PathBuf) {
     if let (Some(core), Some(host)) = (
         env::var_os("CORDIS_CORE_BIN"),
         env::var_os("CORDIS_HOST_BIN"),
@@ -50,7 +51,7 @@ fn binaries(root: &Path) -> (PathBuf, PathBuf) {
         ])
         .arg(&build));
     let copied = cordis_testkit::build::snapshot_artifacts(
-        root,
+        guard,
         "scaffold-tools",
         "debug",
         &["cordis", "cordis-host"],
@@ -92,11 +93,12 @@ fn wait_active(project: &Path, running: &mut Running) -> Value {
 
 #[test]
 fn forwarded_scaffold_builds_and_runs_native_plugins() {
+    let case = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "dev-scaffold");
     let root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
         .canonicalize()
         .unwrap();
-    let (core, host) = binaries(&root);
+    let (core, host) = binaries(&root, &case);
     let dev = Path::new(env!("CARGO_BIN_EXE_cordis-dev"));
     let mut directories = vec![
         dev.parent().unwrap().to_owned(),
@@ -104,14 +106,14 @@ fn forwarded_scaffold_builds_and_runs_native_plugins() {
     ];
     directories.extend(env::split_paths(&env::var_os("PATH").unwrap_or_default()));
     let path = env::join_paths(directories).unwrap();
-    let project = root.join("target/dev-scaffold").join(format!(
+    let project = case.track(root.join("target/dev-scaffold").join(format!(
         "{}-{}",
         std::process::id(),
         SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos()
-    ));
+    )));
     fs::create_dir_all(&project).unwrap();
     run(Command::new(&core)
         .env("PATH", &path)
@@ -159,6 +161,6 @@ fn forwarded_scaffold_builds_and_runs_native_plugins() {
         thread::sleep(Duration::from_millis(20));
     };
     assert!(status.success(), "核心有序退出失败：{}", project.display());
-    fs::remove_dir_all(project.join("target")).unwrap();
-    eprintln!("脚手架运行证据：{}", project.display());
+    eprintln!("脚手架运行证据：{}", case.evidence_for(&project).display());
+    case.success();
 }

@@ -1,9 +1,10 @@
 use cordis_supervisor::{Connection, Handler, Outgoing, Payload, Peer, PeerOptions};
+use cordis_testkit::cleanup::{FixtureLease, SharedFixture, TestGuard};
 use cordis_up::{Value, WireError, rpc::HandlerFuture};
 use std::{
     path::{Path, PathBuf},
     sync::{
-        Arc, OnceLock,
+        Arc,
         atomic::{AtomicUsize, Ordering},
     },
     time::Duration,
@@ -55,11 +56,11 @@ impl Handler for Host {
     }
 }
 
-fn plugin() -> &'static Path {
-    static PLUGIN: OnceLock<PathBuf> = OnceLock::new();
-    PLUGIN.get_or_init(|| {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-        let workspace = root.parent().and_then(Path::parent).unwrap();
+fn plugin() -> FixtureLease<PathBuf> {
+    static PLUGIN: SharedFixture<PathBuf> = SharedFixture::new();
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let workspace = root.parent().and_then(Path::parent).unwrap();
+    PLUGIN.get_or_init(workspace, "process-fixture", |guard| {
         let _build = cordis_testkit::build::shared_build_lock(workspace).unwrap();
         let destination = cordis_testkit::build::shared_target_dir(workspace);
         let output = std::process::Command::new(env!("CARGO"))
@@ -75,7 +76,7 @@ fn plugin() -> &'static Path {
             String::from_utf8_lossy(&output.stderr)
         );
         cordis_testkit::build::snapshot_artifacts(
-            workspace,
+            guard,
             "process-fixture",
             "debug",
             &["cordis-process-fixture"],
@@ -136,6 +137,8 @@ async fn stats(peer: &Peer) -> Vec<u64> {
 // CP-3、CP-4、CP-10：双向调用、取消与引用释放都穿过真实标准输入输出。
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn requests_notifications_resources_and_orderly_exit() {
+    let case = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "process-lifecycle");
+    let _fixture = plugin().for_case(&case);
     let (peer, _) = launch("normal", PeerOptions::default()).await;
     assert_eq!(
         integer(
@@ -191,11 +194,14 @@ async fn requests_notifications_resources_and_orderly_exit() {
     assert_eq!(stats(&peer).await[..2], [0, 1]);
     peer.shutdown(Duration::from_secs(3)).await.unwrap();
     assert!(!peer.is_alive());
+    case.success();
 }
 
 // CP-2、CP-3、CP-4、CP-7：坏输入、洪泛及超时限制在各自连接内。
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn malformed_frames_timeouts_and_flood_leave_other_processes_responsive() {
+    let case = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "process-faults");
+    let _fixture = plugin().for_case(&case);
     let (healthy, _) = launch("normal", PeerOptions::default()).await;
     for mode in ["oversize", "malformed"] {
         let (peer, _) = launch(mode, PeerOptions::default()).await;
@@ -280,11 +286,14 @@ async fn malformed_frames_timeouts_and_flood_leave_other_processes_responsive() 
         2
     );
     healthy.shutdown(Duration::from_secs(3)).await.unwrap();
+    case.success();
 }
 
 // ADR-0027：自然退出的僵尸组判定为空，存活后代在回收组长前收到终止信号。
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn natural_exit_reaps_the_group_and_its_descendants() {
+    let case = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "process-exit");
+    let _fixture = plugin().for_case(&case);
     for mode in ["exit", "descendant"] {
         let logs = Arc::new(std::sync::Mutex::new(Vec::new()));
         let captured = logs.clone();
@@ -338,6 +347,7 @@ async fn natural_exit_reaps_the_group_and_its_descendants() {
             logs.lock().unwrap()
         );
     }
+    case.success();
 }
 
 // 探测命令读取完整输出，并在输出超额或超时时完成组清理后报告错误。

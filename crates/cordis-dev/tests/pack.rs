@@ -1,11 +1,11 @@
 //! AU-12：发布包离开构建目录后由附带核心直接运行真实 KV 与计数组件。
 
+use cordis_testkit::cleanup::{FixtureLease, SharedFixture, TestGuard};
 use serde_json::Value;
 use std::{
     fs,
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
-    sync::OnceLock,
     thread,
     time::{Duration, Instant},
 };
@@ -16,13 +16,13 @@ struct Tools {
 }
 
 /// Y-3、AU-12：按当前源码构建运行程序，显式产物目录兼容外置 CARGO_TARGET_DIR。
-fn tools() -> &'static Tools {
-    static TOOLS: OnceLock<Tools> = OnceLock::new();
-    TOOLS.get_or_init(|| {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../..")
-            .canonicalize()
-            .unwrap();
+fn tools() -> FixtureLease<Tools> {
+    static TOOLS: SharedFixture<Tools> = SharedFixture::new();
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .canonicalize()
+        .unwrap();
+    TOOLS.get_or_init(&root, "pack-tools", |guard| {
         let _build = cordis_testkit::build::shared_build_lock(&root).unwrap();
         let target = cordis_testkit::build::shared_target_dir(&root);
         command(
@@ -49,13 +49,16 @@ fn tools() -> &'static Tools {
             std::env::consts::DLL_SUFFIX
         );
         let binaries = cordis_testkit::build::snapshot_artifacts(
-            &root,
+            guard,
             "pack-tools",
             "release",
             &["cordis", "cordis-host", "cordis-dev", &library],
         )
         .unwrap();
-        Tools { root, binaries }
+        Tools {
+            root: root.clone(),
+            binaries,
+        }
     })
 }
 
@@ -92,18 +95,33 @@ fn project(label: &str) -> (PathBuf, PathBuf) {
             .into_owned(),
     );
     let api = toml::Value::String(root.join("plugins/kv-api").to_string_lossy().into_owned());
-    fs::write(project.join("Cargo.toml"), format!("[workspace]\nmembers=['plugins/*']\nresolver='3'\n[workspace.dependencies]\ncordis-sdk={{path={sdk}}}\nkv-api={{path={api}}}\nserde={{version='=1.0.229',features=['derive']}}\n")).unwrap();
-    for (name, source) in [
-        ("memory", include_str!("../../../plugins/kv-mem/src/lib.rs")),
+    let memory = toml::Value::String(
+        root.join("plugins/kv-mem-component")
+            .to_string_lossy()
+            .into_owned(),
+    );
+    let counter = toml::Value::String(
+        root.join("plugins/counter-component")
+            .to_string_lossy()
+            .into_owned(),
+    );
+    fs::write(project.join("Cargo.toml"), format!("[workspace]\nmembers=['plugins/*']\nresolver='3'\n[workspace.dependencies]\ncordis-sdk={{path={sdk}}}\nkv-api={{path={api}}}\nkv-mem-component={{path={memory}}}\ncounter-component={{path={counter}}}\n")).unwrap();
+    for (name, component, source) in [
+        (
+            "memory",
+            "kv-mem-component",
+            include_str!("../../../plugins/kv-mem/src/lib.rs"),
+        ),
         (
             "counter",
+            "counter-component",
             include_str!("../../../plugins/counter/src/lib.rs"),
         ),
     ] {
         let directory = project.join("plugins").join(name);
         fs::create_dir_all(directory.join("src")).unwrap();
         fs::write(directory.join("src/lib.rs"), source).unwrap();
-        fs::write(directory.join("Cargo.toml"), format!("[package]\nname='{name}'\nversion='0.1.0'\nedition='2024'\n[lib]\ncrate-type=['cdylib']\n[features]\nrlib=[]\n[dependencies]\ncordis-sdk.workspace=true\nkv-api.workspace=true\nserde.workspace=true\n")).unwrap();
+        fs::write(directory.join("Cargo.toml"), format!("[package]\nname='{name}'\nversion='0.1.0'\nedition='2024'\n[lib]\ncrate-type=['cdylib']\n[dependencies]\ncordis-sdk.workspace=true\n{component}.workspace=true\n")).unwrap();
     }
     let extension = std::env::consts::DLL_SUFFIX;
     fs::write(project.join("cordis.toml"), format!("requires_core='>=0.1.0,<0.2.0'\n[pack]\nname='pack-native'\nversion='0.1.0'\n[runtime]\nplugin_dir='target/debug'\ncheckpoint_ms=0\n[instance.store]\nplugin='libmemory{extension}'\ncomponent='kv-store'\ngroup='kv'\n[instance.counter]\nplugin='libcounter{extension}'\ncomponent='counter'\ngroup='counter'\n")).unwrap();
@@ -214,19 +232,29 @@ fn activate_at(
 
 #[test]
 fn archive_runs_real_plugins_without_toolchain_or_source() {
+    let case = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "pack-native");
+    let _tools = tools().for_case(&case);
     let (_, project) = project("native");
+    let project = case.track(project);
     let deployed = release(&project, &tools().binaries, false);
     activate(&project, &deployed, 2);
-    eprintln!("AU-12 真实压缩包运行：{}", project.display());
+    eprintln!(
+        "AU-12 真实压缩包运行：{}",
+        case.evidence_for(&project).display()
+    );
+    case.success();
 }
 
 /// DOC-15 M16：实际 Rust UP/1 进程验证运行时目录与命令改写。
 #[test]
 fn bundled_runtime_executes_real_process_plugin() {
-    let root = &tools().root;
-    let project = root
-        .join("target/pack-tests")
-        .join(format!("runtime-{}", std::process::id()));
+    let case = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "pack-runtime");
+    let lease = tools().for_case(&case);
+    let root = &lease.root;
+    let project = case.track(
+        root.join("target/pack-tests")
+            .join(format!("runtime-{}", std::process::id())),
+    );
     let provider = project.join("plugins/provider");
     let runtime = project.join("provided-runtime/bin");
     fs::create_dir_all(&provider).unwrap();
@@ -266,7 +294,11 @@ fn bundled_runtime_executes_real_process_plugin() {
             .unwrap()
     );
     activate(&project, &deployed, 1);
-    eprintln!("M16 真实进程与运行时目录：{}", project.display());
+    eprintln!(
+        "M16 真实进程与运行时目录：{}",
+        case.evidence_for(&project).display()
+    );
+    case.success();
 }
 
 /// ADR-0036：真实源印记在签名前建立，发布时在签名后的库上重新运行契约。
@@ -279,7 +311,7 @@ fn verified_project(root: &Path, project: &Path) -> PathBuf {
         include_str!("../../../plugins/kv-contract/src/lib.rs"),
     )
     .unwrap();
-    fs::write(contracts.join("Cargo.toml"), "[package]\nname='kv-contract'\nversion='0.1.0'\nedition='2024'\n[lib]\ncrate-type=['cdylib']\n[features]\nrlib=[]\n[dependencies]\ncordis-sdk.workspace=true\ncordis-contract.workspace=true\nkv-api.workspace=true\n").unwrap();
+    fs::write(contracts.join("Cargo.toml"), "[package]\nname='kv-contract'\nversion='0.1.0'\nedition='2024'\n[lib]\ncrate-type=['cdylib']\n[dependencies]\ncordis-sdk.workspace=true\ncordis-contract.workspace=true\nkv-api.workspace=true\n").unwrap();
     let mut workspace: toml::Table =
         toml::from_str(&fs::read_to_string(project.join("Cargo.toml")).unwrap()).unwrap();
     workspace["workspace"]["members"]
@@ -364,7 +396,10 @@ fn verified_project(root: &Path, project: &Path) -> PathBuf {
 #[cfg(target_os = "macos")]
 #[test]
 fn signed_archive_revalidates_and_moves_verified_libraries() {
+    let case = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "pack-signed");
+    let _tools = self::tools().for_case(&case);
     let (root, project) = project("signed");
+    let project = case.track(project);
     let source = verified_project(&root, &project);
     let original = fs::read(source).unwrap();
     let tools = project.join("tools");
@@ -393,13 +428,20 @@ fn signed_archive_revalidates_and_moves_verified_libraries() {
             .any(|library| library["name"] == "kv" && library["verified"] == true),
         "移动后的实际 Host 验证通过"
     );
-    eprintln!("M16 签名、真实重验与印记移动：{}", project.display());
+    eprintln!(
+        "M16 签名、真实重验与印记移动：{}",
+        case.evidence_for(&project).display()
+    );
+    case.success();
 }
 
 #[cfg(target_os = "macos")]
 #[test]
 fn application_keeps_signed_resources_and_selects_multiple_verified_roots() {
+    let case = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "pack-app");
+    let _tools = self::tools().for_case(&case);
     let (root, project) = project("app");
+    let project = case.track(project);
     verified_project(&root, &project);
     let state = project.join("app-state");
     let mut configuration: toml::Table =
@@ -462,7 +504,11 @@ fn application_keeps_signed_resources_and_selects_multiple_verified_roots() {
             .args(["--verify", "--strict"])
             .arg(&app),
     );
-    eprintln!("M16 app 签名资源与多验证根：{}", project.display());
+    eprintln!(
+        "M16 app 签名资源与多验证根：{}",
+        case.evidence_for(&project).display()
+    );
+    case.success();
 }
 
 /// ADR-0036：先遇到另一真实 DLL 和缺席目录，再由正确根完成实际 dlopen。
@@ -507,10 +553,13 @@ fn multiple_roots(project: &Path, app: &Path, host: &Path) {
 /// DOC-15 §12.2：显式发布的静态目录保留路径和实际内容。
 #[test]
 fn declared_static_assets_are_delivered_at_their_configuration_path() {
-    let root = &tools().root;
-    let project = root
-        .join("target/pack-tests")
-        .join(format!("assets-{}", std::process::id()));
+    let case = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "pack-assets");
+    let lease = tools().for_case(&case);
+    let root = &lease.root;
+    let project = case.track(
+        root.join("target/pack-tests")
+            .join(format!("assets-{}", std::process::id())),
+    );
     fs::create_dir_all(project.join("plugins")).unwrap();
     fs::create_dir(project.join("site")).unwrap();
     fs::copy(
@@ -535,5 +584,9 @@ fn declared_static_assets_are_delivered_at_their_configuration_path() {
         fs::read_to_string(deployed.join("site/index.html")).unwrap(),
         "<h1>Cordis release assets</h1>\n"
     );
-    eprintln!("M16 静态发布资源：{}", project.display());
+    eprintln!(
+        "M16 静态发布资源：{}",
+        case.evidence_for(&project).display()
+    );
+    case.success();
 }

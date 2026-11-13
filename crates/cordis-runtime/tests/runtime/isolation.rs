@@ -3,7 +3,7 @@
 use super::gate::{checked, library};
 use super::*;
 
-fn tools(name: &str, packages: &[&str]) -> PathBuf {
+fn tools(case: &TestGuard, name: &str, packages: &[&str]) -> PathBuf {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
         .canonicalize()
@@ -33,7 +33,7 @@ fn tools(name: &str, packages: &[&str]) -> PathBuf {
         })
         .collect();
     let files: Vec<_> = names.iter().map(String::as_str).collect();
-    cordis_testkit::build::snapshot_artifacts(&root, name, "debug", &files).unwrap()
+    cordis_testkit::build::snapshot_artifacts(case, name, "debug", &files).unwrap()
 }
 
 fn core_binaries(project: &Path, host: &Path) {
@@ -56,8 +56,10 @@ fn decode_file(path: &Path) -> Option<Value> {
 
 #[test]
 fn real_file_kv_instances_keep_tenant_data_separate() {
-    let tools = tools("kv-file", &["cordis-host", "kv-file"]);
-    let project = project("real-kv-domains");
+    let case = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "real-kv-domains");
+    let _fixture = fixture().for_case(&case);
+    let tools = tools(&case, "kv-file", &["cordis-host", "kv-file"]);
+    let project = project(&case, "real-kv-domains");
     core_binaries(&project, &tools.join("cordis-host"));
     fs::copy(
         library(&tools, "kv_file"),
@@ -117,11 +119,15 @@ fn real_file_kv_instances_keep_tenant_data_separate() {
         json!([9, 8])
     );
     finish(&mut core);
-    eprintln!("AU-18真实文件KV域证据：{}", project.display());
+    eprintln!(
+        "AU-18真实文件KV域证据：{}",
+        case.evidence_for(&project).display()
+    );
+    case.success();
 }
 
-fn scoped_artifacts() -> (PathBuf, PathBuf, PathBuf) {
-    let host = tools("scoped-host", &["cordis-host"]).join("cordis-host");
+fn scoped_artifacts(case: &TestGuard) -> (PathBuf, PathBuf, PathBuf) {
+    let host = tools(case, "scoped-host", &["cordis-host"]).join("cordis-host");
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let workspace = root.parent().and_then(Path::parent).unwrap();
     let _build = cordis_testkit::build::shared_build_lock(workspace).unwrap();
@@ -141,7 +147,7 @@ fn scoped_artifacts() -> (PathBuf, PathBuf, PathBuf) {
         std::env::consts::DLL_SUFFIX
     );
     let copied = cordis_testkit::build::snapshot_artifacts(
-        workspace,
+        case,
         "scoped-fixtures",
         "debug",
         &[&native, "cordis-kv-scoped-process"],
@@ -154,8 +160,14 @@ fn scoped_artifacts() -> (PathBuf, PathBuf, PathBuf) {
     )
 }
 
-fn scoped_project(mode: &str, host: &Path, native: &Path, process: &Path) -> (PathBuf, PathBuf) {
-    let project = project(&format!("scoped-kv-{mode}"));
+fn scoped_project(
+    case: &TestGuard,
+    mode: &str,
+    host: &Path,
+    native: &Path,
+    process: &Path,
+) -> (PathBuf, PathBuf) {
+    let project = project(case, &format!("scoped-kv-{mode}"));
     core_binaries(&project, host);
     fs::copy(native, library(&project.join("plugins"), "scoped")).unwrap();
     let metadata = if mode == "process" {
@@ -184,9 +196,10 @@ fn scoped_project(mode: &str, host: &Path, native: &Path, process: &Path) -> (Pa
 
 #[test]
 fn kv_scoped_metadata_reaches_same_cross_and_process_providers() {
-    let (host, native, process) = scoped_artifacts();
+    let case = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "scoped-providers");
+    let (host, native, process) = scoped_artifacts(&case);
     for mode in ["same", "cross", "process"] {
-        let (project, metadata) = scoped_project(mode, &host, &native, &process);
+        let (project, metadata) = scoped_project(&case, mode, &host, &native, &process);
         let mut core = Process::start_binary(&project.join("cordis"), &project, mode);
         active(&project, "client");
         let received = until("提供方记录真实Scoped元数据", || {
@@ -200,6 +213,10 @@ fn kv_scoped_metadata_reaches_same_cross_and_process_providers() {
         assert_eq!(observed["value"], json!([4, 2, 9]));
         assert_eq!(observed["keys"], json!(["probe"]));
         finish(&mut core);
-        eprintln!("AU-18 kv@1 {mode}证据：{}", project.display());
+        eprintln!(
+            "AU-18 kv@1 {mode}证据：{}",
+            case.evidence_for(&project).display()
+        );
     }
+    case.success();
 }

@@ -3,6 +3,7 @@
 #[path = "acceptance_support/mod.rs"]
 mod support;
 
+use cordis_testkit::cleanup::TestGuard;
 use serde_json::{Value, json};
 use std::{collections::BTreeSet, fs, process::Command, time::Instant};
 use support::{active, command, status, tools, until, write_json};
@@ -10,8 +11,9 @@ use toml::Table;
 
 #[test]
 fn eight_independent_libraries_and_one_hundred_instances() {
-    let tools = tools();
-    let project = tools.project("ac1");
+    let case = TestGuard::for_package(std::path::Path::new(env!("CARGO_MANIFEST_DIR")), "ac1");
+    let tools = tools().for_case(&case);
+    let project = tools.project(&case, "ac1");
     tools.generate(&project);
     for name in [
         "load-one",
@@ -58,11 +60,11 @@ fn eight_independent_libraries_and_one_hundred_instances() {
         &project.join("result.json"),
         &json!({"scenario":"AC-1", "libraries":names, "instances":100, "startup_ms":startup_ms,"RM-2":rebuilt}),
     );
-    fs::remove_dir_all(project.join("target")).unwrap();
     eprintln!(
         "AC-1 / RM-2 证据：{}，启动 {startup_ms} ms",
-        project.display()
+        case.evidence_for(&project).display()
     );
+    case.success();
 }
 
 fn populate_instances(project: &std::path::Path) {
@@ -108,8 +110,9 @@ fn rebuild_one(project: &std::path::Path) -> Vec<String> {
 
 #[test]
 fn readme_first_plugin_builds_from_pinned_git_sdk() {
-    let tools = tools();
-    let project = tools.project("readme");
+    let case = TestGuard::for_package(std::path::Path::new(env!("CARGO_MANIFEST_DIR")), "readme");
+    let tools = tools().for_case(&case);
+    let project = tools.project(&case, "readme");
     std::fs::create_dir(&project).unwrap();
     command(
         Command::new(&tools.core)
@@ -153,8 +156,11 @@ fn readme_first_plugin_builds_from_pinned_git_sdk() {
         &project.join("result.json"),
         &json!({"scenario":"README first plugin", "sdk_revision":revision, "instances":["app","watch","hello"]}),
     );
-    fs::remove_dir_all(project.join("target")).unwrap();
-    eprintln!("README 首个插件证据：{}", project.display());
+    eprintln!(
+        "README 首个插件证据：{}",
+        case.evidence_for(&project).display()
+    );
+    case.success();
 }
 
 #[cfg(target_os = "macos")]

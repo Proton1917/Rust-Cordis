@@ -1,0 +1,199 @@
+{
+  "scenarios": [
+    {
+      "scenario": "typescript-provider",
+      "exit": 0
+    },
+    {
+      "scenario": "typescript-consumer",
+      "exit": 0
+    },
+    {
+      "scenario": "contract",
+      "exit": 0
+    },
+    {
+      "scenario": "resources",
+      "exit": 0
+    },
+    {
+      "scenario": "realms",
+      "exit": 0
+    },
+    {
+      "scenario": "migration",
+      "exit": 0
+    },
+    {
+      "scenario": "rollback",
+      "exit": 0
+    }
+  ],
+  "native_to_typescript": {
+    "scenario": "typescript-provider",
+    "exit": 0,
+    "cleanup": true,
+    "observed": {
+      "bytes": [
+        0,
+        127,
+        255
+      ],
+      "scoped": true
+    }
+  },
+  "typescript_to_native": {
+    "scenario": "typescript-consumer",
+    "exit": 0,
+    "cleanup": true,
+    "observed": {
+      "bytes": [
+        0,
+        127,
+        255
+      ],
+      "scoped": false
+    }
+  },
+  "contract": {
+    "finished": true,
+    "passed": true,
+    "stage": 1,
+    "assertions": [
+      {
+        "name": "suite.get.missing",
+        "passed": true,
+        "message": "预期 None，实际 None"
+      },
+      {
+        "name": "suite.put.bytes",
+        "passed": true,
+        "message": "预期 Some([0, 127, 255])，实际 Some([0, 127, 255])"
+      },
+      {
+        "name": "suite.put.overwrite",
+        "passed": true,
+        "message": "预期 Some([2])，实际 Some([2])"
+      },
+      {
+        "name": "suite.keys.sorted",
+        "passed": true,
+        "message": "预期 [\"alpha\", \"beta\"]，实际 [\"alpha\", \"beta\"]"
+      },
+      {
+        "name": "suite.flush.read",
+        "passed": true,
+        "message": "预期 Some([0, 127, 255])，实际 Some([0, 127, 255])"
+      },
+      {
+        "name": "suite.state.values",
+        "passed": true,
+        "message": "预期 Some([0, 127, 255])，实际 Some([0, 127, 255])"
+      },
+      {
+        "name": "suite.state.overwrite",
+        "passed": true,
+        "message": "预期 Some([2])，实际 Some([2])"
+      },
+      {
+        "name": "suite.state.keys",
+        "passed": true,
+        "message": "预期 [\"alpha\", \"beta\"]，实际 [\"alpha\", \"beta\"]"
+      }
+    ],
+    "error": null
+  },
+  "resources": {
+    "resource": true,
+    "borrow": true,
+    "mirror": true,
+    "nestedForward": true,
+    "eventResource": true,
+    "cancel": true,
+    "oversize": true,
+    "child": true
+  },
+  "realms": {
+    "tenant-a": [
+      1,
+      2
+    ],
+    "tenant-b": [
+      9,
+      8
+    ],
+    "exit": 0
+  },
+  "migration": {
+    "sequence": [
+      "Rust",
+      "TypeScript",
+      "Rust"
+    ],
+    "counts": [
+      15,
+      74,
+      135
+    ],
+    "counter_contexts": [
+      [
+        9,
+        15
+      ],
+      [
+        15,
+        20
+      ]
+    ],
+    "core_pid": 94622,
+    "exit": 0
+  },
+  "rollback": {
+    "sequence": [
+      "TypeScript",
+      "failed candidate",
+      "TypeScript"
+    ],
+    "counts": [
+      13,
+      75,
+      78
+    ],
+    "counter_contexts": [
+      [
+        8,
+        16
+      ]
+    ],
+    "core_pid": 94682,
+    "exit": 0
+  },
+  "evidence_directory": "target/test-evidence/typescript-sdk-behavior-93487-0/typescript-sdk/behavior-93487",
+  "scaffold": {
+    "after": {
+      "bindings": [],
+      "component": "hello",
+      "context": 11,
+      "error": null,
+      "group": "hello",
+      "name": "hello",
+      "plugin": "hello",
+      "reference": "installed-4",
+      "revision": 1,
+      "state": "active"
+    },
+    "before": {
+      "bindings": [],
+      "component": "hello",
+      "context": 5,
+      "error": null,
+      "group": "hello",
+      "name": "hello",
+      "plugin": "hello",
+      "reference": "installed-2",
+      "revision": 0,
+      "state": "active"
+    },
+    "marker": "typescript-scaffold-new-version"
+  }
+}

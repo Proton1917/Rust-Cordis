@@ -1,5 +1,6 @@
 //! DOC-14 SK-3：组件、接口、提供方与契约套件模板使用同一当前 SDK 编译。
 
+use cordis_testkit::cleanup::TestGuard;
 use std::{
     env, fs,
     path::{Path, PathBuf},
@@ -88,6 +89,7 @@ fn templates(skill: &Path, project: &Path) {
 
 #[test]
 fn shared_skill_templates_build_with_current_sdk() {
+    let guard = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "skill-templates");
     let root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
         .canonicalize()
@@ -95,9 +97,7 @@ fn shared_skill_templates_build_with_current_sdk() {
     let skill = env::var_os("CORDIS_SKILL_PATH")
         .map(PathBuf::from)
         .unwrap_or_else(|| root.join("skills/cordis-plugin"));
-    let project = root
-        .join("target/skill-examples")
-        .join(std::process::id().to_string());
+    let project = guard.directory("skill-examples");
     fs::create_dir_all(&project).unwrap();
     workspace(&root, &project);
     templates(&skill, &project);
@@ -113,5 +113,6 @@ fn shared_skill_templates_build_with_current_sdk() {
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );
-    eprintln!("SK-3模板构建：{}", project.display());
+    eprintln!("SK-3模板构建：{}", guard.evidence_for(&project).display());
+    guard.success();
 }

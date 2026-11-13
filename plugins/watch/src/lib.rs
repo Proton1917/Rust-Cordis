@@ -618,6 +618,5 @@ impl Component for Watch {
 cordis_sdk::export_plugin!(
     name = "watch",
     version = env!("CARGO_PKG_VERSION"),
-    components = [Watch],
-    rlib_feature = "rlib"
+    components = [Watch]
 );

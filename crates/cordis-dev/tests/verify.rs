@@ -1,14 +1,12 @@
 //! DOC-11 §8、M13：开发命令通过真实核心与动态库执行契约及准入验证。
 
+use cordis_testkit::cleanup::{FixtureLease, SharedFixture, TestGuard};
 use serde_json::Value;
 use std::{
     env, fs,
     path::{Path, PathBuf},
     process::{Command, Output},
-    sync::{
-        OnceLock,
-        atomic::{AtomicU64, Ordering},
-    },
+    sync::atomic::{AtomicU64, Ordering},
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -31,13 +29,13 @@ fn checked(command: &mut Command) -> Output {
 }
 
 /// Y-3：真实程序、被测库和套件由测试自身构建，两个负向库分别使用对应构建配置。
-fn artifacts() -> &'static Artifacts {
-    static ARTIFACTS: OnceLock<Artifacts> = OnceLock::new();
-    ARTIFACTS.get_or_init(|| {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../..")
-            .canonicalize()
-            .unwrap();
+fn artifacts() -> FixtureLease<Artifacts> {
+    static ARTIFACTS: SharedFixture<Artifacts> = SharedFixture::new();
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .canonicalize()
+        .unwrap();
+    ARTIFACTS.get_or_init(&root, "verification-tools", |guard| {
         let _build = cordis_testkit::build::shared_build_lock(&root).unwrap();
         let tools = cordis_testkit::build::shared_target_dir(&root);
         checked(
@@ -74,7 +72,7 @@ fn artifacts() -> &'static Artifacts {
             env::consts::DLL_SUFFIX
         );
         let bad = cordis_testkit::build::snapshot_artifacts(
-            &root,
+            guard,
             "verification-broken",
             "debug",
             &[&library_name],
@@ -88,7 +86,7 @@ fn artifacts() -> &'static Artifacts {
                 .arg(&tools),
         );
         let aborted = cordis_testkit::build::snapshot_artifacts(
-            &root,
+            guard,
             "verification-aborted",
             "debug",
             &[&library_name],
@@ -102,14 +100,14 @@ fn artifacts() -> &'static Artifacts {
             )
         });
         let tools = cordis_testkit::build::snapshot_artifacts(
-            &root,
+            guard,
             "verification-tools",
             "debug",
             &["cordis", "cordis-host", &names[0], &names[1], &names[2]],
         )
         .unwrap();
         Artifacts {
-            root,
+            root: root.clone(),
             tools,
             bad: library(&bad, "kv_broken"),
             aborted: library(&aborted, "kv_broken"),
@@ -170,8 +168,10 @@ fn receipt(plugin: &Path) -> PathBuf {
 
 #[test]
 fn memory_and_file_plugins_pass_real_contract_and_receive_gate_evidence() {
-    let artifacts = artifacts();
-    let project = project(artifacts);
+    let case = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "verify-contract");
+    let lease = artifacts().for_case(&case);
+    let artifacts = &*lease;
+    let project = case.track(project(artifacts));
     let config = project.join("file.toml");
     fs::write(&config, "path = 'store.cbor'\n").unwrap();
     for (name, config) in [("kv_mem", None), ("kv_file", Some(config.as_path()))] {
@@ -209,12 +209,15 @@ fn memory_and_file_plugins_pass_real_contract_and_receive_gate_evidence() {
                 .arg("--require-verified"),
         );
     }
+    case.success();
 }
 
 #[test]
 fn contract_violation_and_provider_exit_produce_failure_without_receipt() {
-    let artifacts = artifacts();
-    let project = project(artifacts);
+    let case = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "verify-failures");
+    let lease = artifacts().for_case(&case);
+    let artifacts = &*lease;
+    let project = case.track(project(artifacts));
     let bad = library(&project, "kv_broken");
     let aborted = library(&project, "kv_aborted");
     fs::copy(&artifacts.bad, &bad).unwrap();
@@ -235,12 +238,15 @@ fn contract_violation_and_provider_exit_produce_failure_without_receipt() {
             .contains("验证核心")
     );
     assert!(!receipt(&aborted).exists());
+    case.success();
 }
 
 #[test]
 fn verification_sequences_continue_after_existing_high_entries() {
-    let artifacts = artifacts();
-    let project = project(artifacts);
+    let case = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "verify-sequences");
+    let lease = artifacts().for_case(&case);
+    let artifacts = &*lease;
+    let project = case.track(project(artifacts));
     let sessions = project.join("target/verify");
     let copies = project.join(".cordis/verified");
     fs::create_dir_all(sessions.join("7")).unwrap();
@@ -266,4 +272,5 @@ fn verification_sequences_continue_after_existing_high_entries() {
             .unwrap(),
         format!("kv-8{}", env::consts::DLL_SUFFIX).as_str()
     );
+    case.success();
 }

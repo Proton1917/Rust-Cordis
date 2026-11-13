@@ -269,9 +269,8 @@ mod tests {
             .unwrap()
             .parent()
             .unwrap();
-        let directory = workspace
-            .join("target/runtime-outcomes")
-            .join(format!("cancel-{}", std::process::id()));
+        let guard = cordis_testkit::cleanup::TestGuard::new(workspace, "cancelled-outcome");
+        let directory = guard.directory("runtime-outcomes");
         std::fs::create_dir_all(&directory).unwrap();
         let diagnostics = Arc::new(Mutex::new(Diagnostics::default()));
         let outcomes = Arc::new(Mutex::new(BatchOutcomes::new(
@@ -311,5 +310,6 @@ mod tests {
         restored.load().unwrap();
         assert_eq!(restored.snapshot()[0].state, "interrupted");
         assert!(!restored.known("caller", "cancelled").unwrap());
+        guard.success();
     }
 }

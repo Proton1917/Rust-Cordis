@@ -56,6 +56,9 @@ struct NewPlugin {
     /// 生成 Python 进程插件。
     #[arg(long, group = "language")]
     python: bool,
+    /// 生成 TypeScript 进程插件。
+    #[arg(long = "ts", group = "language")]
+    typescript: bool,
 }
 
 #[tokio::main]
@@ -83,6 +86,13 @@ async fn run(cli: Cli) -> Result<()> {
                     "安装插件依赖：python -m pip install --target plugins/{0}/.dependencies -r plugins/{0}/requirements.txt",
                     options.name
                 );
+            } else if options.typescript {
+                scaffold::typescript_plugin(&options.project, &options.name)?;
+                println!(
+                    "安装插件依赖：npm --prefix plugins/{} install",
+                    options.name
+                );
+                println!("构建插件：npm --prefix plugins/{} run build", options.name);
             } else {
                 scaffold::plugin(&options.project, &options.name)?;
             }
