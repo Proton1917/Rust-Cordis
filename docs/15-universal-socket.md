@@ -308,6 +308,8 @@ intercept = { "kv@1" = { namespace = "app-b" } }   # 提供方在该实例的调
 
 接口版本取 WIT 包版本：主版本与次版本对应 `DOC-11` §3，修订号不参与匹配。
 
+M17 的具体绑定规则见 ADR-0039。`cordis-dev idl gen --lang rust|python|ts --output <文件> [--feature <名称>] <wit>` 通过共享的 cordis-idl 库生成源码；`kv-api/kv.wit` 同时定义 kv 接口、Snapshot 状态与 Changed 事件。record、variant、option 等复合值递归携带资源引用；嵌套可空值以 tag 60001 表示 Some(null)，资源以 tag 60000 表示对象编号。WIT 的 future 与 stream 生成异步资源服务。原生类型化表保持现有方法顺序及 v1.0 ABI 布局。
+
 备选方案：自定义接口格式（需自行维护语法与文档）；以 Rust trait 为来源（Python 与 TypeScript 作者仍要读写 Rust）。两者都不满足“各语言作者只读一份中立定义”。
 
 ## 8 通用插口协议 `UP/1`（设计要点）

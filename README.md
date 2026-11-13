@@ -289,6 +289,23 @@ target/release/cordis pack \
 
 `--sign` 指定本机签名身份并启用 hardened runtime，`--allow-third-party` 为宿主设置第三方库装载权限。启用 `require_verified` 的部署在签名改变库字节后重新执行原契约套件，验证副本及真实结果一起发布。`pack.runtimes` 与 `pack.runtime_paths` 可附带独立 Python/Node 目录并改写进程命令；完整语言运行时发布包的验收安排在 M21。配置、签名及可移动验证副本的规则见 [ADR-0036](docs/adr/0036-release-packaging.md)。
 
+`pack --target-dir <目录>` 指定复用的 Cargo 编译目录，缺省为部署项目的 `target/`；相对目录以部署项目为基准。
+
+## WIT 接口生成
+
+`plugins/kv-api/kv.wit` 定义 kv 接口、迁移状态与事件。修改 WIT 后，通过开发工具生成各语言绑定：
+
+```bash
+cargo run -p cordis-dev -- idl gen --lang rust \
+  --output plugins/kv-api/src/lib.rs plugins/kv-api/kv.wit
+cargo run -p cordis-dev -- idl gen --lang python \
+  --output target/kv.py plugins/kv-api/kv.wit
+cargo run -p cordis-dev -- idl gen --lang ts \
+  --output target/kv.ts plugins/kv-api/kv.wit
+```
+
+生成结果包括提供方接口、数据类型与调用方代理。Rust 接口保留类型化调用，并可通过通用调用传递复合资源；Python 与 TypeScript 绑定使用同一套 CBOR 表示。WIT 的类型映射、方法顺序、借用资源与异步值规则见 [ADR-0039](docs/adr/0039-wit-bindings.md)。
+
 ## 进度
 
 第一阶段 `M0`–`M6` 交付内核，第二阶段推进独立核心、插件宿主与开发工具，每个里程碑一个提交。
@@ -310,12 +327,13 @@ target/release/cordis pack \
 | `M14` | 系统验收、替换指标与使用文档 |
 | `M15` | 插件编写 skill、共享模板与独立新会话验收 |
 | `M16` | 发布压缩包与 `.app`、可移动验证副本、HTTP 页面入口与独立窗口进程 |
+| `M17` | WIT 三语言接口生成、复合资源编解码、共享编译目录 |
 
 `M0`–`M15` 的仓库交付及评审修复已完成。插件编写手册经过独立新会话的热替换、周期检查点与 KV 契约验证，ABI v1.0 已冻结。M12 的三个产品解析目标均完成固定 1800 秒 fuzz，正式源码与被测源码已逐字节比较。M14 的固定 50 次替换、直接调用、隔离与核心恢复结果见 [运行时验收与测量](docs/measurements/m14-acceptance.md)。
 
 M16 的实现与阶段检查已完成。Apple Silicon macOS 上的五项发布打包测试通过，覆盖运行产物交付、签名后契约重验、包外状态和多验证根；窗口过程验收记录 875 ms 恢复及依赖方重建。工作区覆盖 299 条运行测试与 2 条文档测试，固定 20 次迁移验收全部通过。Codex 用户目录的 skill 链接已按授权安装。
 
-AU-17 的外部界面命令已获授权并执行。系统应用列表在窗口恢复前后均记录一个 Regular 进程；截图与 Cmd-Q 命令分别停在屏幕录制、辅助功能权限请求，真实画面、Dock 外观和快捷键退出结果保留缺项。用户已许可据此继续 M16 交付与后续里程碑。原始测量与阶段检查见 [PROGRESS](docs/PROGRESS.md)，下一步为 M17 WIT 接口描述语言。
+M17 已通过阶段检查：WIT 生成 Rust、Python、TypeScript 绑定，kv-api 改由 kv.wit 生成；302 条运行用例与 2 条文档用例通过，Miri 13 条边界用例和布局比较通过。AU-17 界面验收记录 802 ms 窗口恢复，HTTP/KV context 保持原值，截图、Cmd-Q、有序退出、检查点与进程回收均成功。原始测量与阶段检查见 [PROGRESS](docs/PROGRESS.md)，下一步为 M18 Python SDK。
 
 ## 后续阶段
 

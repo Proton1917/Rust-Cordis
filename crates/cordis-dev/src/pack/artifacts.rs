@@ -14,7 +14,7 @@ pub struct Artifacts {
 }
 
 /// AU-12：Cargo 错误原样返回；已有清单以实际 release 产物作为复制来源。
-pub async fn build(project: &Path, target: &str) -> Result<Artifacts> {
+pub async fn build(project: &Path, target: &str, target_dir: &Path) -> Result<Artifacts> {
     let manifest = project.join("Cargo.toml");
     let output = match std::fs::metadata(manifest) {
         Ok(_) => {
@@ -29,7 +29,7 @@ pub async fn build(project: &Path, target: &str) -> Result<Artifacts> {
                     "--target".into(),
                     target.into(),
                     "--target-dir".into(),
-                    "target".into(),
+                    target_dir.to_string_lossy().into_owned(),
                     "--message-format=json-render-diagnostics".into(),
                 ],
                 project,

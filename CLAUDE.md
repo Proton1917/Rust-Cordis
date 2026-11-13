@@ -82,7 +82,7 @@ find crates/cordis/src -name '*.rs' | xargs wc -l                  # 内核行�
 
 - 用 local-messenger：`send_message(client: "codex", sessionId: "01a1cb26-d28c-7da2-9f72-210569e94c42", text: ...)`。会话 ID 失效时用 `list_sessions(client: "codex", cwd: <本仓库>)` 重查。
 - 服务端默认 `mode: "insert"`：消息会插入 Codex 正在运行的这一轮，返回状态为 `steered`/`inserted`。如果工具说明仍写着“加入队列”，那是旧的说明，以返回的状态为准。
-- 插入会打断 Codex 手上的工作：需要它马上改方向时才立即发；普通评审意见攒到它提交里程碑之后再发。
+- 所有消息一律用 `mode: "insert"`，不用 `queue`（用户 2026-11-12 要求）。普通评审意见仍然攒到 Codex 提交里程碑之后再发。
 - 消息自成一体：写清依据的文档条款、要改的文件、验收方式，以及“不需要回复，继续当前工作”或“完成后回复提交哈希与检查结果”。
 - 用 `get_message(id)` 读取 Codex 的回复。
 

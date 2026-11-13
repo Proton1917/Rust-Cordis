@@ -444,7 +444,7 @@ footer { font-size: 13px; color: var(--muted); border-top: 1px solid var(--line)
     <div class="sec-head">
       <div class="eyebrow">进度</div>
       <h2 id="prog-title">实现进度（2026-11-12）</h2>
-      <p class="lead">Rust 原生插件系统已完成系统验收，插件编写手册通过独立新会话验证。发布包可独立运行，窗口进程故障后可恢复，后端实例保持原有上下文；窗口截图和 Cmd-Q 交互等待系统权限。当前实现 WIT 接口生成。上方模拟同时包含后续阶段的多语言与前端场景。</p>
+      <p class="lead">Rust 原生插件系统已完成系统验收，插件编写手册通过独立新会话验证。发布包可独立运行，窗口进程故障后可恢复，后端实例保持原有上下文；窗口截图、Cmd-Q 与退出检查点已通过验收。WIT 已生成 Rust、Python、TypeScript 绑定并通过互通测试，当前继续 Python SDK。上方模拟同时包含后续阶段的多语言与前端场景。</p>
     </div>
     <div class="progress">
       <table>
@@ -457,8 +457,8 @@ footer { font-size: 13px; color: var(--muted); border-top: 1px solid var(--line)
           <tr><td>契约验证</td><td class="mono">M13</td><td><span class="st done">已完成</span></td><td>真实套件通过验证；字节变化候选在装载前被拒绝</td></tr>
           <tr><td>系统验收</td><td class="mono">M14</td><td><span class="st done">已完成</span></td><td>连续替换与状态保持通过；服务恢复修订后实测 1.038 秒</td></tr>
           <tr><td>插件编写手册</td><td class="mono">M15</td><td><span class="st done">验收通过</span></td><td>共享模板编译通过；两个独立新会话完成状态迁移与 KV 契约验证</td></tr>
-          <tr><td>发布打包与窗口插件</td><td class="mono">M16</td><td><span class="st done">运行验证通过</span></td><td>独立发布包、签名与窗口恢复通过；图像及 Cmd-Q 交互等待系统权限</td></tr>
-          <tr><td>WIT 接口描述语言</td><td class="mono">M17</td><td><span class="st doing">进行中</span></td><td>共享类型模型、Rust / Python / TypeScript 绑定与资源传递</td></tr>
+          <tr><td>发布打包与窗口插件</td><td class="mono">M16</td><td><span class="st done">运行验证通过</span></td><td>独立发布包、签名与窗口恢复通过；截图、Cmd-Q、检查点与退出验收通过</td></tr>
+          <tr><td>WIT 接口描述语言</td><td class="mono">M17</td><td><span class="st done">运行验证通过</span></td><td>三语言绑定与 CBOR 互通通过；kv-api 由 WIT 生成，复合资源按调用期回收</td></tr>
           <tr><td>Python 与 TypeScript SDK、全栈插件</td><td class="mono">M18–M21</td><td><span class="st todo">待开始</span></td><td>多语言插件、前端插件（浏览器页面经 http 插件接入）</td></tr>
         </tbody>
       </table>

@@ -92,18 +92,25 @@ fn existing_artifacts(build: &Path, host: Option<PathBuf>) -> Result<Artifacts> 
 }
 
 fn build(host_root: &Path, build: &Path, host: Option<&Path>) -> Result<()> {
+    let workspace = host_root.parent().and_then(Path::parent).unwrap();
+    let _build = cordis_testkit::build::shared_build_lock(workspace)?;
+    let current = cordis_testkit::build::shared_target_dir(workspace);
     if host.is_none() {
         run(
             Command::new("cargo")
                 .args(["build", "--manifest-path"])
                 .arg(host_root.join("Cargo.toml"))
                 .arg("--target-dir")
-                .arg(&build),
+                .arg(&current),
             "构建真实原生宿主",
+        )?;
+        std::fs::create_dir_all(build.join("debug"))?;
+        std::fs::copy(
+            current.join("debug/cordis-host"),
+            build.join("debug/cordis-host"),
         )?;
     }
     let fixtures = host_root.join("tests/fixtures/Cargo.toml");
-    let current = build.join("fixtures-current");
     run(
         Command::new("cargo")
             .args(["build", "--manifest-path"])
@@ -157,8 +164,13 @@ fn build(host_root: &Path, build: &Path, host: Option<&Path>) -> Result<()> {
                 "scoped",
                 "--target-dir",
             ])
-            .arg(&scoped),
+            .arg(&current),
         "构建Scoped提供方动态库",
+    )?;
+    std::fs::create_dir_all(scoped.join("debug"))?;
+    std::fs::copy(
+        library(&current, "loader_fixture"),
+        library(&scoped, "loader_fixture"),
     )?;
     let previous = build.join("fixtures-185");
     run(
@@ -166,8 +178,13 @@ fn build(host_root: &Path, build: &Path, host: Option<&Path>) -> Result<()> {
             .args(["+1.85.0", "build", "--manifest-path"])
             .arg(&fixtures)
             .args(["-p", "loader-fixture-consumer", "--target-dir"])
-            .arg(&previous),
+            .arg(&current),
         "用Rust 1.85.0构建使用方动态库",
+    )?;
+    std::fs::create_dir_all(previous.join("debug"))?;
+    std::fs::copy(
+        library(&current, "loader_fixture_consumer"),
+        library(&previous, "loader_fixture_consumer"),
     )?;
     Ok(())
 }
@@ -1039,9 +1056,10 @@ async fn main() -> Result<()> {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
         .canonicalize()?;
-    let directory = selection
-        .artifacts_dir
-        .unwrap_or_else(|| root.join("../../target/host-native"));
+    let directory = selection.artifacts_dir.unwrap_or_else(|| {
+        root.join("../../target/host-native")
+            .join(std::process::id().to_string())
+    });
     if !selection.reuse_artifacts {
         build(&root, &directory, selection.host.as_deref())?;
     }

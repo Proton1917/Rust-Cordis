@@ -23,7 +23,8 @@ fn tools() -> &'static Tools {
             .join("../..")
             .canonicalize()
             .unwrap();
-        let target = root.join("target/pack-tools");
+        let _build = cordis_testkit::build::shared_build_lock(&root).unwrap();
+        let target = cordis_testkit::build::shared_target_dir(&root);
         command(
             Command::new(env!("CARGO"))
                 .current_dir(&root)
@@ -42,10 +43,19 @@ fn tools() -> &'static Tools {
                 ])
                 .arg(&target),
         );
-        Tools {
-            root,
-            binaries: target.join("release"),
-        }
+        let library = format!(
+            "{}kv_mem{}",
+            std::env::consts::DLL_PREFIX,
+            std::env::consts::DLL_SUFFIX
+        );
+        let binaries = cordis_testkit::build::snapshot_artifacts(
+            &root,
+            "pack-tools",
+            "release",
+            &["cordis", "cordis-host", "cordis-dev", &library],
+        )
+        .unwrap();
+        Tools { root, binaries }
     })
 }
 
@@ -102,6 +112,7 @@ fn project(label: &str) -> (PathBuf, PathBuf) {
 
 /// AU-12：解开的发布目录保留运行程序，源码与开发工具保留在原项目。
 fn release(project: &Path, runtime_dir: &Path, sign: bool) -> PathBuf {
+    let _build = cordis_testkit::build::shared_build_lock(&tools().root).unwrap();
     let target = if cfg!(target_os = "macos") {
         "aarch64-apple-darwin"
     } else {
@@ -112,6 +123,8 @@ fn release(project: &Path, runtime_dir: &Path, sign: bool) -> PathBuf {
         .arg("--project")
         .arg(project)
         .args(["--target", target])
+        .arg("--target-dir")
+        .arg(cordis_testkit::build::shared_target_dir(&tools().root))
         .arg("--runtime-dir")
         .arg(runtime_dir);
     if sign {
@@ -218,7 +231,8 @@ fn bundled_runtime_executes_real_process_plugin() {
     let runtime = project.join("provided-runtime/bin");
     fs::create_dir_all(&provider).unwrap();
     fs::create_dir_all(&runtime).unwrap();
-    let target = root.join("target/pack-fixture");
+    let build_lock = cordis_testkit::build::shared_build_lock(root).unwrap();
+    let target = cordis_testkit::build::shared_target_dir(root);
     command(
         Command::new(env!("CARGO"))
             .args(["build", "--release", "--manifest-path"])
@@ -231,6 +245,7 @@ fn bundled_runtime_executes_real_process_plugin() {
         runtime.join("python3"),
     )
     .unwrap();
+    drop(build_lock);
     fs::write(provider.join("cordis-plugin.toml"), "name='fixture-provider'\nversion='0.1.0'\nsocket='process'\nprotocol=1\ncommand=['python3','provider','v1']\n").unwrap();
     fs::write(project.join("cordis.toml"), "[pack]\nname='pack-native'\nversion='0.1.0'\nruntimes=['python']\n[pack.runtime_paths]\npython='provided-runtime'\n[runtime]\ncheckpoint_ms=0\n[instance.provider]\nplugin='provider'\ncomponent='provider'\nconfig={initial=41}\n").unwrap();
     let deployed = release(&project, &tools().binaries, false);
@@ -303,16 +318,35 @@ fn verified_project(root: &Path, project: &Path) -> PathBuf {
         toml::to_string(&configuration).unwrap(),
     )
     .unwrap();
-    command(Command::new(env!("CARGO")).current_dir(project).args([
-        "build",
-        "--release",
-        "--workspace",
-        "--target",
-        "aarch64-apple-darwin",
-        "--target-dir",
-        "target",
-    ]));
+    let build_lock = cordis_testkit::build::shared_build_lock(root).unwrap();
+    let shared = cordis_testkit::build::shared_target_dir(root);
+    command(
+        Command::new(env!("CARGO"))
+            .current_dir(project)
+            .args([
+                "build",
+                "--release",
+                "--workspace",
+                "--target",
+                "aarch64-apple-darwin",
+                "--target-dir",
+            ])
+            .arg(&shared),
+    );
     let directory = project.join("target/aarch64-apple-darwin/release");
+    fs::create_dir_all(&directory).unwrap();
+    for name in [
+        "libmemory.dylib",
+        "libcounter.dylib",
+        "libkv_contract.dylib",
+    ] {
+        fs::copy(
+            shared.join("aarch64-apple-darwin/release").join(name),
+            directory.join(name),
+        )
+        .unwrap();
+    }
+    drop(build_lock);
     command(
         Command::new(tools().binaries.join("cordis-dev"))
             .current_dir(project)
@@ -392,15 +426,19 @@ fn application_keeps_signed_resources_and_selects_multiple_verified_roots() {
         tools.join("cordis-dev"),
     )
     .unwrap();
+    let build_lock = cordis_testkit::build::shared_build_lock(&root).unwrap();
     command(
         Command::new(self::tools().binaries.join("cordis"))
             .arg("pack")
             .arg("--project")
             .arg(&project)
             .args(["--target", "aarch64-apple-darwin", "--app"])
+            .arg("--target-dir")
+            .arg(cordis_testkit::build::shared_target_dir(&root))
             .arg("--runtime-dir")
             .arg(&tools),
     );
+    drop(build_lock);
     let app = project.join("dist/pack-native.app");
     let launch = project.join("launch");
     fs::create_dir(&launch).unwrap();

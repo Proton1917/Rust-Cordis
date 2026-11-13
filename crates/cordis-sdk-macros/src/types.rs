@@ -2,6 +2,8 @@ use proc_macro2::TokenStream;
 use quote::quote;
 use syn::{GenericArgument, PathArguments, Type};
 
+pub(crate) mod adapter;
+
 #[derive(Clone)]
 pub enum Mapping {
     Unit,
@@ -14,9 +16,16 @@ pub enum Mapping {
     Service(Type),
     Option(Box<Mapping>),
     Cbor(Type),
+    Adapted(adapter::Adapter),
 }
 
 impl Mapping {
+    pub fn adapted(self, codec: Option<syn::Path>) -> syn::Result<Self> {
+        match codec {
+            Some(codec) => adapter::Adapter::new(self, codec).map(Self::Adapted),
+            None => Ok(self),
+        }
+    }
     pub fn parse(ty: &Type) -> syn::Result<Self> {
         match ty {
             Type::Tuple(tuple) if tuple.elems.is_empty() => return Ok(Self::Unit),
@@ -54,6 +63,7 @@ impl Mapping {
 
     pub fn wire(&self) -> TokenStream {
         match self {
+            Self::Adapted(adapter) => adapter.base.wire(),
             Self::Unit => quote!(::cordis_sdk::__private::abi::AbiUnit),
             Self::Primitive(ty) => quote!(#ty),
             Self::Bool => quote!(u8),
@@ -80,7 +90,7 @@ impl Mapping {
 
     pub fn contains_service(&self) -> bool {
         match self {
-            Self::Service(_) => true,
+            Self::Service(_) | Self::Cbor(_) | Self::Adapted(_) => true,
             Self::Option(inner) => inner.contains_service(),
             _ => false,
         }
@@ -111,6 +121,7 @@ impl Mapping {
 
     pub fn prepare(&self, value: TokenStream, environment: TokenStream) -> TokenStream {
         match self {
+            Self::Adapted(adapter) => adapter.prepare(value, environment),
             Self::Unit => {
                 quote!({ let () = #value; ::cordis_sdk::__private::abi::AbiUnit::default() })
             }
@@ -123,7 +134,7 @@ impl Mapping {
             }
             Self::VecBytes => quote!(::cordis_sdk::__private::abi::Buf::new(#value, #environment)?),
             Self::Cbor(_) => {
-                quote!(::cordis_sdk::__private::abi::Buf::new(::cordis_sdk::encode(&#value)?, #environment)?)
+                quote!(::cordis_sdk::__private::abi::CborEncoder::new(#environment).encode(&#value)?)
             }
             Self::Service(_) => quote!(#value.clone_object()?),
             Self::Option(inner) => {
@@ -135,6 +146,7 @@ impl Mapping {
 
     pub fn encode_raw(&self, value: TokenStream) -> TokenStream {
         match self {
+            Self::Adapted(adapter) => adapter.base.encode_raw(value),
             Self::String | Self::VecBytes | Self::Cbor(_) | Self::Service(_) => {
                 quote!(#value.into_raw())
             }
@@ -151,6 +163,7 @@ impl Mapping {
 
     pub fn adopt(&self, value: TokenStream, environment: TokenStream) -> TokenStream {
         match self {
+            Self::Adapted(adapter) => adapter.base.adopt(value, environment),
             Self::String | Self::VecBytes | Self::Cbor(_) => quote!({
                 // SAFETY: DOC-12 §5，调用方转入缓冲的唯一所有权及既有租约。
                 unsafe { ::cordis_sdk::__private::abi::Buf::from_raw(#value, #environment) }
@@ -175,6 +188,7 @@ impl Mapping {
 
     pub fn decode(&self, value: TokenStream) -> TokenStream {
         match self {
+            Self::Adapted(adapter) => adapter.decode(value),
             Self::Unit => quote!({ let _ = #value; ::cordis_sdk::Result::Ok(()) }),
             Self::Primitive(_) => quote!(::cordis_sdk::Result::Ok(#value)),
             Self::Bool => quote!(::cordis_sdk::__private::decode_bool(#value)),
@@ -192,7 +206,7 @@ impl Mapping {
                 quote!(::cordis_sdk::Service::<#interface>::from_object(#value))
             }
             Self::Cbor(ty) => quote!({
-                let __cordis_decoded = ::cordis_sdk::decode::<#ty>(#value.as_slice())?;
+                let __cordis_decoded = ::cordis_sdk::__private::abi::decode_in::<#ty>(#value.as_slice(), __cordis_environment)?;
                 #value.release()?;
                 ::cordis_sdk::Result::Ok(__cordis_decoded)
             }),
@@ -208,12 +222,14 @@ impl Mapping {
 
     pub fn encode_cbor(&self, value: TokenStream, encoder: TokenStream) -> TokenStream {
         match self {
+            Self::Adapted(adapter) => adapter.encode_cbor(value, encoder),
             Self::Unit => {
                 quote!({ let () = #value; ::cordis_sdk::__private::abi::CborValue::Null })
             }
-            Self::Primitive(_) | Self::Bool | Self::Cbor(_) => {
+            Self::Primitive(_) | Self::Bool => {
                 quote!(::cordis_sdk::__private::abi::to_value(&#value)?)
             }
+            Self::Cbor(_) => quote!(#encoder.value(&#value)?),
             Self::Str => quote!(::cordis_sdk::__private::abi::CborValue::Text(#value.to_owned())),
             Self::String => quote!(::cordis_sdk::__private::abi::CborValue::Text(#value)),
             Self::Bytes => {
@@ -233,9 +249,13 @@ impl Mapping {
 
     pub fn decode_cbor(&self, value: TokenStream, environment: TokenStream) -> TokenStream {
         match self {
+            Self::Adapted(adapter) => adapter.decode_cbor(value, environment),
             Self::Unit => quote!(::cordis_sdk::__private::abi::from_value::<()>(#value)),
-            Self::Primitive(ty) | Self::Cbor(ty) => {
+            Self::Primitive(ty) => {
                 quote!(::cordis_sdk::__private::abi::from_value::<#ty>(#value))
+            }
+            Self::Cbor(ty) => {
+                quote!(::cordis_sdk::__private::abi::from_value_in::<#ty>(#value, #environment))
             }
             Self::Bool => quote!(::cordis_sdk::__private::abi::from_value::<bool>(#value)),
             Self::Str | Self::String => {

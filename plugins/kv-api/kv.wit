@@ -1,0 +1,30 @@
+package cordis:kv@1.0.0;
+
+/// 按 UTF-8 键存储字节值，写入相同键会替换原值。
+interface kv {
+    /// kv.snapshot@1 的迁移格式由内存和文件实现共同使用。
+    /// ```cordis
+    /// default = true
+    /// ```
+    record snapshot {
+        entries: map<string, list<u8>>,
+    }
+
+    /// 每次成功写入后派发的通知。
+    /// ```cordis
+    /// event = "kv.changed"
+    /// kind = "sync"
+    /// ```
+    record changed {
+        key: string,
+    }
+
+    /// 返回当前值；缺少键时返回 none。
+    get: func(key: string) -> result<option<list<u8>>, string>;
+    /// 写入完整值。状态导出冻结期间返回 code = 4。
+    put: func(key: string, value: list<u8>) -> result<_, string>;
+    /// 按字典顺序返回全部键。
+    keys: func() -> result<list<string>, string>;
+    /// 等待先前写入达到实现所声明的持久化程度。
+    flush: async func() -> result<_, string>;
+}

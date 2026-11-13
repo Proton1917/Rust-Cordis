@@ -159,7 +159,8 @@ fn plugin() -> &'static Path {
             .parent()
             .and_then(Path::parent)
             .expect("workspace package layout");
-        let destination = workspace.join("target/manager-fixture");
+        let _build = cordis_testkit::build::shared_build_lock(workspace).unwrap();
+        let destination = cordis_testkit::build::shared_target_dir(workspace);
         let result = std::process::Command::new(env!("CARGO"))
             .args(["build", "--manifest-path"])
             .arg(root.join("fixtures/manager-plugin/Cargo.toml"))
@@ -172,7 +173,14 @@ fn plugin() -> &'static Path {
             "{}",
             String::from_utf8_lossy(&result.stderr)
         );
-        destination.join("debug/cordis-manager-fixture")
+        cordis_testkit::build::snapshot_artifacts(
+            workspace,
+            "manager-fixture",
+            "debug",
+            &["cordis-manager-fixture"],
+        )
+        .unwrap()
+        .join("cordis-manager-fixture")
     })
 }
 

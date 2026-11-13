@@ -38,8 +38,8 @@ fn artifacts() -> &'static Artifacts {
             .join("../..")
             .canonicalize()
             .unwrap();
-        let directory = root.join("target/verification-tests");
-        let tools = directory.join("tools");
+        let _build = cordis_testkit::build::shared_build_lock(&root).unwrap();
+        let tools = cordis_testkit::build::shared_target_dir(&root);
         checked(
             Command::new("cargo")
                 .current_dir(&root)
@@ -61,27 +61,58 @@ fn artifacts() -> &'static Artifacts {
         );
         let fixture =
             Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/kv-broken/Cargo.toml");
-        let bad = directory.join("broken");
         checked(
             Command::new("cargo")
                 .args(["build", "--manifest-path"])
                 .arg(&fixture)
                 .arg("--target-dir")
-                .arg(&bad),
+                .arg(&tools),
         );
-        let aborted = directory.join("aborted");
+        let library_name = format!(
+            "{}kv_broken{}",
+            env::consts::DLL_PREFIX,
+            env::consts::DLL_SUFFIX
+        );
+        let bad = cordis_testkit::build::snapshot_artifacts(
+            &root,
+            "verification-broken",
+            "debug",
+            &[&library_name],
+        )
+        .unwrap();
         checked(
             Command::new("cargo")
                 .args(["build", "--manifest-path"])
                 .arg(&fixture)
                 .args(["--features", "abort", "--target-dir"])
-                .arg(&aborted),
+                .arg(&tools),
         );
+        let aborted = cordis_testkit::build::snapshot_artifacts(
+            &root,
+            "verification-aborted",
+            "debug",
+            &[&library_name],
+        )
+        .unwrap();
+        let names = ["kv_mem", "kv_file", "kv_contract"].map(|name| {
+            format!(
+                "{}{name}{}",
+                env::consts::DLL_PREFIX,
+                env::consts::DLL_SUFFIX
+            )
+        });
+        let tools = cordis_testkit::build::snapshot_artifacts(
+            &root,
+            "verification-tools",
+            "debug",
+            &["cordis", "cordis-host", &names[0], &names[1], &names[2]],
+        )
+        .unwrap();
         Artifacts {
             root,
-            tools: tools.join("debug"),
-            bad: library(&bad.join("debug"), "kv_broken"),
-            aborted: library(&aborted.join("debug"), "kv_broken"),
+            tools,
+            bad: library(&bad, "kv_broken"),
+            aborted: library(&aborted, "kv_broken"),
         }
     })
 }
@@ -108,7 +139,7 @@ fn project(artifacts: &Artifacts) -> PathBuf {
                 .as_nanos(),
             NEXT.fetch_add(1, Ordering::Relaxed)
         ));
-    fs::create_dir(&directory).unwrap();
+    fs::create_dir_all(&directory).unwrap();
     directory
 }
 

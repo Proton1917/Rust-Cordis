@@ -1,0 +1,52 @@
+package cordis:types@1.2.0;
+
+interface laboratory {
+    enum state { ready, working }
+    flags permissions { read-value, write-value }
+    variant choice { empty, number(u32), message(string) }
+    type option-values = list<option<option<u32>>>;
+    record sample {
+        label: string,
+        marker: char,
+        count: u64,
+        delta: s64,
+        ratio: f64,
+        active: bool,
+        bytes: list<u8>,
+        pairs: map<string, list<u8>>,
+        coordinates: tuple<s32, f32>,
+        window: list<u32, 40>,
+        choice: choice,
+        state: state,
+        permissions: permissions,
+        nested: option<option<u32>>,
+        options: option-values,
+        outcome: result<u32, string>,
+    }
+    resource counter {
+        constructor(initial: u32);
+        read: func() -> u32;
+        add: func(delta: u32) -> u32;
+        later: async func() -> u32;
+    }
+    record bundle {
+        main: own<counter>,
+        extras: list<own<counter>>,
+        optional: option<own<counter>>,
+    }
+    record loan { counter: borrow<counter> }
+    type eventual = future<u32>;
+    type sequence = stream<u32>;
+
+    @since(version = 1.2.0)
+    transform: func(input: sample) -> result<sample, string>;
+    choose: func(value: choice) -> choice;
+    nested-values: func(values: option-values) -> option-values;
+    nested-maybe: func(values: option<option-values>) -> option<option-values>;
+    relay: func(value: bundle) -> bundle;
+    inspect: func(value: loan) -> u32;
+    read-later: async func(value: own<counter>) -> u32;
+    eventual-value: func(value: u32) -> eventual;
+    sequence-value: func() -> sequence;
+    reject: func() -> result<u32, string>;
+}

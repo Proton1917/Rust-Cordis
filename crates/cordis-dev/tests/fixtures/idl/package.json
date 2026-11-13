@@ -1,0 +1,8 @@
+{
+  "name": "cordis-idl-acceptance",
+  "private": true,
+  "dependencies": {
+    "cbor-x": "1.6.0",
+    "typescript": "5.9.3"
+  }
+}

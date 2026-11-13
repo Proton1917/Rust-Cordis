@@ -48,7 +48,8 @@ pub fn tools() -> &'static Tools {
                 host: host.into(),
             };
         }
-        let build = root.join("target/acceptance-tools");
+        let _build = cordis_testkit::build::shared_build_lock(&root).unwrap();
+        let build = cordis_testkit::build::shared_target_dir(&root);
         command(
             Command::new("cargo")
                 .current_dir(&root)
@@ -65,11 +66,18 @@ pub fn tools() -> &'static Tools {
                 ])
                 .arg(&build),
         );
+        let copied = cordis_testkit::build::snapshot_artifacts(
+            &root,
+            "acceptance-tools",
+            "release",
+            &["cordis", "cordis-dev", "cordis-host"],
+        )
+        .unwrap();
         Tools {
             root,
-            core: build.join("release/cordis"),
-            dev: build.join("release/cordis-dev"),
-            host: build.join("release/cordis-host"),
+            core: copied.join("cordis"),
+            dev: copied.join("cordis-dev"),
+            host: copied.join("cordis-host"),
         }
     })
 }

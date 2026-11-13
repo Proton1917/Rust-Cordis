@@ -20,6 +20,11 @@ pub struct Context {
 }
 
 impl Context {
+    /// DOC-15 §7、ADR-0039：构造可作为返回值传递的本地资源，由服务句柄持有库租约。
+    pub fn service<I: Interface + ?Sized>(&self, value: Arc<I>) -> Result<Service<I>> {
+        Service::from_object(I::object(value, self.environment)?)
+    }
+
     #[doc(hidden)]
     pub fn new(environment: Environment, handle: u64) -> Self {
         Self {
@@ -211,8 +216,9 @@ impl Context {
         E: SyncEvent,
         F: Fn(E) -> Result<()> + Send + Sync + 'static,
     {
-        let callback = sync_callback(self.environment, move |_, _, payload| {
-            listener(crate::decode(payload)?)
+        let environment = self.environment;
+        let callback = sync_callback(environment, move |_, _, payload| {
+            listener(cordis_abi::decode_in(payload, environment)?)
         })?;
         self.environment
             .host()
@@ -220,9 +226,11 @@ impl Context {
     }
 
     pub fn emit<E: SyncEvent>(&self, event: E) -> Result<()> {
+        let buffer = cordis_abi::CborEncoder::new(self.environment).encode(&event)?;
         self.environment
             .host()
-            .emit(self.handle, E::INTERFACE, &crate::encode(&event)?)
+            .emit(self.handle, E::INTERFACE, buffer.as_slice())?;
+        buffer.release()
     }
 
     pub fn on_async<E, F, Fut>(&self, listener: F) -> Result<()>
@@ -232,9 +240,11 @@ impl Context {
         Fut: Future<Output = Result<()>> + Send + 'static,
     {
         let listener = Arc::new(listener);
-        let callback = async_callback(self.environment, move |_, _, payload| {
+        let environment = self.environment;
+        let callback = async_callback(environment, move |_, _, payload| {
             let listener = listener.clone();
-            async move { listener(crate::decode(&payload)?).await }
+            let event = cordis_abi::decode_in(&payload, environment);
+            async move { listener(event?).await }
         })?;
         self.environment
             .host()
@@ -242,10 +252,16 @@ impl Context {
     }
 
     pub async fn emit_async<E: AsyncEvent>(&self, event: E) -> Result<()> {
-        self.environment
-            .host()
-            .emit_async(self.handle, E::INTERFACE, &crate::encode(&event)?)?
-            .await?;
+        let future = {
+            let buffer = cordis_abi::CborEncoder::new(self.environment).encode(&event)?;
+            let future =
+                self.environment
+                    .host()
+                    .emit_async(self.handle, E::INTERFACE, buffer.as_slice())?;
+            buffer.release()?;
+            future
+        };
+        future.await?;
         Ok(())
     }
 

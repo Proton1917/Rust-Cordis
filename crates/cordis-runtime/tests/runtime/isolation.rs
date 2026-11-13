@@ -8,7 +8,8 @@ fn tools(name: &str, packages: &[&str]) -> PathBuf {
         .join("../..")
         .canonicalize()
         .unwrap();
-    let target = root.join("target/m14-isolation").join(name);
+    let _build = cordis_testkit::build::shared_build_lock(&root).unwrap();
+    let target = cordis_testkit::build::shared_target_dir(&root);
     let mut command = Command::new(env!("CARGO"));
     command.current_dir(&root).arg("build");
     for package in packages {
@@ -16,7 +17,23 @@ fn tools(name: &str, packages: &[&str]) -> PathBuf {
     }
     command.arg("--target-dir").arg(&target);
     checked(&mut command);
-    target.join("debug")
+    let names: Vec<_> = packages
+        .iter()
+        .map(|package| {
+            if *package == "cordis-host" {
+                package.to_string()
+            } else {
+                format!(
+                    "{}{}{}",
+                    std::env::consts::DLL_PREFIX,
+                    package.replace('-', "_"),
+                    std::env::consts::DLL_SUFFIX
+                )
+            }
+        })
+        .collect();
+    let files: Vec<_> = names.iter().map(String::as_str).collect();
+    cordis_testkit::build::snapshot_artifacts(&root, name, "debug", &files).unwrap()
 }
 
 fn core_binaries(project: &Path, host: &Path) {
@@ -106,7 +123,9 @@ fn real_file_kv_instances_keep_tenant_data_separate() {
 fn scoped_artifacts() -> (PathBuf, PathBuf, PathBuf) {
     let host = tools("scoped-host", &["cordis-host"]).join("cordis-host");
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let target = root.join("../../target/m14-isolation/scoped-fixtures");
+    let workspace = root.parent().and_then(Path::parent).unwrap();
+    let _build = cordis_testkit::build::shared_build_lock(workspace).unwrap();
+    let target = cordis_testkit::build::shared_target_dir(workspace);
     for fixture in ["kv-scoped", "kv-scoped-process"] {
         checked(
             Command::new(env!("CARGO"))
@@ -116,10 +135,22 @@ fn scoped_artifacts() -> (PathBuf, PathBuf, PathBuf) {
                 .arg(&target),
         );
     }
+    let native = format!(
+        "{}kv_scoped{}",
+        std::env::consts::DLL_PREFIX,
+        std::env::consts::DLL_SUFFIX
+    );
+    let copied = cordis_testkit::build::snapshot_artifacts(
+        workspace,
+        "scoped-fixtures",
+        "debug",
+        &[&native, "cordis-kv-scoped-process"],
+    )
+    .unwrap();
     (
         host,
-        library(&target.join("debug"), "kv_scoped"),
-        target.join("debug/cordis-kv-scoped-process"),
+        library(&copied, "kv_scoped"),
+        copied.join("cordis-kv-scoped-process"),
     )
 }
 

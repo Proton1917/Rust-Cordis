@@ -1,7 +1,6 @@
 use crate::{
     AbiBuf, AbiBytes, AbiError, AbiFuture, AbiStatus, AbiStr, Buf, Environment, Error, Object,
-    ObjectHeader, RemoteFuture, Result, boundary, encode, make_future, object_data,
-    object_environment,
+    ObjectHeader, RemoteFuture, Result, boundary, make_future, object_data, object_environment,
 };
 use serde::{Serialize, de::DeserializeOwned};
 use std::{
@@ -19,13 +18,17 @@ pub const RESOURCE_TAG: u64 = 60000;
 pub const OPTION_SOME_TAG: u64 = 60001;
 
 pub fn to_value<T: Serialize + ?Sized>(value: &T) -> Result<CborValue> {
-    CborValue::serialized(value).map_err(|error| Error::new(2, error.to_string()))
+    crate::encoding::plain(|| {
+        CborValue::serialized(value).map_err(|error| Error::new(2, error.to_string()))
+    })
 }
 
 pub fn from_value<T: DeserializeOwned>(value: CborValue) -> Result<T> {
-    value
-        .deserialized()
-        .map_err(|error| Error::new(2, error.to_string()))
+    crate::encoding::plain(|| {
+        value
+            .deserialized()
+            .map_err(|error| Error::new(2, error.to_string()))
+    })
 }
 
 pub fn decode_value(bytes: &[u8]) -> Result<CborValue> {
@@ -62,43 +65,6 @@ pub fn option_take(value: CborValue) -> Option<CborValue> {
         CborValue::Null => None,
         CborValue::Tag(OPTION_SOME_TAG, value) => Some(*value),
         value => Some(value),
-    }
-}
-
-pub struct CborEncoder {
-    env: Environment,
-    resources: Vec<u64>,
-}
-
-impl CborEncoder {
-    pub fn new(env: Environment) -> Self {
-        Self {
-            env,
-            resources: Vec::new(),
-        }
-    }
-    pub fn export(&mut self, object: Object) -> Result<CborValue> {
-        let id = self.env.host().object_export(object)?;
-        self.resources.push(id);
-        Ok(CborValue::Tag(
-            RESOURCE_TAG,
-            Box::new(CborValue::Integer(id.into())),
-        ))
-    }
-    pub fn finish(self, value: CborValue) -> Result<Buf> {
-        let env = self.env;
-        let bytes = encode(&value)?;
-        Buf::with_owner(bytes, self, env)
-    }
-}
-
-impl Drop for CborEncoder {
-    fn drop(&mut self) {
-        for id in self.resources.drain(..) {
-            if let Err(error) = self.env.host().object_release(id) {
-                self.env.report(error);
-            }
-        }
     }
 }
 

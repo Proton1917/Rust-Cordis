@@ -4,6 +4,11 @@ use syn::{ImplItem, ItemImpl, Lifetime, Signature, TypeReference};
 struct BorrowLifetime(Lifetime);
 
 impl VisitMut for BorrowLifetime {
+    fn visit_lifetime_mut(&mut self, lifetime: &mut Lifetime) {
+        if lifetime.ident == "_" {
+            *lifetime = self.0.clone();
+        }
+    }
     fn visit_type_reference_mut(&mut self, reference: &mut TypeReference) {
         if reference.lifetime.is_none() {
             reference.lifetime = Some(self.0.clone());

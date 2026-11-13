@@ -1,0 +1,14 @@
+[package]
+name = "cordis-idl-acceptance"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+cordis-sdk = { path = "../../../../../crates/cordis-sdk" }
+cordis-abi = { path = "../../../../../crates/cordis-abi", features = ["test-support"] }
+serde = { version = "=1.0.229", features = ["derive"] }
+tokio = { version = "=1.54.1", features = ["rt-multi-thread", "macros", "time", "sync"] }
+futures-util = "=0.3.34"

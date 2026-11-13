@@ -23,7 +23,8 @@ fn command(command: &mut Command) {
 
 /// Y-3、AU-17：当前源码自行构建工具和插件，产物目录显式位于项目 target。
 fn tools(root: &Path) -> PathBuf {
-    let target = root.join("target/pack-tools");
+    let _build = cordis_testkit::build::shared_build_lock(root).unwrap();
+    let target = cordis_testkit::build::shared_target_dir(root);
     let mut build = Command::new(env!("CARGO"));
     build.current_dir(root).args(["build", "--release"]);
     for package in [
@@ -45,7 +46,21 @@ fn tools(root: &Path) -> PathBuf {
             .arg("--target-dir")
             .arg(&target),
     );
-    target.join("release")
+    cordis_testkit::build::snapshot_artifacts(
+        root,
+        "window-tools",
+        "release",
+        &[
+            "cordis",
+            "cordis-dev",
+            "cordis-host",
+            "cordis-window",
+            "libcordis_http.dylib",
+            "libwindow_probe.dylib",
+            "libkv_mem.dylib",
+        ],
+    )
+    .unwrap()
 }
 
 /// ADR-0036：正式 pack 接收真实运行产物，应用状态明确存放在本次场景目录。
@@ -78,15 +93,19 @@ fn deployment(root: &Path, binaries: &Path) -> (PathBuf, PathBuf, PathBuf) {
         ),
     )
     .unwrap();
+    let build_lock = cordis_testkit::build::shared_build_lock(root).unwrap();
     command(
         Command::new(binaries.join("cordis"))
             .arg("pack")
             .arg("--project")
             .arg(&project)
             .args(["--target", "aarch64-apple-darwin", "--app"])
+            .arg("--target-dir")
+            .arg(cordis_testkit::build::shared_target_dir(root))
             .arg("--runtime-dir")
             .arg(binaries),
     );
+    drop(build_lock);
     let app = project.join("dist/window-recovery.app");
     (project, state, app)
 }

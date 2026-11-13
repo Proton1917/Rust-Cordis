@@ -14,16 +14,16 @@ pub use model::{
     AsyncEvent, BoxFuture, Component, Dependency, EmptyConfig, Event, Frozen, Inject, Listens,
     Provides, StateBlob, StateSchema, SyncEvent,
 };
-pub use service::{Interface, Scoped, Service};
+pub use service::{BorrowedService, Interface, Scoped, Service};
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const BUILD_INFO: &str = concat!(env!("CORDIS_RUSTC"), " ", env!("CORDIS_TARGET"));
 
 pub mod prelude {
     pub use crate::{
-        AsyncEvent, BoxFuture, CborValue, Component, Context, ContextOptions, Effect, EffectScope,
-        EmptyConfig, Error, Event, Frozen, Inject, Interception, Interface, Isolation, Listens,
-        Provides, Result, Scoped, Service, StateBlob, StateSchema, SyncEvent,
+        AsyncEvent, BorrowedService, BoxFuture, CborValue, Component, Context, ContextOptions,
+        Effect, EffectScope, EmptyConfig, Error, Event, Frozen, Inject, Interception, Interface,
+        Isolation, Listens, Provides, Result, Scoped, Service, StateBlob, StateSchema, SyncEvent,
     };
     pub use std::sync::Arc;
 }

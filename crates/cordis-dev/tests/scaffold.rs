@@ -36,7 +36,8 @@ fn binaries(root: &Path) -> (PathBuf, PathBuf) {
     ) {
         return (core.into(), host.into());
     }
-    let build = root.join("target/dev-tools");
+    let _build = cordis_testkit::build::shared_build_lock(root).unwrap();
+    let build = cordis_testkit::build::shared_target_dir(root);
     run(Command::new("cargo")
         .current_dir(root)
         .args([
@@ -48,7 +49,14 @@ fn binaries(root: &Path) -> (PathBuf, PathBuf) {
             "--target-dir",
         ])
         .arg(&build));
-    (build.join("debug/cordis"), build.join("debug/cordis-host"))
+    let copied = cordis_testkit::build::snapshot_artifacts(
+        root,
+        "scaffold-tools",
+        "debug",
+        &["cordis", "cordis-host"],
+    )
+    .unwrap();
+    (copied.join("cordis"), copied.join("cordis-host"))
 }
 
 /// 项目须在 30 秒内报告三个实例 active；失败保留项目、状态和日志供定位。
@@ -151,5 +159,6 @@ fn forwarded_scaffold_builds_and_runs_native_plugins() {
         thread::sleep(Duration::from_millis(20));
     };
     assert!(status.success(), "核心有序退出失败：{}", project.display());
+    fs::remove_dir_all(project.join("target")).unwrap();
     eprintln!("脚手架运行证据：{}", project.display());
 }

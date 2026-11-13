@@ -76,11 +76,16 @@ fn library(directory: &Path, name: &str) -> PathBuf {
 }
 
 fn host_binary(workspace: &Path) -> PathBuf {
-    workspace.join("target/watch-tools/debug/cordis-host")
+    workspace
+        .join("target/watch-tools")
+        .join(std::process::id().to_string())
+        .join("cordis-host")
 }
 
 fn prepare(workspace: &Path) -> (PathBuf, PathBuf) {
-    let fixtures = workspace.join("target/host-native");
+    let fixtures = workspace
+        .join("target/host-native")
+        .join(std::process::id().to_string());
     compile_host_fixtures(workspace, &fixtures);
     compile_watch(workspace, &fixtures);
     let project = create_project(workspace, &fixtures, "window");
@@ -88,49 +93,79 @@ fn prepare(workspace: &Path) -> (PathBuf, PathBuf) {
 }
 
 fn compile_host_fixtures(workspace: &Path, fixtures: &Path) {
+    let shared = cordis_testkit::build::shared_target_dir(workspace);
+    let build_lock = cordis_testkit::build::shared_build_lock(workspace).unwrap();
     let mut compile = Command::new(env!("CARGO"));
     compile
         .args(["build", "-p", "cordis-host", "--target-dir"])
-        .arg(workspace.join("target/watch-tools"))
+        .arg(&shared)
         .current_dir(workspace);
     build(compile);
+    fs::create_dir_all(host_binary(workspace).parent().unwrap()).unwrap();
+    fs::copy(shared.join("debug/cordis-host"), host_binary(workspace)).unwrap();
+    drop(build_lock);
     let mut fixtures_command = Command::new(env!("CARGO"));
     fixtures_command
         .args(["run", "--manifest-path"])
         .arg(workspace.join("crates/cordis-host/tests/driver/Cargo.toml"))
         .arg("--target-dir")
-        .arg(fixtures.join("driver"))
+        .arg(&shared)
         .args(["--", "--build-only", "--artifacts-dir"])
         .arg(fixtures)
         .arg("--host")
         .arg(host_binary(workspace));
     build(fixtures_command);
+    let _build = cordis_testkit::build::shared_build_lock(workspace).unwrap();
     let mut current_consumer = Command::new(env!("CARGO"));
     current_consumer
         .args(["build", "--manifest-path"])
         .arg(workspace.join("crates/cordis-host/tests/fixtures/Cargo.toml"))
         .args(["-p", "loader-fixture-consumer", "--target-dir"])
-        .arg(fixtures.join("fixtures-current"));
+        .arg(&shared);
     build(current_consumer);
+    let copied = fixtures.join("fixtures-current/debug");
+    fs::create_dir_all(&copied).unwrap();
+    fs::copy(
+        library(&shared.join("debug"), "loader_fixture_consumer"),
+        library(&copied, "loader_fixture_consumer"),
+    )
+    .unwrap();
 }
 
 fn compile_watch(workspace: &Path, fixtures: &Path) {
+    let _build = cordis_testkit::build::shared_build_lock(workspace).unwrap();
+    let shared = cordis_testkit::build::shared_target_dir(workspace);
     let watch = workspace.join("plugins/watch");
-    let watch_target = workspace.join("target/watch-plugin");
+    let watch_target = workspace
+        .join("target/watch-plugin")
+        .join(std::process::id().to_string());
     let mut watcher = Command::new(env!("CARGO"));
     watcher
         .args(["build", "--manifest-path"])
         .arg(watch.join("Cargo.toml"))
         .arg("--target-dir")
-        .arg(&watch_target);
+        .arg(&shared);
     build(watcher);
+    fs::create_dir_all(watch_target.join("debug")).unwrap();
+    fs::copy(
+        library(&shared.join("debug"), "cordis_watch"),
+        library(&watch_target.join("debug"), "cordis_watch"),
+    )
+    .unwrap();
     let mut failed = Command::new(env!("CARGO"));
     failed
         .args(["build", "--manifest-path"])
         .arg(Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/watch-fails/Cargo.toml"))
         .arg("--target-dir")
-        .arg(fixtures.join("watch-fails"));
+        .arg(&shared);
     build(failed);
+    let copied = fixtures.join("watch-fails/debug");
+    fs::create_dir_all(&copied).unwrap();
+    fs::copy(
+        library(&shared.join("debug"), "watch_fails"),
+        library(&copied, "watch_fails"),
+    )
+    .unwrap();
 }
 
 fn create_project(workspace: &Path, fixtures: &Path, label: &str) -> PathBuf {
@@ -139,7 +174,9 @@ fn create_project(workspace: &Path, fixtures: &Path, label: &str) -> PathBuf {
         .join(format!("{label}-{}", std::process::id()));
     fs::create_dir_all(project.join("plugins")).unwrap();
     fs::create_dir_all(project.join("sources")).unwrap();
-    let watch_target = workspace.join("target/watch-plugin");
+    let watch_target = workspace
+        .join("target/watch-plugin")
+        .join(std::process::id().to_string());
     fs::copy(env!("CARGO_BIN_EXE_cordis"), project.join("cordis")).unwrap();
     fs::copy(host_binary(workspace), project.join("cordis-host")).unwrap();
     fs::copy(

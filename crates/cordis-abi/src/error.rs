@@ -66,13 +66,17 @@ impl fmt::Display for Error {
 impl std::error::Error for Error {}
 
 pub fn encode<T: Serialize + ?Sized>(value: &T) -> Result<Vec<u8>> {
-    let mut bytes = Vec::new();
-    ciborium::into_writer(value, &mut bytes).map_err(|e| Error::new(2, e.to_string()))?;
-    Ok(bytes)
+    crate::encoding::plain(|| {
+        let mut bytes = Vec::new();
+        ciborium::into_writer(value, &mut bytes).map_err(|e| Error::new(2, e.to_string()))?;
+        Ok(bytes)
+    })
 }
 
 pub fn decode<T: DeserializeOwned>(bytes: &[u8]) -> Result<T> {
-    ciborium::from_reader(bytes).map_err(|e| Error::new(2, e.to_string()))
+    crate::encoding::plain(|| {
+        ciborium::from_reader(bytes).map_err(|e| Error::new(2, e.to_string()))
+    })
 }
 
 fn dispose_payload(payload: Box<dyn std::any::Any + Send>) {

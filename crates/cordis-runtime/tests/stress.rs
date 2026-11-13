@@ -22,11 +22,15 @@ struct Artifacts {
 
 /// Y-3、AC-8：构建两个相同接口版本的真实提供方，使用方由 Rust 1.85 构建。
 fn artifacts(tools: &Tools) -> Artifacts {
-    let build = tools.root.join("target/stress-artifacts");
+    let _build = cordis_testkit::build::shared_build_lock(&tools.root).unwrap();
+    let build = tools
+        .root
+        .join("target/stress-artifacts")
+        .join(std::process::id().to_string());
     let fixtures = tools
         .root
         .join("crates/cordis-host/tests/fixtures/Cargo.toml");
-    let provider = build.join("provider");
+    let provider = cordis_testkit::build::shared_target_dir(&tools.root);
     let mut build_provider = Command::new("cargo");
     build_provider
         .args(["build", "--release", "--manifest-path"])
@@ -45,15 +49,13 @@ fn artifacts(tools: &Tools) -> Artifacts {
         &second,
     )
     .unwrap();
-    let consumer = build.join("consumer-185");
     command(
         Command::new("cargo")
             .args(["+1.85.0", "build", "--release", "--manifest-path"])
             .arg(&fixtures)
             .args(["-p", "loader-fixture-consumer", "--target-dir"])
-            .arg(&consumer),
+            .arg(&provider),
     );
-    let process = build.join("process");
     command(
         Command::new("cargo")
             .args(["build", "--release", "--manifest-path"])
@@ -63,13 +65,25 @@ fn artifacts(tools: &Tools) -> Artifacts {
                     .join("crates/cordis-runtime/fixtures/plugin/Cargo.toml"),
             )
             .arg("--target-dir")
-            .arg(&process),
+            .arg(&provider),
     );
+    let consumer_name = format!(
+        "{}loader_fixture_consumer{}",
+        std::env::consts::DLL_PREFIX,
+        std::env::consts::DLL_SUFFIX
+    );
+    let copied = cordis_testkit::build::snapshot_artifacts(
+        &tools.root,
+        "stress-fixtures",
+        "release",
+        &[&consumer_name, "cordis-runtime-fixture"],
+    )
+    .unwrap();
     Artifacts {
         provider: first,
         version2: second,
-        consumer: library(&consumer.join("release"), "loader_fixture_consumer"),
-        client: process.join("release/cordis-runtime-fixture"),
+        consumer: library(&copied, "loader_fixture_consumer"),
+        client: copied.join("cordis-runtime-fixture"),
     }
 }
 

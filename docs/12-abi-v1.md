@@ -170,6 +170,8 @@ Some 的内部编码值通常直接交出；内部值为 null 或 Tag 60001 时�
 
 `CborEncoder` 为输入和结果建立资源守卫。同步调用结束、异步入口交回 Future 后，调用方释放输入载荷及其导出编号；被调用侧在入口内完成全部参数 import，异步 Future 持有独立对象引用。输出 Buf 保持导出编号至 free，接收方在释放 Buf 前完成结果 import。序列化、参数解码或调用失败时，各侧的拥有包装释放已取得的引用；取消时 Future 释放其参数引用。输出缓冲的源侧 owner 负责最终资源表回收。
 
+ADR-0039 将该机制扩展到 record、list、tuple、option 等复合值。`CborEncoder::value` 与 `encode` 在同步 Serde 作用域中导出资源，`decode_in` 与 `from_value_in` 在接收环境中导入独立引用；`Service<I>`、`BorrowedService<'a, I>` 参与递归编解码。普通状态编解码使用纯数据作用域。异步事件在 ABI 入口构造回调 Future 时接管输入资源，监听器主体随后由 Future 执行。公开 ABI 布局与 HostV1 槽位保持 v1.0。
+
 ### 7.4 回调
 
 ```c

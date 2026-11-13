@@ -89,14 +89,16 @@ where
 {
     // SAFETY: DOC-12 §7，data具有Object公共前缀。
     let env = unsafe { object_environment(data) };
-    // SAFETY: DOC-12 §5、§7.4，先复制借用payload，Future持有回调实现。
+    // SAFETY: DOC-12 §5、§7.4，先准备拥有型输入及Future，Future持有回调实现。
     unsafe {
         boundary(env, out, err, || {
             let callback = object_arc::<AsyncCallback<F>>(data);
             let bytes = payload.as_slice().to_vec();
+            let pending = (callback.0)(ctx, scope, bytes);
             make_future(
                 async move {
-                    (callback.0)(ctx, scope, bytes).await?;
+                    let _callback = callback;
+                    pending.await?;
                     Ok(AbiUnit::default())
                 },
                 env,

@@ -14,7 +14,8 @@ fn artifacts() -> Artifacts {
         .join("../..")
         .canonicalize()
         .unwrap();
-    let tools = root.join("target/verification-tests/tools");
+    let _build = cordis_testkit::build::shared_build_lock(&root).unwrap();
+    let tools = cordis_testkit::build::shared_target_dir(&root);
     checked(
         Command::new(env!("CARGO"))
             .current_dir(&root)
@@ -36,17 +37,38 @@ fn artifacts() -> Artifacts {
             ])
             .arg(&tools),
     );
-    let broken = root.join("target/verification-tests/broken");
     checked(
         Command::new(env!("CARGO"))
             .args(["build", "--manifest-path"])
             .arg(root.join("crates/cordis-dev/tests/fixtures/kv-broken/Cargo.toml"))
             .arg("--target-dir")
-            .arg(&broken),
+            .arg(&tools),
     );
+    let names = ["kv_mem", "kv_file", "kv_contract", "kv_broken"].map(|name| {
+        format!(
+            "{}{name}{}",
+            std::env::consts::DLL_PREFIX,
+            std::env::consts::DLL_SUFFIX
+        )
+    });
+    let copied = cordis_testkit::build::snapshot_artifacts(
+        &root,
+        "runtime-gate",
+        "debug",
+        &[
+            "cordis",
+            "cordis-host",
+            "cordis-dev",
+            &names[0],
+            &names[1],
+            &names[2],
+            &names[3],
+        ],
+    )
+    .unwrap();
     Artifacts {
-        tools: tools.join("debug"),
-        broken: library(&broken.join("debug"), "kv_broken"),
+        broken: library(&copied, "kv_broken"),
+        tools: copied,
     }
 }
 

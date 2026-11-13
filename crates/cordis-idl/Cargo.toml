@@ -1,0 +1,18 @@
+[package]
+name = "cordis-idl"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+license.workspace = true
+description = "WIT interfaces and language bindings for Cordis development tools."
+
+[dependencies]
+wit-parser = { version = "=0.263.0", default-features = false, features = ["std"] }
+heck = "=0.5.0"
+pulldown-cmark = "=0.13.6"
+toml = "=1.2.1"
+serde.workspace = true
+serde_json = "=1.0.154"
+syn = { version = "=3.0.10", features = ["full"] }
+prettyplease = "=0.3.0"

@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 //! DOC-15 §3.1、§12.1：独立开发命令生成项目与插件，运行管理交由 cordis。
 
+mod idl;
 mod pack;
 mod receipts;
 mod scaffold;
@@ -29,6 +30,9 @@ enum Action {
     Verify(verify::Options),
     /// 构建并装配包含核心、宿主与插件的发布包。
     Pack(pack::Options),
+    /// 从 WIT 定义生成各语言接口、数据类型与调用方代理。
+    #[command(subcommand)]
+    Idl(idl::Action),
     /// 显示开发工具版本与支持的核心版本范围。
     Version,
 }
@@ -75,6 +79,7 @@ async fn run(cli: Cli) -> Result<()> {
         }
         Action::Verify(options) => verify::run(options).await?,
         Action::Pack(options) => pack::run(options).await?,
+        Action::Idl(action) => idl::run(action)?,
         Action::Version => println!(
             "cordis-dev {}\n支持核心 >=0.1.0,<0.2.0",
             env!("CARGO_PKG_VERSION")

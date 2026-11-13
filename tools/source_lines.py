@@ -6,7 +6,11 @@ import subprocess
 root = pathlib.Path(__file__).resolve().parents[1]
 scratch = root / "target" / "tmp"
 scratch.mkdir(parents=True, exist_ok=True)
-sources = sorted(path.relative_to(root) for path in root.glob("crates/*/src"))
+sources = sorted(
+    path.relative_to(root)
+    for category in ("crates", "plugins")
+    for path in root.glob(f"{category}/*/src")
+)
 
 # DOC-13 §1.1：使用 cloc 的 Rust 注释规则，逐文件计数并关闭内容去重。
 result = subprocess.run(
@@ -28,7 +32,7 @@ records = json.loads(result.stdout)
 totals = {}
 for filename, counts in records.items():
     parts = pathlib.Path(filename).parts
-    if len(parts) < 3 or parts[0] != "crates":
+    if len(parts) < 3 or parts[0] not in ("crates", "plugins"):
         continue
     total = totals.setdefault(parts[1], [0, 0])
     total[0] += counts["code"]
@@ -39,3 +43,10 @@ print("| crate | 代码行 / 总行 |")
 print("|---|---:|")
 for name, (code, total) in sorted(totals.items()):
     print(f"| {name} | {code} / {total} |")
+core_names = (
+    "cordis", "cordis-supervisor", "cordis-runtime",
+    "cordis-up", "cordis-process", "cordis-types",
+)
+core_code = sum(totals[name][0] for name in core_names)
+core_total = sum(totals[name][1] for name in core_names)
+print(f"| 六个核心 crate 合计 | {core_code} / {core_total} |")

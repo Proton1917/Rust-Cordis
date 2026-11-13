@@ -58,6 +58,7 @@ fn eight_independent_libraries_and_one_hundred_instances() {
         &project.join("result.json"),
         &json!({"scenario":"AC-1", "libraries":names, "instances":100, "startup_ms":startup_ms,"RM-2":rebuilt}),
     );
+    fs::remove_dir_all(project.join("target")).unwrap();
     eprintln!(
         "AC-1 / RM-2 证据：{}，启动 {startup_ms} ms",
         project.display()
@@ -152,6 +153,7 @@ fn readme_first_plugin_builds_from_pinned_git_sdk() {
         &project.join("result.json"),
         &json!({"scenario":"README first plugin", "sdk_revision":revision, "instances":["app","watch","hello"]}),
     );
+    fs::remove_dir_all(project.join("target")).unwrap();
     eprintln!("README 首个插件证据：{}", project.display());
 }
 

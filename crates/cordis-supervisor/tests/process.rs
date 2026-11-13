@@ -59,7 +59,9 @@ fn plugin() -> &'static Path {
     static PLUGIN: OnceLock<PathBuf> = OnceLock::new();
     PLUGIN.get_or_init(|| {
         let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-        let destination = root.join("../../target/process-fixture");
+        let workspace = root.parent().and_then(Path::parent).unwrap();
+        let _build = cordis_testkit::build::shared_build_lock(workspace).unwrap();
+        let destination = cordis_testkit::build::shared_target_dir(workspace);
         let output = std::process::Command::new(env!("CARGO"))
             .args(["build", "--manifest-path"])
             .arg(root.join("fixtures/process-plugin/Cargo.toml"))
@@ -72,7 +74,14 @@ fn plugin() -> &'static Path {
             "{}",
             String::from_utf8_lossy(&output.stderr)
         );
-        destination.join("debug/cordis-process-fixture")
+        cordis_testkit::build::snapshot_artifacts(
+            workspace,
+            "process-fixture",
+            "debug",
+            &["cordis-process-fixture"],
+        )
+        .unwrap()
+        .join("cordis-process-fixture")
     })
 }
 

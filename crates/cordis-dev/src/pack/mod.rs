@@ -24,6 +24,9 @@ pub struct Options {
     out: PathBuf,
     #[arg(long)]
     target: String,
+    /// Cargo 编译产物目录，相对路径以项目目录为基准。
+    #[arg(long, default_value = "target")]
+    target_dir: PathBuf,
     #[arg(long)]
     app: bool,
     #[arg(long)]
@@ -49,7 +52,8 @@ struct Plan {
 /// AU-12：输出目录由本次命令创建；失败保留装配目录与具体错误。
 pub async fn run(options: Options) -> Result<()> {
     let mut plan = plan(&options).await?;
-    let artifacts = artifacts::build(&plan.project, &options.target).await?;
+    let target_dir = absolute(&plan.project, &options.target_dir);
+    let artifacts = artifacts::build(&plan.project, &options.target, &target_dir).await?;
     let out = absolute(&plan.project, &options.out);
     fs::create_dir_all(&out)?;
     let staging = plan.project.join("target/pack");

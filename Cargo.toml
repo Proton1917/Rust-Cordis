@@ -11,6 +11,7 @@ members = [
     "crates/cordis-process",
     "crates/cordis-host",
     "crates/cordis-dev",
+    "crates/cordis-idl",
     "crates/cordis-runtime",
     "crates/cordis-contract",
     "plugins/kv-api",
@@ -59,6 +60,7 @@ cordis-types = { path = "crates/cordis-types" }
 cordis-process = { path = "crates/cordis-process" }
 cordis-supervisor = { path = "crates/cordis-supervisor" }
 cordis-contract = { path = "crates/cordis-contract" }
+cordis-idl = { path = "crates/cordis-idl" }
 kv-api = { path = "plugins/kv-api" }
 kv-mem = { path = "plugins/kv-mem" }
 counter = { path = "plugins/counter" }

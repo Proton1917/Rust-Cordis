@@ -6,11 +6,11 @@
 
 | 项 | 值 |
 |---|---|
-| 最近完成的实现与检查 | `M16`；发布包、HTTP、窗口与运行目录已接入正式工作区，阶段检查通过 |
-| 当前里程碑 | M17 接口描述语言；Codex skill 链接已按授权安装 |
-| 下一步 | M17 接口描述语言：接入 WIT 与宏职责拆分候选，按正式差异执行对应验收 |
-| 遗留验收 | AU-17 的截图与 Cmd-Q 命令分别返回屏幕录制、辅助功能权限请求；用户已许可记录缺项并继续交付 |
-| 最后更新 | 2026-11-12（America/Los_Angeles），M16 阶段检查、授权界面命令结果与测量记录 |
+| 最近完成的实现与检查 | `M17`；WIT 三语言绑定、复合资源传递与共享编译目录已通过阶段检查 |
+| 当前里程碑 | M17 提交；随后接入 M18 Python SDK |
+| 下一步 | M18：按 ADR-0040 候选接入 cbor2 与 Python SDK、kv-py/counter-py、脚手架、真实迁移与 AU-18 验收；候选位于 target/python-m18 |
+| 窗口界面验收 | AU-17 通过；用户在 iTerm2 执行，窗口恢复 802 ms，截图、Cmd-Q、检查点与进程退出均通过 |
+| 最后更新 | 2026-11-12（America/Los_Angeles），M17 阶段检查与 AU-17 用户终端验收 |
 
 ## 环境
 
@@ -433,9 +433,10 @@ cargo test --workspace -- \
 - Y-6–Y-7：本阶段 Miri 的 13 条 ABI 边界用例通过，3.41 秒；布局比较通过，0.94 秒。原生布局用例在 workspace 执行中通过。Miri 日志为 target/m16-miri.log，ABI 保持 v1.0。
 - Y-8：cloc 2.10 按各成员 src 中的 Rust 文件统计，参数为 `--skip-uniqueness --sdir=target/tmp --include-lang=Rust --by-file --json`，原始结果 target/m16-source-lines.json。各 crate 均满足 DOC-13 上限；下表列代码行 / 总行。六个核心 crate 为 cordis、cordis-up、cordis-supervisor、cordis-runtime、cordis-types、cordis-process，合计 16972 / 18991。
 - Y-9：DOC-13 的 crate、依赖、包外目录与接口，DOC-15 的 M16/M20 职责、窗口和打包规则，以及 README 发布说明已同步。解释页 M16/M17 进度区及独立 HTML 已更新；实际查看 1440 桌面与 390 移动画面，截图为 target/explainer-m16-desktop.png、target/explainer-m16-mobile.png；移动表格可横向阅读，控制台 0 错误，页面与本次 HTTP 服务已退出。
-- Y-10：提交主题 `M16: 实现发布打包与独立窗口进程`，推送目标 origin/main；AU-17 的系统权限缺项按用户许可保留。
+- Y-10：提交 `3710989`，主题 `M16: 实现发布打包与独立窗口进程`，已推送 origin/main。
 - AU-17 授权界面验收：按用户授权运行 target/window-m16/inspect_window.swift，对本次窗口 PID 读取系统应用信息、截图和发送 Cmd-Q。窗口 PID 64939→65170，982 ms 恢复，核心 PID 64904 保持，HTTP/KV context 保持 5/7。[恢复前应用信息](measurements/m16-window-app-before.json)和[恢复后应用信息](measurements/m16-window-app-after.json)的系统列表各记录一个 Regular 进程。截图命令返回 1，原因是屏幕录制权限等待允许；Cmd-Q 命令返回 1，原因是辅助功能权限等待允许，按键发送停在权限请求。真实画面、Dock 外观及快捷键退出结果保留缺项。随后以 SIGTERM 有序退出，返回 0，5 个进程均退出，应用签名有效。[授权执行结果](measurements/m16-window-authorized.json)保留本次实际观测，原始信息、错误输出和结果位于 target/window-m16/authorized-{before,after,result}.json、authorized-capture.stderr.log 与 authorized-quit.stderr.log。
-- 阶段状态：M16 实现与阶段检查完成；用户已明确许可 GUI 命令失败时记录缺项并继续交付。M15 的 Codex 用户 skill 链接已按授权安装，路径与创建结果见上一节。M16 的提交与推送在本阶段交付时记录。
+- AU-17 用户终端验收：2026-11-12 18:17（America/Los_Angeles），用户在 iTerm2 授予系统权限后执行 `target/window-m16/au17-run.sh`，结果 passed。四实例 Active，窗口 SIGKILL 后 802 ms 恢复，HTTP/store context 保持 5/7，window 9→14、probe 11→16；恢复前后各一个 Regular 应用。截图与 Cmd-Q 退出码均为 0，核心有序退出 0，window/store 检查点保存，残留与强制终止进程数均为 0，签名有效。完整结果为 [AU-17 用户终端验收](measurements/m16-au17-user.json)；原始目录 `target/window-m16/au17-user-runs/20261113T021701.346712Z-97183`。已查看该目录的 `window-restored.png`，窗口标题与“运行中”页面清晰。辅助程序自测入口共用 Acceptance 的 finally 清理，支持 `--inspect-only`。
+- 阶段状态：M16 实现、阶段检查与 AU-17 界面验收通过。M15 的 Codex 用户 skill 链接已按授权安装，路径与创建结果见上一节。
 - 后续：继续 M17 接口描述语言。WIT 候选位于 target/idl-m17，宏拆分候选位于 target/macros-m17；其行为在正式接入时按实际差异验证。正式构建缓存继续供后续里程碑使用。
 
 Y-3 的完整执行与按中断位置继续的命令为：
@@ -490,6 +491,61 @@ cargo test --workspace --doc
 | cordis-runtime | 管理事务、契约会话、检查点、服务安装和 Bundle 目录解析；5050 高于目标 4500，上限 5500 |
 | cordis-dev | 脚手架、真实验证、归档、运行时命令改写及签名后重验；1902 高于目标 1500，上限 2500 |
 
+### M17 WIT 接口与共享编译目录
+
+- 正式实现：`cordis-idl` 共享 WIT 解析模型，生成 Rust、Python、TypeScript 的提供方接口、数据类型与调用方代理；公开命令为 `cordis-dev idl gen`。`plugins/kv-api/kv.wit` 成为接口、Snapshot 与 Changed 的来源，生成 Rust 继续保持 kv@1 的方法顺序和状态表示。宏的 interface/plugin 入口已按职责拆分。ADR-0039 规定复合资源、借用资源、嵌套 option、future/stream 和脚本传输约定，ABI v1.0 布局与宿主槽位保持原值。
+- Y-1：`cargo fmt --all --check` 通过，日志 `target/m17-fmt-final.log`。Y-2：工作区 clippy/all-targets 通过，10.93 秒，日志 `target/m17-clippy.log`；IDL 安装环境修正后的对应目标通过，3.42 秒，日志 `target/m17-idl-clippy.log`。`cargo build --workspace` 通过，18.73 秒，日志 `target/m17-build.log`。
+- Y-3：隔离源码 `target/m17-review/source`，编译根 `CARGO_TARGET_DIR=$PWD/target/main-build`。完整范围为 302 条运行用例、2 条文档用例，均通过。首次工作区命令在 IDL 的 pip 安装步骤因本机 virtualenv 要求停止；该条 `pip --target` 命令局部设置 PIP_REQUIRE_VIRTUALENV=false 后，从受影响及后续 crate 接续，保留已成功的内核、ABI 等结果。日志为 `target/m17-workspace-tests.log`、`target/m17-workspace-remaining.log`、`target/m17-core-doctests.log`。最终 crate 与插件源码逐字节比较一致，独立 fixture 的 Cargo.lock 同步为实际测试解析的依赖。
+- WIT 验收：公开 CLI 现场生成六份源码后执行真实 SDK、Python/TypeScript Client 与提供方的 CBOR 调用，并由 Rust 回读脚本输出，23.07 秒通过。每个 DOC-15 §7 映射行均有行为断言，涵盖接口版本、同步/异步、record、variant/enum、option/result、resource；还覆盖借用资源、异步取消、引用回收、future/stream 与嵌套 option 的独立编码期望。原始证据为 `target/m17-review/source/target/idl-acceptance/2357-1794536751886760000/`。SDK 两项新增资源编码/事件用例与既有回环测试均通过；生成 kv-api 同现有 KV 实现与真实 kv-contract 场景共同验收。
+- 共享编译：cordis-testkit 的 build 模块统一编译根与 shared 路径，跨进程文件锁覆盖构建和实际产物复制。夹具、宿主驱动、迁移、发布、watch、测量与示例构建均复用 shared；`pack --target-dir` 允许指定复用目录。生成的用户项目继续使用自己的 target，并在测试通过后清理该编译缓存。隔离验收的编译根最终子目录为 debug、shared；Cargo 临时创建的空 tmp 目录已移除。证据放在源码副本的 target，与编译根分开。本阶段后续三个活动编译根为 `target/main-build`、`target/agent-shared`、`target/agent-cleanup`；历史 `target/debug` 保留，后续主会话使用 main-build。
+- 共享路径实际验收：发布 5 条通过，68.18 秒；脚手架真实构建/启动通过，25.96 秒；原生宿主 14 个独立场景通过；配置与管理、迁移、watch、窗口、50 次替换压力及 AU-11 均执行。测试均在外置 CARGO_TARGET_DIR 下自行构建所需产物。新增的 cordis-testkit 依赖位于产品 crate 的开发依赖及独立测试驱动中。
+- Y-4：177 条矩阵通过，8 条移植、166 条改写、3 条不适用，日志 `target/m17-conformance.log`。Y-5：unsafe 源码审计在工作区执行中通过，0.69 秒；核心产品依赖查询符合 Q0，完整树为 `target/m17-core-dependencies.txt`。
+- Y-6：`MIRI_SYSROOT=$PWD/target/miri-sysroot TMPDIR=$PWD/target/tmp CARGO_TARGET_DIR=$PWD/target/main-build/shared cargo +nightly miri test -p cordis-abi` 通过，13 条边界行为 3.64 秒，布局 0.94 秒，日志 `target/m17-miri.log`。nightly 沿用环境表。Y-7：原生布局用例也在隔离工作区测试中通过。
+- Y-8：下表来自 `conda run -n base python tools/source_lines.py`，使用 cloc 2.10、`--skip-uniqueness` 与 src 内 Rust 代码行口径，日志 `target/m17-source-lines.txt`。IDL 2324/2466，低于 ADR-0039 的 2500 目标；宏 1434/1566，复合资源适配使其高于 1200 目标，低于 2000 上限；其余超过目标的原因沿用 M16，全部保持各自上限。
+- Y-9：DOC-12、DOC-13、DOC-15、README 与解释页已同步，AU-17 用户终端通过结果归档至 `docs/measurements/m16-au17-user.json`。实际查看解释页 1440 桌面和 390 移动画面，截图 `target/explainer-m17-desktop.png`、`target/explainer-m17-mobile.png`，进度文字可读，表格沿既有横向滚动布局，控制台 0 错误；页面及本次 HTTP 服务已退出。
+- Y-10：提交主题 `M17: 实现 WIT 三语言绑定与共享编译目录`，推送目标 origin/main。
+- 偏离与决定：ADR-0039 将解析与生成放入 cordis-idl 开发库，采用 scoped-tls 为 Serde 复合资源传递同步调用环境；生成 Rust 使用独立 syn 3/prettyplease，原生 SDK 宏保持 syn 2 和 Rust 1.85。依赖均位于相应开发工具或原生插件侧。
+
+```bash
+export CARGO_TARGET_DIR="$PWD/target/main-build"
+export TMPDIR="$PWD/target/tmp"
+cargo test --manifest-path target/m17-review/source/Cargo.toml --workspace
+# IDL 安装命令修正后接续其余 crate。
+cargo test --manifest-path target/m17-review/source/Cargo.toml --workspace \
+  --exclude cordis --exclude cordis-abi --exclude cordis-contract \
+  --exclude console-log --exclude counter
+cargo test --manifest-path target/m17-review/source/Cargo.toml -p cordis --doc
+```
+
+| crate | 代码行 / 总行 |
+|---|---:|
+| cordis | 4230 / 5112 |
+| cordis-testkit | 208 / 240 |
+| cordis-abi | 2407 / 2846 |
+| cordis-sdk | 786 / 910 |
+| cordis-sdk-macros | 1434 / 1566 |
+| cordis-idl | 2324 / 2466 |
+| cordis-up | 1613 / 1752 |
+| cordis-supervisor | 5500 / 5918 |
+| cordis-types | 205 / 239 |
+| cordis-process | 374 / 410 |
+| cordis-host | 2491 / 2766 |
+| cordis-dev | 1934 / 2112 |
+| cordis-runtime | 5050 / 5560 |
+| cordis-contract | 31 / 47 |
+| kv-api | 23 / 37 |
+| kv-mem | 73 / 84 |
+| counter | 81 / 89 |
+| cordis-watch | 579 / 623 |
+| console-log | 465 / 515 |
+| kv-file | 130 / 143 |
+| kv-contract | 57 / 67 |
+| web-api | 12 / 18 |
+| cordis-http | 358 / 399 |
+| window-api | 11 / 17 |
+| cordis-window | 943 / 1020 |
+| 六个核心 crate 合计 | 16972 / 18991 |
+
 ## 第二阶段候选与恢复记录
 
 用户设置的 10 分钟计时于 2026-11-12 02:40:22 UTC 到期后暂停，随后按用户指令恢复。设计提交为 `478b3a4`，包含用户指定的序号和完整字节比对方案。M7 已完成验收，后续候选继续按下表接入。
@@ -529,6 +585,8 @@ M8 候选保留独立 `[workspace]` 以便隔离编译，正式接入时改为�
 ## 决策与发现
 
 实现过程中得到的、文档里没有的结论记在这里，每条写明日期、结论、依据（源码位置或用例编号）。需要改变 `DOC-01` 条款或 `DOC-02` 规则的结论另写 ADR，这里只留一行指向它。
+
+- 2026-11-12（UTC−08:00）：设计方按用户授权清理旧候选与复核的 Cargo 缓存，`du -sh target` 从 68G 降至 27G；执行脚本与演练记录为 `target/claude-edits/clean_caches.py`、`clean-dryrun.txt`。后续构建按 AGENTS 规则 11 共用各编译根的 shared 目录，阶段结束保留编译缓存。
 
 - 2026-11-11（UTC−08:00）：第二阶段按用户决定采用单调序号路径与完整字节比较；验证门保存已验证库副本，印记记录副本路径、套件及断言结果。DOC-11、DOC-13、DOC-14、ADR-0012 已同步。
 - 2026-11-11（UTC−08:00）：按 DOC-10 §8 统一导出冻结语义：SW-1–SW-4 保持实例与绑定，SW-5 可逆冻结，导出失败解冻。kv-mem/kv-file 使用共同逻辑插件名 kv、组件名 kv-store，使 AC-2 满足同名替换输入。K-5 已在 940650c 实现。

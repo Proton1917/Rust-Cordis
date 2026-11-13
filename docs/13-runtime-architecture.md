@@ -21,6 +21,7 @@
 | `crates/cordis-process` | 共享的安全进程执行、组回收与受限探测；开发工具与监管器复用 |
 | `crates/cordis-runtime` | 核心可执行文件 cordis：运行、状态、检查点、管理接口与服务安装 |
 | `crates/cordis-dev` | 独立开发工具：脚手架、验证、打包与代码生成，通过 cordis-host 读取原生描述符 |
+| `crates/cordis-idl` | 开发工具使用的 WIT 解析、共享类型模型与 Rust/Python/TypeScript 绑定生成 |
 | `crates/cordis-host` | 原生插件宿主程序：分组装载、ABI 适配、租约、组内替换、UP/1 桥 |
 | `crates/cordis-abi` | 原生插件与宿主之间的 ABI 类型、安全包装、布局测试 |
 | `crates/cordis-sdk` | 原生插件作者接口：Component、Context、Service、事件、状态 |
@@ -45,7 +46,7 @@
 | cordis-supervisor | cordis、cordis-up、cordis-process、cordis-types |
 | cordis-process | cordis-up |
 | cordis-host | cordis-up、cordis-abi、cordis-types |
-| cordis-dev | cordis-up、cordis-process、cordis-types；通过子进程使用 cordis、cordis-host |
+| cordis-dev | cordis-up、cordis-process、cordis-types、cordis-idl；通过子进程使用 cordis、cordis-host |
 | cordis-http | cordis-sdk、web-api |
 | cordis-window | cordis-up |
 | web-api、window-api | cordis-sdk |
@@ -71,6 +72,7 @@
 | `cordis-host` | 2000 | 3500 |
 | `cordis-runtime` | 4500 | 5500（ADR-0034） |
 | `cordis-dev` | 1500 | 2500 |
+| `cordis-idl` | 2500 | 4000（ADR-0039） |
 | `cordis-contract` | 500 | 1000 |
 
 目标与上限统计 `src/` 中的 Rust 代码行，排除空行、普通注释与文档注释；同一行同时有代码与注释时计为代码行。`docs/PROGRESS.md` 同时报告“代码行 / 总行”并记录统计工具与算法。
@@ -103,7 +105,7 @@
 - 提供插件侧的安全包装：把 Rust 闭包、`Future`、trait 对象包装成 `AbiObject`/`AbiFuture` 的泛型蹦床函数；panic 捕获；`AbiBuf` 的分配与释放。
 - 提供宿主侧的安全包装：把收到的 `AbiObject`/`AbiFuture` 包装成持有租约的 Rust 值，`Drop` 时调用对方的 `drop` 并归还租约。
 - 布局测试：对每个类型输出大小、对齐、字段偏移到 `docs/abi/v1-layout.txt`，测试比较生成结果与文件。
-- 运行时依赖为 `serde`、`ciborium`；源码审计使用开发依赖 `syn`、`proc-macro2`（`ADR-0015`）。
+- 运行时依赖为 `serde`、`ciborium` 与调用期资源作用域 `scoped-tls`（ADR-0039）；源码审计使用开发依赖 `syn`、`proc-macro2`（`ADR-0015`）。
 
 ### 3.2 `cordis-sdk`
 
@@ -159,7 +161,7 @@
 | 宿主库缓存与描述符探测副本 | `state_dir/.cordis/lib/` |
 | 验证副本 | `Contents/Resources/.cordis/verified/` 与 `state_dir/.cordis/verified/` |
 
-cordis-dev 提供 new、new-plugin、verify、pack，M17 接入 idl gen。原生描述符由 cordis-host --describe 读取；验证由独立 cordis run 部署执行；模板与 M15 skill 共用。`tooling` 统一开发工具的运行程序发现、受控子进程与描述符探测，`receipts` 保存真实契约结果和验证副本。打包模块从 Cargo 结构化输出取得目标产物，生成部署配置、运行时相对命令、归档或 Bundle，并按签名后的实际字节处理验证印记。开发工具使用协议数据和子进程，产品依赖与内核、ABI、SDK 分离。
+cordis-dev 提供 new、new-plugin、verify、pack 和 idl gen。原生描述符由 cordis-host --describe 读取；验证由独立 cordis run 部署执行；模板与 M15 skill 共用。`tooling` 统一开发工具的运行程序发现、受控子进程与描述符探测，`receipts` 保存真实契约结果和验证副本。打包模块从 Cargo 结构化输出取得目标产物，生成部署配置、运行时相对命令、归档或 Bundle，并按签名后的实际字节处理验证印记。`cordis-idl` 使用 wit-parser 解析 WIT，共用类型模型与传输约定生成三种语言的接口、数据类型和调用方代理；kv-api 的源码由 kv.wit 生成。开发工具使用协议数据和子进程，产品依赖与内核、ABI、SDK 分离。
 
 ### 3.6 `cordis-contract`
 
@@ -286,6 +288,8 @@ pub trait Kv: Send + Sync {
 | `chrono` | 终端日志时间格式（ADR-0032） | `plugins/console-log` |
 | `toml` | 解析 `cordis.toml` 与生成项目配置 | `cordis-runtime`、`cordis-dev` |
 | `syn`、`quote`、`proc-macro2` | 过程宏 | `cordis-sdk-macros` |
+| `wit-parser`、`heck`、`pulldown-cmark`、`syn`、`prettyplease` | WIT 解析、命名、文档属性与 Rust 源码生成（ADR-0039） | `cordis-idl`，由 `cordis-dev` 调用 |
+| `scoped-tls` | 同步 Serde 调用期资源环境（ADR-0039） | `cordis-abi` |
 | `parking_lot`、`futures-util`、`thiserror` | 与内核相同 | 各 crate |
 | `object` 0.41.0 | 读取发布产物的 ELF/Mach-O 机器类型（ADR-0036） | `cordis-dev` |
 | `tar` 0.4.46、`flate2` 1.1.11 | 生成 tar.gz 发布包（ADR-0036） | `cordis-dev` |

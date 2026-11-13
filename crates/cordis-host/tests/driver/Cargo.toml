@@ -11,5 +11,6 @@ publish = false
 cordis = { path = "../../../cordis" }
 cordis-up = { path = "../../../cordis-up" }
 cordis-supervisor = { path = "../../../cordis-supervisor" }
+cordis-testkit = { path = "../../../cordis-testkit" }
 tokio = { version = "=1.54.1", features = ["rt-multi-thread", "macros", "time", "sync"] }
 clap = { version = "=4.6.7", features = ["derive"] }

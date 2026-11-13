@@ -482,16 +482,15 @@ impl Backend for Loopback {
     fn emit_async(&self, ctx: u64, event: &str, payload: &[u8]) -> Result<RemoteFuture<AbiUnit>> {
         self.record(13);
         self.instance(ctx)?;
-        let listeners = self.listeners(event, 3)?;
-        let payload = payload.to_owned();
+        // ADR-0039：回调在调用边界取得资源引用，异步主体随后由 Future 推进。
+        let pending = self
+            .listeners(event, 3)?
+            .iter()
+            .map(|listener| listener.call_async(ctx, 0, payload))
+            .collect::<Result<Vec<_>>>()?;
         make_future(
             async move {
-                let results =
-                    futures_util::future::join_all(listeners.iter().map(|listener| async {
-                        listener.call_async(ctx, 0, &payload)?.await.map(|_| ())
-                    }))
-                    .await;
-                for result in results {
+                for result in futures_util::future::join_all(pending).await {
                     result?;
                 }
                 Ok(AbiUnit::default())

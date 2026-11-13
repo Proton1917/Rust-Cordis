@@ -1,0 +1,428 @@
+{
+  "scenario": "AU-17 iTerm2 native interface acceptance",
+  "status": "passed",
+  "started_at": "2026-11-13T02:17:01.346990+00:00",
+  "app": "/Users/gordongauerk/Projects/Rust-cordis/target/window-tests/recovery-51816/dist/window-recovery.app",
+  "run_directory": "/Users/gordongauerk/Projects/Rust-cordis/target/window-m16/au17-user-runs/20261113T021701.346712Z-97183",
+  "state_directory": "/Users/gordongauerk/Projects/Rust-cordis/target/window-m16/au17-user-runs/20261113T021701.346712Z-97183/state",
+  "helper": "/Users/gordongauerk/Projects/Rust-cordis/target/window-m16/inspect-window",
+  "permission_retry": "请在弹窗中允许后重新运行本脚本",
+  "phase": "截取恢复窗口并向该 PID 发送 Cmd-Q",
+  "conflicts": [],
+  "command": [
+    "/Users/gordongauerk/Projects/Rust-cordis/target/window-tests/recovery-51816/dist/window-recovery.app/Contents/MacOS/cordis",
+    "run",
+    "--config",
+    "/Users/gordongauerk/Projects/Rust-cordis/target/window-m16/au17-user-runs/20261113T021701.346712Z-97183/entry/Resources/cordis.toml"
+  ],
+  "core_pid": 97184,
+  "window-before": {
+    "command": [
+      "/Users/gordongauerk/Projects/Rust-cordis/target/window-m16/inspect-window",
+      "97191",
+      "inspect"
+    ],
+    "exit_code": 0,
+    "stderr": "",
+    "application": {
+      "action": "inspect",
+      "bundle": "org.cordis.window-recovery",
+      "name": "window-recovery",
+      "pid": 97191,
+      "policy": 0,
+      "regular_pids": [
+        97191
+      ],
+      "windows": [
+        {
+          "kCGWindowAlpha": 1,
+          "kCGWindowBounds": {
+            "Height": 714,
+            "Width": 962,
+            "X": 275,
+            "Y": 77
+          },
+          "kCGWindowIsOnscreen": true,
+          "kCGWindowLayer": 0,
+          "kCGWindowMemoryUsage": 2432,
+          "kCGWindowName": "Cordis 窗口验收",
+          "kCGWindowNumber": 36470,
+          "kCGWindowOwnerName": "window-recovery",
+          "kCGWindowOwnerPID": 97191,
+          "kCGWindowSharingState": 1,
+          "kCGWindowStoreType": 1
+        },
+        {
+          "kCGWindowAlpha": 0.032949745655059814,
+          "kCGWindowBounds": {
+            "Height": 444,
+            "Width": 628,
+            "X": 442,
+            "Y": 147
+          },
+          "kCGWindowIsOnscreen": true,
+          "kCGWindowLayer": 0,
+          "kCGWindowMemoryUsage": 2432,
+          "kCGWindowName": "Cordis 窗口调用",
+          "kCGWindowNumber": 36471,
+          "kCGWindowOwnerName": "window-recovery",
+          "kCGWindowOwnerPID": 97191,
+          "kCGWindowSharingState": 1,
+          "kCGWindowStoreType": 1
+        }
+      ]
+    }
+  },
+  "first_probe": {
+    "activation": 1,
+    "window": 6
+  },
+  "sigkill_count": 1,
+  "recovery_ms": 802,
+  "previous_window_pid": 97191,
+  "before_contexts": {
+    "http": 5,
+    "probe": 11,
+    "store": 7,
+    "window": 9
+  },
+  "after_contexts": {
+    "http": 5,
+    "probe": 16,
+    "store": 7,
+    "window": 14
+  },
+  "restored_probe": {
+    "activation": 2,
+    "window": 6
+  },
+  "window-after": {
+    "command": [
+      "/Users/gordongauerk/Projects/Rust-cordis/target/window-m16/inspect-window",
+      "97199",
+      "inspect"
+    ],
+    "exit_code": 0,
+    "stderr": "",
+    "application": {
+      "action": "inspect",
+      "bundle": "org.cordis.window-recovery",
+      "name": "window-recovery",
+      "pid": 97199,
+      "policy": 0,
+      "regular_pids": [
+        97199
+      ],
+      "windows": [
+        {
+          "kCGWindowAlpha": 1,
+          "kCGWindowBounds": {
+            "Height": 712,
+            "Width": 960,
+            "X": 276,
+            "Y": 78
+          },
+          "kCGWindowIsOnscreen": true,
+          "kCGWindowLayer": 0,
+          "kCGWindowMemoryUsage": 2432,
+          "kCGWindowName": "Cordis 窗口验收",
+          "kCGWindowNumber": 36474,
+          "kCGWindowOwnerName": "window-recovery",
+          "kCGWindowOwnerPID": 97199,
+          "kCGWindowSharingState": 1,
+          "kCGWindowStoreType": 1
+        },
+        {
+          "kCGWindowAlpha": 0.1212165355682373,
+          "kCGWindowBounds": {
+            "Height": 444,
+            "Width": 630,
+            "X": 441,
+            "Y": 147
+          },
+          "kCGWindowIsOnscreen": true,
+          "kCGWindowLayer": 0,
+          "kCGWindowMemoryUsage": 2432,
+          "kCGWindowName": "Cordis 窗口调用",
+          "kCGWindowNumber": 36475,
+          "kCGWindowOwnerName": "window-recovery",
+          "kCGWindowOwnerPID": 97199,
+          "kCGWindowSharingState": 1,
+          "kCGWindowStoreType": 1
+        }
+      ]
+    }
+  },
+  "restored_window_pid": 97199,
+  "window-activate": {
+    "command": [
+      "/Users/gordongauerk/Projects/Rust-cordis/target/window-m16/inspect-window",
+      "97199",
+      "activate"
+    ],
+    "exit_code": 0,
+    "stderr": "",
+    "application": {
+      "action": "activate",
+      "bundle": "org.cordis.window-recovery",
+      "name": "window-recovery",
+      "pid": 97199,
+      "policy": 0,
+      "regular_pids": [
+        97199
+      ],
+      "windows": [
+        {
+          "kCGWindowAlpha": 1,
+          "kCGWindowBounds": {
+            "Height": 714,
+            "Width": 962,
+            "X": 275,
+            "Y": 77
+          },
+          "kCGWindowIsOnscreen": true,
+          "kCGWindowLayer": 0,
+          "kCGWindowMemoryUsage": 2432,
+          "kCGWindowName": "Cordis 窗口验收",
+          "kCGWindowNumber": 36474,
+          "kCGWindowOwnerName": "window-recovery",
+          "kCGWindowOwnerPID": 97199,
+          "kCGWindowSharingState": 1,
+          "kCGWindowStoreType": 1
+        },
+        {
+          "kCGWindowAlpha": 0.01609933376312256,
+          "kCGWindowBounds": {
+            "Height": 444,
+            "Width": 628,
+            "X": 442,
+            "Y": 147
+          },
+          "kCGWindowIsOnscreen": true,
+          "kCGWindowLayer": 0,
+          "kCGWindowMemoryUsage": 2432,
+          "kCGWindowName": "Cordis 窗口调用",
+          "kCGWindowNumber": 36475,
+          "kCGWindowOwnerName": "window-recovery",
+          "kCGWindowOwnerPID": 97199,
+          "kCGWindowSharingState": 1,
+          "kCGWindowStoreType": 1
+        }
+      ]
+    }
+  },
+  "window-capture": {
+    "command": [
+      "/Users/gordongauerk/Projects/Rust-cordis/target/window-m16/inspect-window",
+      "97199",
+      "capture",
+      "/Users/gordongauerk/Projects/Rust-cordis/target/window-m16/au17-user-runs/20261113T021701.346712Z-97183/window-restored.png"
+    ],
+    "exit_code": 0,
+    "stderr": "",
+    "application": {
+      "action": "capture",
+      "bundle": "org.cordis.window-recovery",
+      "name": "window-recovery",
+      "pid": 97199,
+      "policy": 0,
+      "regular_pids": [
+        97199
+      ],
+      "windows": [
+        {
+          "kCGWindowAlpha": 1,
+          "kCGWindowBounds": {
+            "Height": 712,
+            "Width": 960,
+            "X": 276,
+            "Y": 78
+          },
+          "kCGWindowIsOnscreen": true,
+          "kCGWindowLayer": 0,
+          "kCGWindowMemoryUsage": 2432,
+          "kCGWindowName": "Cordis 窗口验收",
+          "kCGWindowNumber": 36474,
+          "kCGWindowOwnerName": "window-recovery",
+          "kCGWindowOwnerPID": 97199,
+          "kCGWindowSharingState": 1,
+          "kCGWindowStoreType": 1
+        }
+      ]
+    }
+  },
+  "screenshot": "/Users/gordongauerk/Projects/Rust-cordis/target/window-m16/au17-user-runs/20261113T021701.346712Z-97183/window-restored.png",
+  "window-quit": {
+    "command": [
+      "/Users/gordongauerk/Projects/Rust-cordis/target/window-m16/inspect-window",
+      "97199",
+      "quit"
+    ],
+    "exit_code": 0,
+    "stderr": "",
+    "application": {
+      "action": "quit",
+      "bundle": "org.cordis.window-recovery",
+      "name": "window-recovery",
+      "pid": 97199,
+      "policy": 0,
+      "regular_pids": [
+        97199
+      ],
+      "windows": [
+        {
+          "kCGWindowAlpha": 1,
+          "kCGWindowBounds": {
+            "Height": 712,
+            "Width": 960,
+            "X": 276,
+            "Y": 78
+          },
+          "kCGWindowIsOnscreen": true,
+          "kCGWindowLayer": 0,
+          "kCGWindowMemoryUsage": 2432,
+          "kCGWindowName": "Cordis 窗口验收",
+          "kCGWindowNumber": 36474,
+          "kCGWindowOwnerName": "window-recovery",
+          "kCGWindowOwnerPID": 97199,
+          "kCGWindowSharingState": 1,
+          "kCGWindowStoreType": 1
+        }
+      ]
+    }
+  },
+  "checkpoints": {
+    "window": {
+      "schema": "window.snapshot",
+      "version": 1,
+      "data": [
+        {
+          "url": "http://127.0.0.1:49859/#cordis_token=86c39b2f-8a4d-4c7c-b790-1a73d021edf5",
+          "title": "Cordis 窗口验收",
+          "width": 960,
+          "height": 680,
+          "entry": true
+        }
+      ]
+    },
+    "store": {
+      "schema": "kv.snapshot",
+      "version": 1,
+      "data": {
+        "entries": {}
+      }
+    }
+  },
+  "exit_code": 0,
+  "app_signature": "valid",
+  "cleanup": {
+    "core_exit_code": 0,
+    "owned_processes": [
+      {
+        "pid": 97184,
+        "created_at": 1794536221.375617,
+        "command": [
+          "/Users/gordongauerk/Projects/Rust-cordis/target/window-tests/recovery-51816/dist/window-recovery.app/Contents/MacOS/cordis",
+          "run",
+          "--config",
+          "/Users/gordongauerk/Projects/Rust-cordis/target/window-m16/au17-user-runs/20261113T021701.346712Z-97183/entry/Resources/cordis.toml"
+        ]
+      },
+      {
+        "pid": 97185,
+        "created_at": 1794536221.379555,
+        "command": [
+          "/Users/gordongauerk/Projects/Rust-cordis/target/window-tests/recovery-51816/dist/window-recovery.app/Contents/MacOS/cordis-host",
+          "--describe",
+          "/Users/gordongauerk/Projects/Rust-cordis/target/window-tests/recovery-51816/dist/window-recovery.app/Contents/Resources/plugins/plugin-1/libcordis_http.dylib",
+          "--cache-dir",
+          "/Users/gordongauerk/Projects/Rust-cordis/target/window-m16/au17-user-runs/20261113T021701.346712Z-97183/state/.cordis/lib/discovery"
+        ]
+      },
+      {
+        "pid": 97186,
+        "created_at": 1794536221.561974,
+        "command": [
+          "/Users/gordongauerk/Projects/Rust-cordis/target/window-tests/recovery-51816/dist/window-recovery.app/Contents/MacOS/cordis-host",
+          "--describe",
+          "/Users/gordongauerk/Projects/Rust-cordis/target/window-tests/recovery-51816/dist/window-recovery.app/Contents/Resources/plugins/plugin-2/libkv_mem.dylib",
+          "--cache-dir",
+          "/Users/gordongauerk/Projects/Rust-cordis/target/window-m16/au17-user-runs/20261113T021701.346712Z-97183/state/.cordis/lib/discovery"
+        ]
+      },
+      {
+        "pid": 97187,
+        "created_at": 1794536221.71926,
+        "command": [
+          "/Users/gordongauerk/Projects/Rust-cordis/target/window-tests/recovery-51816/dist/window-recovery.app/Contents/MacOS/cordis-host",
+          "--describe",
+          "/Users/gordongauerk/Projects/Rust-cordis/target/window-tests/recovery-51816/dist/window-recovery.app/Contents/Resources/plugins/plugin-3/libwindow_probe.dylib",
+          "--cache-dir",
+          "/Users/gordongauerk/Projects/Rust-cordis/target/window-m16/au17-user-runs/20261113T021701.346712Z-97183/state/.cordis/lib/discovery"
+        ]
+      },
+      {
+        "pid": 97188,
+        "created_at": 1794536221.882632,
+        "command": [
+          "/Users/gordongauerk/Projects/Rust-cordis/target/window-tests/recovery-51816/dist/window-recovery.app/Contents/MacOS/cordis-host",
+          "--cache-dir",
+          "/Users/gordongauerk/Projects/Rust-cordis/target/window-m16/au17-user-runs/20261113T021701.346712Z-97183/state/.cordis/lib/http",
+          "--unload",
+          "never",
+          "--request-timeout-ms",
+          "30000",
+          "--library",
+          "/Users/gordongauerk/Projects/Rust-cordis/target/window-tests/recovery-51816/dist/window-recovery.app/Contents/Resources/plugins/plugin-1/libcordis_http.dylib"
+        ]
+      },
+      {
+        "pid": 97189,
+        "created_at": 1794536222.056659,
+        "command": [
+          "/Users/gordongauerk/Projects/Rust-cordis/target/window-tests/recovery-51816/dist/window-recovery.app/Contents/MacOS/cordis-host",
+          "--cache-dir",
+          "/Users/gordongauerk/Projects/Rust-cordis/target/window-m16/au17-user-runs/20261113T021701.346712Z-97183/state/.cordis/lib/kv",
+          "--unload",
+          "never",
+          "--request-timeout-ms",
+          "30000",
+          "--library",
+          "/Users/gordongauerk/Projects/Rust-cordis/target/window-tests/recovery-51816/dist/window-recovery.app/Contents/Resources/plugins/plugin-2/libkv_mem.dylib"
+        ]
+      },
+      {
+        "pid": 97190,
+        "created_at": 1794536222.213646,
+        "command": [
+          "/Users/gordongauerk/Projects/Rust-cordis/target/window-tests/recovery-51816/dist/window-recovery.app/Contents/MacOS/cordis-host",
+          "--cache-dir",
+          "/Users/gordongauerk/Projects/Rust-cordis/target/window-m16/au17-user-runs/20261113T021701.346712Z-97183/state/.cordis/lib/probe",
+          "--unload",
+          "never",
+          "--request-timeout-ms",
+          "30000",
+          "--library",
+          "/Users/gordongauerk/Projects/Rust-cordis/target/window-tests/recovery-51816/dist/window-recovery.app/Contents/Resources/plugins/plugin-3/libwindow_probe.dylib"
+        ]
+      },
+      {
+        "pid": 97191,
+        "created_at": 1794536222.375587,
+        "command": [
+          "./../../../MacOS/cordis-window"
+        ]
+      },
+      {
+        "pid": 97199,
+        "created_at": 1794536223.295233,
+        "command": [
+          "./../../../MacOS/cordis-window"
+        ]
+      }
+    ],
+    "forced_processes": [],
+    "remaining_processes": []
+  },
+  "finished_at": "2026-11-13T02:17:04.045456+00:00"
+}

@@ -56,6 +56,7 @@ pub fn recover() {
         &project.join("result.json"),
         &json!({"scenario":"AU-11", "RM-10_ms":recovery_ms,"previous_core":initial["pid"],"restored_core":restored_core,"previous_plugins":host_pids(&initial),"restored_plugins":restored_hosts,"inherited_value":73,"new_initial_value":29,"launchd_target":job.target,"service_removed":true}),
     );
+    fs::remove_dir_all(project.join("target")).unwrap();
     eprintln!(
         "AU-11 / RM-10 证据：{}，恢复 {recovery_ms} ms",
         project.display()

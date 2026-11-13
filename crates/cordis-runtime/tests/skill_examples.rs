@@ -101,9 +101,11 @@ fn shared_skill_templates_build_with_current_sdk() {
     fs::create_dir_all(&project).unwrap();
     workspace(&root, &project);
     templates(&skill, &project);
+    let _build = cordis_testkit::build::shared_build_lock(&root).unwrap();
     let output = Command::new(env!("CARGO"))
         .current_dir(&project)
-        .args(["build", "--workspace", "--target-dir", "target"])
+        .args(["build", "--workspace", "--target-dir"])
+        .arg(cordis_testkit::build::shared_target_dir(&root))
         .output()
         .unwrap();
     assert!(

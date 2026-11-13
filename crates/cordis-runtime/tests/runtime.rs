@@ -83,7 +83,8 @@ fn fixture() -> &'static Path {
     FIXTURE.get_or_init(|| {
         let package = Path::new(env!("CARGO_MANIFEST_DIR"));
         let workspace = package.parent().and_then(Path::parent).unwrap();
-        let target = workspace.join("target/runtime-m12/build/fixture");
+        let _build = cordis_testkit::build::shared_build_lock(workspace).unwrap();
+        let target = cordis_testkit::build::shared_target_dir(workspace);
         let output = Command::new(env!("CARGO"))
             .args(["build", "--manifest-path"])
             .arg(package.join("fixtures/plugin/Cargo.toml"))
@@ -96,7 +97,14 @@ fn fixture() -> &'static Path {
             "{}",
             String::from_utf8_lossy(&output.stderr)
         );
-        target.join("debug/cordis-runtime-fixture")
+        cordis_testkit::build::snapshot_artifacts(
+            workspace,
+            "runtime-fixture",
+            "debug",
+            &["cordis-runtime-fixture"],
+        )
+        .unwrap()
+        .join("cordis-runtime-fixture")
     })
 }
 

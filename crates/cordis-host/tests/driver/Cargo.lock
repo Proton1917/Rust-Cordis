@@ -166,6 +166,7 @@ dependencies = [
  "clap",
  "cordis",
  "cordis-supervisor",
+ "cordis-testkit",
  "cordis-up",
  "tokio",
 ]
@@ -193,6 +194,14 @@ dependencies = [
  "semver",
  "serde",
  "tokio",
+]
+
+[[package]]
+name = "cordis-testkit"
+version = "0.1.0"
+dependencies = [
+ "cordis",
+ "futures-util",
 ]
 
 [[package]]

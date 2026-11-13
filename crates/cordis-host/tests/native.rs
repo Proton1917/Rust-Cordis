@@ -15,12 +15,16 @@ static DRIVER: OnceLock<Result<Driver, String>> = OnceLock::new();
 
 fn build_driver() -> Result<Driver, String> {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let target = root.join("../../target/host-native");
+    let workspace = root.parent().and_then(Path::parent).unwrap();
+    let target = workspace
+        .join("target/host-native")
+        .join(std::process::id().to_string());
+    let shared = cordis_testkit::build::shared_target_dir(workspace);
     let status = Command::new(env!("CARGO"))
         .args(["run", "--manifest-path"])
         .arg(root.join("tests/driver/Cargo.toml"))
         .arg("--target-dir")
-        .arg(target.join("driver"))
+        .arg(&shared)
         .args(["--", "--build-only", "--artifacts-dir"])
         .arg(&target)
         .arg("--host")
@@ -31,7 +35,7 @@ fn build_driver() -> Result<Driver, String> {
         return Err(format!("原生样例构建失败：{status}"));
     }
     Ok(Driver {
-        executable: target.join("driver/debug/cordis-host-driver"),
+        executable: shared.join("debug/cordis-host-driver"),
         target,
     })
 }

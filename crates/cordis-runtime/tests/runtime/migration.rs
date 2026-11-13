@@ -17,8 +17,11 @@ fn artifacts() -> Artifacts {
         .join("../..")
         .canonicalize()
         .unwrap();
-    let target = root.join("target/m14-kv");
-    let tools = target.join("tools");
+    let target = root
+        .join("target/m14-kv")
+        .join(std::process::id().to_string());
+    let _build = cordis_testkit::build::shared_build_lock(&root).unwrap();
+    let shared = cordis_testkit::build::shared_target_dir(&root);
     checked(
         Command::new(env!("CARGO"))
             .current_dir(&root)
@@ -34,12 +37,25 @@ fn artifacts() -> Artifacts {
                 "kv-file",
                 "--target-dir",
             ])
-            .arg(&tools),
+            .arg(&shared),
     );
+    let names = ["counter", "kv_mem", "kv_file"].map(|name| {
+        format!(
+            "{}{name}{}",
+            std::env::consts::DLL_PREFIX,
+            std::env::consts::DLL_SUFFIX
+        )
+    });
+    let tools = cordis_testkit::build::snapshot_artifacts(
+        &root,
+        "migration-tools",
+        "debug",
+        &["cordis-host", &names[0], &names[1], &names[2]],
+    )
+    .unwrap();
     let manifest = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/kv-evolution/Cargo.toml");
     let variants = target.join("variants");
     fs::create_dir_all(&variants).unwrap();
-    let evolution = target.join("evolution");
     for (feature, name) in [
         (None, "memory-v2"),
         (Some("fails"), "failed"),
@@ -50,38 +66,49 @@ fn artifacts() -> Artifacts {
             .args(["build", "--manifest-path"])
             .arg(&manifest)
             .arg("--target-dir")
-            .arg(&evolution);
+            .arg(&shared);
         if let Some(feature) = feature {
             command.args(["--features", feature]);
         }
         checked(&mut command);
         fs::copy(
-            library(&evolution.join("debug"), "kv_evolution"),
+            library(&shared.join("debug"), "kv_evolution"),
             library(&variants, name),
         )
         .unwrap();
     }
-    let old = target.join("rust-185");
     checked(
         Command::new("cargo")
             .current_dir(&root)
             .args(["+1.85.0", "build", "-p", "counter", "--target-dir"])
-            .arg(&old),
+            .arg(&shared),
     );
     checked(
         Command::new("cargo")
             .args(["+1.85.0", "build", "--manifest-path"])
             .arg(root.join("crates/cordis-host/tests/fixtures/Cargo.toml"))
             .args(["-p", "loader-fixture-consumer", "--target-dir"])
-            .arg(&old),
+            .arg(&shared),
     );
+    let consumer = format!(
+        "{}loader_fixture_consumer{}",
+        std::env::consts::DLL_PREFIX,
+        std::env::consts::DLL_SUFFIX
+    );
+    let old = cordis_testkit::build::snapshot_artifacts(
+        &root,
+        "migration-185",
+        "debug",
+        &[&names[0], &consumer],
+    )
+    .unwrap();
     Artifacts {
-        tools: tools.join("debug"),
+        tools,
         memory_v2: library(&variants, "memory-v2"),
         failed: library(&variants, "failed"),
         incompatible: library(&variants, "incompatible"),
-        counter_185: library(&old.join("debug"), "counter"),
-        consumer: library(&old.join("debug"), "loader_fixture_consumer"),
+        counter_185: library(&old, "counter"),
+        consumer: library(&old, "loader_fixture_consumer"),
     }
 }
 
