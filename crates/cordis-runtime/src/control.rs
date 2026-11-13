@@ -879,6 +879,7 @@ impl Controller {
         let outcome = self
             .replace_package(
                 &replacement.group,
+                &replacement.previous,
                 &replacement.candidate,
                 &replacement.packages,
                 replacement.inherited.clone(),
@@ -1005,6 +1006,7 @@ impl Controller {
         let recovery = self
             .replace_package(
                 &replacement.group,
+                &replacement.candidate,
                 &replacement.previous,
                 &packages,
                 original.clone(),
@@ -1052,16 +1054,17 @@ impl Controller {
         self.refresh()
     }
 
-    /// DOC-11 §7、Q0：两种插口共用监管器事务，原生代码始终由宿主执行。
+    /// DOC-11 §7、DOC-15 AU-5：两端为原生插件时在宿主内换库，跨插口切换整个分组。
     async fn replace_package(
         &self,
         group: &str,
+        current: &Package,
         candidate: &Package,
         packages: &[Package],
         states: HashMap<String, Option<payload::State>>,
     ) -> Result<()> {
         match &candidate.entry {
-            Entry::Native { library } => {
+            Entry::Native { library } if matches!(current.entry, Entry::Native { .. }) => {
                 self.manager
                     .restore_library(
                         group.to_owned(),
@@ -1071,7 +1074,7 @@ impl Controller {
                     )
                     .await?;
             }
-            Entry::Process { .. } => {
+            Entry::Native { .. } | Entry::Process { .. } => {
                 self.manager
                     .restore_group(
                         catalog::plan(

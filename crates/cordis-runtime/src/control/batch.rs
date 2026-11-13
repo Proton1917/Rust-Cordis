@@ -281,6 +281,9 @@ impl Controller {
                     old.len() == packages.len()
                         && old
                             .iter()
+                            .all(|item| matches!(item.entry, Entry::Native { .. }))
+                        && old
+                            .iter()
                             .all(|item| packages.iter().any(|package| package.name == item.name))
                 });
             if native {

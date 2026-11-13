@@ -370,7 +370,7 @@ plugins/kv-py/
 ```
 
 ```toml
-name = "kv-py"
+name = "kv"
 version = "0.1.0"
 socket = "process"
 protocol = 1
@@ -384,25 +384,38 @@ entry = "web/index.js"
 ```
 
 ```python
-from cordis_sdk import Component, Context, run
-from kv_api import Kv                    # 由 kv.wit 生成
+from cordis_sdk import Component, Frozen, run
+from . import bindings                  # 由 kv.wit 生成
 
-class MemoryKv(Kv):
-    def __init__(self): self.data = {}
-    def get(self, key: str) -> bytes | None: return self.data.get(key)
-    def put(self, key: str, value: bytes) -> None: self.data[key] = value
+class MemoryKv:
+    def __init__(self, data, frozen):
+        self.data = data
+        self.frozen = frozen
 
-class KvStore(Component):
-    name = "kv-store"
-    provides = [Kv]
-    async def apply(self, ctx: Context, config: dict) -> None:
-        store = MemoryKv()
-        if (state := ctx.inherited_state("kv-py.snapshot")) is not None:
-            store.data = state.decode()
-        ctx.export_state("kv-py.snapshot", 1, lambda: store.data)
-        ctx.provide(Kv, store)
+    def get(self, key):
+        return self.data.get(key)
 
-run(components=[KvStore])
+    def put(self, key, value):
+        self.frozen.check()
+        self.data[key] = value
+
+    def keys(self):
+        return sorted(self.data)
+
+    async def flush(self):
+        pass
+
+async def apply(context, config):
+    inherited = context.inherited
+    entries = inherited["data"]["entries"] if inherited else {}
+    data = {key: bytes(value) for key, value in entries.items()}
+    frozen = Frozen()
+    await context.export_state("kv.snapshot", 1,
+        lambda: {"entries": {key: list(value) for key, value in data.items()}}, frozen)
+    await context.provide("kv@1.0", MemoryKv(data, frozen), bindings)
+
+run("kv", [Component("kv-store", apply, provides=("kv@1.0",),
+    state_schema="kv.snapshot", state_version_min=1, state_version_max=1)])
 ```
 
 TypeScript 插件形态相同，`command = ["node", "dist/main.js"]`；Node 26 也可以直接运行 `.ts` 文件。
@@ -444,12 +457,12 @@ export default defineComponent({
 | SDK | 位置 | 语言要求 | 第三方依赖 | 内容 |
 |---|---|---|---|---|
 | Rust | `crates/cordis-sdk` | Rust 1.85 | `DOC-13` §7 | 第二阶段已有；`V-2` 增加通用调用 |
-| Python | `sdks/python/cordis_sdk` | Python 3.11 及以上 | 无，CBOR 由 SDK 自行实现 | `Component`、`Context`、`run`；`asyncio`；效应与清理；状态导出；`UP/1` 客户端 |
-| TypeScript | `sdks/typescript/cordis-sdk` | Node 22 及以上，或 Bun、Deno | 无，CBOR 由 SDK 自行实现 | 同上；`Promise` |
+| Python | `sdks/python/cordis_sdk` | Python 3.11 及以上 | cbor2 5.6.5（ADR-0040） | `Component`、`Context`、`run`；`asyncio`；效应与清理；状态导出；`UP/1` 客户端 |
+| TypeScript | `sdks/typescript/cordis-sdk` | Node 22 及以上，或 Bun、Deno | cbor-x 1.6.0（ADR-0040） | 同上；`Promise` |
 | 网页宿主 | `sdks/typescript/cordis-web` | 支持 ES 模块与 WebSocket 的浏览器、系统 WebView | 无 | TypeScript SDK 的浏览器构建：WebSocket 传输、`defineComponent`、§11.2 的宿主职责 |
 | 代码生成 | `cordis idl gen --lang rust\|python\|ts <wit>` | — | `wit-parser` | 由 WIT 生成接口、数据类型、调用方代理；TypeScript 代码同时用于 Node 与浏览器 |
 
-脚本语言 SDK 不依赖第三方库：插件作者把 SDK 目录复制进插件即可使用。发布到 PyPI 与 npm 不在范围内。本机已有 Python 3.12（conda base）与 Node 26，开发测试不需要安装新环境。
+脚本语言 SDK 使用成熟 CBOR 库，依赖随 pyproject.toml、requirements.txt 或 package.json 声明；发布包携带相应运行依赖。插件作者可以安装 SDK 包或把 SDK 目录复制进插件。PyPI 与 npm 发布属于后续事项。本机开发测试使用已有 Conda base 与 Node 环境。
 
 ## 11 前端插件与全栈插件
 
@@ -676,7 +689,7 @@ Codex 从 `M9` 连续推进到 `M21`，包括 `M15` 的 skill 与 `M21` 的 skil
 | `D-2` | 原生插件由 `cordis-host` 进程按分组装载；默认每个插件库自成一组 | 是 |
 | `D-3` | `V-1`–`V-4` 并入 `M9`；ABI v1 在 `M11` 冻结 | 是 |
 | `D-4` | 接口描述语言为 WIT | 是 |
-| `D-5` | 首批通用插口语言为 Python、TypeScript；SDK 自行实现 CBOR，不依赖第三方库 | 是 |
+| `D-5` | 首批通用插口语言为 Python、TypeScript；CBOR 使用 cbor2 与 cbor-x（ADR-0040） | 是 |
 | `D-6` | 里程碑按 §15 重排 | 是 |
 | `D-7` | WebAssembly 插口与进程配额列为后续 | 是 |
 | `D-8` | 核心崩溃恢复（`CP-9`–`CP-11`、§5.1）、项目脚手架与发布打包（§12） | 是 |

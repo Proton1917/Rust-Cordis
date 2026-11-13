@@ -35,6 +35,8 @@
 | `plugins/http` | 原生 HTTP 插件，提供静态资源、页面入口和每次激活的令牌 |
 | `plugins/window-api` | window@1.0 开关窗口接口与 window.closed@1.0 事件 |
 | `plugins/window` | 独立进程窗口插件，主线程运行系统 WebView，另一线程处理 UP/1 |
+| `sdks/python/cordis_sdk` | Python UP/1、组件与上下文、资源引用及 WIT 绑定适配（ADR-0040） |
+| `plugins/kv-py`、`plugins/counter-py` | 与原生 kv、counter 共享接口和状态格式的 Python 进程实现 |
 | `fixtures/` | 真实行为与故障测试插件 |
 | `docs/abi/v1-layout.txt` | ABI 布局记录，由测试生成 |
 
@@ -290,6 +292,7 @@ pub trait Kv: Send + Sync {
 | `syn`、`quote`、`proc-macro2` | 过程宏 | `cordis-sdk-macros` |
 | `wit-parser`、`heck`、`pulldown-cmark`、`syn`、`prettyplease` | WIT 解析、命名、文档属性与 Rust 源码生成（ADR-0039） | `cordis-idl`，由 `cordis-dev` 调用 |
 | `scoped-tls` | 同步 Serde 调用期资源环境（ADR-0039） | `cordis-abi` |
+| `toml_edit` 0.25.19 | 保留项目注释与格式的脚手架配置修改（ADR-0040） | `cordis-dev` |
 | `parking_lot`、`futures-util`、`thiserror` | 与内核相同 | 各 crate |
 | `object` 0.41.0 | 读取发布产物的 ELF/Mach-O 机器类型（ADR-0036） | `cordis-dev` |
 | `tar` 0.4.46、`flate2` 1.1.11 | 生成 tar.gz 发布包（ADR-0036） | `cordis-dev` |

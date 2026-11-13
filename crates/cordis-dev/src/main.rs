@@ -51,8 +51,11 @@ struct NewPlugin {
     #[arg(long, default_value = ".")]
     project: PathBuf,
     /// 生成 Rust 原生插件。
-    #[arg(long)]
+    #[arg(long, group = "language")]
     rust: bool,
+    /// 生成 Python 进程插件。
+    #[arg(long, group = "language")]
+    python: bool,
 }
 
 #[tokio::main]
@@ -74,7 +77,15 @@ async fn run(cli: Cli) -> Result<()> {
             println!("进入项目后运行 cargo build --target-dir target，再运行 cordis run。");
         }
         Action::NewPlugin(options) => {
-            scaffold::plugin(&options.project, &options.name)?;
+            if options.python {
+                scaffold::python_plugin(&options.project, &options.name)?;
+                println!(
+                    "安装插件依赖：python -m pip install --target plugins/{0}/.dependencies -r plugins/{0}/requirements.txt",
+                    options.name
+                );
+            } else {
+                scaffold::plugin(&options.project, &options.name)?;
+            }
             println!("已创建插件 plugins/{}", options.name);
         }
         Action::Verify(options) => verify::run(options).await?,

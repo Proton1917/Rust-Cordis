@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import inspect
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any, ClassVar, Generic, Protocol, TypeVar
@@ -176,7 +177,7 @@ async def dispatch(provider, transport, interface, name, args):
         raise ValueError("方法参数数量错误")
     values = [decode_value(param["type"], value, transport, True) for param, value in zip(method["params"], args)]
     result = getattr(provider, method["python"])(*values)
-    if method["async"]:
+    if inspect.isawaitable(result):
         result = await result
     return encode_value(method["result"], result, transport, True)
 

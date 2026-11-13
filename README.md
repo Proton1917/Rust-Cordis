@@ -306,6 +306,20 @@ cargo run -p cordis-dev -- idl gen --lang ts \
 
 生成结果包括提供方接口、数据类型与调用方代理。Rust 接口保留类型化调用，并可通过通用调用传递复合资源；Python 与 TypeScript 绑定使用同一套 CBOR 表示。WIT 的类型映射、方法顺序、借用资源与异步值规则见 [ADR-0039](docs/adr/0039-wit-bindings.md)。
 
+## Python 进程插件
+
+在现有项目中运行 `cordis new-plugin hello --python`，开发工具会生成插件代码、当前 SDK 和依赖声明，将实例加入配置，并登记源目录的 watch 监视。安装该插件的依赖后即可运行：
+
+```bash
+conda run -n base python -m pip install \
+  --target plugins/hello/.dependencies \
+  -r plugins/hello/requirements.txt
+```
+
+生成的插件使用部署环境中的 Python，标准输出传输 UP/1；日志通过 `Context.log` 交给核心。Rust 与 Python 插件可在同一项目中编写，Python 源目录已加入 Cargo workspace 的排除列表。示例 `plugins/kv-py` 和 `plugins/counter-py` 分别采用逻辑名 `kv`、`counter`，与原生实现共用接口与状态格式，支持跨插口替换和失败回退。
+
+Python SDK 的服务、效应、状态、隔离域、拦截视图、子组件与事件资源接口见 [Python SDK](sdks/python/README.md)。运行依赖为 `cbor2==5.6.5`；项目提供方可以通过生成的 WIT 绑定与其他语言调用。
+
 ## 进度
 
 第一阶段 `M0`–`M6` 交付内核，第二阶段推进独立核心、插件宿主与开发工具，每个里程碑一个提交。
@@ -328,12 +342,13 @@ cargo run -p cordis-dev -- idl gen --lang ts \
 | `M15` | 插件编写 skill、共享模板与独立新会话验收 |
 | `M16` | 发布压缩包与 `.app`、可移动验证副本、HTTP 页面入口与独立窗口进程 |
 | `M17` | WIT 三语言接口生成、复合资源编解码、共享编译目录 |
+| `M18` | Python SDK、KV 与计数插件、Python 脚手架、跨插口双向替换 |
 
 `M0`–`M15` 的仓库交付及评审修复已完成。插件编写手册经过独立新会话的热替换、周期检查点与 KV 契约验证，ABI v1.0 已冻结。M12 的三个产品解析目标均完成固定 1800 秒 fuzz，正式源码与被测源码已逐字节比较。M14 的固定 50 次替换、直接调用、隔离与核心恢复结果见 [运行时验收与测量](docs/measurements/m14-acceptance.md)。
 
 M16 的实现与阶段检查已完成。Apple Silicon macOS 上的五项发布打包测试通过，覆盖运行产物交付、签名后契约重验、包外状态和多验证根；窗口过程验收记录 875 ms 恢复及依赖方重建。工作区覆盖 299 条运行测试与 2 条文档测试，固定 20 次迁移验收全部通过。Codex 用户目录的 skill 链接已按授权安装。
 
-M17 已通过阶段检查：WIT 生成 Rust、Python、TypeScript 绑定，kv-api 改由 kv.wit 生成；302 条运行用例与 2 条文档用例通过，Miri 13 条边界用例和布局比较通过。AU-17 界面验收记录 802 ms 窗口恢复，HTTP/KV context 保持原值，截图、Cmd-Q、有序退出、检查点与进程回收均成功。原始测量与阶段检查见 [PROGRESS](docs/PROGRESS.md)，下一步为 M18 Python SDK。
+M18 已通过阶段检查：Python SDK 与原生插件双向调用、8 项 KV 契约、资源与事件转交、隔离域和跨插口双向替换均通过；工作区共 306 条用例通过。`new-plugin --python` 生成的插件与 Rust 成员共同构建运行，watch 可替换修改后的 Python 源码。M17 的 WIT 三语言绑定及 ABI v1.0 保持有效，AU-17 已记录截图与 Cmd-Q 的完整成功结果。原始测量与阶段检查见 [PROGRESS](docs/PROGRESS.md)，下一步为 M19 TypeScript SDK。
 
 ## 后续阶段
 

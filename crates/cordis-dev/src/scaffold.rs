@@ -4,6 +4,9 @@ use crate::Result;
 use std::{fs, io::Write, path::Path};
 use toml::{Table, Value};
 
+mod process;
+pub use process::python_plugin;
+
 const REPOSITORY: &str = "https://github.com/Proton1917/Rust-Cordis.git";
 const SDK_REVISION: &str = env!("CORDIS_SOURCE_REVISION");
 const PLUGIN: &str = include_str!("../../../skills/cordis-plugin/templates/plugin.rs");
@@ -50,6 +53,17 @@ fn prepare_directory(path: &Path) -> Result<()> {
 
 /// DOC-15 §12.1：解析现有项目后追加新实例，原有配置文本保留在原位置。
 pub fn plugin(project: &Path, name: &str) -> Result<()> {
+    let (config_path, serialized, _) = registration(project, name, library(name))?;
+    write_crate(project, name, &PLUGIN.replace("{{name}}", name), false)?;
+    append_instance(&config_path, &serialized)
+}
+
+/// DOC-15 §12.1：共享实例名称与项目校验，生成过程取得完整追加文本。
+fn registration(
+    project: &Path,
+    name: &str,
+    reference: String,
+) -> Result<(std::path::PathBuf, String, Table)> {
     validate_name(name)?;
     let workspace: Table = toml::from_str(&fs::read_to_string(project.join("Cargo.toml"))?)?;
     if workspace.get("workspace").is_none() {
@@ -65,14 +79,17 @@ pub fn plugin(project: &Path, name: &str) -> Result<()> {
         return Err(format!("实例 {name} 已存在").into());
     }
     let mut instance = Table::new();
-    instance.insert("plugin".into(), Value::String(library(name)));
+    instance.insert("plugin".into(), Value::String(reference));
     instance.insert("component".into(), Value::String(name.into()));
     let mut instances = Table::new();
     instances.insert(name.into(), Value::Table(instance));
     let mut addition = Table::new();
     addition.insert("instance".into(), Value::Table(instances));
     let serialized = format!("\n{}", toml::to_string_pretty(&addition)?);
-    write_crate(project, name, &PLUGIN.replace("{{name}}", name), false)?;
+    Ok((config_path, serialized, config))
+}
+
+fn append_instance(config_path: &Path, serialized: &str) -> Result<()> {
     fs::OpenOptions::new()
         .append(true)
         .open(config_path)?

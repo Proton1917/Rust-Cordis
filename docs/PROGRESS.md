@@ -6,11 +6,11 @@
 
 | 项 | 值 |
 |---|---|
-| 最近完成的实现与检查 | `M17`；WIT 三语言绑定、复合资源传递与共享编译目录已通过阶段检查 |
-| 当前里程碑 | M17 提交；随后接入 M18 Python SDK |
-| 下一步 | M18：按 ADR-0040 候选接入 cbor2 与 Python SDK、kv-py/counter-py、脚手架、真实迁移与 AU-18 验收；候选位于 target/python-m18 |
+| 最近完成的实现与检查 | `M18`；Python SDK、双向迁移、隔离域、资源与事件转交、Python 脚手架已通过阶段检查 |
+| 当前里程碑 | M18 提交；随后接入 M19 TypeScript SDK |
+| 下一步 | M19：接入 target/typescript-m19 的 SDK、kv-ts、IDL 模板适配与脚手架；随后整合 target/web-m20 的路由拆分、转发通道和网页部署。主会话编译使用默认 target/，夹具使用 target/shared |
 | 窗口界面验收 | AU-17 通过；用户在 iTerm2 执行，窗口恢复 802 ms，截图、Cmd-Q、检查点与进程退出均通过 |
-| 最后更新 | 2026-11-12（America/Los_Angeles），M17 阶段检查与 AU-17 用户终端验收 |
+| 最后更新 | 2026-11-12（America/Los_Angeles），M18 阶段检查与编译根收拢 |
 
 ## 环境
 
@@ -546,6 +546,28 @@ cargo test --manifest-path target/m17-review/source/Cargo.toml -p cordis --doc
 | cordis-window | 943 / 1020 |
 | 六个核心 crate 合计 | 16972 / 18991 |
 
+### M18 Python SDK、进程插件与跨插口迁移
+
+- 正式实现：`sdks/python/cordis_sdk` 提供 Component、Context、Effect、Frozen、双向 UP/1、WIT 绑定适配、调用取消和资源引用。`plugins/kv-py`、`plugins/counter-py` 使用逻辑名称 kv、counter，与原生实现共享接口及状态格式。`Context.isolate`、`intercept`、`plugin` 与 scoped 提供方覆盖 DOC-15 §6.4；事件可携带独立持有的服务资源。第三方 CBOR 依赖为 cbor2 5.6.5，依据 ADR-0040，Python 文件从运行入口使用现有 Conda base。
+- 脚手架：`cordis new-plugin <名称> --python` 生成当前 SDK、Python 入口、清单与 requirements，在部署目录建立源码链接；Cargo exclude 和 watch 的源目录监视随配置更新，toml_edit 保留原有格式与注释。依赖安装位置为插件的 .dependencies。实际新建项目中 Rust 成员继续构建，Python 插件进入 Active；修改源码后 watch 执行新版本。验收等待新代码写入的 stderr 标记与新 context，覆盖 status.json 的异步发布时间差。最新定向通过用时 30.66 秒，日志 `target/m18-python-visible-version.log`，原始场景 `target/python-sdk/scaffold-36902`。生成项目的 Cargo 缓存已按规则清理，源码、状态及日志保留。
+- 跨插口修复：原实现按候选类型选择宿主内换库，使 process→native 返回 code 3。单项替换和 replace_batch 现以当前端与候选端共同决定策略：两端原生使用库事务，跨插口使用已有的分组事务。supervisor 的生命周期实现保持原值。100 ms 周期检查点下，原生→Python→失败候选回退→原生→批次回到原生的读值依次为 1、99、200、255、366；失败候选返回 1001、committed=false，批次 succeeded。
+- 资源专项：根据已复现的二次转交错误，Service 使用生成 schema 解码参数、调用远程代理并重新编码结果，每条连接持有自己的出口引用。参数与结果继续携带资源的镜像调用通过；事件回调结束后保留的服务仍可调用。修复前证据位于 `target/python-m18/evidence/resources-transfer-before/failure.json`，正式结果归档在 [Python SDK 验收](measurements/m18-python-sdk.json)。
+- Y-1：fmt 通过，`target/m18-fmt-final.log`。Y-2：工作区 clippy/all-targets 的其余目标通过；脚手架测试拆分后的一处多余借用已修正，dev 全目标通过（含构建锁等待共 18.91 秒），最终 Python 目标通过 0.31 秒。日志为 `target/m18-clippy.log`、`target/m18-dev-clippy.log`、`target/m18-python-clippy.log`。runtime 与 dev 的实际构建分别通过 9.20 秒、6.96 秒。
+- Y-3：`TMPDIR=$PWD/target/tmp cargo test --workspace` 全部通过，共 304 条运行用例与 2 条文档用例，日志 `target/m18-workspace-tests.log`。Python 集成的六个场景涵盖 Rust↔Python 服务调用、8 项原生 kv-contract 断言、资源构造/借用/二次转交、事件资源、调用取消、超帧后的继续调用、私有域子组件及父清理、命名域、双向替换和批次替换。正式自构建入口为 `crates/cordis-dev/tests/python.rs` 与 `tests/python-sdk/run.py`，实际程序由公共 testkit 的 shared 构建及快照提供，原始场景为 `target/python-sdk/behavior-32011`。全部场景及迁移、契约结果已汇入 `docs/measurements/m18-python-sdk.json`。
+- Y-4：177 条矩阵通过，8 条移植、166 条改写、3 条不适用，日志 `target/m18-conformance.log`。Y-5：工作区中的 unsafe 审计通过；新增 Python 与格式编辑依赖位于插件侧或开发工具侧，核心依赖边界沿 Q0 保持。
+- Y-6：ABI 与 Rust 宏源码保持 M17，复用 M17 的 13 条 Miri 边界用例及布局比较结果，nightly 版本沿环境表。Y-7：本阶段工作区执行的原生布局比较通过，ABI 为 v1.0。
+- Y-8：cloc 2.10 的完整 crate 统计保存在 `target/m18-source-lines.txt`。变化项和核心合计如下，其他 crate 数值与 M17 一致，全部符合 DOC-13 上限。Python SDK 为 838 代码行 / 987 总行，六个模块按解析、对象所有权、上下文和组件执行分工。
+- Y-9：ADR-0040、DOC-13、DOC-15、Python SDK README、根 README 与解释页已同步。已实际查看 `target/explainer-m18-desktop.png` 和 `target/explainer-m18-mobile.png`，新进度行可读；移动表格沿已有横向滚动布局。控制台 0 错误，页面与 HTTP 服务已退出。
+- Y-10：提交主题 `M18: 接入 Python SDK 与跨插口状态迁移`，推送目标 origin/main。
+- 设计调整：按用户的成熟解析库规则采用 cbor2，并为 M19 规定 cbor-x；详情见 ADR-0040。WIT 的 async 元数据维持原生入口选择，Python 提供方等待实际返回的 awaitable。SDK 源码、依赖和脚手架均保存在工作区；保持两个 Astra/high 子代理，分别准备 M20 的 routing 提取与网页接入。
+
+| crate 或模块 | 代码行 / 总行 |
+|---|---:|
+| cordis-dev | 2062 / 2256 |
+| cordis-runtime | 5056 / 5566 |
+| Python SDK | 838 / 987 |
+| 六个核心 crate 合计 | 16978 / 18997 |
+
 ## 第二阶段候选与恢复记录
 
 用户设置的 10 分钟计时于 2026-11-12 02:40:22 UTC 到期后暂停，随后按用户指令恢复。设计提交为 `478b3a4`，包含用户指定的序号和完整字节比对方案。M7 已完成验收，后续候选继续按下表接入。
@@ -587,6 +609,7 @@ M8 候选保留独立 `[workspace]` 以便隔离编译，正式接入时改为�
 实现过程中得到的、文档里没有的结论记在这里，每条写明日期、结论、依据（源码位置或用例编号）。需要改变 `DOC-01` 条款或 `DOC-02` 规则的结论另写 ADR，这里只留一行指向它。
 
 - 2026-11-12（UTC−08:00）：设计方按用户授权清理旧候选与复核的 Cargo 缓存，`du -sh target` 从 68G 降至 27G；执行脚本与演练记录为 `target/claude-edits/clean_caches.py`、`clean-dryrun.txt`。后续构建按 AGENTS 规则 11 共用各编译根的 shared 目录，阶段结束保留编译缓存。
+- 2026-11-12（UTC−08:00）：M17 复核后的编译根收拢已执行。删除前进程查询确认 main-build 处于空闲，主会话统一使用默认 `target/` 与 `target/shared`，`target/main-build`、`target/m17-review/source` 已删除。原隔离现场的日志、JSON、CBOR 和生成源码迁至 `target/m17-review/evidence/isolated-target`，646 个可重建二进制及发布归档移除清单为该 evidence 目录的 artifact-cleanup.json。`du -sh target` 从 41G 降至 29G，保留证据 38M；默认 target/debug 18G，agent-shared 418M，agent-cleanup 的编译目录处于缺席状态。M17 段落中的原始源码与证据路径对应本次迁移前位置。
 
 - 2026-11-11（UTC−08:00）：第二阶段按用户决定采用单调序号路径与完整字节比较；验证门保存已验证库副本，印记记录副本路径、套件及断言结果。DOC-11、DOC-13、DOC-14、ADR-0012 已同步。
 - 2026-11-11（UTC−08:00）：按 DOC-10 §8 统一导出冻结语义：SW-1–SW-4 保持实例与绑定，SW-5 可逆冻结，导出失败解冻。kv-mem/kv-file 使用共同逻辑插件名 kv、组件名 kv-store，使 AC-2 满足同名替换输入。K-5 已在 940650c 实现。

@@ -1,0 +1,168 @@
+{
+  "scenarios": [
+    {
+      "scenario": "smoke",
+      "exit": 0
+    },
+    {
+      "scenario": "contract",
+      "exit": 0
+    },
+    {
+      "scenario": "resources",
+      "exit": 0
+    },
+    {
+      "scenario": "transfer",
+      "exit": 0
+    },
+    {
+      "scenario": "realms",
+      "exit": 0
+    },
+    {
+      "scenario": "migration",
+      "exit": 0
+    }
+  ],
+  "native_to_python": {
+    "bytes": [
+      0,
+      127,
+      255
+    ],
+    "scoped": true
+  },
+  "python_to_native": {
+    "bytes": [
+      0,
+      127,
+      255
+    ],
+    "scoped": false
+  },
+  "contract": {
+    "finished": true,
+    "passed": true,
+    "stage": 1,
+    "assertions": [
+      {
+        "name": "suite.get.missing",
+        "passed": true,
+        "message": "预期 None，实际 None"
+      },
+      {
+        "name": "suite.put.bytes",
+        "passed": true,
+        "message": "预期 Some([0, 127, 255])，实际 Some([0, 127, 255])"
+      },
+      {
+        "name": "suite.put.overwrite",
+        "passed": true,
+        "message": "预期 Some([2])，实际 Some([2])"
+      },
+      {
+        "name": "suite.keys.sorted",
+        "passed": true,
+        "message": "预期 [\"alpha\", \"beta\"]，实际 [\"alpha\", \"beta\"]"
+      },
+      {
+        "name": "suite.flush.read",
+        "passed": true,
+        "message": "预期 Some([0, 127, 255])，实际 Some([0, 127, 255])"
+      },
+      {
+        "name": "suite.state.values",
+        "passed": true,
+        "message": "预期 Some([0, 127, 255])，实际 Some([0, 127, 255])"
+      },
+      {
+        "name": "suite.state.overwrite",
+        "passed": true,
+        "message": "预期 Some([2])，实际 Some([2])"
+      },
+      {
+        "name": "suite.state.keys",
+        "passed": true,
+        "message": "预期 [\"alpha\", \"beta\"]，实际 [\"alpha\", \"beta\"]"
+      }
+    ],
+    "error": null
+  },
+  "resources": {
+    "resource": true,
+    "borrow": true,
+    "mirror": true,
+    "cancel": true,
+    "oversize": true,
+    "child": true
+  },
+  "resource_forwarding_and_event": {
+    "resource_argument_and_result": true,
+    "event_resource_retained_after_callback": true
+  },
+  "named_realms": {
+    "tenant-a": [
+      1,
+      2
+    ],
+    "tenant-b": [
+      9,
+      8
+    ],
+    "exit": 0
+  },
+  "migration": {
+    "native_before": 1,
+    "python": 99,
+    "python_after_rejected_candidate": 200,
+    "native_after": 255,
+    "batch_native_after": 366,
+    "batch": {
+      "id": "python-native",
+      "caller": "admin",
+      "state": "succeeded",
+      "error": null
+    },
+    "rejection": {
+      "ok": false,
+      "code": 1001,
+      "value": "候选组件激活失败",
+      "detail": {
+        "group": "kv",
+        "plugin": null,
+        "committed": false,
+        "cause": null
+      },
+      "rpc_wall_us": 934899
+    },
+    "periodic_checkpoint_ms": 100
+  },
+  "evidence_directory": "target/python-sdk/behavior-32011",
+  "scaffold": {
+    "after": {
+      "bindings": [],
+      "component": "hello",
+      "context": 11,
+      "error": null,
+      "group": "hello",
+      "name": "hello",
+      "plugin": "hello",
+      "reference": "installed-2",
+      "revision": 1,
+      "state": "active"
+    },
+    "before": {
+      "bindings": [],
+      "component": "hello",
+      "context": 5,
+      "error": null,
+      "group": "hello",
+      "name": "hello",
+      "plugin": "hello",
+      "reference": "installed-2",
+      "revision": 0,
+      "state": "active"
+    }
+  }
+}

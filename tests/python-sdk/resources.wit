@@ -1,0 +1,12 @@
+package cordis:python-resources@1.0.0;
+
+interface resources {
+    resource item {
+        read: func() -> string;
+        wait: async func() -> string;
+        relay: func(value: borrow<item>) -> item;
+    }
+    make: func(value: string) -> item;
+    borrow-value: async func(value: borrow<item>) -> string;
+    mirror: func(value: own<item>) -> item;
+}

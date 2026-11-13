@@ -28,7 +28,7 @@
 |---|---|---|---|
 | 第一阶段 | `M0`–`M6` | 内核库 `crates/cordis` | 已完成（`e459aa7`，评审修复至 `940650c`） |
 | 第二阶段 | `M7`–`M15` | 核心可执行文件 `cordis`、插件 ABI v1、Rust SDK、`UP/1` 与核心监管、插件宿主 `cordis-host`、验证门、插件编写 skill | 仓库交付与验收通过；Codex 用户 skill 链接已按授权安装 |
-| 第三阶段 | `M16`–`M21` | 发布打包、WIT 接口描述语言、Python 与 TypeScript SDK、全栈插件 | M16、M17 与 AU-17 界面验收通过；接续 M18 |
+| 第三阶段 | `M16`–`M21` | 发布打包、WIT 接口描述语言、Python 与 TypeScript SDK、全栈插件 | M16–M18 与 AU-17 界面验收通过；接续 M19 |
 
 全部里程碑由你实现，包括 `M15` 的 skill、`M21` 的 skill 章节，以及 `docs/explainer/` 解释页随进度的更新。里程碑之间不等待评审，从 `M12` 连续推进到 `M21`。
 

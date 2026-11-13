@@ -68,7 +68,8 @@ cargo test --workspace --no-fail-fast
 cargo test -p cordis --test fiber <测试名>                        # 单个测试
 conda run -n base python tools/conformance.py check --through M6   # 第一阶段 177 条上游用例矩阵
 conda run -n base python tools/unsafe_audit.py                     # unsafe 只能出现在允许的位置
-cargo +nightly miri test -p cordis-abi                             # ABI 层的未定义行为检查
+MIRI_SYSROOT=$PWD/../miri-sysroot TMPDIR=$PWD/../review-tmp CARGO_TARGET_DIR=$PWD/../review-build/miri \
+  cargo +nightly miri test -p cordis-abi                           # ABI 层的未定义行为检查；必须指定 MIRI_SYSROOT，否则 sysroot 落在工作区内构建失败
 find crates/cordis/src -name '*.rs' | xargs wc -l                  # 内核行数，上限 6000
 ```
 
