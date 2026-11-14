@@ -9,13 +9,13 @@
 | 项 | 值 |
 |---|---|
 | 最近完成的实现与检查 | ADR-0052：跨分组及原生依赖方状态交接、确认期丢弃报告、路由调用退役已实现；单次全量 359 通过、2 失败、1 忽略，两处失败修复后的对应复验及全栈批量回滚通过 |
-| 当前里程碑 | ADR-0052 实现与验收完成，等待设计方复核；核心 0.1.2、cordis-types 0.1.2、HTTP 0.1.1、cordis.runtime@1.5 |
+| 当前里程碑 | ADR-0052（f4694fe）经设计方复核通过；核心 0.1.2、cordis-types 0.1.2、HTTP 0.1.1、cordis.runtime@1.5；v0.2.3 发布等待用户决定 |
 | M23 接口确认 | beb4c8cf 批准的纯数据调用、资源释放和拥有型 Service 转交已实现并通过 AU-27a。Inject 命名声明共用类型化校验；Python 沿用 Remote.invoke，TypeScript 提供 getDynamic。ADR-0047 与实现随 18a62cf 提交，review 基线为 70db380 |
 | M23 版本 | 1c6187d3 批准发行标签 v0.2.0，改动的 cordis-sdk、cordis-dev 与 TypeScript SDK 升为 0.2.0；核心、宿主、Python SDK 和既有官方插件保持 0.1.0，ABI v1、UP/1 保持。发布页和包内 README 以组件表说明；脚手架验证生成的 SDK 版本及源码提交 |
 | M23 依赖锁文件 | ef9cfb5a 批准夹具 Cargo.lock 中 SDK 项随 0.2.0 机械联动；其余依赖保持既有版本。核心产品 src/Cargo.toml、ABI 与根锁文件中的核心依赖项保持 review 70db380 |
 | M23 固定 Git 验收 | 按 72c36897 在 18a62cf 推送后复验通过；设计方隔离副本同样指向 18a62cf 构建通过，v0.2.0 已发布 |
-| 当前验证 | ADR-0052 的 fmt、workspace clippy、177 条矩阵、unsafe 审计通过，Miri 16 条边界及 2 条布局通过；全量与修复后局部复验分别记录在 measurements/dependent-state-transitions.json |
-| 下一步 | 本轮完成，等待设计方复核和用户安排；后续发行及 Linux 实测由用户决定 |
+| 当前验证 | 设计方报告 f4694fe 的 git archive 隔离副本单次全量 361 通过、0 失败、1 忽略；fmt、clippy、177 矩阵、unsafe 与 cordis-abi Miri 通过。本机原始全量及修复后局部复验记录保留在 measurements/dependent-state-transitions.json |
+| 下一步 | 等待用户安排；v0.2.3 发布由用户决定 |
 | M22 复核跟进 | 页面故障测试同步与身份缺席错误处理已在 70db380 完成；五轮并行负载测试通过。supervisor 为 5445 行 |
 | 发布复核跟进 | 两个重建资产已上传，远端文件名和大小与本地产物一致；设计方将再次下载核验。v0.1.0 保留 6 个 Mach-O，v0.2.0 保留 7 个并包含 secrets |
 | M22 边界 | 按设计方三项裁决：内核、up、channels、types、process 与 ABI 相对 df05064 保持；supervisor 先提取到 routing 再添加受信调用元数据，结束时至多 5450 代码行；web-deployment 限页面来源，runtime 限 service install |
@@ -46,7 +46,9 @@
 
 fmt、workspace clippy -D warnings、177 条矩阵、unsafe 审计及 Miri 通过；最终 HTTP/runtime 修改各补做对应 clippy 和 fmt，unsafe 审计在最终源码上通过。Miri 为 16 条边界与 2 条布局。全栈恢复的桌面和移动端截图已实际查看，两页计数 1、2 与共享内容保持，页面文档对象由测试核对。完整证据索引为 [dependent-state-transitions.json](measurements/dependent-state-transitions.json)。
 
-代码行 / 总行：内核 4230 / 5112，supervisor 5867 / 6340，routing 821 / 926，runtime 5452 / 5985。状态准备、确认记录与原连接恢复已由各路径复用；supervisor 的 6000 与 routing 的 900 上限调整在 ADR-0052 中说明，交设计方复核。
+设计方于 f4694fe 复核通过：git archive 隔离副本的一次 workspace 全量为 361 通过、0 失败、1 忽略；fmt、clippy、177 矩阵、unsafe 和 cordis-abi Miri 均通过。设计方逐项核对了 137 状态继承、确认期 129→29 的回滚及实例披露、在途调用与字节流在 1 秒内返回 code 4。
+
+代码行 / 总行：内核 4230 / 5112，supervisor 5867 / 6340，routing 821 / 926，runtime 5452 / 5985。设计方同意 supervisor 的 6000 与 routing 的 900 上限；supervisor 后续新增职责须在同一提交中先去重腾出所需行数，优先处理 batch.rs 与 lifecycle.rs 的重复事务步骤，上限固定为 6000。
 
 设计方的 SKILL.md 与 resources-state.md 随本次提交。状态章节按实现明确核心 0.1.2、cordis.runtime@1.5、路由退役 code 4、主动取消 code 7，以及同宿主直接调用的效应与租约规则。本次源码修订保留既有 v0.2.2 发布标签和资产。
 

@@ -87,8 +87,8 @@
 | `cordis-types` | 200 | 400 |
 | `cordis-process` | 400 | 700（ADR-0029） |
 | `cordis-up` | 1500 | 2500 |
-| `cordis-supervisor` | 4500 | 6000（ADR-0052，提交后由设计方复核） |
-| `cordis-routing` | 500 | 900（ADR-0052，提交后由设计方复核） |
+| `cordis-supervisor` | 4500 | 6000（ADR-0052，设计方已于 f4694fe 复核通过） |
+| `cordis-routing` | 500 | 900（ADR-0052，设计方已于 f4694fe 复核通过） |
 | `cordis-channels` | 700 | 1200（ADR-0041） |
 | `cordis-web-deployment` | 1000 | 1500（ADR-0041） |
 | `cordis-host` | 2000 | 3500 |
@@ -98,6 +98,8 @@
 | `cordis-contract` | 500 | 1000 |
 
 目标与上限统计 `src/` 中的 Rust 代码行，排除空行、普通注释与文档注释；同一行同时有代码与注释时计为代码行。`docs/PROGRESS.md` 同时报告“代码行 / 总行”并记录统计工具与算法。
+
+ADR-0052 的复核条件：supervisor 在 f4694fe 为 5867 代码行，余量 133 行。后续每项新增职责在同一提交中先通过去重腾出所需行数，优先合并 batch.rs 与 lifecycle.rs 的重复事务步骤；supervisor 上限固定为 6000。
 
 超过目标时在 `docs/PROGRESS.md` 记录原因。通过职责拆分、去重和复用调整实现，保持标准格式、必要注释与完整功能；调整后代码行仍超过上限时写 ADR，继续推进，由设计方复核。全部模块与关键函数使用文档注释说明负责步骤、前置条件和失败处理，并引用相应条款。约 60 行以上的函数按实际步骤拆分。
 
