@@ -15,7 +15,7 @@
 | M23 依赖锁文件 | ef9cfb5a 批准夹具 Cargo.lock 中 SDK 项随 0.2.0 机械联动；其余依赖保持既有版本。核心产品 src/Cargo.toml、ABI 与根锁文件中的核心依赖项保持 review 70db380 |
 | M23 固定 Git 验收 | 按 72c36897 在 18a62cf 推送后复验通过；设计方隔离副本同样指向 18a62cf 构建通过，v0.2.0 已发布 |
 | 当前验证 | fix 的 fmt、clippy、177 条矩阵、unsafe 通过，344 项测试通过。固定 Git 用例在已推送的 4e800c631064a344964f7f91c1b6210c1d659775 上执行，19.53 秒通过，app/watch/hello Active；日志 target/fix-watch-privacy/evidence/pinned-git.log |
-| 下一步 | 等待设计方复核 ADR-0051 实现与验收；后续工作由用户安排 |
+| 下一步 | 本轮完成，等待用户安排（v0.2.2 是否发布、Linux 实测） |
 | M22 复核跟进 | 页面故障测试同步与身份缺席错误处理已在 70db380 完成；五轮并行负载测试通过。supervisor 为 5445 行 |
 | 发布复核跟进 | 两个重建资产已上传，远端文件名和大小与本地产物一致；设计方将再次下载核验。v0.1.0 保留 6 个 Mach-O，v0.2.0 保留 7 个并包含 secrets |
 | M22 边界 | 按设计方三项裁决：内核、up、channels、types、process 与 ABI 相对 df05064 保持；supervisor 先提取到 routing 再添加受信调用元数据，结束时至多 5450 代码行；web-deployment 限页面来源，runtime 限 service install |
