@@ -1,0 +1,302 @@
+{
+  "version": "v0.2.2",
+  "tag_revision": "e12ac3a1eeaee4f56bf46eba1c936877dc54871a",
+  "asset": "cordis-v0.2.2-aarch64-apple-darwin.tar.gz",
+  "size_bytes": 10331002,
+  "build_seconds": 35.18496199999936,
+  "build_profile": "release",
+  "platform": "aarch64-apple-darwin",
+  "components": {
+    "cordis": "0.1.1",
+    "cordis-host": "0.1.1",
+    "cordis-dev": "0.2.2",
+    "Rust SDK": "0.2.1",
+    "HTTP": "0.1.0 (embedded web SDK 0.2.0)",
+    "watch": "0.1.1",
+    "window": "0.1.0",
+    "secrets": "0.1.0",
+    "Python SDK": "0.1.0",
+    "TypeScript SDK": "0.2.0",
+    "web host": "0.1.0",
+    "ABI": "1.1",
+    "UP/1": "1",
+    "cordis.runtime": "1.4"
+  },
+  "binaries": [
+    {
+      "file": "bin/cordis",
+      "architecture": "arm64",
+      "path_matches": 0,
+      "signature": "valid"
+    },
+    {
+      "file": "bin/cordis-host",
+      "architecture": "arm64",
+      "path_matches": 0,
+      "signature": "valid"
+    },
+    {
+      "file": "bin/cordis-dev",
+      "architecture": "arm64",
+      "path_matches": 0,
+      "signature": "valid"
+    },
+    {
+      "file": "plugins/libcordis_http.dylib",
+      "architecture": "arm64",
+      "path_matches": 0,
+      "signature": "valid"
+    },
+    {
+      "file": "plugins/libcordis_watch.dylib",
+      "architecture": "arm64",
+      "path_matches": 0,
+      "signature": "valid"
+    },
+    {
+      "file": "plugins/libcordis_secrets.dylib",
+      "architecture": "arm64",
+      "path_matches": 0,
+      "signature": "valid"
+    },
+    {
+      "file": "plugins/window/cordis-window",
+      "architecture": "arm64",
+      "path_matches": 0,
+      "signature": "valid"
+    }
+  ],
+  "privacy": {
+    "archive_bytes": 10331002,
+    "archive_matches": {
+      "user_directory": 0,
+      "HOME": 0,
+      "username": 0,
+      "private_project": 0,
+      "designer_directory": 0
+    },
+    "files": [
+      {
+        "file": "cordis-v0.2.2-aarch64-apple-darwin/LICENSE",
+        "bytes": 1144,
+        "matches": {
+          "user_directory": 0,
+          "HOME": 0,
+          "username": 0,
+          "private_project": 0,
+          "designer_directory": 0
+        }
+      },
+      {
+        "file": "cordis-v0.2.2-aarch64-apple-darwin/README.md",
+        "bytes": 3960,
+        "matches": {
+          "user_directory": 0,
+          "HOME": 0,
+          "username": 0,
+          "private_project": 0,
+          "designer_directory": 0
+        }
+      },
+      {
+        "file": "cordis-v0.2.2-aarch64-apple-darwin/bin/cordis",
+        "bytes": 8898800,
+        "matches": {
+          "user_directory": 0,
+          "HOME": 0,
+          "username": 0,
+          "private_project": 0,
+          "designer_directory": 0
+        }
+      },
+      {
+        "file": "cordis-v0.2.2-aarch64-apple-darwin/bin/cordis-dev",
+        "bytes": 6099312,
+        "matches": {
+          "user_directory": 0,
+          "HOME": 0,
+          "username": 0,
+          "private_project": 0,
+          "designer_directory": 0
+        }
+      },
+      {
+        "file": "cordis-v0.2.2-aarch64-apple-darwin/bin/cordis-host",
+        "bytes": 3389440,
+        "matches": {
+          "user_directory": 0,
+          "HOME": 0,
+          "username": 0,
+          "private_project": 0,
+          "designer_directory": 0
+        }
+      },
+      {
+        "file": "cordis-v0.2.2-aarch64-apple-darwin/cordis.toml",
+        "bytes": 178,
+        "matches": {
+          "user_directory": 0,
+          "HOME": 0,
+          "username": 0,
+          "private_project": 0,
+          "designer_directory": 0
+        }
+      },
+      {
+        "file": "cordis-v0.2.2-aarch64-apple-darwin/plugins/libcordis_http.dylib",
+        "bytes": 3683856,
+        "matches": {
+          "user_directory": 0,
+          "HOME": 0,
+          "username": 0,
+          "private_project": 0,
+          "designer_directory": 0
+        }
+      },
+      {
+        "file": "cordis-v0.2.2-aarch64-apple-darwin/plugins/libcordis_secrets.dylib",
+        "bytes": 713264,
+        "matches": {
+          "user_directory": 0,
+          "HOME": 0,
+          "username": 0,
+          "private_project": 0,
+          "designer_directory": 0
+        }
+      },
+      {
+        "file": "cordis-v0.2.2-aarch64-apple-darwin/plugins/libcordis_watch.dylib",
+        "bytes": 1128288,
+        "matches": {
+          "user_directory": 0,
+          "HOME": 0,
+          "username": 0,
+          "private_project": 0,
+          "designer_directory": 0
+        }
+      },
+      {
+        "file": "cordis-v0.2.2-aarch64-apple-darwin/plugins/window/cordis-plugin.toml",
+        "bytes": 96,
+        "matches": {
+          "user_directory": 0,
+          "HOME": 0,
+          "username": 0,
+          "private_project": 0,
+          "designer_directory": 0
+        }
+      },
+      {
+        "file": "cordis-v0.2.2-aarch64-apple-darwin/plugins/window/cordis-window",
+        "bytes": 3144928,
+        "matches": {
+          "user_directory": 0,
+          "HOME": 0,
+          "username": 0,
+          "private_project": 0,
+          "designer_directory": 0
+        }
+      }
+    ]
+  },
+  "archive_metadata": {
+    "owner": "root",
+    "full_byte_scan": "passed"
+  },
+  "download": {
+    "archive_cmp": "passed",
+    "signatures": [
+      {
+        "file": "bin/cordis",
+        "signature": "valid"
+      },
+      {
+        "file": "bin/cordis-host",
+        "signature": "valid"
+      },
+      {
+        "file": "bin/cordis-dev",
+        "signature": "valid"
+      },
+      {
+        "file": "plugins/libcordis_http.dylib",
+        "signature": "valid"
+      },
+      {
+        "file": "plugins/libcordis_watch.dylib",
+        "signature": "valid"
+      },
+      {
+        "file": "plugins/libcordis_secrets.dylib",
+        "signature": "valid"
+      },
+      {
+        "file": "plugins/window/cordis-window",
+        "signature": "valid"
+      }
+    ],
+    "versions": {
+      "cordis": "cordis 0.1.1",
+      "cordis-host": "cordis-host 0.1.1",
+      "cordis-dev": "cordis-dev 0.2.2"
+    },
+    "http": {
+      "observation": {
+        "http_status": 200,
+        "body_bytes": 1534
+      },
+      "sigint_exit_code": 0
+    },
+    "generated_project": {
+      "sdk": {
+        "git": "https://github.com/Proton1917/Rust-Cordis.git",
+        "rev": "e12ac3a1eeaee4f56bf46eba1c936877dc54871a",
+        "version": "0.2.1"
+      },
+      "observation": {
+        "active": [
+          "app",
+          "watch"
+        ]
+      },
+      "sigint_exit_code": 0
+    },
+    "wait_plugin": {
+      "observation": {
+        "input": 21,
+        "result": 42,
+        "groups": [
+          "release-provider",
+          "release-waiter",
+          "release-caller"
+        ]
+      },
+      "sigint_exit_code": 0
+    },
+    "sdk_dependencies_fetched_from_public_git": true
+  },
+  "workspace": {
+    "passed": 351,
+    "failed": 0,
+    "ignored": 1,
+    "exit_code": 0
+  },
+  "fmt": "passed",
+  "clippy": "cordis-dev all targets passed with -D warnings",
+  "remote": {
+    "assets": [
+      {
+        "name": "cordis-v0.2.2-aarch64-apple-darwin.tar.gz",
+        "size": 10331002,
+        "state": "uploaded"
+      }
+    ],
+    "draft": false,
+    "prerelease": false,
+    "tag": "v0.2.2",
+    "target": "e12ac3a1eeaee4f56bf46eba1c936877dc54871a",
+    "url": "https://github.com/Proton1917/Rust-Cordis/releases/tag/v0.2.2"
+  },
+  "evidence": "target/releases/v0.2.2/evidence",
+  "cleanup_record": "target/releases/v0.2.2/evidence/cleanup.json"
+}
