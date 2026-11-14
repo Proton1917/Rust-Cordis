@@ -11,6 +11,8 @@ Rust SDK 0.2.0 提供 `Context::get_dynamic(interface)`。普通服务在 `Compo
 
 例如 `service.invoke_as::<_, Option<Bytes>>("get", &("key",))` 读取 KV 字节值。单参数 tuple 保留末尾逗号；零参数用空 `Vec<CborValue>`，unit 的 Serde 表示为 null。异步入口同样可以调用同步方法。
 
+字节数据用 `cordis_sdk::Bytes`（原始值为 `CborValue::Bytes`），编码为 CBOR 字节串。不要用 `Vec<u8>` 序列化出的整数数组，也不要把 JSON 中的数组原样转换后传入：UP/1 规定单个集合最多 65,536 项（`cordis-up` 的 `max_collection`），超过时整次调用被拒绝。从 JSON 等没有字节类型的外部格式转换参数时，按接口声明把字节字段转换为 `Bytes`；数据可能很大时，改用字节流对象（见 [HTTP、流与身份](http.md)）。
+
 原始 `invoke` 只处理不含资源的纯数据：参数或结果中出现资源引用时返回参数错误（结果中的资源会先被归还）。传递文件流等资源时用 `invoke_as` 系列，把返回类型写成 `Service<dyn ByteStream>` 或含 `Service` 字段的结构；最后一个 `Service` 释放时归还资源。
 
 Python：`remote = await context.get(interface, bindings)`，再 `await remote.invoke(interface, method, args)`。TypeScript：`await context.getDynamic(interface, binding)` 取得 Remote，再调用同名 `invoke`。binding 为 WIT 生成模块。一次性调用用 try/finally 关闭 Remote，长期持有时在效应中登记 defer 关闭。
