@@ -67,6 +67,14 @@ pub struct InstanceInfo<F = String> {
     pub page_of: Option<String>,
 }
 
+/// ADR-0052：回滚撤销的候选纪元及确认窗口，仅携带实例身份与时间。
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ConfirmationDiscard {
+    pub instances: Vec<String>,
+    pub configured_ms: u64,
+    pub elapsed_ms: u64,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SwapReport {
     pub plugin: String,
@@ -80,6 +88,8 @@ pub struct SwapReport {
     pub succeeded: bool,
     pub rolled_back: bool,
     pub failure: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub discarded_confirmation: Option<ConfirmationDiscard>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -115,6 +125,8 @@ pub struct GroupReplaceReport<F = String> {
     pub succeeded: bool,
     pub rolled_back: bool,
     pub failure: Option<F>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub discarded_confirmation: Option<ConfirmationDiscard>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -152,6 +164,8 @@ pub struct BatchOutcome {
     pub caller: String,
     pub state: String,
     pub error: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub discarded_confirmation: Option<ConfirmationDiscard>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

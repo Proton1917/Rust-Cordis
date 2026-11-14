@@ -1,0 +1,115 @@
+{
+  "date": "2026-11-15",
+  "baseline": "29b1692abbaf2a3c830887f344c6fbfa979a476a",
+  "adr": "ADR-0052",
+  "platform": "aarch64-apple-darwin",
+  "versions": {
+    "cordis": "0.1.2",
+    "cordis-types": "0.1.2",
+    "cordis-http": "0.1.1",
+    "cordis.runtime": "1.5",
+    "cordis-sdk": "0.2.1",
+    "ABI": "1.1",
+    "UP": 1
+  },
+  "reproductions": {
+    "dependent_state_before": {"written": 137, "checkpoint": 137, "after_replace": 100, "log": "target/replacement-state/evidence/state-before.log"},
+    "inflight_before": {"error_code": 6, "elapsed_ms": 5003, "log": "target/replacement-state/evidence/inflight-before.log"},
+    "inflight_after": {"error_code": 4, "elapsed_ms": 8, "log": "target/replacement-state/evidence/inflight-after.log"},
+    "stream_after": {"first_bytes": [7, 8, 9], "error_code": 4, "elapsed_ms": 8, "log": "target/replacement-state/evidence/stream-after.log"}
+  },
+  "state_results": {
+    "process_replace": 137,
+    "configuration_update": 137,
+    "batch_replace": 137,
+    "native_library_replace_and_rollback": 137,
+    "crashed_provider_restored_checkpoint": 34,
+    "live_dependent_after_provider_crash": 137,
+    "optional_dependent_write_during_backoff": 142,
+    "optional_dependent_after_restart": 142,
+    "confirmation_accepted_write": 142,
+    "confirmation_rollback_state": 137,
+    "discarded_instances": ["downstream", "upstream"],
+    "confirmation_configured_ms": 2000,
+    "batch_discard_status_and_persistence": "passed"
+  },
+  "validation": {
+    "workspace": {
+      "command": "CARGO_NET_OFFLINE=true TMPDIR=$PWD/target/tmp cargo test --workspace --no-fail-fast",
+      "runs": 1,
+      "exit_code": 101,
+      "passed": 359,
+      "failed": 2,
+      "ignored": 1,
+      "log": "target/replacement-state/evidence/workspace.log",
+      "failed_tests": [
+        "http_replacement_rolls_back_under_traffic_and_faults_remain_local",
+        "fullstack_replacement_commits_or_restores_backend_and_pages"
+      ],
+      "pinned_public_git_sdk_test": "passed"
+    },
+    "targeted_after_repairs": [
+      {
+        "command": "cargo test -p cordis-dev --test http http_replacement_rolls_back_under_traffic_and_faults_remain_local -- --nocapture",
+        "result": "passed",
+        "repair": "Empty-body GET/HEAD waits for graceful route re-registration and resubmits once within the original deadline; process failure remains 503.",
+        "log": "target/replacement-state/evidence/http-replacement-fixed.log",
+        "evidence": "target/test-evidence/lifecycle-8568-0/http-sdk/lifecycle-8568-0"
+      },
+      {
+        "command": "cargo test -p cordis-runtime --test web fullstack_replacement_commits_or_restores_backend_and_pages -- --nocapture",
+        "result": "passed",
+        "repair": "Runtime selects backend state from its deployment directory; web transactions own page snapshots.",
+        "log": "target/replacement-state/evidence/web-fullstack-fixed.log",
+        "evidence": "target/test-evidence/web-fullstack-10408-0/web-sdk/web-fullstack-10408-0/case"
+      },
+      {
+        "command": "cargo test -p cordis-runtime --test web web_batches_restore_or_publish_backends_and_pages -- --nocapture",
+        "result": "passed",
+        "log": "target/replacement-state/evidence/web-batch-fixed.log"
+      }
+    ],
+    "fmt": {"result": "passed", "logs": ["target/replacement-state/evidence/fmt.log", "target/replacement-state/evidence/changed-fmt.log"]},
+    "clippy": {"result": "passed", "logs": ["target/replacement-state/evidence/clippy.log", "target/replacement-state/evidence/http-clippy.log", "target/replacement-state/evidence/runtime-clippy.log"]},
+    "conformance": {"cases": 177, "result": "passed", "log": "target/replacement-state/evidence/conformance.log"},
+    "unsafe_audit": {"result": "passed", "log": "target/replacement-state/evidence/unsafe-final.log"},
+    "miri": {
+      "command": "MIRI_SYSROOT=$PWD/target/miri-sysroot TMPDIR=$PWD/target/tmp CARGO_NET_OFFLINE=true cargo +nightly miri test --target-dir target/shared -p cordis-abi",
+      "result": "passed", "boundary_tests": 16, "layout_tests": 2,
+      "log": "target/replacement-state/evidence/miri.log"
+    },
+    "visual_review": {
+      "result": "viewed desktop and mobile restored pages",
+      "screenshots": [
+        "target/test-evidence/web-fullstack-10408-0/web-sdk/web-fullstack-10408-0/case/fullstack-restored.png",
+        "target/test-evidence/web-fullstack-10408-0/web-sdk/web-fullstack-10408-0/case/fullstack-mobile.png"
+      ],
+      "page_counts": [1, 2],
+      "shared_content": "跨语言共享内容"
+    }
+  },
+  "source_lines": {
+    "tool": "cloc 2.12 --skip-uniqueness",
+    "cordis": {"code": 4230, "total": 5112, "limit": 6000},
+    "cordis-supervisor": {"code": 5867, "total": 6340, "proposed_limit": 6000},
+    "cordis-routing": {"code": 821, "total": 926, "proposed_limit": 900},
+    "cordis-runtime": {"code": 5452, "total": 5985, "limit": 5500},
+    "cordis-http": {"code": 1728, "total": 1877}
+  },
+  "cleanup": {
+    "process_query": "No cargo, rustc or project runtime process was using the selected cache directories.",
+    "open_files_command": "lsof -nP +D target/debug +D target/shared",
+    "open_files_found": 0,
+    "commands": ["cargo clean --target-dir target/debug", "cargo clean --target-dir target/shared"],
+    "target_before_kib": 17924516,
+    "target_after_kib": 866808,
+    "target_before_du": "17G",
+    "target_after_du": "846M",
+    "directory_reduction_bytes": 17467092992,
+    "filesystem_available_before_kib": 1212879704,
+    "filesystem_available_after_kib": 1229502464,
+    "filesystem_available_increase_bytes": 17021706240,
+    "preserved": ["target/miri-sysroot", "target/pack-runtime-inputs", "release archives", "review directories", "logs", "test evidence"],
+    "next_build": "Compilation regenerates the selected caches."
+  }
+}

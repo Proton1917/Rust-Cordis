@@ -24,6 +24,12 @@ pub(super) struct Route {
     pub info: OnceCell<Arc<RetainedInfo>>,
     pub lifetime: Option<Weak<Generation>>,
     pub view: Option<Arc<ViewRecord>>,
+    pub retirement: Option<cordis_routing::Retirement>,
+}
+impl cordis_routing::RouteLifetime for Route {
+    fn retirement(&self) -> Option<cordis_routing::Retirement> {
+        self.retirement.clone()
+    }
 }
 impl Route {
     pub fn remote(
@@ -31,11 +37,16 @@ impl Route {
         info: Option<RetainedInfo>,
         lifetime: Option<Weak<Generation>>,
     ) -> Arc<Self> {
+        let retirement = lifetime
+            .as_ref()
+            .and_then(Weak::upgrade)
+            .map(|generation| generation.retirement.clone());
         Arc::new(Self {
             target: Target::Remote(object),
             info: OnceCell::new_with(info.map(Arc::new)),
             lifetime,
             view: None,
+            retirement,
         })
     }
     fn live(&self) -> Result<LiveGenerations> {
@@ -57,7 +68,27 @@ impl Route {
                     .ok_or_else(|| error(4, "服务所属纪元已退役"))
             })
             .transpose()?;
+        if matches!(self.target, Target::Remote(_))
+            && provider
+                .as_ref()
+                .is_some_and(|generation| generation.retirement.ended())
+        {
+            return Err(error(4, "服务提供方加载纪元已结束"));
+        }
         Ok((consumer, provider))
+    }
+
+    async fn during<T>(
+        &self,
+        operation: impl std::future::Future<Output = Result<T>>,
+    ) -> Result<T> {
+        let (_consumer, provider) = self.live()?;
+        match provider {
+            Some(provider) if matches!(self.target, Target::Remote(_)) => {
+                provider.retirement.during(operation).await
+            }
+            _ => operation.await,
+        }
     }
 }
 
@@ -77,16 +108,14 @@ impl Manager {
         args: Vec<Value>,
     ) -> Result<Value> {
         let route = self.lookup_service_route(interface)?;
-        let _live = route.live()?;
         let Target::Remote(object) = &route.target else {
             return Err(error(3, "核心装配接口需要远端提供方"));
         };
         for argument in &args {
             payload::persistent_value(argument).map_err(|problem| error(2, problem.to_string()))?;
         }
-        let response = object
-            .peer()
-            .request(
+        let response = route
+            .during(object.peer().request(
                 "invoke",
                 value(&payload::Invoke {
                     object: object.id(),
@@ -95,7 +124,7 @@ impl Manager {
                     refs: Vec::new(),
                 })?,
                 self.0.options.invoke_timeout,
-            )
+            ))
             .await?;
         let result: payload::InvokeResult = decode(response.value())?;
         payload::persistent_value(&result.value)
@@ -165,6 +194,7 @@ impl Manager {
             }))),
             lifetime: None,
             view: None,
+            retirement: None,
         });
         view.provide_named(
             interface.key.clone(),
@@ -205,10 +235,8 @@ impl Manager {
 
     /// DOC-16 对象信息：首次请求取得接口和方法表，同一活跃路由复用结果。
     pub(super) async fn object_info(&self, route: &Route) -> Result<payload::ObjectInfo> {
-        let _live = route.live()?;
         let info = route
-            .info
-            .get_or_try_init(|| async {
+            .during(route.info.get_or_try_init(|| async {
                 let Target::Remote(object) = &route.target else {
                     return Err(error(4, "内置对象元数据缺席"));
                 };
@@ -216,7 +244,7 @@ impl Manager {
                     .metadata
                     .remote_info(object, self.0.options.invoke_timeout)
                     .await
-            })
+            }))
             .await?;
         Ok(info.value.clone())
     }
@@ -262,6 +290,7 @@ impl Manager {
                     info: OnceCell::new_with(route.info.get().cloned()),
                     lifetime: route.lifetime.clone(),
                     view: Some(generation.record.clone()),
+                    retirement: route.retirement.clone(),
                 }))
             }
             Target::Local { service, .. } => Ok(self.local_route(generation, &binding, service)),
@@ -286,6 +315,7 @@ impl Manager {
             )),
             lifetime: Some(Arc::downgrade(&generation.generation)),
             view: Some(generation.record.clone()),
+            retirement: None,
         })
     }
 
@@ -326,9 +356,9 @@ impl Manager {
         object: &RemoteObject,
         meta: &Value,
     ) -> Result<Arc<Route>> {
-        let output = object
-            .peer()
-            .request(
+        let output = binding
+            .route
+            .during(object.peer().request(
                 "invoke",
                 value(&payload::Invoke {
                     object: object.id(),
@@ -337,7 +367,7 @@ impl Manager {
                     refs: Vec::new(),
                 })?,
                 self.0.options.invoke_timeout,
-            )
+            ))
             .await?;
         let result: payload::InvokeResult = decode(output.value())?;
         let reference: payload::ObjectRef = decode(&result.value)?;
@@ -383,13 +413,21 @@ impl Manager {
         incoming: &Payload,
     ) -> Result<Outgoing> {
         let route = self.route(caller.id(), request.object)?;
-        let _live = route.live()?;
+        let (consumer, provider) = route.live()?;
         match &route.target {
             Target::View => Err(error(3, "上下文租约的可调用方法为空")),
             Target::Remote(object) => {
-                self.0
-                    .routes
-                    .invoke_remote(caller, object, request, incoming, imported_route)
+                let argument_owner = consumer.as_ref().map(Arc::downgrade);
+                let result_owner = provider.as_ref().map(Arc::downgrade);
+                route
+                    .during(self.0.routes.invoke_remote(
+                        caller,
+                        object,
+                        request,
+                        incoming,
+                        move |object| Route::remote(object, None, argument_owner.clone()),
+                        move |object| Route::remote(object, None, result_owner.clone()),
+                    ))
                     .await
             }
             Target::Local { service, origin } => {

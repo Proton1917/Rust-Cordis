@@ -8,10 +8,11 @@ mod metadata;
 mod model;
 mod native;
 mod routing;
+mod transition;
 mod trusted;
 mod views;
 
-pub use batch::{BatchInstance, BatchReplacement};
+pub use batch::{BatchCompletion, BatchInstance, BatchReplacement};
 pub use cordis_routing::{Arguments, CallContext, LocalReply, LocalService};
 pub use lifecycle::FrozenSnapshot;
 pub use model::{
@@ -331,11 +332,18 @@ impl Manager {
         plugin: Option<&str>,
         states: &HashMap<String, Option<payload::State>>,
     ) -> Result<()> {
+        let roots: Vec<_> = self
+            .group_instances(group)
+            .into_iter()
+            .filter(|instance| plugin.is_none_or(|plugin| instance.data.plugin == plugin))
+            .collect();
+        let allowed: HashSet<_> = self
+            .affected_instances(&roots)
+            .into_iter()
+            .map(|instance| instance.data.name.clone())
+            .collect();
         for (name, state) in states {
-            let instance = self.instance(name)?;
-            if instance.data.group != group
-                || plugin.is_some_and(|plugin| instance.data.plugin != plugin)
-            {
+            if !allowed.contains(name) {
                 return Err(error(2, "恢复快照的实例超出本次替换范围"));
             }
             if let Some(state) = state {

@@ -8,14 +8,14 @@
 
 | 项 | 值 |
 |---|---|
-| 最近完成的实现与检查 | v0.2.2 已正式发布并完成下载核验：351 项全量测试通过，生成项目固定标签 SDK 修订，同步方法经 Context::wait 跨分组返回 42 |
-| 当前里程碑 | v0.2.2 发布、下载核验、记录推送与缓存清理已完成；随后处理 ADR-0052 替换语义 |
+| 最近完成的实现与检查 | ADR-0052：跨分组及原生依赖方状态交接、确认期丢弃报告、路由调用退役已实现；单次全量 359 通过、2 失败、1 忽略，两处失败修复后的对应复验及全栈批量回滚通过 |
+| 当前里程碑 | ADR-0052 实现与验收完成，等待设计方复核；核心 0.1.2、cordis-types 0.1.2、HTTP 0.1.1、cordis.runtime@1.5 |
 | M23 接口确认 | beb4c8cf 批准的纯数据调用、资源释放和拥有型 Service 转交已实现并通过 AU-27a。Inject 命名声明共用类型化校验；Python 沿用 Remote.invoke，TypeScript 提供 getDynamic。ADR-0047 与实现随 18a62cf 提交，review 基线为 70db380 |
 | M23 版本 | 1c6187d3 批准发行标签 v0.2.0，改动的 cordis-sdk、cordis-dev 与 TypeScript SDK 升为 0.2.0；核心、宿主、Python SDK 和既有官方插件保持 0.1.0，ABI v1、UP/1 保持。发布页和包内 README 以组件表说明；脚手架验证生成的 SDK 版本及源码提交 |
 | M23 依赖锁文件 | ef9cfb5a 批准夹具 Cargo.lock 中 SDK 项随 0.2.0 机械联动；其余依赖保持既有版本。核心产品 src/Cargo.toml、ABI 与根锁文件中的核心依赖项保持 review 70db380 |
 | M23 固定 Git 验收 | 按 72c36897 在 18a62cf 推送后复验通过；设计方隔离副本同样指向 18a62cf 构建通过，v0.2.0 已发布 |
-| 当前验证 | fix 的 fmt、clippy、177 条矩阵、unsafe 通过，344 项测试通过。固定 Git 用例在已推送的 4e800c631064a344964f7f91c1b6210c1d659775 上执行，19.53 秒通过，app/watch/hello Active；日志 target/fix-watch-privacy/evidence/pinned-git.log |
-| 下一步 | 按 4c97d962 开始 ADR-0052 的 R-1/R-2/R-3。设计方 SKILL.md 与 resources-state.md 的待提交改动随替换语义修复交付 |
+| 当前验证 | ADR-0052 的 fmt、workspace clippy、177 条矩阵、unsafe 审计通过，Miri 16 条边界及 2 条布局通过；全量与修复后局部复验分别记录在 measurements/dependent-state-transitions.json |
+| 下一步 | 本轮完成，等待设计方复核和用户安排；后续发行及 Linux 实测由用户决定 |
 | M22 复核跟进 | 页面故障测试同步与身份缺席错误处理已在 70db380 完成；五轮并行负载测试通过。supervisor 为 5445 行 |
 | 发布复核跟进 | 两个重建资产已上传，远端文件名和大小与本地产物一致；设计方将再次下载核验。v0.1.0 保留 6 个 Mach-O，v0.2.0 保留 7 个并包含 secrets |
 | M22 边界 | 按设计方三项裁决：内核、up、channels、types、process 与 ABI 相对 df05064 保持；supervisor 先提取到 routing 再添加受信调用元数据，结束时至多 5450 代码行；web-deployment 限页面来源，runtime 限 service install |
@@ -26,13 +26,29 @@
 | M20 评审跟进 | segmentation_fault_isolates_group 的等待修正及五轮稳定性验收已完成；supervisor 保持 5480/5500 代码行 |
 | M21 性能结果 | RM-7 三方向各 10000 次，RM-8 三次替换完成。RM-9 首轮中位数比 1.07711183；停载重测中位数比 0.95774113、最大值比 0.90793525，满足原 1.05/1.15 判据。完整样本与测量条件并列归档 |
 | 后续事项 | Linux 实测、crates.io、插件包格式、Windows 移植、RM-9 方法研究与 ADR-0045 的优先级由用户决定；静态分派候选和原始测量资料在 GitHub 存档中保留原相对路径 |
-| 清理 | 证据迁移后 target 为 55.2 MiB；本轮构建与验证后再次清理 target/debug、shared、miri、miri-sysroot 及旧宿主验证副本，从 3,598,044 KiB 降至 75,728 KiB（约 74 MiB），保留日志和首次失败夹具。记录 docs/measurements/native-synchronous-wait.json |
+| 清理 | ADR-0052 验收后经进程和打开文件查询确认空闲，使用 cargo clean 分别清理 target/debug 与 target/shared；target 从 17G 降至 846M，目录占用减少 17,467,092,992 字节，文件系统可用空间同期增加 17,021,706,240 字节；保留 miri-sysroot、pack-runtime-inputs、发布包、日志与验收现场 |
 | 执行安排 | 用户要求关闭全部子代理，由主会话独立完成 M22 与后续 M23；编译沿默认 target/debug 与 target/shared |
 | 后续顺序 | 发布、公开存档、下载验证、本地清理和 TestGuard 全量验收已完成；后续工作由用户安排 |
 | 验收资料 | docs/measurements 中保存发布、存档及清理记录；原始日志在 GitHub 原存档和补充资产中，按 target/ 原相对路径恢复 |
 | 文档交付 | README、guide、ADR-0047、skill、解释页、组件版本表与发布记录已同步 |
 | 窗口界面验收 | AU-17 已归档；用户运行记录为恢复 802 ms，截图、Cmd-Q、检查点与进程退出通过 |
-| 最后更新 | 2026-11-15（Asia/Shanghai），v0.2.2 正式发布与下载验收完成 |
+| 最后更新 | 2026-11-15（Asia/Shanghai），ADR-0052 验收记录与编译缓存清理完成 |
+
+### ADR-0052：依赖重建、回滚报告与调用退役
+
+监管器复用实际 Binding 计算受影响传递闭包，进程分组、原生组内换库、批量替换、配置更新和恢复共用导出、冻结与继承步骤；故障进程采用最近成功导出的检查点，活跃依赖方在撤回前导出，退避期间的可选依赖方在恢复前再次导出。职责位于 supervisor，依据第一性原理第 2、5 条。状态保持不透明，业务持久性归所有者插件，依据第 6 条。
+
+确认期回滚报告列出被撤销的实例、配置时长和实际时长，runtime 写入 status.json 与批次持久记录。路由退役通知位于 routing，由 supervisor 的加载代清理触发；经过核心转交的在途调用及字节流立即返回 code 4。内核、UP/1、channels、process、ABI 和 SDK 源码保持，依赖次序继续由唯一内核决定。
+
+真实复现中，跨分组下游从 100 写至 137 后，旧实现替换上游会恢复为 100；修复后分组、配置、批量及原生换库均保持 137。故障提供方恢复最近检查点 34，存活下游保留 137；可选依赖方在退避期间成功写入 142，提供方恢复后仍为 142。确认期原生候选宿主退出后，下游从确认期的 142 回到原快照 137，并报告两实例及 2000 ms 窗口。进行中调用由原先约 5003 ms 的 code 6 改为约 8 ms 的 code 4，流读取约 8–10 ms 返回 code 4。
+
+单次 `cargo test --workspace --no-fail-fast` 原始结果为 **359 通过、2 失败、1 忽略**，退出码 101。两项失败均定位后修复：HTTP 的空正文 GET/HEAD 在正常路由替换宽限内重新交给新处理方一次，故障请求仍为 503；全栈恢复按 runtime 的部署表选择后端状态，页面快照由网页事务持有。对应 HTTP、全栈替换及受影响的全栈批次三个局部复验各通过一次。全量日志及失败现场保留，统计来自同一份输出。固定公开 Git SDK 用例在该次全量中通过。
+
+fmt、workspace clippy -D warnings、177 条矩阵、unsafe 审计及 Miri 通过；最终 HTTP/runtime 修改各补做对应 clippy 和 fmt，unsafe 审计在最终源码上通过。Miri 为 16 条边界与 2 条布局。全栈恢复的桌面和移动端截图已实际查看，两页计数 1、2 与共享内容保持，页面文档对象由测试核对。完整证据索引为 [dependent-state-transitions.json](measurements/dependent-state-transitions.json)。
+
+代码行 / 总行：内核 4230 / 5112，supervisor 5867 / 6340，routing 821 / 926，runtime 5452 / 5985。状态准备、确认记录与原连接恢复已由各路径复用；supervisor 的 6000 与 routing 的 900 上限调整在 ADR-0052 中说明，交设计方复核。
+
+设计方的 SKILL.md 与 resources-state.md 随本次提交。状态章节按实现明确核心 0.1.2、cordis.runtime@1.5、路由退役 code 4、主动取消 code 7，以及同宿主直接调用的效应与租约规则。本次源码修订保留既有 v0.2.2 发布标签和资产。
 
 ### v0.2.2 组件版本
 

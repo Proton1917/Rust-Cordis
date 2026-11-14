@@ -24,6 +24,20 @@ pub struct BatchInstance {
     pub remount: bool,
 }
 
+/// ADR-0052 R-2：批次执行结果与核心形成的丢弃信息保持同一次操作的所有权。
+pub struct BatchCompletion {
+    pub result: Result<HashMap<String, Option<payload::State>>>,
+    pub discarded_confirmation: Option<cordis_types::ConfirmationDiscard>,
+    pub original_states: Option<HashMap<String, Option<payload::State>>>,
+}
+
+#[derive(Default)]
+struct BatchDecision {
+    committed: AtomicBool,
+    discarded: Mutex<Option<cordis_types::ConfirmationDiscard>>,
+    original: Mutex<Option<HashMap<String, Option<payload::State>>>>,
+}
+
 struct LibraryChange {
     plugin: String,
     previous: u64,
@@ -52,8 +66,9 @@ impl Manager {
         target: Vec<BatchInstance>,
         states: HashMap<String, Option<payload::State>>,
     ) -> Result<HashMap<String, Option<payload::State>>> {
-        self.queue_deployment_batch(replacements, before, target, states, false)
+        self.replace_batch_reported(replacements, before, target, states, false)
             .await
+            .result
     }
 
     /// ADR-0044：配置目标允许依赖缺席，执行与清理错误仍进入同一批次恢复。
@@ -64,36 +79,51 @@ impl Manager {
         target: Vec<BatchInstance>,
         states: HashMap<String, Option<payload::State>>,
     ) -> Result<HashMap<String, Option<payload::State>>> {
-        self.queue_deployment_batch(replacements, before, target, states, true)
+        self.replace_batch_reported(replacements, before, target, states, true)
             .await
+            .result
     }
 
-    async fn queue_deployment_batch(
+    /// ADR-0052：类型化确认期信息来自当前事务，运行时可据此持久化批次结果。
+    pub async fn replace_batch_reported(
         &self,
         replacements: Vec<BatchReplacement>,
         before: Vec<BatchInstance>,
         target: Vec<BatchInstance>,
         states: HashMap<String, Option<payload::State>>,
         permit_pending: bool,
-    ) -> Result<HashMap<String, Option<payload::State>>> {
-        let committed = Arc::new(AtomicBool::new(false));
-        let marker = committed.clone();
-        self.transaction(move |manager| async move {
-            manager
-                .execute_deployment_batch(
-                    replacements,
-                    before,
-                    target,
-                    states,
-                    marker,
-                    permit_pending,
+    ) -> BatchCompletion {
+        let decision = Arc::new(BatchDecision::default());
+        let marker = decision.clone();
+        let result = self
+            .transaction(move |manager| async move {
+                manager
+                    .execute_deployment_batch(
+                        replacements,
+                        before,
+                        target,
+                        states,
+                        marker,
+                        permit_pending,
+                    )
+                    .await
+            })
+            .await
+            .map_err(|problem| {
+                replacement_failure(
+                    "batch",
+                    None,
+                    decision.committed.load(Ordering::Acquire),
+                    problem,
                 )
-                .await
-        })
-        .await
-        .map_err(|problem| {
-            replacement_failure("batch", None, committed.load(Ordering::Acquire), problem)
-        })
+            });
+        let discarded_confirmation = decision.discarded.lock().clone();
+        let original_states = decision.original.lock().take();
+        BatchCompletion {
+            result,
+            discarded_confirmation,
+            original_states,
+        }
     }
 
     /// SW-1–SW-5：候选和最终配置全部通过预检后才冻结旧实例。
@@ -103,7 +133,7 @@ impl Manager {
         before: Vec<BatchInstance>,
         mut target: Vec<BatchInstance>,
         states: HashMap<String, Option<payload::State>>,
-        committed: Arc<AtomicBool>,
+        decision: Arc<BatchDecision>,
         permit_pending: bool,
     ) -> Result<HashMap<String, Option<payload::State>>> {
         let started = std::time::Instant::now();
@@ -116,11 +146,7 @@ impl Manager {
             Err(problem) => return Err(self.discard_batch(&prepared, problem).await),
         };
         transition.permit_pending = permit_pending;
-        let original = transition
-            .names
-            .iter()
-            .map(|name| (name.clone(), transition.frozen.states.get(name).cloned()))
-            .collect::<HashMap<_, _>>();
+        let original = transition.inherited.clone();
         let mut inherited = batch_inherited(&transition, &before, &target);
         inherited.extend(states);
         let accepted = match self
@@ -136,7 +162,7 @@ impl Manager {
         let (paused, affected) = match accepted {
             Ok(accepted) => accepted,
             Err(problem) => {
-                return Err(self
+                let (problem, discarded) = self
                     .rollback_batch(
                         &prepared,
                         &before,
@@ -145,15 +171,25 @@ impl Manager {
                         started.elapsed(),
                         problem,
                     )
-                    .await);
+                    .await;
+                *decision.discarded.lock() = discarded;
+                return Err(problem);
             }
         };
-        committed.store(true, Ordering::Release);
-        self.record_batch_reports(&prepared, affected, paused, true, false, None);
-        self.commit_batch(&prepared, &before, &target, &transition)
-            .await?;
+        decision.committed.store(true, Ordering::Release);
+        self.record_batch_reports(&prepared, affected, paused, None, None, None);
+        let committed = self
+            .commit_batch(&prepared, &before, &target, &transition)
+            .await;
         drop(transition);
-        self.retire_batch(&prepared, &before, &target).await?;
+        let finished = match committed {
+            Ok(()) => self.retire_batch(&prepared, &before, &target).await,
+            Err(problem) => Err(problem),
+        };
+        if let Err(problem) = finished {
+            *decision.original.lock() = Some(original);
+            return Err(problem);
+        }
         Ok(original)
     }
 
@@ -202,7 +238,24 @@ impl Manager {
             .filter(|item| names.contains(&item.specification.name))
             .map(|item| self.instance(&item.specification.name))
             .collect::<Result<Vec<_>>>()?;
-        Ok((self.prepare_transition(&instances).await?, names))
+        let incoming = target
+            .iter()
+            .filter(|item| names.contains(&item.specification.name))
+            .map(|item| {
+                let group = self.batch_generation(prepared, &item.specification.group, false)?;
+                let component = group
+                    .components
+                    .get(&(
+                        item.specification.plugin.clone(),
+                        item.specification.component.clone(),
+                    ))
+                    .cloned()
+                    .ok_or_else(|| error(3, "批次组件描述缺席"))?;
+                Ok((item.view.clone(), component))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let instances = self.include_incoming(instances, incoming);
+        Ok((self.prepare_transition(&instances, true).await?, names))
     }
 
     /// DOC-11 §7：恢复窗口前全部定义和状态后释放候选，并保留实际回滚报告。
@@ -214,12 +267,9 @@ impl Manager {
         transition: lifecycle::Transition,
         elapsed: Duration,
         problem: WireError,
-    ) -> WireError {
-        let original = transition
-            .names
-            .iter()
-            .map(|name| (name.clone(), transition.frozen.states.get(name).cloned()))
-            .collect::<HashMap<_, _>>();
+    ) -> (WireError, Option<cordis_types::ConfirmationDiscard>) {
+        let discarded = self.confirmation_discard(&transition);
+        let original = transition.inherited.clone();
         let restored = match self
             .apply_batch(prepared, target, before, &original, true)
             .await
@@ -238,12 +288,19 @@ impl Manager {
             prepared,
             transition.names.len(),
             elapsed,
-            false,
-            restored.is_ok(),
+            Some(restored.is_ok()),
             Some(&problem),
+            discarded.as_ref(),
         );
+        let restored = match restored {
+            Ok(()) => self.thaw_current(&transition.frozen).await,
+            Err(problem) => Err(problem),
+        };
         drop(transition);
-        self.batch_failed(prepared, problem, restored).await
+        (
+            self.batch_failed(prepared, problem, restored).await,
+            discarded,
+        )
     }
 
     /// SW-1–SW-3：同宿主的多个原生候选逐个合并描述符，保留其他组件定义身份。
@@ -485,7 +542,16 @@ impl Manager {
         states: &HashMap<String, Option<payload::State>>,
         rollback: bool,
     ) -> Result<()> {
+        let mut recovered = Vec::new();
         for group in prepared.values() {
+            if rollback && !group.candidate.connection.is_alive() {
+                let transition = self
+                    .prepare_transition(&self.group_instances(&group.group.name), false)
+                    .await?;
+                self.inherit(&transition.inherited);
+                recovered.push(transition);
+                continue;
+            }
             for library in &group.libraries {
                 let id = if rollback {
                     library.previous
@@ -496,8 +562,8 @@ impl Manager {
                     .await?;
             }
         }
-        self.remove_batch_instances(before, target).await?;
         self.inherit(states);
+        self.remove_batch_instances(before, target).await?;
         for group in prepared.values() {
             let version = if rollback {
                 group.previous.clone()
@@ -505,6 +571,11 @@ impl Manager {
                 Some(group.candidate.clone())
             };
             if let Some(version) = version {
+                let version = if rollback {
+                    self.rollback_version(&group.group, &version).await?
+                } else {
+                    version
+                };
                 self.0
                     .catalog
                     .lock()
@@ -515,7 +586,13 @@ impl Manager {
             }
         }
         self.apply_batch_instances(prepared, target, states, rollback)
-            .await
+            .await?;
+        for transition in recovered {
+            self.stabilize_with(&transition.before, &transition.names, true)
+                .await?;
+            self.thaw_current(&transition.frozen).await?;
+        }
+        Ok(())
     }
 
     /// S-FBR-4、ADR-0031：所有版本已发布后调和实例配置，并等待全部配置更新任务。
@@ -545,7 +622,11 @@ impl Manager {
                     }));
                 }
             } else {
-                let generation = self.batch_generation(prepared, &specification.group, rollback)?;
+                let generation = if rollback {
+                    self.group(&specification.group)?.current.lock().clone()
+                } else {
+                    self.batch_generation(prepared, &specification.group, false)?
+                };
                 let definition = generation
                     .definitions
                     .get(&(
@@ -627,6 +708,8 @@ impl Manager {
             .stabilize_with(&transition.before, &names, transition.permit_pending)
             .await?;
         let paused = started.elapsed();
+        self.thaw_current(&transition.frozen).await?;
+        self.begin_confirmation(transition);
         for result in join_all(
             prepared
                 .values()
@@ -660,7 +743,7 @@ impl Manager {
                 })
                 .map(|item| item.specification.name.clone())
                 .collect::<Vec<_>>();
-            self.retain_replacement_states(&name, &names, &transition.frozen);
+            self.retain_replacement_states(&name, &names, &transition.inherited);
         }
         for group in prepared.values() {
             *group.group.specification.lock() = group.specification.clone();
@@ -772,10 +855,12 @@ impl Manager {
         prepared: &BTreeMap<String, PreparedGroup>,
         affected: usize,
         elapsed: Duration,
-        committed: bool,
-        rolled_back: bool,
+        rollback: Option<bool>,
         failure: Option<&WireError>,
+        discarded: Option<&cordis_types::ConfirmationDiscard>,
     ) {
+        let committed = rollback.is_none();
+        let rolled_back = rollback.unwrap_or(false);
         let mut catalog = self.0.catalog.lock();
         for group in prepared.values() {
             let Some(previous) = &group.previous else {
@@ -793,6 +878,7 @@ impl Manager {
                     succeeded: false,
                     rolled_back,
                     failure: failure.map(Failure::from),
+                    discarded_confirmation: discarded.cloned(),
                 },
             );
             for library in &group.libraries {
@@ -811,6 +897,7 @@ impl Manager {
                             succeeded: false,
                             rolled_back,
                             failure: failure.map(|failure| metadata::clipped(&failure.message)),
+                            discarded_confirmation: discarded.cloned(),
                         },
                     ),
                 );
@@ -866,6 +953,9 @@ impl Manager {
                 }
                 self.retire(&group.candidate).await
             } else {
+                if !group.candidate.connection.is_alive() {
+                    continue;
+                }
                 let mut failure = None;
                 for library in &group.libraries {
                     if let Err(error) = self

@@ -69,6 +69,7 @@ pub struct Controller {
     groups: BTreeMap<String, Vec<Package>>,
     installed: HashMap<String, Package>,
     outcomes: Arc<Mutex<BatchOutcomes>>,
+    batch_discarded: Option<cordis_types::ConfirmationDiscard>,
     sources: Arc<Mutex<SourceBindings>>,
 }
 
@@ -141,6 +142,7 @@ impl Controller {
             groups: BTreeMap::new(),
             installed: HashMap::new(),
             outcomes,
+            batch_discarded: None,
             sources,
         })
     }
@@ -811,7 +813,8 @@ impl Controller {
             }
             return outcome;
         }
-        let mut original = self.manager.last_replacement_states(&replacement.group);
+        let mut original =
+            self.deployment_states(self.manager.last_replacement_states(&replacement.group));
         if matches!(replacement.candidate.entry, Entry::Web) {
             original.extend(replacement.affected.iter().map(|name| (name.clone(), None)));
         }
@@ -883,6 +886,15 @@ impl Controller {
         };
         self.prepare_replacement_states(&mut replacement, rollback)?;
         Ok(replacement)
+    }
+
+    /// ADR-0041/0052：部署实例按运行时目录恢复，页面快照由网页事务持有。
+    fn deployment_states(
+        &self,
+        mut states: HashMap<String, Option<payload::State>>,
+    ) -> HashMap<String, Option<payload::State>> {
+        states.retain(|name, _| self.mounted.contains_key(name));
+        states
     }
 
     /// DOC-11 §7：上一版本记录使用实际装载副本，回滚按各实例读取该版本的原快照。

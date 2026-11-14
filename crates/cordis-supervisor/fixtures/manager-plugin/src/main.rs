@@ -126,6 +126,10 @@ struct Session {
 }
 
 enum Resource {
+    Stream {
+        session: Weak<Session>,
+        data: Mutex<std::io::Cursor<Vec<u8>>>,
+    },
     Scoped {
         session: Weak<Session>,
         interface: String,
@@ -224,6 +228,10 @@ impl Shared {
             "core",
             "release-object",
             "view-effect",
+            "hold",
+            "open-stream",
+            "open-held-stream",
+            "read-held-stream",
             "cordis.scope",
         ]
         .map(str::to_owned)
@@ -275,6 +283,16 @@ impl Shared {
                 library: None,
                 components: vec![
                     component("a", CONSUMER, true, false),
+                    component("stateful", CONSUMER, true, true),
+                    {
+                        let mut optional = component("optional-stateful", CONSUMER, true, true);
+                        optional.inject.iter_mut().for_each(|inject| {
+                            if inject.interface == COUNTER {
+                                inject.required = false;
+                            }
+                        });
+                        optional
+                    },
                     component("b", COUNTER, false, true),
                     component("independent", INDEPENDENT, false, true),
                 ],
@@ -460,10 +478,16 @@ impl Shared {
         let lifetime = self.effect(session.clone(), false).await?;
         self.release_effect(&session, lifetime).await?;
         let interface = match session.role.as_str() {
-            "a" => {
-                let dependency = self.get(&session, COUNTER).await?;
-                *session.observed.lock() = (dependency.read().await?, dependency.version().await?);
-                *session.dependency.lock() = Some(dependency);
+            "a" | "stateful" | "optional-stateful" => {
+                match self.get(&session, COUNTER).await {
+                    Ok(dependency) => {
+                        *session.observed.lock() =
+                            (dependency.read().await?, dependency.version().await?);
+                        *session.dependency.lock() = Some(dependency);
+                    }
+                    Err(problem) if session.role == "optional-stateful" && problem.code == 4 => {}
+                    Err(problem) => return Err(problem),
+                }
                 for asynchronous in [false, true] {
                     let (callback, offer) = self.offer(Resource::Event {
                         session: Arc::downgrade(&session),
@@ -656,6 +680,29 @@ impl Shared {
     }
     async fn invoke(self: &Arc<Self>, request: payload::Invoke) -> Result<Value> {
         let resource = self.object(request.object)?;
+        if let Resource::Stream { session, data } = resource.as_ref() {
+            use std::io::Read;
+            let (max,): (usize,) = decode(&Value::Array(request.args))?;
+            if max == 0 || max > 4 * 1024 * 1024 {
+                return Err(WireError::new(2, "stream read size"));
+            }
+            let mut bytes = vec![0; max];
+            let count = data
+                .lock()
+                .read(&mut bytes)
+                .map_err(|e| WireError::new(1, e.to_string()))?;
+            if count > 0 {
+                bytes.truncate(count);
+                return Ok(Value::Bytes(bytes));
+            }
+            let session = session
+                .upgrade()
+                .ok_or_else(|| WireError::new(4, "stream context retired"))?;
+            self.trace(&session, "stream-read-start", Value::Null)
+                .await?;
+            tokio::time::sleep(Duration::from_secs(60)).await;
+            return Ok(Value::Null);
+        }
         let session = match resource.as_ref() {
             Resource::Scoped { session, meta, .. } => {
                 if request.method == "meta" {
@@ -673,6 +720,46 @@ impl Shared {
             return Err(WireError::new(4, "service context retired"));
         }
         match request.method.as_str() {
+            "open-held-stream" => {
+                let Bound::Remote(provider) = self.get(&session, COUNTER).await? else {
+                    return Err(WireError::new(3, "stream probe uses a remote provider"));
+                };
+                let response = provider
+                    .peer()
+                    .request(
+                        "invoke",
+                        value(&payload::Invoke {
+                            object: provider.id(),
+                            method: "open-stream".into(),
+                            args: request.args,
+                            refs: Vec::new(),
+                        })?,
+                        Duration::from_secs(5),
+                    )
+                    .await?;
+                let result: payload::InvokeResult = decode(response.value())?;
+                let object: ObjectRef = decode(&result.value)?;
+                session
+                    .retained
+                    .lock()
+                    .insert(object.0, response.import(object.0)?);
+                Ok(object.0.into())
+            }
+            "read-held-stream" => {
+                let (id, max): (u64, u32) = decode(&Value::Array(request.args))?;
+                let object = session
+                    .retained
+                    .lock()
+                    .get(&id)
+                    .cloned()
+                    .ok_or_else(|| WireError::new(4, "stream reference absent"))?;
+                invoke(&object, "read", vec![max.into()]).await
+            }
+            "hold" => {
+                self.trace(&session, "call-start", Value::Null).await?;
+                tokio::time::sleep(Duration::from_secs(60)).await;
+                Ok(session.counter.read()?.into())
+            }
             "core" => {
                 let (method, params): (String, Value) = decode(&Value::Array(request.args))?;
                 let response = session
@@ -853,6 +940,27 @@ impl Handler for Program {
                 }
                 "invoke" => {
                     let request: payload::Invoke = decode(input.value())?;
+                    if request.method == "open-stream" {
+                        let resource = shared.object(request.object)?;
+                        let Resource::Service { session, .. } = resource.as_ref() else {
+                            return Err(WireError::new(2, "stream provider required"));
+                        };
+                        let [Value::Bytes(bytes)]: [Value; 1] = request
+                            .args
+                            .try_into()
+                            .map_err(|_| WireError::new(2, "stream bytes argument"))?
+                        else {
+                            return Err(WireError::new(2, "stream bytes argument"));
+                        };
+                        let (object, offer) = shared.offer(Resource::Stream {
+                            session: session.clone(),
+                            data: Mutex::new(std::io::Cursor::new(bytes)),
+                        });
+                        return Ok(offer.outgoing(value(&payload::InvokeResult {
+                            value: ObjectRef(object).into(),
+                            refs: vec![object],
+                        })?));
+                    }
                     if request.method == "cordis.scope" {
                         let resource = shared.object(request.object)?;
                         let Resource::Service { session, interface } = resource.as_ref() else {
@@ -877,6 +985,14 @@ impl Handler for Program {
                 "object_info" => {
                     let request: payload::ObjectInfoRequest = decode(input.value())?;
                     let resource = shared.object(request.object)?;
+                    if matches!(resource.as_ref(), Resource::Stream { .. }) {
+                        return Ok(value(&payload::ObjectInfo {
+                            interface: "cordis.byte-stream@1.0".into(),
+                            methods: vec!["read".into()],
+                            local: None,
+                        })?
+                        .into());
+                    }
                     let (session, interface) = match resource.as_ref() {
                         Resource::Service { session, interface }
                         | Resource::Scoped {

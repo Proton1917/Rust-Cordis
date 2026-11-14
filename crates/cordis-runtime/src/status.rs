@@ -267,6 +267,7 @@ fn runtime_replace(report: ReplaceReport) -> GroupReplaceReport {
         succeeded: report.succeeded,
         rolled_back: report.rolled_back,
         failure: report.failure.map(|failure| failure.message),
+        discarded_confirmation: report.discarded_confirmation,
     }
 }
 

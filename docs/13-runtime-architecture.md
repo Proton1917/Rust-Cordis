@@ -87,8 +87,8 @@
 | `cordis-types` | 200 | 400 |
 | `cordis-process` | 400 | 700（ADR-0029） |
 | `cordis-up` | 1500 | 2500 |
-| `cordis-supervisor` | 4500 | 5500（ADR-0030） |
-| `cordis-routing` | 500 | 800（ADR-0041） |
+| `cordis-supervisor` | 4500 | 6000（ADR-0052，提交后由设计方复核） |
+| `cordis-routing` | 500 | 900（ADR-0052，提交后由设计方复核） |
 | `cordis-channels` | 700 | 1200（ADR-0041） |
 | `cordis-web-deployment` | 1000 | 1500（ADR-0041） |
 | `cordis-host` | 2000 | 3500 |
@@ -315,7 +315,7 @@ pub trait Kv: Send + Sync {
 | `clap` | 命令行参数与子命令解析 | `cordis-runtime`、`cordis-host`、`cordis-dev` |
 | `ciborium` | CBOR 编解码（`ADR-0010`） | `cordis-abi`、`cordis-sdk`、`cordis-host`、`cordis-up` |
 | `libloading` | 打开动态库 | `cordis-host` |
-| `tokio` | 执行器、计时、双向消息、子进程 I/O 与插件自有网络运行时 | `cordis-runtime`、`cordis-supervisor`、`cordis-channels`、`cordis-web-deployment`、`cordis-host`、`cordis-up`、`cordis-process`、`cordis-dev`、`plugins/http`、`plugins/window` |
+| `tokio` | 执行器、计时、双向消息、子进程 I/O、路由退役通知（ADR-0052）与插件自有网络运行时 | `cordis-runtime`、`cordis-supervisor`、`cordis-routing`、`cordis-channels`、`cordis-web-deployment`、`cordis-host`、`cordis-up`、`cordis-process`、`cordis-dev`、`plugins/http`、`plugins/window` |
 | `nix` | 安全的 POSIX 进程组信号接口（ADR-0021） | `cordis-process` |
 | `rustix` | 安全的 waitid 状态观察与待回收子进程管理（ADR-0027） | `cordis-process` |
 | `libfuzzer-sys` | CP-9 输入模糊测试（ADR-0021） | 独立 fuzz 工作区的开发构建 |

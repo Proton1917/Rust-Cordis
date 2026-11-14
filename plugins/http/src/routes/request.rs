@@ -175,7 +175,7 @@ async fn invoke(
             .timeout_ms
             .unwrap_or(state.config.route_timeout_ms),
     );
-    let result = tokio::time::timeout(timeout, route.handler.handle(request)).await;
+    let result = tokio::time::timeout(timeout, handle_replacement(state, route, request)).await;
     if let Some(status) = guard.0.status() {
         return failure(status);
     }
@@ -206,6 +206,52 @@ async fn invoke(
             }
         }
         Err(_) => failure(StatusCode::GATEWAY_TIMEOUT),
+    }
+}
+
+/// ADR-0046 AU-21、ADR-0052：空正文 GET/HEAD 在正常撤回宽限内交给新登记处理一次。
+async fn handle_replacement(
+    state: &State,
+    route: &Route,
+    request: HttpRequest,
+) -> cordis_sdk::Result<HttpResponse> {
+    let replay = (matches!(request.method.as_str(), "GET" | "HEAD")
+        && matches!(request.body, http_api::Body::Empty))
+    .then(|| request.clone());
+    let result = route.handler.handle(request).await;
+    if let (Err(problem), Some(request)) = (&result, replay)
+        && problem.code() == 4
+    {
+        let grace = Duration::from_millis(state.config.replace_grace_ms);
+        if let Ok(Some(next)) =
+            tokio::time::timeout(grace, replacement(&state.registry, route)).await
+        {
+            if !next.spec.methods.is_empty() && !next.spec.methods.contains(&request.method) {
+                return Ok(HttpResponse {
+                    status: 405,
+                    headers: vec![("allow".into(), next.spec.methods.join(", "))],
+                    body: http_api::Body::Empty,
+                });
+            }
+            return next.handler.handle(request).await;
+        }
+    }
+    result
+}
+
+/// 正常 unroute 后等待新登记；故障撤回立即交回原调用错误，订阅先于读取状态。
+async fn replacement(registry: &Registry, old: &Route) -> Option<Arc<Route>> {
+    let mut changed = registry.changed.subscribe();
+    loop {
+        {
+            let state = registry.state.lock().unwrap();
+            match state.routes.get(&old.spec.prefix) {
+                Some(Slot::Active(route)) if route.id != old.id => return Some(route.clone()),
+                Some(Slot::Active(_)) | Some(Slot::Retired { failed: false, .. }) => {}
+                Some(Slot::Retired { failed: true, .. }) | None => return None,
+            }
+        }
+        changed.changed().await.ok()?;
     }
 }
 

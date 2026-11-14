@@ -2,6 +2,7 @@
 
 mod allocation;
 mod blocking_wait;
+mod replacement_state;
 
 use clap::Parser;
 use cordis::{
@@ -762,6 +763,13 @@ async fn swaps(artifacts: &Artifacts, threshold: bool) -> Result<()> {
             )?;
             eprintln!("阈值验收通过：21轮固定换库，前20轮无关纪元保持，第21轮分组重启并继承137");
         } else {
+            let written = manager
+                .invoke_service("host.downstream@1.0", "add", vec![37u64.into()])
+                .await?;
+            check(
+                written == Value::Integer(137u64.into()),
+                "原生依赖方实际写入137",
+            )?;
             let low_epoch = low.epoch();
             let report = manager
                 .replace_library(
@@ -777,6 +785,11 @@ async fn swaps(artifacts: &Artifacts, threshold: bool) -> Result<()> {
             check(
                 low.epoch() != low_epoch && idle.epoch() == idle_epoch,
                 "依赖方应重载，无关实例应保持纪元",
+            )?;
+            let state = manager.checkpoint().await?;
+            check(
+                state["low"].data == Value::Integer(137u64.into()),
+                "原生换库后依赖方保持137",
             )?;
             wait_callers(&logs, 2).await?;
             let libraries = manager.library_snapshots().await?;
@@ -833,6 +846,11 @@ async fn swaps(artifacts: &Artifacts, threshold: bool) -> Result<()> {
                     && low.state() == FiberState::Active
                     && idle.epoch() == idle_epoch,
                 "回滚后实例应恢复且无关纪元保持",
+            )?;
+            let state = manager.checkpoint().await?;
+            check(
+                state["low"].data == Value::Integer(137u64.into()),
+                "原生回滚后依赖方保持137",
             )?;
             let service = offered(&manager, &control, name, "after-rollback").await?;
             check(
@@ -1137,6 +1155,7 @@ async fn main() -> Result<()> {
             "scoped-same" => composition(&artifacts, true).await?,
             "scoped-cross" => composition(&artifacts, false).await?,
             "swap" => swaps(&artifacts, false).await?,
+            "confirmation-state" => replacement_state::run(&artifacts).await?,
             "threshold" => swaps(&artifacts, true).await?,
             "allocation" => allocation::run(&artifacts).await?,
             "blocking-wait" | "safe-wait" | "legacy-wait" => {

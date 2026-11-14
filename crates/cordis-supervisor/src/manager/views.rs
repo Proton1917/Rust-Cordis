@@ -253,6 +253,7 @@ impl Manager {
             info: OnceCell::new_with(Some(Arc::new(info))),
             lifetime: Some(Arc::downgrade(&parent.generation)),
             view: Some(view),
+            retirement: None,
         });
         let mut batch = self.batch(connection.id());
         let object = self.export_route(connection, route, &mut batch)?;

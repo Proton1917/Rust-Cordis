@@ -20,6 +20,9 @@ use std::{
 };
 use tokio::sync::watch;
 
+#[path = "manager/state_transitions.rs"]
+mod state_transitions;
+
 struct Executor(Instant);
 impl Spawn for Executor {
     fn spawn(&self, task: Task) {

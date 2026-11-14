@@ -496,7 +496,7 @@ dependencies = [
 
 [[package]]
 name = "cordis-http"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "axum",
  "cordis-sdk",
@@ -547,11 +547,12 @@ dependencies = [
  "parking_lot 0.13.0",
  "semver",
  "serde",
+ "tokio",
 ]
 
 [[package]]
 name = "cordis-runtime"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "clap",
  "cordis",
@@ -633,7 +634,7 @@ dependencies = [
 
 [[package]]
 name = "cordis-types"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "serde",
 ]

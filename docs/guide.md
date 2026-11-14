@@ -163,6 +163,8 @@ cordis run
 
 另开一个终端，进入同一个 `demo` 目录执行 `cordis status`，可以在实例列表中查看 `hello` 的 `active` 状态。修改 `plugins/hello/src/lib.rs` 后再次执行 `cargo build --target-dir target`，`watch` 会把同一防抖窗口的变化作为一批提交给管理接口。批次失败时，运行配置、插件版本和原状态共同恢复。Ctrl-C 触发有序退出并保存检查点。
 
+核心 0.1.2 在替换前共同保存目标实例和受影响依赖方的状态，原生换库、批量替换、配置更新与故障恢复采用相同交接规则。确认期内的内存写入在回滚时恢复为原快照，`cordis.runtime@1.5` 的替换和批次报告通过 `discarded_confirmation` 给出涉及的实例及持续时间。业务写入由数据所有者在应答前写入持久存储，并保持新旧版本可读的数据格式。经过核心路由的在途调用与字节流在提供方开始清理时返回 code 4，调用方主动取消返回 code 7。HTTP 0.1.1 对空正文 GET/HEAD 在正常路由替换宽限内向新处理方再提交一次，沿用原请求截止时间；其他请求由调用方依自身幂等约定处理。具体规则见 [状态迁移与回滚](11-plugin-model.md#5-状态迁移协议)。
+
 生成的 `hello` 组件在激活时发送日志事件；部署 `console-log` 插件可以把这些事件显示在终端。服务、效应、隔离域、状态导出和管理授权的接口见 [插件模型](11-plugin-model.md) 与 [SDK 接口](13-runtime-architecture.md#4-sdk-接口)。
 
 [cordis-first-principles skill](../skills/cordis-first-principles/SKILL.md) 先讲职责放置的第一性原理，再说明共享接口、服务、事件、效应清理、冻结状态、契约验证与替换，并提供可复制的接口、提供方和契约套件模板。Claude Code 与 Codex 可加载同一份 skill；`cordis new-plugin` 直接读取其中的组件模板。

@@ -70,6 +70,7 @@ native_scenarios! {
     same_group_composition => "scoped-same",
     cross_group_composition => "scoped-cross",
     native_library_swap_and_rollback => "swap",
+    native_confirmation_restores_dependent_state => "confirmation-state",
     retired_image_threshold_restarts_group => "threshold",
     shared_directory_allocates_monotonic_copies => "allocation",
     service_panic_preserves_host => "panic",

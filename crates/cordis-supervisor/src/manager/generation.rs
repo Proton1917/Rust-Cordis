@@ -67,6 +67,7 @@ pub(super) struct Generation {
     pub config: Value,
     pub inherited: Option<payload::State>,
     pub epoch: cordis::Epoch,
+    pub retirement: cordis_routing::Retirement,
     pub effects: Mutex<HashMap<u64, Arc<RemoteEffect>>>,
     registrations: Arc<AtomicUsize>,
     max_registrations: usize,
@@ -283,6 +284,7 @@ impl Manager {
             Generation {
                 id,
                 epoch: context.fiber().epoch(),
+                retirement: cordis_routing::Retirement::default(),
                 context: context.clone(),
                 instance: configuration.instance.clone(),
                 component,
@@ -311,6 +313,11 @@ impl Manager {
         let keeper = generation.clone();
         context.effect("remote-context", move |scope| {
             scope.defer(move || {
+                if let Some(core) = keeper.core.upgrade() {
+                    core.routes.retire(&keeper.retirement);
+                } else {
+                    keeper.retirement.finish();
+                }
                 drop(keeper);
                 Ok(())
             })

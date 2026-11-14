@@ -9,10 +9,22 @@ use serde::{Deserialize, Serialize};
 #[derive(Deserialize, Serialize)]
 #[serde(tag = "state", rename_all = "lowercase")]
 enum Record {
-    Pending { id: String },
-    Succeeded { id: String },
-    Rejected { id: String, error: WireError },
-    Interrupted { id: String, error: WireError },
+    Pending {
+        id: String,
+    },
+    Succeeded {
+        id: String,
+    },
+    Rejected {
+        id: String,
+        error: WireError,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        discarded_confirmation: Option<cordis_types::ConfirmationDiscard>,
+    },
+    Interrupted {
+        id: String,
+        error: WireError,
+    },
 }
 
 pub(crate) struct BatchOutcomes {
@@ -134,7 +146,13 @@ impl BatchOutcomes {
     }
 
     /// ADR-0031：最终状态由实际执行结果形成，磁盘写入由调用步骤统一处理。
-    fn finish(&mut self, caller: &str, id: &str, result: &Result<Value>) {
+    fn finish(
+        &mut self,
+        caller: &str,
+        id: &str,
+        result: &Result<Value>,
+        discarded_confirmation: Option<cordis_types::ConfirmationDiscard>,
+    ) {
         let id = id.into();
         self.records.insert(
             caller.into(),
@@ -143,6 +161,7 @@ impl BatchOutcomes {
                 Err(error) => Record::Rejected {
                     id,
                     error: error.clone(),
+                    discarded_confirmation,
                 },
             },
         );
@@ -164,6 +183,13 @@ impl BatchOutcomes {
                     caller: caller.clone(),
                     state: state.into(),
                     error,
+                    discarded_confirmation: match record {
+                        Record::Rejected {
+                            discarded_confirmation,
+                            ..
+                        } => discarded_confirmation.clone(),
+                        _ => None,
+                    },
                 }
             })
             .collect()
@@ -193,9 +219,10 @@ impl Controller {
         if let Some(result) = self.outcomes.lock().replay(caller, id) {
             return result;
         }
+        self.batch_discarded = None;
         let result = self.execute_operation(request).await;
         let mut outcomes = self.outcomes.lock();
-        outcomes.finish(caller, id, &result);
+        outcomes.finish(caller, id, &result, self.batch_discarded.take());
         let saved = outcomes.save();
         if let Err(problem) = &saved {
             outcomes.records.insert(

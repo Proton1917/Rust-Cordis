@@ -73,15 +73,19 @@ impl Controller {
         reconfigure: bool,
     ) -> Result<()> {
         let sources = std::mem::take(&mut target.sources);
-        let result = if reconfigure {
-            self.manager
-                .reconfigure_batch(sources, before.clone(), desired.clone(), HashMap::new())
-                .await
-        } else {
-            self.manager
-                .replace_batch(sources, before.clone(), desired.clone(), HashMap::new())
-                .await
-        };
+        let completion = self
+            .manager
+            .replace_batch_reported(
+                sources,
+                before.clone(),
+                desired.clone(),
+                HashMap::new(),
+                reconfigure,
+            )
+            .await;
+        self.batch_discarded = completion.discarded_confirmation;
+        let original_states = completion.original_states;
+        let result = completion.result;
         if result.is_ok() || result.as_ref().is_err_and(replacement_committed) {
             let snapshot = self.manager.snapshot();
             for item in &mut desired {
@@ -95,9 +99,11 @@ impl Controller {
             }
         }
         let states = match result {
-            Ok(states) => states,
+            Ok(states) => self.deployment_states(states),
             Err(problem) if replacement_committed(&problem) => {
-                let original = self.batch_original_states();
+                let original = self.deployment_states(
+                    original_states.ok_or_else(|| WireError::new(1, "已提交批次缺少原状态记录"))?,
+                );
                 return self
                     .restore_batch(target, before, desired, original, pages, problem)
                     .await;
@@ -503,14 +509,6 @@ impl Controller {
         })
         .map_err(parameter)?;
         Err(failure)
-    }
-
-    /// ADR-0031：已提交错误从监管器取回原快照，覆盖配置移除和改变分组的实例。
-    fn batch_original_states(&self) -> HashMap<String, Option<payload::State>> {
-        self.groups
-            .keys()
-            .flat_map(|group| self.manager.last_replacement_states(group))
-            .collect()
     }
 
     /// ADR-0031：恢复后的纤程句柄来自监管器当前目录，配置和授权仍为窗口前值。

@@ -48,6 +48,7 @@ Rust-cordis 的核心不运行插件代码，只管理组件的依赖、加载�
 | 写 Python、TypeScript、网页插件 | [Python](references/python.md)、[TypeScript](references/typescript.md)、[网页与全栈](references/web.md) |
 | HTTP 路由、认证、字节流、机密 | [HTTP、流与身份](references/http.md) |
 | 调用外部服务或模型、可能超过 30 秒的工作、Rust 中等待异步调用 | [调用、超时与长任务](references/calls.md) |
+| 替换或回滚后哪些数据会保留、哪些会丢 | [资源与状态](references/resources-state.md)“替换能保住什么” |
 | 修改已发布接口、升级主版本、状态格式变化 | [接口版本与升级](references/versioning.md) |
 | 方法名来自配置或外部输入 | [按名称调用](references/dynamic.md) |
 | 把现有应用迁过来 | [迁移现有应用](references/migration.md) |

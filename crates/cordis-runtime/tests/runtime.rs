@@ -18,6 +18,9 @@ mod migration;
 #[path = "runtime/isolation.rs"]
 mod isolation;
 
+#[path = "runtime/confirmation.rs"]
+mod confirmation;
+
 struct Process(Option<Child>);
 impl Process {
     fn start(project: &Path, label: &str) -> Self {

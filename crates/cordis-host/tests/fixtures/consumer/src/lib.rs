@@ -3,6 +3,26 @@ mod blocking_wait;
 use cordis_sdk::prelude::*;
 use loader_fixture_api::{Control, Counter, Metadata, NewCounter, ScopedCounter};
 
+#[cordis_sdk::interface(name = "host.downstream", version = "1.0")]
+trait Downstream: Send + Sync {
+    fn add(&self, amount: u64) -> Result<u64>;
+}
+
+struct DownstreamState {
+    value: std::sync::Mutex<u64>,
+    frozen: Frozen,
+}
+
+#[cordis_sdk::interface]
+impl Downstream for DownstreamState {
+    fn add(&self, amount: u64) -> Result<u64> {
+        let mut value = self.value.lock().unwrap();
+        self.frozen.check()?;
+        *value += amount;
+        Ok(*value)
+    }
+}
+
 struct Low;
 impl Component for Low {
     const NAME: &'static str = "low";
@@ -10,9 +30,28 @@ impl Component for Low {
     fn inject() -> Inject {
         Inject::new().with::<dyn Counter>()
     }
+    fn provides() -> Provides {
+        Provides::new().with::<dyn Downstream>()
+    }
+    fn state() -> StateSchema {
+        StateSchema::new("host.downstream.state", 1, 1)
+    }
     async fn apply(ctx: Context, _: EmptyConfig) -> Result<()> {
         let provider = ctx.get::<dyn Counter>()?;
         provider.value()?;
+        let value = match ctx.inherited_state()? {
+            Some(state) => state.decode::<u64>()?,
+            None => 100,
+        };
+        let frozen = Frozen::new();
+        let state = Arc::new(DownstreamState {
+            value: std::sync::Mutex::new(value),
+            frozen: frozen.clone(),
+        });
+        ctx.provide::<dyn Downstream>(state.clone())?;
+        ctx.export_state_with("host.downstream.state", 1, frozen, move || {
+            Ok(*state.value.lock().unwrap())
+        })?;
         let retained = ctx.clone();
         ctx.effect("consumer-cleanup", move |fx| {
             fx.defer(move || {

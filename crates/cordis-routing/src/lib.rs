@@ -4,12 +4,14 @@
 pub mod description;
 mod directory;
 mod interface;
+mod lifetime;
 mod local;
 pub mod metadata;
 mod transfer;
 
 pub use directory::{Batch, Router};
 pub use interface::Interface;
+pub use lifetime::{Retirement, RouteLifetime};
 pub use local::{Arguments, CallContext, LocalReply, LocalService};
 
 use cordis_up::{Value, WireError};

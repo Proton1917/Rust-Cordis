@@ -1,13 +1,13 @@
 //! DOC-16 §6、CP-3/CP-6：按接收连接分配出口编号并在锁外释放路由。
 
-use crate::{Result, error};
+use crate::{Result, Retirement, RouteLifetime, error};
 use cordis_up::{
     Value,
     rpc::{Connection, Outgoing},
 };
 use parking_lot::Mutex;
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     sync::{Arc, Weak},
     time::Duration,
 };
@@ -15,6 +15,7 @@ use std::{
 struct Entry<R> {
     route: Arc<R>,
     owner: Option<u64>,
+    lifetime: Option<Retirement>,
 }
 struct Counter {
     next: u64,
@@ -23,6 +24,7 @@ struct Counter {
 struct Entries<R> {
     values: HashMap<(u64, u64), Entry<R>>,
     counters: HashMap<u64, Counter>,
+    lifetimes: HashMap<usize, HashSet<(u64, u64)>>,
 }
 struct Directory<R> {
     entries: Mutex<Entries<R>>,
@@ -42,10 +44,24 @@ pub struct Batch<R> {
 }
 
 impl<R> Entries<R> {
+    fn remove_one(&mut self, key: (u64, u64)) -> Option<Entry<R>> {
+        let entry = self.values.remove(&key)?;
+        if let Some(lifetime) = &entry.lifetime {
+            let id = lifetime.id();
+            if let Some(keys) = self.lifetimes.get_mut(&id) {
+                keys.remove(&key);
+                if keys.is_empty() {
+                    self.lifetimes.remove(&id);
+                }
+            }
+        }
+        Some(entry)
+    }
+
     fn remove(&mut self, recipient: u64, ids: &[u64]) -> Vec<Entry<R>> {
         let discarded: Vec<_> = ids
             .iter()
-            .filter_map(|id| self.values.remove(&(recipient, *id)))
+            .filter_map(|id| self.remove_one((recipient, *id)))
             .collect();
         if let Some(counter) = self.counters.get_mut(&recipient) {
             counter.active -= discarded.len();
@@ -75,7 +91,7 @@ impl<R: Send + Sync + 'static> Batch<R> {
     }
 }
 
-impl<R: Send + Sync + 'static> Router<R> {
+impl<R: RouteLifetime + Send + Sync + 'static> Router<R> {
     /// ADR-0041：调用方提供既定连接预算；路由数据保持调用方的具体类型。
     pub fn new(max_exports: usize, timeout: Duration) -> Self {
         Self {
@@ -83,6 +99,7 @@ impl<R: Send + Sync + 'static> Router<R> {
                 entries: Mutex::new(Entries {
                     values: HashMap::new(),
                     counters: HashMap::new(),
+                    lifetimes: HashMap::new(),
                 }),
                 max_exports,
             }),
@@ -108,7 +125,11 @@ impl<R: Send + Sync + 'static> Router<R> {
         owner: Option<u64>,
         batch: &mut Batch<R>,
     ) -> Result<u64> {
+        let lifetime = route.retirement();
         let mut entries = self.directory.entries.lock();
+        if lifetime.as_ref().is_some_and(Retirement::ended) {
+            return Err(error(4, "服务提供方加载纪元已结束"));
+        }
         if !recipient.is_alive() {
             return Err(error(4, "接收连接已结束"));
         }
@@ -125,9 +146,21 @@ impl<R: Send + Sync + 'static> Router<R> {
             .checked_add(1)
             .ok_or_else(|| error(8, "出口编号空间已耗尽"))?;
         counter.active += 1;
-        entries
-            .values
-            .insert((recipient.id(), id), Entry { route, owner });
+        if let Some(lifetime) = &lifetime {
+            entries
+                .lifetimes
+                .entry(lifetime.id())
+                .or_default()
+                .insert((recipient.id(), id));
+        }
+        entries.values.insert(
+            (recipient.id(), id),
+            Entry {
+                route,
+                owner,
+                lifetime,
+            },
+        );
         batch.ids.push(id);
         Ok(id)
     }
@@ -173,7 +206,7 @@ impl<R: Send + Sync + 'static> Router<R> {
                 .collect();
             let discarded: Vec<_> = ids
                 .iter()
-                .filter_map(|id| entries.values.remove(id).map(|entry| (id.0, entry)))
+                .filter_map(|id| entries.remove_one(*id).map(|entry| (id.0, entry)))
                 .collect();
             for (recipient, _) in &discarded {
                 if let Some(counter) = entries.counters.get_mut(recipient) {
@@ -181,6 +214,26 @@ impl<R: Send + Sync + 'static> Router<R> {
                 }
             }
             entries.counters.remove(&connection);
+            discarded
+        };
+        drop(discarded);
+    }
+
+    /// ADR-0052：按加载代索引退役出口，编号继续由 release 的幂等范围识别。
+    pub fn retire(&self, lifetime: &Retirement) {
+        lifetime.finish();
+        let discarded = {
+            let mut entries = self.directory.entries.lock();
+            let keys = entries.lifetimes.remove(&lifetime.id()).unwrap_or_default();
+            let mut discarded = Vec::with_capacity(keys.len());
+            for key in keys {
+                if let Some(entry) = entries.values.remove(&key) {
+                    if let Some(counter) = entries.counters.get_mut(&key.0) {
+                        counter.active -= 1;
+                    }
+                    discarded.push(entry);
+                }
+            }
             discarded
         };
         drop(discarded);

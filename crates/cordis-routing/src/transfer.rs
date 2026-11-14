@@ -7,7 +7,7 @@ use cordis_up::{
 };
 use std::{collections::HashMap, sync::Arc};
 
-impl<R: Send + Sync + 'static> Router<R> {
+impl<R: crate::RouteLifetime + Send + Sync + 'static> Router<R> {
     /// DOC-16 §6：同一载荷中的重复资源共用一个出口，失败由 Batch 回收。
     pub fn transfer(
         &self,
@@ -39,6 +39,7 @@ impl<R: Send + Sync + 'static> Router<R> {
         request: payload::Invoke,
         incoming: &Payload,
         route: impl Fn(RemoteObject) -> Arc<R>,
+        response_route: impl Fn(RemoteObject) -> Arc<R>,
     ) -> Result<Outgoing> {
         let (args, batch) =
             self.transfer(Value::Array(request.args), incoming, object.peer(), &route)?;
@@ -56,7 +57,7 @@ impl<R: Send + Sync + 'static> Router<R> {
             .request("invoke", batch.outgoing(outgoing), self.timeout)
             .await?;
         let response: payload::InvokeResult = decode(result.value())?;
-        self.reply(response.value, &result, caller, route)
+        self.reply(response.value, &result, caller, response_route)
     }
 
     /// ADR-0017：内置函数在目录锁外执行，回复写出后再执行约定动作。

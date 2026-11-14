@@ -31,6 +31,7 @@ pub(super) struct Transition {
     pub names: Vec<String>,
     pub before: HashMap<String, cordis::Epoch>,
     pub permit_pending: bool,
+    pub confirming: Mutex<Option<(std::time::Instant, Vec<String>)>>,
 }
 
 impl Manager {
@@ -76,41 +77,45 @@ impl Manager {
     pub(super) async fn prepare_transition(
         &self,
         instances: &[Arc<Instance>],
+        stop_on_error: bool,
     ) -> Result<Transition> {
+        let instances = self.affected_instances(instances);
         let names: Vec<_> = instances
             .iter()
             .map(|instance| instance.data.name.clone())
             .collect();
-        let frozen = self.export(&names, true).await;
-        if let Some(problem) = &frozen.failure {
+        let frozen = self.export(&names, stop_on_error).await;
+        if let Some(problem) = &frozen.failure
+            && stop_on_error
+        {
             let problem = problem.clone();
             self.thaw(&frozen).await?;
             return Err(problem);
         }
-        self.0
-            .catalog
-            .lock()
-            .checkpoints
-            .extend(frozen.states.clone());
-        let inherited = instances
-            .iter()
-            .map(|instance| {
-                (
-                    instance.data.name.clone(),
-                    frozen
-                        .states
-                        .get(&instance.data.name)
-                        .cloned()
-                        .or_else(|| instance.data.inherited.lock().clone()),
-                )
-            })
-            .collect();
+        let inherited = {
+            let mut catalog = self.0.catalog.lock();
+            catalog.checkpoints.extend(frozen.states.clone());
+            instances
+                .iter()
+                .map(|instance| {
+                    (
+                        instance.data.name.clone(),
+                        catalog
+                            .checkpoints
+                            .get(&instance.data.name)
+                            .cloned()
+                            .or_else(|| instance.data.inherited.lock().clone()),
+                    )
+                })
+                .collect()
+        };
         Ok(Transition {
             frozen,
             inherited,
             names,
             before: self.epochs(),
             permit_pending: false,
+            confirming: Mutex::new(None),
         })
     }
     /// CP-1、CP-6：准备独立进程并握手，接受其描述符后建立核心分组。
@@ -597,23 +602,7 @@ impl Manager {
                 .get(&key)
                 .ok_or_else(|| error(2, "描述符中缺少目标组件"))?;
             manager.resolve(component, &config).await?;
-            *instance.data.config.lock() = config.clone();
-            instance
-                .fiber
-                .update(Configuration {
-                    instance: instance.data.clone(),
-                    config,
-                })
-                .await
-                .map_err(|problem| {
-                    instance
-                        .data
-                        .error
-                        .lock()
-                        .as_ref()
-                        .map(|problem| problem.value.clone())
-                        .unwrap_or_else(|| kernel_error(problem))
-                })
+            manager.update_stateful(instance, config).await
         })
         .await
     }
@@ -652,10 +641,15 @@ impl Manager {
     }
 
     /// DOC-11 SW-9：成功确认时保存本次导出结果，供运行时与上一版本引用共同持久化。
-    pub(super) fn retain_replacement_states(&self, group: &str, names: &[String], frozen: &Frozen) {
+    pub(super) fn retain_replacement_states(
+        &self,
+        group: &str,
+        names: &[String],
+        inherited: &HashMap<String, Option<payload::State>>,
+    ) {
         let states = names
             .iter()
-            .map(|name| (name.clone(), frozen.states.get(name).cloned()))
+            .map(|name| (name.clone(), inherited.get(name).cloned().flatten()))
             .collect();
         self.0
             .catalog
@@ -939,7 +933,17 @@ impl Manager {
             return Err(problem);
         }
         let instances = self.group_instances(&group.name);
-        let transition = match self.prepare_transition(&instances).await {
+        let incoming = instances.iter().filter_map(|instance| {
+            candidate
+                .components
+                .get(&(
+                    instance.data.plugin.clone(),
+                    instance.data.component.clone(),
+                ))
+                .map(|component| (instance.fiber.context(), component.clone()))
+        });
+        let instances = self.include_incoming(instances.clone(), incoming);
+        let transition = match self.prepare_transition(&instances, true).await {
             Ok(transition) => transition,
             Err(problem) => {
                 self.retire(&candidate).await?;
@@ -961,6 +965,7 @@ impl Manager {
             succeeded: false,
             rolled_back: false,
             failure: None,
+            discarded_confirmation: None,
         };
         if let Err(problem) = self
             .accept_group(&candidate, &transition, &mut report, started)
@@ -997,6 +1002,8 @@ impl Manager {
             .await?;
         report.affected_instances = changed.len();
         report.pause_ms = started.elapsed().as_millis().min(u64::MAX as u128) as u64;
+        self.thaw_current(&transition.frozen).await?;
+        self.begin_confirmation(transition);
         self.confirm(&changed, &candidate.connection).await
     }
 
@@ -1017,7 +1024,7 @@ impl Manager {
         };
         group.restarts.store(0, Ordering::Release);
         report.committed = true;
-        self.retain_replacement_states(&group.name, &transition.names, &transition.frozen);
+        self.retain_replacement_states(&group.name, &transition.names, &transition.inherited);
         self.record_group_report(report.clone());
         drop(transition);
         let completion = async {
@@ -1040,14 +1047,16 @@ impl Manager {
     /// 双重失败分别保留，其他分组继续由各自生命周期管理。
     async fn rollback_group(
         &self,
-        group: &Group,
+        group: &Arc<Group>,
         previous: Arc<GroupGeneration>,
         candidate: &GroupGeneration,
         transition: Transition,
         mut report: ReplaceReport,
         problem: WireError,
     ) -> Result<ReplaceReport> {
+        report.discarded_confirmation = self.confirmation_discard(&transition);
         self.inherit(&transition.inherited);
+        let previous = self.rollback_version(group, &previous).await?;
         self.activate(group, previous, None)?;
         let rollback = self.stabilize(&transition.before, &transition.names).await;
         report.rolled_back = rollback.is_ok();
@@ -1060,6 +1069,7 @@ impl Manager {
         .into();
         group.health.lock().error = Some(saved_error(&problem));
         self.record_group_report(report);
+        self.thaw_current(&transition.frozen).await?;
         drop(transition);
         self.retire(candidate).await?;
         if let Err(rollback) = rollback {
@@ -1213,7 +1223,17 @@ impl Manager {
 
     pub(super) fn inherit(&self, states: &HashMap<String, Option<payload::State>>) {
         let instances = {
-            let catalog = self.0.catalog.lock();
+            let mut catalog = self.0.catalog.lock();
+            for (name, state) in states {
+                match state {
+                    Some(state) => {
+                        catalog.checkpoints.insert(name.clone(), state.clone());
+                    }
+                    None => {
+                        catalog.checkpoints.remove(name);
+                    }
+                }
+            }
             states
                 .iter()
                 .filter_map(|(name, state)| {
@@ -1440,16 +1460,27 @@ impl Manager {
             return Ok(());
         }
         let problem = error(4, metadata::clipped(&reason));
+        let transition = self
+            .prepare_transition(&self.group_instances(&group.name), false)
+            .await?;
+        self.inherit(&transition.inherited);
         self.withdraw(&group, &version, problem).await;
+        let cohort = transition.names;
+        self.thaw_current(&transition.frozen).await?;
         let specification = group.specification.lock().clone();
         let Some(specification) = specification else {
             return Ok(());
         };
-        self.restart_group(group, specification).await
+        self.restart_group(group, specification, &cohort).await
     }
 
     /// CP-6：退避与重启共用五次以内的尝试预算，关闭信号结束等待，失败保留诊断。
-    async fn restart_group(&self, group: Arc<Group>, specification: GroupSpec) -> Result<()> {
+    async fn restart_group(
+        &self,
+        group: Arc<Group>,
+        specification: GroupSpec,
+        cohort: &[String],
+    ) -> Result<()> {
         let mut shutdown = self.0.stop.subscribe();
         while group.restarts.load(Ordering::Acquire) < specification.restart.max {
             if !self.0.context.is_current() || *shutdown.borrow() {
@@ -1478,7 +1509,7 @@ impl Manager {
                 self.retire(&candidate).await?;
                 continue;
             }
-            if !self.restore_candidate(&group, &candidate).await? {
+            if !self.restore_candidate(&group, &candidate, cohort).await? {
                 continue;
             }
             group.health.lock().state = "running".into();
@@ -1494,33 +1525,30 @@ impl Manager {
         &self,
         group: &Group,
         candidate: &Arc<GroupGeneration>,
+        cohort: &[String],
     ) -> Result<bool> {
-        let instances = self.group_instances(&group.name);
-        let inherited = {
-            let catalog = self.0.catalog.lock();
-            instances
-                .iter()
-                .map(|instance| {
-                    (
-                        instance.data.name.clone(),
-                        catalog.checkpoints.get(&instance.data.name).cloned(),
-                    )
-                })
-                .collect()
-        };
-        self.inherit(&inherited);
+        let instances: Vec<_> = cohort
+            .iter()
+            .filter_map(|name| self.instance(name).ok())
+            .collect();
+        let transition = self.prepare_transition(&instances, false).await?;
+        self.inherit(&transition.inherited);
         self.activate(group, candidate.clone(), None)?;
         let outcomes = join_all(instances.iter().map(|instance| instance.fiber.settled())).await;
         if !candidate.connection.is_alive() {
             self.reclaim_connection(candidate.connection.id());
+            let retry = self.prepare_transition(&instances, false).await?;
+            self.inherit(&retry.inherited);
             self.withdraw(
                 group,
                 candidate,
                 error(4, candidate.connection.closed().await),
             )
             .await;
+            self.thaw_current(&retry.frozen).await?;
             return Ok(false);
         }
+        self.thaw_current(&transition.frozen).await?;
         if let Some(problem) = outcomes.into_iter().find_map(std::result::Result::err) {
             group.health.lock().error = Some(saved_error(&kernel_error(problem)));
         }

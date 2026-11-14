@@ -246,7 +246,17 @@ impl Manager {
                 .into_iter()
                 .filter(|instance| instance.data.plugin == plugin_name)
                 .collect();
-            let transition = self.prepare_transition(&instances).await?;
+            let incoming = instances.iter().filter_map(|instance| {
+                candidate
+                    .components
+                    .get(&(
+                        instance.data.plugin.clone(),
+                        instance.data.component.clone(),
+                    ))
+                    .map(|component| (instance.fiber.context(), component.clone()))
+            });
+            let instances = self.include_incoming(instances.clone(), incoming);
+            let transition = self.prepare_transition(&instances, true).await?;
             Ok(NativeSwap {
                 group,
                 plugin: plugin_name.into(),
@@ -361,6 +371,7 @@ impl Manager {
             succeeded: false,
             rolled_back: false,
             failure: None,
+            discarded_confirmation: None,
         };
         let mut confirmation = Duration::ZERO;
         let accepted = match self
@@ -368,9 +379,11 @@ impl Manager {
             .await
         {
             Ok(changed) => {
+                self.thaw_current(&swap.transition.frozen).await?;
                 report.affected_instances = changed.len();
                 report.pause_ms = started.elapsed().as_millis().min(u64::MAX as u128) as u64;
                 let confirming = std::time::Instant::now();
+                self.begin_confirmation(&swap.transition);
                 let result = self.confirm(&changed, &swap.previous.connection).await;
                 confirmation = confirming.elapsed();
                 result
@@ -423,18 +436,35 @@ impl Manager {
         mut report: SwapReport,
         problem: WireError,
     ) -> Result<SwapReport> {
+        report.discarded_confirmation = self.confirmation_discard(&swap.transition);
         let rollback = async {
-            self.library_command::<()>(
-                &swap.previous.connection,
-                "library_activate",
-                swap.old_library,
-            )
-            .await?;
+            let recovered = if swap.previous.connection.is_alive() {
+                self.library_command::<()>(
+                    &swap.previous.connection,
+                    "library_activate",
+                    swap.old_library,
+                )
+                .await?;
+                None
+            } else {
+                Some(
+                    self.prepare_transition(&self.group_instances(&swap.group.name), false)
+                        .await?,
+                )
+            };
+            if let Some(recovered) = &recovered {
+                self.inherit(&recovered.inherited);
+            }
             self.inherit(&swap.transition.inherited);
-            self.activate(&swap.group, swap.previous.clone(), Some(&swap.plugin))?;
+            let restored = self.rollback_version(&swap.group, &swap.previous).await?;
+            let plugin = recovered.is_none().then_some(swap.plugin.as_str());
+            self.activate(&swap.group, restored, plugin)?;
             self.stabilize(&swap.transition.before, &swap.transition.names)
-                .await
-                .map(|_| ())
+                .await?;
+            if let Some(recovered) = &recovered {
+                self.thaw_current(&recovered.frozen).await?;
+            }
+            self.thaw_current(&swap.transition.frozen).await
         }
         .await;
         report.rolled_back = rollback.is_ok();
@@ -448,12 +478,14 @@ impl Manager {
         swap.group.health.lock().error = Some(saved_error(&problem));
         self.record_native(&swap, &report);
         drop(swap.transition.frozen);
-        self.library_command::<payload::LibraryRetired>(
-            &swap.previous.connection,
-            "library_retire",
-            swap.new_library,
-        )
-        .await?;
+        if swap.previous.connection.is_alive() {
+            self.library_command::<payload::LibraryRetired>(
+                &swap.previous.connection,
+                "library_retire",
+                swap.new_library,
+            )
+            .await?;
+        }
         rollback?;
         Err(problem)
     }
@@ -476,7 +508,7 @@ impl Manager {
         self.retain_replacement_states(
             &swap.group.name,
             &swap.transition.names,
-            &swap.transition.frozen,
+            &swap.transition.inherited,
         );
         self.record_native(&swap, &report);
         drop(std::mem::take(&mut swap.transition.frozen));
