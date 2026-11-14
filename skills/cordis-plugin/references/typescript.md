@@ -2,9 +2,7 @@
 
 ## 项目与构建
 
-`cordis new-plugin hello --ts` 生成 src/main.ts、src/cordis_sdk、package.json、tsconfig.json 和进程清单。SDK 源码与入口共同编译到 dist，生成项目的 npm 配置使用普通文件依赖布局。
-
-维护仓库 SDK 源码时，使用[仓库 SDK 构建](web.md#仓库-sdk-构建)中的 workspace 命令，一并更新 Node SDK、网页 bundle 与 HTTP 内置资源。下面的命令针对生成的用户插件，沿其 package.json 调用本地 TypeScript 入口。
+`cordis new-plugin hello --ts` 生成 `src/main.ts`、`src/cordis_sdk`、`package.json`（`"type": "module"`）、`tsconfig.json` 和进程清单。SDK 源码与入口一起编译到 `dist`。
 
 ```sh
 npm --prefix plugins/hello install
@@ -12,26 +10,73 @@ npm --prefix plugins/hello run build
 cordis run
 ```
 
-清单的 command 为 `node dist/main.js`。标准输出承载 UP/1，诊断使用 `context.log` 或标准错误。应用入口从生成的 `./cordis_sdk/index.js` 导入 run；使用仓库 SDK 包的项目从 `cordis-sdk` 导入。
+清单的 command 为 `node dist/main.js`。标准输出承载 UP/1，诊断用 `context.log` 或标准错误，不要 `console.log`。入口从生成的 `./cordis_sdk/index.js` 导入；以 npm 包方式使用 SDK 的项目从 `cordis-sdk` 导入。
 
-组件对象包含 name、apply(context, config) 与可选的 resolve(config)。inject 将接口标识映射为必需性；provides、listens 列出服务和事件；stateSchema、stateVersionMin、stateVersionMax 描述状态继承范围。
+## 最小完整示例
 
-## 接口与引用
+使用方组件：注入 `kv@1.0`，迁移自己的计数状态，在效应中归还客户端，运行后台任务。
 
 ```sh
-cordis idl gen interfaces/kv.wit --lang ts --output plugins/hello/src/bindings.ts
+cordis idl gen interfaces/kv.wit --lang ts --output plugins/visits/src/bindings.ts
 ```
 
-`await context.get("kv@1.0", binding, binding.KvClient)` 返回生成客户端；`await context.provide(interface, provider, binding)` 登记服务。方法返回普通值或 Promise，由生成绑定处理两者。`close(client)` 显式结束客户端份额；参数、结果和复合值中的资源引用由各次转交分别拥有。
+```ts
+import {setTimeout as sleep} from "node:timers/promises";
+import {Context, CordisError, close, run} from "./cordis_sdk/index.js";
+import * as binding from "./bindings.js";
 
-资源事件使用 Context.on 的 binding 参数，回调通过 BindingTransport 和生成的 decodeValue 读取记录；Context.emit 使用同一 binding 的 encodeValue。普通持久状态采用值类型，服务资源留在其实际效应寿命内。
+async function apply(context: Context): Promise<void> {
+    // 状态继承：先核对模式与版本，缺席时用初始值。
+    const state = context.inherited as Map<string, any> | null;
+    if (state && (state.get("schema") !== "visits" || state.get("version") !== 1)) {
+        throw new CordisError(2, "需要 visits 版本 1");
+    }
+    const visits = {count: Number(state?.get("data").get("count") ?? 0)};
+    const frozen = await context.exportState("visits", 1, () => ({count: visits.count}));
+    frozen.check(); // 检查与修改之间没有 await，导出不会插进来
+    visits.count += 1;
+
+    // 必需依赖缺席时核心不会调用 apply。客户端在效应清理中归还。
+    const kv = await context.get("kv@1.0", binding, binding.KvClient);
+    const holder = await context.effect(async scope => {
+        await scope.defer(() => close(kv));
+    }, "kv-client");
+    holder.close(); // 只归还外部句柄，效应仍由核心持有到实例停用
+
+    // 后台任务：停用时 signal 中止，清理等待任务结束。
+    await context.task(async signal => {
+        while (!signal.aborted) {
+            const keys = await kv.keys();
+            await context.log(`共有 ${keys.length} 个键`, 3);
+            await sleep(5000, undefined, {signal});
+        }
+    }, "poll-kv");
+}
+
+await run("visits", [{
+    name: "visits",
+    apply,
+    inject: {"kv@1.0": true},
+    stateSchema: "visits",
+    stateVersionMin: 1,
+    stateVersionMax: 1,
+}]);
+```
+
+继承状态是 CBOR 解码后的 `Map`，嵌套字段用 `get` 读取。
+
+## 组件与服务
+
+组件对象含 `name`、`apply(context, config)`，可选 `resolve(config)`、`inject`（接口标识到“是否必需”）、`provides`、`listens`、`stateSchema`、`stateVersionMin`、`stateVersionMax`。
+
+取服务：`await context.get(interface, binding, binding.XxxClient)` 返回生成的客户端，`close(client)` 归还引用。提供服务：`await context.provide(interface, provider, binding)`；第四个参数为 `true` 时为 scoped 提供方，`scope(metadata)` 返回保存该元数据的视图。方法可以返回普通值或 Promise。
+
+事件载荷含资源时，`context.on(event, callback, asynchronous, binding)` 传入生成模块，回调中用生成的 `decodeValue` 读取；`context.emit` 用同一模块的 `encodeValue`。
 
 ## 效应、取消与状态
 
-`await context.effect(body, label)` 的 body 接收作用域 Context，在 `await scope.defer(cleanup)` 中登记回退。Effect.settled 等待体函数，Effect.dispose 等待回退，Effect.close 归还外部控制句柄。`context.task(signal => ...)` 把后台任务与 AbortSignal、结束等待绑定到同一效应。
+`await context.effect(body, label)` 的 body 接收作用域 Context，`await scope.defer(cleanup)` 登记清理。`Effect.settled` 等待体函数，`Effect.dispose` 等待清理，`Effect.close` 只归还外部句柄。`context.task(signal => ...)` 把后台任务与 AbortSignal 绑定到同一效应。
 
-`withSignal(signal, () => client.method(...))` 将使用方的取消信号传给核心。Node 提供方通过 currentSignal() 取得当前调用信号，交给支持 AbortSignal 的异步接口。生命周期中的 apply 与清理按核心调度完成。
+`withSignal(signal, () => client.method(...))` 把使用方的取消传到核心；提供方用 `currentSignal()` 取得本次调用的信号，交给支持 AbortSignal 的接口。
 
-`context.inherited` 使用 Map 表示原始 State，读取 schema、version、data；传入 apply 的 config 已转成普通对象。`context.exportState(schema, version, exporter, frozen, thaw)` 登记导出器，写入时调用 frozen.check。仓库 kv-ts 与 Rust KV 共用 kv.snapshot@1，entries 的字节值保存为整数数组。
-
-`context.isolate(interface, realm)` 和 `context.intercept(interface, metadata)` 返回派生 Context；调用其 close() 归还外部视图份额。`context.plugin(component, config)` 装入当前插件描述符中的子组件。scoped 提供方的 scope(metadata) 返回保存该元数据的服务视图。
+`context.exportState(schema, version, exporter, frozen?, thaw?)` 返回 Frozen，写入前调用 `frozen.check()`。`context.isolate(interface, realm)`、`context.intercept(interface, metadata)` 返回派生 Context，用完调用其 `close()`。`context.plugin(component, config)` 装入本插件描述符中的子组件。

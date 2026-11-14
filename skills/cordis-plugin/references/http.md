@@ -8,7 +8,7 @@
 
 请求携带方法、原编码路径、命中前缀、查询串、重复头部、直接对端和正文。认证由处理方实施。HTTP 提供方过滤逐跳头，保持 Cookie、Authorization、X-Forwarded 字段；处理方根据自己的部署边界决定转发头的信任方式。响应状态、端到端头部与正文由处理方返回，Content-Length 由 HTTP 提供方生成。
 
-通过 `cordis new-plugin api --rust --http` 生成原生处理方；也可选择 `--python`、`--ts`。运行目录同时配置官方 HTTP 提供方。示例 `plugins/http-echo`、`http-echo-py`、`http-echo-ts` 使用相同的回显与 `/file` 上传下载接口。
+通过 `cordis new-plugin api --rust --http` 生成原生处理方；也可选择 `--python`、`--ts`。部署中同时配置官方 http 插件作为提供方。
 
 ## 通用字节流
 

@@ -15,20 +15,6 @@
 
 脚手架的 web/index.js 是可直接加载的 ES 模块，从 `/_cordis/cordis-web.js` 导入 defineComponent、Frozen 等浏览器 API。每个网页模块默认导出一个 `defineComponent({...})` 对象，宿主按入口清单的 component 确定该对象的实际组件名。HTTP 默认页面加载当前入口清单，业务组件把 DOM 放入 `main#cordis-components`。使用自己的构建工具时，将宿主导入地址保留为 external，使所有组件共用同一页面宿主。
 
-## 仓库 SDK 构建
-
-维护 Rust-cordis 仓库内的 SDK 时，在仓库根目录执行统一构建：
-
-```sh
-cd sdks/typescript
-npm ci --ignore-scripts --no-audit --no-fund
-npm run build
-cd ../..
-cargo build -p cordis-http
-```
-
-该入口检查并生成 cordis-sdk/dist，同时更新 cordis-web/dist/cordis-web.js 与 plugins/http/assets/cordis-web.js。HTTP 动态库在后续 Cargo 构建中嵌入更新后的脚本。SDK 独立构建入口为 cordis-sdk/build.mjs，workspace 与 cordis-web 的 npm build 复用同一编译函数；TypeScript 和 esbuild 通过 Node API 调用，配合 bin-links=false 使用。生成的用户插件沿自身 package.json 构建。
-
 ## 页面连接
 
 默认 HTTP 页面已经调用 connect。自定义页面加载 `/_cordis/session.js`，再执行 `connect({token: globalThis.CORDIS_SESSION.token})`；每个页面建立一条宿主连接。connect 返回 `{close, completed}`，close 请求结束连接与重连循环，completed 等待整个连接流程结束。
@@ -65,7 +51,7 @@ cargo build -p cordis-http
 
 每个页面拥有自己的服务域。核心通过 PageNamespace 标记页面视图，并按 `(页面连接编号, 域名)` 识别显式命名域；同页同名域共享身份，不同页保有各自服务。`await context.isolate(interface, "tenant-a")` 进入当前页面中的命名域，省略 realm 时创建新的独有域。后端普通服务按组件声明注入，跨页面共享业务数据由后端服务管理。
 
-`await context.plugin(component, config)` 在当前视图下装入当前插件描述符中的组件。网页模块的描述符包含默认导出的这一个组件，因此自身子组件使用其实际组件名，并通过配置区分父级与子级行为。纯网页名为 panel 的组件使用 panel，全栈后端组件名为 panel 时使用 panel/web；仓库 tests/web-sdk/fixtures/realm-counter 展示真实调用。
+`await context.plugin(component, config)` 在当前视图下装入当前插件描述符中的组件。网页模块的描述符包含默认导出的这一个组件，因此自身子组件使用其实际组件名，并通过配置区分父级与子级行为。纯网页名为 panel 的组件使用 panel，全栈后端组件名为 panel 时使用 panel/web。
 
 服务依赖在提供方 Active 后可用。子组件依赖父组件当前加载代提供的新服务时，在父组件进入 Active 后调用 context.plugin 挂载使用方，例如由后续用户事件触发。
 
@@ -77,4 +63,4 @@ cargo build -p cordis-http
 
 纯网页替换依次导出状态、清理旧效应、加载带新序号 URL 的模块并继承状态。全栈替换先使后端 Active，再切换各页面；任一步失败时恢复同一事务的后端、页面版本和状态。多个插件的变化使用 replace_batch，让 watch 窗口保持整体提交与整体恢复。
 
-运行验证观察真实页面控件和后端数据，记录各页独立状态与页面文档是否保持。调用管理接口 configure 时，读取配置的组件在新激活中采用该值；remove 回收对应资源登记和子实例。仓库 examples/web 提供纯网页笔记、Rust KV 全栈和 Python KV 全栈的源码与构建方式。
+运行验证观察真实页面控件和后端数据，记录各页独立状态与页面文档是否保持。调用管理接口 configure 时，读取配置的组件在新激活中采用该值；remove 回收对应资源登记和子实例。
