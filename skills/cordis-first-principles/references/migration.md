@@ -28,7 +28,7 @@
 | 后台线程、定时器、`setInterval`、裸 `asyncio.create_task`、全局 `tokio::spawn` | Rust `ctx.spawn` / `ctx.spawn_thread`，Python 与 TypeScript `context.task`；定时用任务内的循环 | 3 |
 | 进程退出钩子、`atexit`、信号处理 | 效应清理 | 3 |
 | 请求处理中同步等待外部服务或模型 | 提交、执行、查询三步（见[调用、超时与长任务](calls.md)） | 3 |
-| 同步函数里 `block_on` 等待异步调用 | 方法声明为异步；阻塞库放进 `ctx.spawn_thread` | 3 |
+| 同步函数里 `block_on` 等待异步调用 | `context.wait(future)`，或把方法声明为异步；阻塞库放进 `ctx.spawn_thread` | 3 |
 | 启动时读取全局配置文件 | 组件 Config，在 resolve 中检查 | 1.1 |
 | 当前工作目录或固定路径下的数据文件 | Rust 用 `ctx.data_dir()`；Python 与 TypeScript SDK 目前没有对应入口，持久路径写进组件配置 | 2.1 |
 | 进程内直接调用另一个模块的函数 | 注入对方的版本化接口 | 4.1 |

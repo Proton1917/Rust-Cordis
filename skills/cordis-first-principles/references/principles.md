@@ -55,7 +55,7 @@ Rust-cordis 维护者使用的六条判据（`Q0` 核心不运行插件代码、
 |---|---|---|
 | 文件、连接、监听器、后台任务 | 取得它的实例 | 在效应中取得，在同一效应清理；后台工作用 SDK 任务入口（Rust `ctx.spawn` / `ctx.spawn_thread`，Python 与 TypeScript `context.task`），不用全局 `tokio::spawn`、裸 `asyncio.create_task`、`setInterval`（见[资源与状态](resources-state.md)） |
 | 调用的截止时间 | 核心（缺省 30 秒，连续 3 次超时终止进程） | 服务方法不等待长工作；长工作改为提交、执行、查询 |
-| 原生执行线程 | 宿主（每组缺省 2 个） | 不自己 `block_on` 等待 SDK 调用；需要等待的方法声明为异步；阻塞库放进 `ctx.spawn_thread` |
+| 原生执行线程 | 宿主（每组缺省 2 个） | 不自己 `block_on`；同步上下文中经宿主的 `context.wait` 等待，异步上下文中 `.await`；阻塞库放进 `ctx.spawn_thread` |
 | Python、TypeScript 的事件循环 | 整个进程 | 不做同步阻塞 I/O |
 | 本地锁 | 当前代码段 | 调用服务或派发事件前释放，让重入的回调能执行 |
 

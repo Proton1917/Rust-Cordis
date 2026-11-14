@@ -67,7 +67,7 @@ WIT 的 `async func` 只表示方法本身是异步实现，调用仍受截止�
 
 1. 每个原生分组是一个 `cordis-host` 进程。进程里有一个专门轮询插件代码的执行器，**缺省只有 2 个线程**，同组所有插件共用。
 2. 核心转来的每次服务调用、每个 `ctx.spawn` 任务、每次跨进程调用的等待，都是这个执行器上的任务。同步服务方法也在这里执行：它被包在一个任务里，在这 2 个线程之一上运行到返回。
-3. SDK 自己提供的同步调用（同步接口方法的代理、`context.get` 等）由宿主的等待入口实现：等待期间，宿主把这个线程上的其他任务交给别的线程，执行器不会被占住。
+3. SDK 自己提供的同步调用（同步接口方法的代理、`context.get` 等）以及 `Context::wait` 都经宿主的等待入口执行：等待期间，宿主把这个线程上的其他任务交给别的线程，执行器不会被占住。
 4. 插件自己调用的 `futures::executor::block_on`、自建运行时的 `block_on`、`reqwest::blocking` 这类阻塞等待，宿主看不到，**会一直占住一个执行器线程**。
 
 推论：在同步服务方法或 `ctx.spawn` 任务里用自己的 `block_on` 等待 SDK 的异步调用（例如 `secrets.get`、`http_api::page_attributes`、异步接口方法、字节流读取），等的那个调用本身也要在同一个执行器上运行。只要有 2 个这样的调用同时发生，2 个线程都被占住，等待的任务永远得不到运行：调用在截止时间到达时返回错误码 6，连续 3 次后整个分组被核心终止。并发越高越容易出现，单人测试通常发现不了。
@@ -77,8 +77,10 @@ WIT 的 `async func` 只表示方法本身是异步实现，调用仍受截止�
 ## 阻塞的规则
 
 - **Rust：**
-  - 需要等待异步 SDK 调用的服务方法，在接口中声明为异步（WIT `async func`，Rust 接口 trait 中写 `async fn`），用 `.await` 等待。从同步改为异步属于不兼容修改，发布新的接口主版本（见[接口版本与升级](versioning.md)）。
-  - 不在同步服务方法、`ctx.spawn` 任务或 apply 中调用 `futures::executor::block_on` 或任何自建运行时的 `block_on`。
+  - 异步方法、apply 与 `ctx.spawn` 任务中，用 `.await` 等待。
+  - 同步服务方法或 `ctx.spawn_thread` 线程中需要等待异步 SDK 调用时，用 `context.wait(future)`，例如 `context.wait(secrets.get(name))`。签名为 `Context::wait<F, T>(&self, future: F) -> Result<T>`，其中 `F: Future<Output = Result<T>>`；Future 可以借用局部值，不要求 `Send`，可以嵌套。它要求 SDK 0.2.1 及以上、宿主 cordis-host 0.1.1（ABI 1.1）及以上；在旧宿主上返回错误码 3，Future 不会被执行。
+  - 也可以把方法在接口中声明为异步（WIT `async func`，trait 中写 `async fn`）。从同步改为异步属于不兼容修改，发布新的接口主版本（见[接口版本与升级](versioning.md)）。
+  - 不调用 `futures::executor::block_on` 或任何自建运行时的 `block_on`。
   - 外部 HTTP 请求在 `ctx.spawn` 的异步任务中用异步客户端发出；客户端需要 Tokio 时，使用插件自己的 Tokio 运行时，并把它的创建与关闭登记为效应（[资源与状态](resources-state.md) PR-3）。
   - 必须使用阻塞库时，放进 `ctx.spawn_thread` 的独立线程，循环中用 `context.is_current()?` 判断是否退出。阻塞发生在插件自己的线程上，执行器不受影响。
 - **Python：** 插件运行在一个 asyncio 事件循环里，所有请求共用它。服务方法和任务中不做同步阻塞 I/O（`requests`、`time.sleep`、同步数据库驱动），否则这一进程收不到也回不了任何请求，其他调用跟着超时，连续三次后整个进程被终止。用异步客户端，或 `await asyncio.to_thread(...)` 把阻塞调用移出事件循环。
@@ -102,5 +104,5 @@ WIT 的 `async func` 只表示方法本身是异步实现，调用仍受截止�
 - 没有可能超过 `invoke_timeout_ms` 的服务方法。
 - 长任务有持久的任务记录、幂等提交、可查询的状态，替换后能接着执行。
 - 外部调用有自己的超时和并发上限。
-- Python 与 TypeScript 插件中没有同步阻塞 I/O；Rust 插件中没有自己调用的 `block_on`，异步任务中没有阻塞客户端，需要等待异步 SDK 调用的服务方法已声明为异步。
+- Python 与 TypeScript 插件中没有同步阻塞 I/O；Rust 插件中没有自己调用的 `block_on`，同步上下文的等待都经 `context.wait`，异步任务中没有阻塞客户端。
 - 调用方对错误码 4、6、7、8 有明确处理。
