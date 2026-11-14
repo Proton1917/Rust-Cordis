@@ -1,0 +1,116 @@
+{
+  "date": "2026-11-15",
+  "initial": {
+    "target_kib": 906780
+  },
+  "archive_url": "https://github.com/Proton1917/Rust-Cordis/releases/tag/evidence-2026-11-13",
+  "assets": [
+    {
+      "name": "cordis-evidence-M0-M23-2026-11-13.tar.gz",
+      "size_bytes": 46641374
+    },
+    {
+      "name": "cordis-evidence-supplement-2026-11-15.tar.gz",
+      "size_bytes": 349517,
+      "files": 473,
+      "full_byte_matches": {
+        "HOME": 0,
+        "username": 0,
+        "private_project": 0,
+        "credential_patterns": 0
+      }
+    }
+  ],
+  "download_verification": {
+    "base_cmp": true,
+    "supplement_cmp": true,
+    "method": "GitHub release download followed by cmp of complete archive bytes",
+    "new_credential_result": "matches fixed test value in tests/http-sdk"
+  },
+  "archived_local_files_removed": 67053,
+  "regenerable_artifact_files_removed": 1159,
+  "cache_directories_removed": [
+    "pack-runtime-inputs/python-3.12.16-node-22.23.5",
+    "phase3-acceptance/m21/runtimes",
+    "miri-sysroot",
+    "npm-cache",
+    "tmp/node-compile-cache",
+    "idl-dependencies",
+    "python-sdk-dependencies"
+  ],
+  "preserved_private_files": [
+    {
+      "file": "direct-call-baseline/docs/15-universal-socket.md",
+      "size_bytes": 30790,
+      "reason": "private-project"
+    },
+    {
+      "file": "m10-review/source/docs/15-universal-socket.md",
+      "size_bytes": 55937,
+      "reason": "private-project"
+    },
+    {
+      "file": "m17-review/evidence/isolated-target/watch-runtime/self-6925/state/data/watch/watch-rejected.cbor",
+      "size_bytes": 281,
+      "reason": "private-binary"
+    },
+    {
+      "file": "python-sdk/scaffold-36902/state/data/watch/watch-rejected.cbor",
+      "size_bytes": 317,
+      "reason": "private-binary"
+    },
+    {
+      "file": "skill-eval/sk1b/counter-demo/evidence/run-02/t20/state/data/watch/watch-rejected.cbor",
+      "size_bytes": 368,
+      "reason": "private-binary"
+    },
+    {
+      "file": "skill-eval/sk1b/counter-demo/evidence/run-02/t25/state/data/watch/watch-rejected.cbor",
+      "size_bytes": 368,
+      "reason": "private-binary"
+    },
+    {
+      "file": "test-evidence/typescript-scaffold-93487-1/typescript-sdk/scaffold-93487/state/data/watch/watch-rejected.cbor",
+      "size_bytes": 325,
+      "reason": "private-binary"
+    }
+  ],
+  "retained_local": [
+    "formal release archives",
+    "claude-edits",
+    "codex-tier-protocol",
+    "review-fix",
+    "review-m3",
+    "review-m4"
+  ],
+  "recovery": {
+    "base": "extract original archive",
+    "supplement": "overlay supplement using paths relative to target",
+    "miri": "MIRI_SYSROOT=target/miri-sysroot cargo +nightly miri setup",
+    "script_runtimes": "tests/pack-runtimes/runtime_inputs.py downloads fixed Python and Node distributions",
+    "runtime_download_bytes": 51157421
+  },
+  "before_local_cleanup": {
+    "target_kib": 918096,
+    "filesystem_free_bytes": 1261845487616
+  },
+  "process_check": {
+    "open_files_under_target": 0,
+    "build_or_project_runtime_processes": 0
+  },
+  "after": {
+    "target_kib": 56572,
+    "filesystem_free_bytes": 1263580663808
+  },
+  "directory_reduction_bytes": 870612992,
+  "cleanup_including_staging_reduction_bytes": 882200576,
+  "filesystem_free_increase_bytes": 1735176192,
+  "filesystem_measurement_scope": "Filesystem-wide free space sampled immediately before local cleanup and after staging removal; concurrent system activity contributes to this delta.",
+  "release_state": {
+    "draft": false,
+    "prerelease": true,
+    "assets_uploaded": 2,
+    "supplement_documented": true
+  },
+  "validation_scope": "Archive member comparison, full-byte privacy scan, download cmp, process/file-use query, and directory/free-space measurements. Product source and build configuration remain unchanged."
+}

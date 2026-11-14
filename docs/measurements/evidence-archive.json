@@ -127,6 +127,11 @@
         "name": "cordis-evidence-M0-M23-2026-11-13.tar.gz",
         "size": 46641374,
         "state": "uploaded"
+      },
+      {
+        "name": "cordis-evidence-supplement-2026-11-15.tar.gz",
+        "size": 349517,
+        "state": "uploaded"
       }
     ],
     "draft": false,
@@ -137,5 +142,24 @@
   },
   "download_verified": true,
   "download_comparison": "full byte comparison with cmp",
-  "designer_directory_present": false
+  "designer_directory_present": false,
+  "supplement": {
+    "asset": "cordis-evidence-supplement-2026-11-15.tar.gz",
+    "size_bytes": 349517,
+    "evidence_files": 472,
+    "files_with_scrubbed_manifest": 473,
+    "download_comparison": "full byte comparison with cmp",
+    "full_byte_matches": {
+      "HOME": 0,
+      "username": 0,
+      "private_project": 0,
+      "credential_patterns": 0
+    }
+  },
+  "local_storage": {
+    "date": "2026-11-15",
+    "evidence": "GitHub assets; local expanded evidence and archive copies released",
+    "recovery": "Extract the original asset, then overlay the supplement by paths relative to target/",
+    "record": "evidence-offload-2026-11-15.json"
+  }
 }

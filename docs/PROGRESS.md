@@ -2,18 +2,20 @@
 
 本文件记录实现的当前位置，供中断后继续。每个里程碑结束时更新；里程碑进行中发生需要后来者知道的事情时也更新。更新时改写“当前状态”一节，并在“里程碑记录”中补充对应小节，不在文件末尾堆叠流水账。
 
+历史现场的 `target/` 路径同时作为[GitHub 证据存档](https://github.com/Proton1917/Rust-Cordis/releases/tag/evidence-2026-11-13)的成员定位：先解开原存档，再按相同相对路径覆盖 2026-11-15 补充包。用户已于 2026-11-15 要求将保留资料迁到 GitHub 并释放本机副本。需要查看原始资料时按路径恢复，清理与恢复说明见[存档迁移记录](measurements/evidence-offload-2026-11-15.json)。
+
 ## 当前状态
 
 | 项 | 值 |
 |---|---|
-| 最近完成的实现与检查 | v0.2.1 发布、脱敏证据存档与设计方下载核验完成；TestGuard 调整全量 344 项通过，target 清理至 843M |
-| 当前里程碑 | 测试现场裁剪与成功归档策略已完成，等待设计方复核 |
+| 最近完成的实现与检查 | v0.2.1 发布及证据存档经设计方核验，TestGuard 调整的 d54f103 复核通过；2026-11-15 已补齐远端证据并释放本机副本，target 为 55.2 MiB |
+| 当前里程碑 | 既定实现与收尾完成，等待用户安排 |
 | M23 接口确认 | beb4c8cf 批准的纯数据调用、资源释放和拥有型 Service 转交已实现并通过 AU-27a。Inject 命名声明共用类型化校验；Python 沿用 Remote.invoke，TypeScript 提供 getDynamic。ADR-0047 与实现随 18a62cf 提交，review 基线为 70db380 |
 | M23 版本 | 1c6187d3 批准发行标签 v0.2.0，改动的 cordis-sdk、cordis-dev 与 TypeScript SDK 升为 0.2.0；核心、宿主、Python SDK 和既有官方插件保持 0.1.0，ABI v1、UP/1 保持。发布页和包内 README 以组件表说明；脚手架验证生成的 SDK 版本及源码提交 |
 | M23 依赖锁文件 | ef9cfb5a 批准夹具 Cargo.lock 中 SDK 项随 0.2.0 机械联动；其余依赖保持既有版本。核心产品 src/Cargo.toml、ABI 与根锁文件中的核心依赖项保持 review 70db380 |
 | M23 固定 Git 验收 | 按 72c36897 在 18a62cf 推送后复验通过；设计方隔离副本同样指向 18a62cf 构建通过，v0.2.0 已发布 |
 | 当前验证 | fix 的 fmt、clippy、177 条矩阵、unsafe 通过，344 项测试通过。固定 Git 用例在已推送的 4e800c631064a344964f7f91c1b6210c1d659775 上执行，19.53 秒通过，app/watch/hello Active；日志 target/fix-watch-privacy/evidence/pinned-git.log |
-| 下一步 | 等待设计方复核 TestGuard 的成功归档策略与清理记录；后续工作由用户安排 |
+| 下一步 | 等待用户安排 |
 | M22 复核跟进 | 页面故障测试同步与身份缺席错误处理已在 70db380 完成；五轮并行负载测试通过。supervisor 为 5445 行 |
 | 发布复核跟进 | 两个重建资产已上传，远端文件名和大小与本地产物一致；设计方将再次下载核验。v0.1.0 保留 6 个 Mach-O，v0.2.0 保留 7 个并包含 secrets |
 | M22 边界 | 按设计方三项裁决：内核、up、channels、types、process 与 ABI 相对 df05064 保持；supervisor 先提取到 routing 再添加受信调用元数据，结束时至多 5450 代码行；web-deployment 限页面来源，runtime 限 service install |
@@ -23,21 +25,21 @@
 | 发布 | v0.2.1→83e4f509ba20276de8395c0fb70aa950d655ab9b，macOS arm64 资产 10,310,396 字节；核心 0.1.1、宿主 0.1.0、开发工具 0.2.1、watch 0.1.1、Rust SDK 0.2.0、运行时接口 1.4。历史标签及重建资产保持 |
 | M20 评审跟进 | segmentation_fault_isolates_group 的等待修正及五轮稳定性验收已完成；supervisor 保持 5480/5500 代码行 |
 | M21 性能结果 | RM-7 三方向各 10000 次，RM-8 三次替换完成。RM-9 首轮中位数比 1.07711183；停载重测中位数比 0.95774113、最大值比 0.90793525，满足原 1.05/1.15 判据。完整样本与测量条件并列归档 |
-| 后续事项 | Linux 实测、crates.io、插件包格式、Windows 移植、RM-9 方法研究与 ADR-0045 的优先级由用户决定；静态分派候选和原始测量资料按原路径保留 |
-| 清理 | 本次 target 从 8.3G 降至 843M，目录占用减少 7,977,402,368 字节，文件系统可用空间增加 6,477,475,840 字节。保留 46 个引用现场，移除 706 个迭代现场和 13,895 个可重建文件；target/debug、target/shared 已清理，保留正式产物、证据与指定保护资料。记录 docs/measurements/test-evidence-pruning.json |
+| 后续事项 | Linux 实测、crates.io、插件包格式、Windows 移植、RM-9 方法研究与 ADR-0045 的优先级由用户决定；静态分派候选和原始测量资料在 GitHub 存档中保留原相对路径 |
+| 清理 | 2026-11-15 的 target 为 885.5→55.2 MiB，目录占用减少 870,612,992 字节。归档后的 67,053 个本机文件、1,159 个可重建产物以及 Miri、Python/Node、npm 等缓存已释放；发布压缩包与私有工作资料保留。记录 docs/measurements/evidence-offload-2026-11-15.json |
 | 执行安排 | 用户要求关闭全部子代理，由主会话独立完成 M22 与后续 M23；编译沿默认 target/debug 与 target/shared |
-| 后续顺序 | 发布、公开存档、下载验证、本地清理和全量测试已完成；等待设计方复核 |
-| 验收资料 | docs/measurements/release-v0.2.1.json、evidence-archive.json、test-evidence-pruning.json 分别保存发布、存档和清理验收；原始日志在 target/releases/v0.2.1/evidence 与 target/evidence-archive |
+| 后续顺序 | 发布、公开存档、下载验证、本地清理和 TestGuard 全量验收已完成；后续工作由用户安排 |
+| 验收资料 | docs/measurements 中保存发布、存档及清理记录；原始日志在 GitHub 原存档和补充资产中，按 target/ 原相对路径恢复 |
 | 文档交付 | README、guide、ADR-0047、skill、解释页、组件版本表与发布记录已同步 |
 | 窗口界面验收 | AU-17 已归档；用户运行记录为恢复 802 ms，截图、Cmd-Q、检查点与进程退出通过 |
-| 最后更新 | 2026-11-14（Asia/Shanghai），v0.2.1、证据存档与测试现场清理完成 |
+| 最后更新 | 2026-11-15（Asia/Shanghai），证据迁到 GitHub 后释放本机副本 |
 
 ## 环境
 
 | 项 | 值 | 来源 |
 |---|---|---|
 | Rust 工具链 | 1.96.0 stable，`aarch64-apple-darwin` | 2026-11-11 `rustc --version` |
-| Miri 工具链 | nightly 1.102.0-nightly（3ef0c22cd 2026-11-11）；miri 与 rust-src 已安装 | M8 的 12 条边界行为与布局比较通过；sysroot 位于 target/miri-sysroot |
+| Miri 工具链 | nightly 1.102.0-nightly（3ef0c22cd 2026-11-11）；miri 与 rust-src 已安装 | M8 的 12 条边界行为与布局比较通过；本机 sysroot 缓存已释放，后续通过 MIRI_SYSROOT=target/miri-sysroot cargo +nightly miri setup 重建 |
 | `UPSTREAM` | `cordis/`，commit `261c5fdae6edb54e7ed4f071024f530acd18903b` | 2026-11-11 `git -C cordis log -1` |
 | Python | `conda run -n base python`，执行项目辅助检查 | 项目约定 |
 | 依赖版本 | slotmap 1.1.1；parking_lot 0.13.0；futures-core / futures-util 0.3.34；thiserror 2.0.21；serde 1.0.229；serde_json 1.0.154；tokio 1.54.1 | M0：逐项 `cargo search <crate> --limit 1`；workspace 固定版本，按模块调用引入 crate |
@@ -940,6 +942,14 @@ RM-9 两次均为每实现固定 9 轮、每轮预热 10000 次、计量 100000 
 - 已用真实 64 MiB 状态文件复现旧归档行为，原测试失败日志为 target/evidence-archive/guard-before.log。修复后的清单位于 target/test-evidence/successful-subject-97163-7/testkit-cleanup/cleanup-success-97163-0/subject/pruned.json，记录 payload.state 的 67,108,864 字节；结果文件继续保留。格式与 testkit 的 clippy 通过，cargo test --workspace --no-fail-fast 退出 0，共 344 项通过、0 失败；RM-11 保持项目既有独立测量方式。输出 target/evidence-archive/workspace.log。
 - 全量测试后，按同一引用规则移除本轮新增的 83 个迭代现场和 2,640 个可重建文件，保留新归档行为的回归证据；各保留现场的 pruned.json 延续已有删除记录。随后执行 cargo clean --target-dir target/debug 和 target/shared，最终 target 为 843M，约 884 MB，低于 1 GB。
 - 两阶段合计移除 706 个迭代现场、13,895 个可重建文件，保留 46 个引用现场。相对首次裁剪前，目录占用减少 7,977,402,368 字节，文件系统可用空间增加 6,477,475,840 字节。完整数值、保护范围、命令与回归清单见 [现场清理验收](measurements/test-evidence-pruning.json)。
+
+### 2026-11-15 证据迁移与本机清理
+
+- 按用户要求将保留的验收资料存放到 GitHub。现有 evidence-2026-11-13 保留原资产，新增 cordis-evidence-supplement-2026-11-15.tar.gz，349,517 字节，含 472 份新增或更新资料及 SCRUBBED.md。原资产复用的本机文件先按脱敏后的完整字节比较，更新内容进入补充包。
+- 补充包对全部成员的内容与名称检查 HOME、用户名、私有项目标记和凭据格式，结果均为 0；新增密钥结果与 tests/http-sdk 的固定测试值一致。两个资产分别通过 gh release download 获取，cmp 完整字节比较通过；发布页说明了叠加恢复方式。
+- pgrep 与 lsof +D target 确认相关构建、运行进程和打开文件为 0 后，释放已归档的 67,053 个本机文件、1,159 个可重建产物及七处缓存目录。残缺的 Python/Node 运行时目录整体释放，后续打包验收通过既有脚本重新获取固定版本，下载量 51,157,421 字节。Miri sysroot 按 miri setup 重建。
+- target 从本轮起始 906,780 KiB 降至 56,572 KiB（885.5→55.2 MiB），减少 870,612,992 字节；本轮临时装配资料也已释放。清理前后文件系统可用空间同期增加 1,735,176,192 字节，该值包含系统并发活动影响。正式发布压缩包、设计方工作目录、代理协调资料及少量含本机信息的文件留在本机。
+- 本轮变更为存档与记录，沿用既有产品验收结果。详细数值、保留范围与下载核验见[证据迁移记录](measurements/evidence-offload-2026-11-15.json)。
 
 ## 第二阶段候选与恢复记录
 
