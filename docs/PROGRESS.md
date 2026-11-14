@@ -9,13 +9,13 @@
 | 项 | 值 |
 |---|---|
 | 最近完成的实现与检查 | v0.2.2 已正式发布并完成下载核验：351 项全量测试通过，生成项目固定标签 SDK 修订，同步方法经 Context::wait 跨分组返回 42 |
-| 当前里程碑 | v0.2.2 发布验收完成，整理记录与缓存后进入用户安排的替换语义修复 |
+| 当前里程碑 | v0.2.2 发布、下载核验、记录推送与缓存清理已完成；随后处理 ADR-0052 替换语义 |
 | M23 接口确认 | beb4c8cf 批准的纯数据调用、资源释放和拥有型 Service 转交已实现并通过 AU-27a。Inject 命名声明共用类型化校验；Python 沿用 Remote.invoke，TypeScript 提供 getDynamic。ADR-0047 与实现随 18a62cf 提交，review 基线为 70db380 |
 | M23 版本 | 1c6187d3 批准发行标签 v0.2.0，改动的 cordis-sdk、cordis-dev 与 TypeScript SDK 升为 0.2.0；核心、宿主、Python SDK 和既有官方插件保持 0.1.0，ABI v1、UP/1 保持。发布页和包内 README 以组件表说明；脚手架验证生成的 SDK 版本及源码提交 |
 | M23 依赖锁文件 | ef9cfb5a 批准夹具 Cargo.lock 中 SDK 项随 0.2.0 机械联动；其余依赖保持既有版本。核心产品 src/Cargo.toml、ABI 与根锁文件中的核心依赖项保持 review 70db380 |
 | M23 固定 Git 验收 | 按 72c36897 在 18a62cf 推送后复验通过；设计方隔离副本同样指向 18a62cf 构建通过，v0.2.0 已发布 |
 | 当前验证 | fix 的 fmt、clippy、177 条矩阵、unsafe 通过，344 项测试通过。固定 Git 用例在已推送的 4e800c631064a344964f7f91c1b6210c1d659775 上执行，19.53 秒通过，app/watch/hello Active；日志 target/fix-watch-privacy/evidence/pinned-git.log |
-| 下一步 | 推送 v0.2.2 验收记录并清理本轮缓存；随后按 4c97d962 开始 ADR-0052 的 R-1/R-2/R-3。设计方 SKILL.md 与 resources-state.md 的待提交改动随替换语义修复交付 |
+| 下一步 | 按 4c97d962 开始 ADR-0052 的 R-1/R-2/R-3。设计方 SKILL.md 与 resources-state.md 的待提交改动随替换语义修复交付 |
 | M22 复核跟进 | 页面故障测试同步与身份缺席错误处理已在 70db380 完成；五轮并行负载测试通过。supervisor 为 5445 行 |
 | 发布复核跟进 | 两个重建资产已上传，远端文件名和大小与本地产物一致；设计方将再次下载核验。v0.1.0 保留 6 个 Mach-O，v0.2.0 保留 7 个并包含 secrets |
 | M22 边界 | 按设计方三项裁决：内核、up、channels、types、process 与 ABI 相对 df05064 保持；supervisor 先提取到 routing 再添加受信调用元数据，结束时至多 5450 代码行；web-deployment 限页面来源，runtime 限 service install |
@@ -57,6 +57,8 @@
 标签指向 e12ac3a1eeaee4f56bf46eba1c936877dc54871a，发布构建的 CORDIS_SOURCE_REVISION 同为该提交。资产 cordis-v0.2.2-aarch64-apple-darwin.tar.gz 为 10,331,002 字节。七个 Mach-O 均为 arm64、ad-hoc 签名有效；完整归档、包内 11 个文件及成员元数据的用户名、HOME、用户目录、私有项目标记与设计方工作目录匹配均为 0，tar 属主使用 root。
 
 全新下载目录中的资产与上传文件通过 cmp 完整字节比较。随包核心、宿主和开发工具版本分别为 0.1.1、0.1.1、0.2.2；GET / 返回 200。用随包 cordis new 生成的项目依赖公开 Git URL，SDK version 为 0.2.1、rev 等于标签提交，构建后 app/watch 为 Active。额外编译的原生插件分置三个进程分组，同步服务方法通过 Context::wait 等待异步提供方，输入 21 返回 42。上述三次运行均以 SIGINT 有序退出，退出码为 0。
+
+验收记录推送后清理本轮 target/debug、target/shared、发布装配及下载验证副本，目录占用减少 12,639,219,712 字节，文件系统可用空间同期增加 12,222,988,288 字节。发布压缩包、miri-sysroot、pack-runtime-inputs、日志及设计方复核目录保持，明细为 target/releases/v0.2.2/evidence/cleanup.json。
 
 ## 环境
 

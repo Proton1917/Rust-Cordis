@@ -298,5 +298,26 @@
     "url": "https://github.com/Proton1917/Rust-Cordis/releases/tag/v0.2.2"
   },
   "evidence": "target/releases/v0.2.2/evidence",
-  "cleanup_record": "target/releases/v0.2.2/evidence/cleanup.json"
+  "cleanup_record": "target/releases/v0.2.2/evidence/cleanup.json",
+  "cleanup": {
+    "before": {
+      "directories_kib": {
+        "target/debug": 3395444,
+        "target/shared": 8639280,
+        "target/releases/v0.2.2/package": 26456,
+        "target/releases/v0.2.2/download": 281808
+      },
+      "free_bytes": 1251419471872
+    },
+    "after_free_bytes": 1263642460160,
+    "directory_reduction_bytes": 12639219712,
+    "filesystem_free_increase_bytes": 12222988288,
+    "preserved": [
+      "miri-sysroot",
+      "pack-runtime-inputs",
+      "release archive",
+      "logs and evidence",
+      "designer review directories"
+    ]
+  }
 }
