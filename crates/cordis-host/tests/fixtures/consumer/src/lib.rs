@@ -1,3 +1,5 @@
+mod blocking_wait;
+
 use cordis_sdk::prelude::*;
 use loader_fixture_api::{Control, Counter, Metadata, NewCounter, ScopedCounter};
 
@@ -462,6 +464,7 @@ cordis_sdk::export_plugin!(
         PrivateProvider,
         PrivateReader,
         Carrier,
-        Callers
+        Callers,
+        blocking_wait::BlockingWait
     ]
 );

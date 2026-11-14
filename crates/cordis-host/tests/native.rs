@@ -79,4 +79,6 @@ native_scenarios! {
     stack_overflow_isolates_group => "stack",
     process_exit_isolates_group => "exit",
     endless_computation_isolates_group => "spin",
+    concurrent_raw_wait_exhausts_native_workers => "blocking-wait",
+    sdk_wait_preserves_native_workers => "safe-wait",
 }

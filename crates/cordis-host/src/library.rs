@@ -274,7 +274,7 @@ impl LibraryStore {
     ) -> Result<Arc<Descriptor>> {
         // SAFETY: DOC-12 §3，宿主表具有进程寿命，入口输出描述符并转交所有权。
         let raw: *const PluginV1 = unsafe {
-            environment.call(|out, err| entry(environment.raw_host(), lease.id, out, err))
+            environment.call(|out, err| entry(environment.raw_host_ptr(), lease.id, out, err))
         }?;
         if raw.is_null() {
             return Err(Error::new(2, "插件入口返回空描述符"));

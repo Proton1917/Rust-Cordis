@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 mod allocation;
+mod blocking_wait;
 
 use clap::Parser;
 use cordis::{
@@ -1121,6 +1122,8 @@ async fn main() -> Result<()> {
             "stack",
             "exit",
             "spin",
+            "blocking-wait",
+            "safe-wait",
         ]
         .map(str::to_owned)
         .to_vec()
@@ -1136,6 +1139,9 @@ async fn main() -> Result<()> {
             "swap" => swaps(&artifacts, false).await?,
             "threshold" => swaps(&artifacts, true).await?,
             "allocation" => allocation::run(&artifacts).await?,
+            "blocking-wait" | "safe-wait" | "legacy-wait" => {
+                blocking_wait::run(&artifacts, &case).await?
+            }
             "panic" | "apply-panic" | "abort" | "segfault" | "stack" | "exit" | "spin" => {
                 faults(&artifacts, &case).await?
             }

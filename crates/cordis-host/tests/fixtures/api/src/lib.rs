@@ -53,3 +53,20 @@ pub trait ScopedCounter: Send + Sync {
 pub trait Control: Send + Sync {
     fn offer(&self, service: Service<dyn Counter>) -> Result<()>;
 }
+
+#[cordis_sdk::interface(name = "host.wait-probe", version = "1.0")]
+pub trait WaitProbe: Send + Sync {
+    fn call(&self) -> Result<u64>;
+    fn nested(&self) -> Result<u64>;
+    fn system_thread(&self) -> Result<u64>;
+    fn task(&self) -> Result<u64>;
+    fn failure(&self) -> Result<u64>;
+    fn panics(&self) -> Result<u64>;
+    fn legacy(&self) -> Result<u64>;
+    fn polls(&self) -> Result<u64>;
+}
+
+#[cordis_sdk::interface(name = "host.wait-control", version = "1.0")]
+pub trait WaitControl: Send + Sync {
+    fn offer(&self, service: Service<dyn WaitProbe>) -> Result<()>;
+}

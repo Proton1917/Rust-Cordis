@@ -167,6 +167,28 @@ cordis run
 
 [cordis-first-principles skill](../skills/cordis-first-principles/SKILL.md) 先讲职责放置的第一性原理，再说明共享接口、服务、事件、效应清理、冻结状态、契约验证与替换，并提供可复制的接口、提供方和契约套件模板。Claude Code 与 Codex 可加载同一份 skill；`cordis new-plugin` 直接读取其中的组件模板。
 
+### Rust 原生执行模型与同步等待
+
+每个原生分组由独立的 `cordis-host` 运行，缺省有两个工作线程。同组服务方法、`ctx.spawn` 任务及跨进程异步调用的等待共用执行器。同步服务方法会在一个工作线程上执行到返回；SDK 自带的同步服务代理由宿主协同交出工作线程。
+
+异步服务方法与 `ctx.spawn` 任务使用 `.await` 等待 SDK 调用。自行调用 `futures::executor::block_on` 会持续占用原生工作线程；当两个线程都在等待同一执行器中的任务时，调用将到期并返回 code 6，连续三次截止触发整个分组回收。
+
+同步上下文通过 SDK 0.2.1 的 `Context::wait` 等待异步接口。例如对一个已声明、已取得的动态服务调用异步入口：
+
+```rust
+use cordis_sdk::{Context, DynamicService, Result};
+
+fn read_counter(ctx: &Context, counter: &DynamicService) -> Result<u64> {
+    ctx.wait(counter.invoke_as_async("value", &[] as &[u64]))
+}
+```
+
+`wait` 接受借用型 Future，返回其 `Result<T>`，支持嵌套调用和 `ctx.spawn_thread` 中的系统线程。宿主交出工作线程后才开始轮询 Future；业务错误保持原错误码，panic 转为 code 5。该入口要求 **cordis-host 0.1.1（ABI 1.1）及以上**。旧宿主返回 code 3，并保持 Future 轮询次数为零。既有核心 0.1.1 继续适用。
+
+任意阻塞库调用安排在 `ctx.spawn_thread` 的实例所属线程中，线程按 `context.is_current()` 判断退出。跨进程调用的截止时间继续适用；可能长时间执行的工作采用提交任务、后台执行和查询结果的接口，任务及数据由业务插件持有。
+
+调用取消时，宿主发现全部原生线程已在单次轮询中持续至少 100 ms，会输出分组、方法名、占用线程数和持续时间，并提示排查阻塞等待或长时间同步计算。原生工作线程恢复后，该诊断阶段结束。线程数当前沿宿主缺省值，按组部署配置已评估并暂缓。
+
 ## 契约验证
 
 `cordis verify` 转交独立开发工具，启动隔离的核心和宿主执行真实套件。下面的命令验证内存 KV 的读写、键顺序、flush 和状态继承：

@@ -1,4 +1,4 @@
-//! DOC-12 §9：固定 HostV1 函数表将 ABI 参数交给宿主操作并统一返回拥有错误。
+//! DOC-12 §9、ADR-0051：版本化宿主表转交 ABI 操作，统一返回拥有错误。
 
 use crate::{host::Host, lease};
 use cordis_abi::*;
@@ -17,8 +17,8 @@ fn host() -> &'static Host {
 }
 
 pub fn environment() -> Environment {
-    // SAFETY: DOC-12 §9，HOST的28个槽遵守输出、错误与拥有输入协议，表具有进程寿命。
-    unsafe { Environment::new(&HOST, 0) }
+    // SAFETY: DOC-12 §9、ADR-0051，原始指针覆盖完整静态扩展表，各槽遵守输出与借用契约。
+    unsafe { Environment::new(std::ptr::addr_of!(HOST).cast(), 0) }
 }
 
 macro_rules! host_call {
@@ -114,34 +114,41 @@ host_call!(plugin(ctx: u64, component: AbiStr, config: AbiBytes) -> AbiFuture, {
     host().plugin(ctx, component.as_str()?, config.as_slice()).map(RemoteFuture::into_raw)
 });
 
-static HOST: HostV1 = HostV1 {
-    size: std::mem::size_of::<HostV1>() as u64,
-    log,
-    now,
-    sleep,
-    spawn,
-    effect,
-    effect_async,
-    defer,
-    defer_async,
-    is_current,
-    provide,
-    get,
-    on,
-    emit,
-    emit_async,
-    export_state,
-    inherited_state,
-    config,
-    spawn_thread,
-    lease_acquire,
-    lease_release,
-    effect_settled,
-    effect_dispose,
-    object_export,
-    object_import,
-    object_release,
-    effect_release,
-    context_derive,
-    plugin,
+host_call!(block_in_place(data: *mut std::ffi::c_void, callback: AbiBlockingCallback), {
+    host().block_in_place(|| environment().call_unit(|err| callback(data, err)))
+});
+
+static HOST: HostV1_1 = HostV1_1 {
+    v1: HostV1 {
+        size: std::mem::size_of::<HostV1_1>() as u64,
+        log,
+        now,
+        sleep,
+        spawn,
+        effect,
+        effect_async,
+        defer,
+        defer_async,
+        is_current,
+        provide,
+        get,
+        on,
+        emit,
+        emit_async,
+        export_state,
+        inherited_state,
+        config,
+        spawn_thread,
+        lease_acquire,
+        lease_release,
+        effect_settled,
+        effect_dispose,
+        object_export,
+        object_import,
+        object_release,
+        effect_release,
+        context_derive,
+        plugin,
+    },
+    block_in_place,
 };

@@ -64,7 +64,7 @@ fn retired<T>() -> Result<T> {
     Err(Error::new(4, "context has retired"))
 }
 
-pub static HOST: HostV1 = HostV1 {
+pub const HOST: HostV1 = HostV1 {
     size: size_of::<HostV1>() as u64,
     log,
     now,

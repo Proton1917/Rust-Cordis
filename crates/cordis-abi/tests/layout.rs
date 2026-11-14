@@ -155,3 +155,15 @@ fn abi_v1_matches_layout_record() {
         );
     }
 }
+
+#[test]
+fn abi_v1_1_extension_matches_layout_record() {
+    let actual = format!(
+        "Cordis ABI 1.1 extension; 64-bit little-endian\nHostV1_1 size={} align={}\n  v1={}\n  block_in_place={}\n",
+        size_of::<HostV1_1>(),
+        align_of::<HostV1_1>(),
+        offset_of!(HostV1_1, v1),
+        offset_of!(HostV1_1, block_in_place),
+    );
+    assert_eq!(actual, include_str!("../../../docs/abi/v1.1-layout.txt"));
+}

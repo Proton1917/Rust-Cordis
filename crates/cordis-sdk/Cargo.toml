@@ -1,6 +1,6 @@
 [package]
 name = "cordis-sdk"
-version = "0.2.0"
+version = "0.2.1"
 edition.workspace = true
 rust-version = "1.85"
 publish.workspace = true
@@ -11,6 +11,7 @@ cordis-abi.workspace = true
 cordis-sdk-macros.workspace = true
 cordis-types.workspace = true
 serde.workspace = true
+futures-lite = { version = "=2.6.1", default-features = false, features = ["std"] }
 
 [dev-dependencies]
 cordis-abi = { workspace = true, features = ["test-support"] }

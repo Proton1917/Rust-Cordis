@@ -73,7 +73,7 @@ def component_versions():
         ("Python SDK", tomllib.loads((ROOT / "sdks/python/pyproject.toml").read_text())["project"]["version"]),
         ("TypeScript SDK", typescript_version),
         ("网页宿主", json.loads((ROOT / "sdks/typescript/cordis-web/package.json").read_text())["version"]),
-        ("ABI", "v1.0"), ("UP/1", "1"),
+        ("ABI", "v1.1"), ("UP/1", "1"),
     ])
     return "| 组件 | 版本 |\n|---|---|\n" + "\n".join(f"| {name} | {version} |" for name, version in rows)
 

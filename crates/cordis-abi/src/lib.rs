@@ -1,6 +1,7 @@
 //! DOC-12：稳定的 C ABI、边界所有权和源侧释放。
 #![deny(unsafe_op_in_unsafe_fn)]
 
+mod blocking;
 mod buffer;
 mod callback;
 mod descriptor;

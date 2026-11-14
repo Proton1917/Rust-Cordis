@@ -3,7 +3,7 @@ use std::{ffi::c_void, mem::MaybeUninit};
 pub type AbiStatus = u32;
 pub type LibraryId = u64;
 pub const ABI_MAJOR: u32 = 1;
-pub const ABI_MINOR: u32 = 0;
+pub const ABI_MINOR: u32 = 1;
 pub const FORMAT_NATIVE: u8 = 1;
 pub const FORMAT_PROCESS: u8 = 2;
 pub const FORMAT_WASM: u8 = 3;
@@ -289,6 +289,17 @@ pub struct HostV1 {
         unsafe extern "C" fn(u64, AbiBytes, *mut AbiContext, *mut AbiError) -> AbiStatus,
     pub plugin:
         unsafe extern "C" fn(u64, AbiStr, AbiBytes, *mut AbiFuture, *mut AbiError) -> AbiStatus,
+}
+
+/// ADR-0051：调用期借用回调，宿主在当前线程调用一次，返回时结束全部访问。
+pub type AbiBlockingCallback = unsafe extern "C" fn(*mut c_void, *mut AbiError) -> AbiStatus;
+
+/// DOC-12 §13、ADR-0051：v1.0 前缀保持冻结，尾部槽由 size 协商。
+#[repr(C)]
+pub struct HostV1_1 {
+    pub v1: HostV1,
+    pub block_in_place:
+        unsafe extern "C" fn(*mut c_void, AbiBlockingCallback, *mut AbiError) -> AbiStatus,
 }
 
 pub type Apply = unsafe extern "C" fn(u64, AbiBytes, *mut AbiFuture, *mut AbiError) -> AbiStatus;

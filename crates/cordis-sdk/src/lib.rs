@@ -1,3 +1,16 @@
+//! Rust-cordis 原生插件 SDK。
+//!
+//! # 执行模型
+//!
+//! ADR-0051：同一原生分组的服务调用及 `Context::spawn` 任务共用宿主执行器，
+//! 缺省为两个工作线程。异步方法与后台任务通过 `.await` 交还轮询权；同步方法
+//! 需要异步结果时使用 [`Context::wait`]。自行 `futures::executor::block_on`
+//! 会持续占用工作线程，多个并发等待可能耗尽同组的执行能力。
+//!
+//! `Context::wait` 由 cordis-host 0.1.1（ABI 1.1）交出工作线程，支持借用 Future、
+//! 嵌套等待及 `Context::spawn_thread` 的系统线程。旧宿主在轮询前返回 code 3。
+//! 跨进程调用继续遵守截止时间；可能超过截止时间的业务采用提交与查询接口。
+
 extern crate self as cordis_sdk;
 
 pub mod builtin;

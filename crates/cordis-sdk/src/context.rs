@@ -20,6 +20,20 @@ pub struct Context {
 }
 
 impl Context {
+    /// ADR-0051：在同步上下文等待异步结果，由宿主交出原生执行线程。
+    ///
+    /// 异步服务方法及 `ctx.spawn` 任务优先使用 `.await`；同步服务方法可用
+    /// `ctx.wait(service.async_method())`，支持借用参数和嵌套等待。
+    /// 该入口要求 cordis-host 0.1.1（ABI 1.1）及以上。旧宿主在轮询 Future
+    /// 之前返回 code 3。跨进程调用继续受截止时间约束，实例清理遵循原有规则。
+    pub fn wait<F, T>(&self, future: F) -> Result<T>
+    where
+        F: Future<Output = Result<T>>,
+    {
+        self.environment
+            .block_in_place(|| futures_lite::future::block_on(future))?
+    }
+
     /// DOC-16 §5：当前加载视图编号，可与只读运行时快照中的实例上下文匹配。
     pub fn context_id(&self) -> u64 {
         self.handle

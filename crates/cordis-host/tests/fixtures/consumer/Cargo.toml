@@ -12,3 +12,4 @@ crate-type = ["cdylib"]
 cordis-sdk.workspace = true
 loader-fixture-api.workspace = true
 serde.workspace = true
+futures = "=0.3.34"

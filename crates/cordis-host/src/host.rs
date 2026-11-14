@@ -99,6 +99,11 @@ pub(crate) struct Inner {
 pub struct Host(pub(crate) Arc<Inner>);
 
 impl Host {
+    /// ADR-0051：调度线程交接属于原生宿主，借用回调在当前调用期间结束。
+    pub fn block_in_place<T>(&self, body: impl FnOnce() -> T) -> T {
+        self.0.executor.block_in_place(body)
+    }
+
     /// DOC-15 CP-1：初始化宿主数据和独立原生执行器，运行时构造错误直接返回。
     pub fn new(options: HostOptions, io: tokio::runtime::Handle) -> Result<Self> {
         let store = LibraryStore::new(options.library.clone())?;
@@ -733,6 +738,7 @@ impl Host {
 
     /// DOC-16：握手建立进程身份并装入核心指定的初始原生库。
     fn hello(&self, request: payload::Hello) -> Result<Value> {
+        self.0.executor.group(request.group.clone());
         if request.protocol != 1 {
             return Err(Error::new(3, "UP/1 主版本不匹配"));
         }
@@ -791,6 +797,7 @@ impl Host {
     /// DOC-16 资源协议：参数导入和结果导出分别持有调用所需资源。
     async fn invoke(&self, params: Payload) -> Result<Outgoing> {
         let request: payload::Invoke = from_value(params.value().clone())?;
+        crate::native::method(&request.method);
         let object = self.objects().borrow(request.object)?;
         let bridge = self.bridge()?;
         let arguments = bridge.incoming(&params, Value::Array(request.args)).await?;

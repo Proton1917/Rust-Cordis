@@ -8,14 +8,14 @@
 
 | 项 | 值 |
 |---|---|
-| 最近完成的实现与检查 | v0.2.1 发布及证据存档经设计方核验，TestGuard 调整的 d54f103 复核通过；2026-11-15 已补齐远端证据并释放本机副本，target 为 55.2 MiB |
-| 当前里程碑 | 既定实现与收尾完成，等待用户安排 |
+| 最近完成的实现与检查 | ADR-0051 的 Context::wait、ABI v1.1 和宿主占满诊断完成；原生 16 项、ABI/SDK 23 项、模板 1 项及 Miri 18 项通过。skill 重整已单独提交推送 a0e04b8 |
+| 当前里程碑 | 原生同步等待修复完成，等待设计方复核 |
 | M23 接口确认 | beb4c8cf 批准的纯数据调用、资源释放和拥有型 Service 转交已实现并通过 AU-27a。Inject 命名声明共用类型化校验；Python 沿用 Remote.invoke，TypeScript 提供 getDynamic。ADR-0047 与实现随 18a62cf 提交，review 基线为 70db380 |
 | M23 版本 | 1c6187d3 批准发行标签 v0.2.0，改动的 cordis-sdk、cordis-dev 与 TypeScript SDK 升为 0.2.0；核心、宿主、Python SDK 和既有官方插件保持 0.1.0，ABI v1、UP/1 保持。发布页和包内 README 以组件表说明；脚手架验证生成的 SDK 版本及源码提交 |
 | M23 依赖锁文件 | ef9cfb5a 批准夹具 Cargo.lock 中 SDK 项随 0.2.0 机械联动；其余依赖保持既有版本。核心产品 src/Cargo.toml、ABI 与根锁文件中的核心依赖项保持 review 70db380 |
 | M23 固定 Git 验收 | 按 72c36897 在 18a62cf 推送后复验通过；设计方隔离副本同样指向 18a62cf 构建通过，v0.2.0 已发布 |
 | 当前验证 | fix 的 fmt、clippy、177 条矩阵、unsafe 通过，344 项测试通过。固定 Git 用例在已推送的 4e800c631064a344964f7f91c1b6210c1d659775 上执行，19.53 秒通过，app/watch/hello Active；日志 target/fix-watch-privacy/evidence/pinned-git.log |
-| 下一步 | 等待用户安排 |
+| 下一步 | 等待设计方复核 ADR-0051 实现与验收；后续工作由用户安排 |
 | M22 复核跟进 | 页面故障测试同步与身份缺席错误处理已在 70db380 完成；五轮并行负载测试通过。supervisor 为 5445 行 |
 | 发布复核跟进 | 两个重建资产已上传，远端文件名和大小与本地产物一致；设计方将再次下载核验。v0.1.0 保留 6 个 Mach-O，v0.2.0 保留 7 个并包含 secrets |
 | M22 边界 | 按设计方三项裁决：内核、up、channels、types、process 与 ABI 相对 df05064 保持；supervisor 先提取到 routing 再添加受信调用元数据，结束时至多 5450 代码行；web-deployment 限页面来源，runtime 限 service install |
@@ -26,13 +26,13 @@
 | M20 评审跟进 | segmentation_fault_isolates_group 的等待修正及五轮稳定性验收已完成；supervisor 保持 5480/5500 代码行 |
 | M21 性能结果 | RM-7 三方向各 10000 次，RM-8 三次替换完成。RM-9 首轮中位数比 1.07711183；停载重测中位数比 0.95774113、最大值比 0.90793525，满足原 1.05/1.15 判据。完整样本与测量条件并列归档 |
 | 后续事项 | Linux 实测、crates.io、插件包格式、Windows 移植、RM-9 方法研究与 ADR-0045 的优先级由用户决定；静态分派候选和原始测量资料在 GitHub 存档中保留原相对路径 |
-| 清理 | 2026-11-15 的 target 为 885.5→55.2 MiB，目录占用减少 870,612,992 字节。归档后的 67,053 个本机文件、1,159 个可重建产物以及 Miri、Python/Node、npm 等缓存已释放；发布压缩包与私有工作资料保留。记录 docs/measurements/evidence-offload-2026-11-15.json |
+| 清理 | 证据迁移后 target 为 55.2 MiB；本轮构建与验证后再次清理 target/debug、shared、miri、miri-sysroot 及旧宿主验证副本，从 3,598,044 KiB 降至 75,728 KiB（约 74 MiB），保留日志和首次失败夹具。记录 docs/measurements/native-synchronous-wait.json |
 | 执行安排 | 用户要求关闭全部子代理，由主会话独立完成 M22 与后续 M23；编译沿默认 target/debug 与 target/shared |
 | 后续顺序 | 发布、公开存档、下载验证、本地清理和 TestGuard 全量验收已完成；后续工作由用户安排 |
 | 验收资料 | docs/measurements 中保存发布、存档及清理记录；原始日志在 GitHub 原存档和补充资产中，按 target/ 原相对路径恢复 |
 | 文档交付 | README、guide、ADR-0047、skill、解释页、组件版本表与发布记录已同步 |
 | 窗口界面验收 | AU-17 已归档；用户运行记录为恢复 802 ms，截图、Cmd-Q、检查点与进程退出通过 |
-| 最后更新 | 2026-11-15（Asia/Shanghai），证据迁到 GitHub 后释放本机副本 |
+| 最后更新 | 2026-11-15（Asia/Shanghai），原生同步等待修复与受影响验收完成 |
 
 ## 环境
 
@@ -950,6 +950,17 @@ RM-9 两次均为每实现固定 9 轮、每轮预热 10000 次、计量 100000 
 - pgrep 与 lsof +D target 确认相关构建、运行进程和打开文件为 0 后，释放已归档的 67,053 个本机文件、1,159 个可重建产物及七处缓存目录。残缺的 Python/Node 运行时目录整体释放，后续打包验收通过既有脚本重新获取固定版本，下载量 51,157,421 字节。Miri sysroot 按 miri setup 重建。
 - target 从本轮起始 906,780 KiB 降至 56,572 KiB（885.5→55.2 MiB），减少 870,612,992 字节；本轮临时装配资料也已释放。清理前后文件系统可用空间同期增加 1,735,176,192 字节，该值包含系统并发活动影响。正式发布压缩包、设计方工作目录、代理协调资料及少量含本机信息的文件留在本机。
 - 本轮变更为存档与记录，沿用既有产品验收结果。详细数值、保留范围与下载核验见[证据迁移记录](measurements/evidence-offload-2026-11-15.json)。
+
+### ADR-0051 原生同步等待
+
+- 依据设计方 70d700f1，在两个真实原生宿主之间复现同步方法自行 block_on 的调度阻塞。缺省两个工作线程下，两次并发调用在 1001 ms 后返回 code 6，第三次截止触发使用方分组回收。原始日志 target/native-wait/evidence/reproduction.log；首次用例参数编码问题单独保留原日志。
+- 设计方 20d7db10 批准 ABI v1.1 和 Context::wait。执行线程归 cordis-host 掌握，宿主通过 block_in_place 交出工作线程，ABI 追加同步借用回调槽，SDK 负责 Future 与返回值包装（第一性原理第 3、5 条）。SDK 使用支持嵌套的 futures-lite 2.6.1；借用与非 Send 局部值保持在原调用线程。
+- HostV1 的 232 字节前缀与 28 个槽保持，HostV1_1 为 240 字节，追加槽偏移 232。握手保留完整原始表指针，访问尾部前检查 size。旧宿主在执行 Future 前返回 code 3；实际 v0.2.1 发布包中的 cordis-host 0.1.0 已验证返回 code 3 且 Future polls=0。新宿主装载该发布包中的旧 SDK 0.2.0 secrets 库通过。
+- 两个工作线程下四路安全等待在 1 ms 内全部返回真实提供方计数 100；嵌套 wait、ctx.spawn_thread 与 ctx.spawn 路径通过。业务错误保持 code 1021，panic 返回 code 5，随后服务继续可调用。原生宿主全部 16 场景通过；ABI/SDK 23 项通过，其中包含 unsafe 审计。模板测试在 crates.io TLS 故障后沿已缓存依赖离线执行，1 项通过。
+- 宿主在调用取消且原生轮询持续占满至少 100 ms 时输出一次诊断，字段为分组、方法名、占用线程数和持续时间。复现中记录 wait-client、call、2/2、1004 ms；提示排查阻塞等待或长时间同步计算。安全等待期间从占用统计中挂起，恢复后重新计时。
+- Miri 先通过 setup 重建本机 sysroot，随后 16 个边界用例及两份布局比较全部通过。nightly 为 1.102.0-nightly（3ef0c22cd 2026-11-11），v1.0 布局文件保持。fmt、受影响三 crate 的 all-targets clippy、原生 driver clippy 和 177 条矩阵通过。ABI、SDK、host 分别为 2466/2924、987/1163、2908/3225 代码行/总行；核心进程产品差异为空。
+- 代码版本为 cordis-sdk 0.2.1、cordis-host 0.1.1、cordis-abi 0.1.1，宿主 ABI 1.1。guide、SDK rustdoc、DOC-12 与发布组件表写明能力及最低宿主版本。按组线程数已评估并暂缓，后续由项目所有者安排 cordis.toml 到 --native-workers 的配置接入。
+- 设计方七份 skill 文档按 eb095c44、d6e0fa6f 原样单独提交为 a0e04b8，推送在 HTTPS 的 HTTP/1.1 连接下完成。后续 Context::wait 规则由设计方更新。验收记录为 [native-synchronous-wait.json](measurements/native-synchronous-wait.json)。测试结束后清理可重建缓存，目录占用减少 3,606,851,584 字节，文件系统可用空间同期增加 3,537,301,504 字节；首次失败夹具与全部日志保留。
 
 ## 第二阶段候选与恢复记录
 

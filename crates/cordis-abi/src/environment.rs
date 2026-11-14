@@ -3,15 +3,20 @@ use std::mem::{MaybeUninit, size_of};
 
 #[derive(Clone, Copy)]
 pub struct Environment {
-    host: &'static HostV1,
+    host: *const HostV1,
     library: LibraryId,
 }
 
+// SAFETY: DOC-12 §3：宿主表只读且具有进程寿命，全部槽遵守跨线程调用契约。
+unsafe impl Send for Environment {}
+// SAFETY: DOC-12 §3：共享环境只读取静态宿主表，调用的可变状态由宿主管理。
+unsafe impl Sync for Environment {}
+
 impl Environment {
     /// # Safety
-    /// DOC-12 §5、§6、§9：host全部函数遵守输出、所有权及panic边界契约。
+    /// DOC-12 §3、§5、§9：host 对应 size 声明的完整静态只读表，全部函数遵守所有权与 panic 边界契约。
     // SAFETY: DOC-12 §9 的宿主实现契约由构造者保证。
-    pub const unsafe fn new(host: &'static HostV1, library: LibraryId) -> Self {
+    pub const unsafe fn new(host: *const HostV1, library: LibraryId) -> Self {
         Self { host, library }
     }
 
@@ -24,12 +29,17 @@ impl Environment {
             return Err(Error::new(3, "HostV1 size is below ABI v1"));
         }
         // SAFETY: DOC-12 §3、§9，完整v1表经长度确认且具有进程寿命。
-        Ok(unsafe { Self::new(&*host, library) })
+        Ok(unsafe { Self::new(host, library) })
     }
     pub const fn library(self) -> LibraryId {
         self.library
     }
     pub const fn raw_host(self) -> &'static HostV1 {
+        // SAFETY: DOC-12 §3：环境构造保证 v1.0 前缀及进程寿命。
+        unsafe { &*self.host }
+    }
+    /// ADR-0051：传递完整表的原始指针，保持扩展槽的分配来源范围。
+    pub const fn raw_host_ptr(self) -> *const HostV1 {
         self.host
     }
     pub const fn host(self) -> HostClient {
@@ -88,7 +98,7 @@ impl Environment {
             return Ok(());
         }
         // SAFETY: DOC-12 §11，宿主表有效，错误槽由call_unit提供。
-        unsafe { self.call_unit(|err| (self.host.lease_acquire)(library, err)) }
+        unsafe { self.call_unit(|err| (self.raw_host().lease_acquire)(library, err)) }
     }
 
     pub fn release(self, library: LibraryId) -> Result<()> {
@@ -96,14 +106,14 @@ impl Environment {
             return Ok(());
         }
         // SAFETY: DOC-12 §11，所有者在资源回调返回后归还既有租约。
-        unsafe { self.call_unit(|err| (self.host.lease_release)(library, err)) }
+        unsafe { self.call_unit(|err| (self.raw_host().lease_release)(library, err)) }
     }
 
     pub fn report(self, error: Error) {
         let message = format!("library {}: {error}", self.library);
         let result =
             // SAFETY: DOC-12 §6、§9，ctx0是诊断入口，借用字符串覆盖调用期。
-            unsafe { self.call_unit(|err| (self.host.log)(0, 0, AbiStr::new(&message), err)) };
+            unsafe { self.call_unit(|err| (self.raw_host().log)(0, 0, AbiStr::new(&message), err)) };
         if let Err(logging) = result {
             eprintln!("{message}; ABI diagnostic failed: {logging}");
         }

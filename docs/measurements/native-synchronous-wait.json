@@ -1,0 +1,100 @@
+{
+  "date": "2026-11-15",
+  "adr": "ADR-0051",
+  "platform": "macOS aarch64-apple-darwin",
+  "versions": {
+    "cordis_sdk": "0.2.1",
+    "cordis_host": "0.1.1",
+    "cordis_abi": "0.1.1",
+    "host_abi": "1.1",
+    "minimum_host_for_wait": "0.1.1"
+  },
+  "reproduction": {
+    "command": "cargo test -p cordis-host --test native concurrent_raw_wait_exhausts_native_workers -- --nocapture",
+    "native_workers": 2,
+    "concurrent_calls": 2,
+    "deadline_ms": 1000,
+    "observed_elapsed_ms": 1001,
+    "errors": [6, 6, 6],
+    "failed_group": "wait-client",
+    "group_reaped": true,
+    "log": "target/native-wait/evidence/reproduction.log"
+  },
+  "safe_wait": {
+    "native_workers": 2,
+    "concurrent_calls": 4,
+    "deadline_ms": 1000,
+    "observed_elapsed_ms": 1,
+    "values": [100, 100, 100, 100],
+    "nested": "passed",
+    "system_thread": "passed",
+    "context_spawn": "passed",
+    "error_propagation": 1021,
+    "panic_code": 5,
+    "service_after_panic": "passed",
+    "log": "target/native-wait/evidence/host-tests.log"
+  },
+  "diagnostic": {
+    "group": "wait-client",
+    "methods": ["call", "call"],
+    "occupied_threads": 2,
+    "configured_threads": 2,
+    "duration_ms": 1004,
+    "fields": ["group", "methods", "occupied", "duration_ms"],
+    "interpretation": "Sustained native polling saturation; inspect blocking waits or synchronous computation.",
+    "same_episode_messages": 1
+  },
+  "compatibility": {
+    "old_host_version": "0.1.0",
+    "old_host_source": "official v0.2.1 macOS arm64 asset",
+    "old_host_wait_error": 3,
+    "old_host_future_polls": 0,
+    "old_host_log": "target/native-wait/evidence/legacy-host.log",
+    "new_host_old_plugin": {
+      "plugin": "secrets",
+      "version": "0.1.0",
+      "sdk": "0.2.0",
+      "operation": "describe and load published ABI v1.0 library",
+      "exit_code": 0,
+      "record": "target/native-wait/evidence/old-plugin-new-host.json"
+    },
+    "v1_0_layout": "unchanged",
+    "v1_1_table_size": 240,
+    "appended_slot_offset": 232
+  },
+  "checks": {
+    "native_tests": {"passed": 16, "failed": 0},
+    "abi_sdk_tests": {"passed": 23, "failed": 0},
+    "skill_examples": {"passed": 1, "failed": 0, "cargo_net_offline": true},
+    "miri": {
+      "rustc": "1.102.0-nightly (3ef0c22cd 2026-11-11)",
+      "command": "MIRI_SYSROOT=$PWD/target/miri-sysroot TMPDIR=$PWD/target/tmp cargo +nightly miri test -p cordis-abi",
+      "boundary_passed": 16,
+      "layout_passed": 2,
+      "failed": 0,
+      "log": "target/native-wait/evidence/miri.log"
+    },
+    "fmt": "passed",
+    "clippy": "cordis-abi, cordis-sdk, cordis-host all targets and native driver passed with -D warnings",
+    "conformance": 177,
+    "unsafe_audit": "passed as part of cordis-abi tests",
+    "core_product_diff": "empty",
+    "scope": "Affected ABI, SDK, host and template checks"
+  },
+  "source_lines": {
+    "cordis_abi": {"code": 2466, "total": 2924},
+    "cordis_sdk": {"code": 987, "total": 1163},
+    "cordis_host": {"code": 2908, "total": 3225}
+  },
+  "group_worker_configuration": "Evaluated and deferred; project owner schedules cordis.toml group settings translated by runtime into --native-workers.",
+  "skill_commit": "a0e04b8e9707d4cc140da6ef54c8161a61a3d03f",
+  "cleanup": {
+    "target_before_kib": 3598044,
+    "target_after_kib": 75728,
+    "directory_reduction_bytes": 3606851584,
+    "filesystem_free_increase_bytes": 3537301504,
+    "removed": ["target/debug", "target/shared", "target/miri", "target/miri-sysroot", "legacy verification binaries"],
+    "preserved": ["evidence logs", "initial failed fixture", "existing release archives and private work directories"],
+    "record": "target/native-wait/evidence/cleanup-result.json"
+  }
+}

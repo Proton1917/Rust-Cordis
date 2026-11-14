@@ -1,3 +1,5 @@
+#[path = "support/blocking.rs"]
+mod blocking_tests;
 #[path = "support/generic.rs"]
 mod generic_tests;
 mod support;
