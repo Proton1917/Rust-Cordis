@@ -9,13 +9,13 @@
 | 项 | 值 |
 |---|---|
 | 最近完成的实现与检查 | ADR-0051 的 Context::wait、ABI v1.1 和宿主占满诊断完成；原生 16 项、ABI/SDK 23 项、模板 1 项及 Miri 18 项通过。skill 重整已单独提交推送 a0e04b8 |
-| 当前里程碑 | 原生同步等待修复完成，等待设计方复核 |
+| 当前里程碑 | 原生同步等待及复核修复已通过设计方隔离复核，按 b42afd54 发布 v0.2.2 |
 | M23 接口确认 | beb4c8cf 批准的纯数据调用、资源释放和拥有型 Service 转交已实现并通过 AU-27a。Inject 命名声明共用类型化校验；Python 沿用 Remote.invoke，TypeScript 提供 getDynamic。ADR-0047 与实现随 18a62cf 提交，review 基线为 70db380 |
 | M23 版本 | 1c6187d3 批准发行标签 v0.2.0，改动的 cordis-sdk、cordis-dev 与 TypeScript SDK 升为 0.2.0；核心、宿主、Python SDK 和既有官方插件保持 0.1.0，ABI v1、UP/1 保持。发布页和包内 README 以组件表说明；脚手架验证生成的 SDK 版本及源码提交 |
 | M23 依赖锁文件 | ef9cfb5a 批准夹具 Cargo.lock 中 SDK 项随 0.2.0 机械联动；其余依赖保持既有版本。核心产品 src/Cargo.toml、ABI 与根锁文件中的核心依赖项保持 review 70db380 |
 | M23 固定 Git 验收 | 按 72c36897 在 18a62cf 推送后复验通过；设计方隔离副本同样指向 18a62cf 构建通过，v0.2.0 已发布 |
 | 当前验证 | fix 的 fmt、clippy、177 条矩阵、unsafe 通过，344 项测试通过。固定 Git 用例在已推送的 4e800c631064a344964f7f91c1b6210c1d659775 上执行，19.53 秒通过，app/watch/hello Active；日志 target/fix-watch-privacy/evidence/pinned-git.log |
-| 下一步 | 本轮完成，等待用户安排（v0.2.2 是否发布、Linux 实测） |
+| 下一步 | 发布 v0.2.2：开发工具升至 0.2.2，完成全量测试后固定标签提交；从该提交构建，上传后下载核验隐私、签名、生成项目修订与 Context::wait，再清理构建缓存 |
 | M22 复核跟进 | 页面故障测试同步与身份缺席错误处理已在 70db380 完成；五轮并行负载测试通过。supervisor 为 5445 行 |
 | 发布复核跟进 | 两个重建资产已上传，远端文件名和大小与本地产物一致；设计方将再次下载核验。v0.1.0 保留 6 个 Mach-O，v0.2.0 保留 7 个并包含 secrets |
 | M22 边界 | 按设计方三项裁决：内核、up、channels、types、process 与 ABI 相对 df05064 保持；supervisor 先提取到 routing 再添加受信调用元数据，结束时至多 5450 代码行；web-deployment 限页面来源，runtime 限 service install |
@@ -33,6 +33,26 @@
 | 文档交付 | README、guide、ADR-0047、skill、解释页、组件版本表与发布记录已同步 |
 | 窗口界面验收 | AU-17 已归档；用户运行记录为恢复 802 ms，截图、Cmd-Q、检查点与进程退出通过 |
 | 最后更新 | 2026-11-15（Asia/Shanghai），原生同步等待修复与受影响验收完成 |
+
+### v0.2.2 组件版本
+
+| 组件或协议 | 版本 |
+|---|---|
+| cordis | 0.1.1 |
+| cordis-host | 0.1.1 |
+| cordis-dev | 0.2.2 |
+| Rust SDK | 0.2.1 |
+| HTTP | 0.1.0，内置网页 SDK 0.2.0 |
+| watch | 0.1.1 |
+| window、secrets | 0.1.0 |
+| Python SDK | 0.1.0 |
+| TypeScript SDK | 0.2.0 |
+| 网页宿主 | 0.1.0 |
+| ABI | 1.1 |
+| UP/1 | 1 |
+| cordis.runtime | 1.4 |
+
+发布平台为 macOS arm64。版本提交前 workspace 全量测试一次通过，351 项通过、0 失败、1 项既有独立测量忽略；fmt 与 cordis-dev all-targets clippy 通过。发布资产的下载验收待执行。
 
 ## 环境
 

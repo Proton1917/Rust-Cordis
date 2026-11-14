@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import tarfile
 import time
 import tomllib
 
@@ -99,6 +100,18 @@ def inspect(package, evidence):
     return records
 
 
+def archive_package(package, archive):
+    """发布存档使用中性属主，成员范围来自已装配的发布目录。"""
+    def neutral_owner(info):
+        info.uid = info.gid = 0
+        info.uname = info.gname = "root"
+        info.pax_headers = {}
+        return info
+
+    with tarfile.open(archive, "w:gz") as output:
+        output.add(package, arcname=package.name, filter=neutral_owner)
+
+
 def main():
     parser = argparse.ArgumentParser(description="构建并装配 macOS arm64 发布包，保存路径检查与签名记录。")
     parser.add_argument("version")
@@ -114,7 +127,7 @@ def main():
     stage(artifacts, package, options.version)
     result["binaries"] = inspect(package, evidence)
     archive = work / (name + ".tar.gz")
-    subprocess.run(["tar", "-czf", str(archive), "-C", str(package.parent), name], env={**os.environ, "COPYFILE_DISABLE": "1"}, check=True)
+    archive_package(package, archive)
     result.update({"version": options.version, "asset": archive.name, "bytes": archive.stat().st_size})
     (evidence / "package.json").write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n")
     print(archive)

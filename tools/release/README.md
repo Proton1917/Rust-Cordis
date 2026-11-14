@@ -3,15 +3,29 @@
 {{components}}
 | cordis.runtime | 1.4 |
 
-发行版本代表组件的组合；本版提供核心 0.1.1、watch 0.1.1 和开发工具 0.2.1，Rust 与 TypeScript SDK 沿用 0.2.0。
+发行版本代表组件的组合；本版提供核心 0.1.1、宿主 0.1.1、开发工具 0.2.2 和 Rust SDK 0.2.1。各组件版本及协议版本以表格为准。
 
 平台为 macOS Apple Silicon（aarch64-apple-darwin）。本包包含 cordis、cordis-host、cordis-dev，以及 HTTP、watch、window、secrets 官方插件。
 
-## 修复内容
+## 同步等待与宿主诊断
 
-watch 根据运行时快照的 page_of 字段选择部署实例作为替换目标，修复页面投影被当作独立目标而导致整批替换拒绝的问题。页面投影随所属部署更新，网页草稿、页面文档和应用外壳保持。快照接口升至 cordis.runtime@1.4，兼容既有 1.3 读取方；watch 0.1.1 需要核心 ≥ 0.1.1。
+Rust SDK 0.2.1 提供宿主协同的同步等待入口：
 
-cordis pack 默认重映射 HOME、CARGO_HOME、Rust sysroot 和项目目录，并保留用户编译参数。macOS 动态库在编译期采用相对安装名称。交付前对 Mach-O、ELF 和清单进行完整字节自查，命中构建用户的 HOME 或用户名时打包失败，诊断列出相对文件名与命中次数；显式 --allow-private-paths 可将检查降为警告。
+```rust
+pub fn wait<F, T>(&self, future: F) -> Result<T>
+where
+    F: Future<Output = Result<T>>;
+```
+
+在同步服务方法中使用 `ctx.wait(service.async_method())`。Future 可借用调用参数及局部值，支持嵌套等待。异步方法和 `ctx.spawn` 任务优先使用 `.await`。
+
+该入口要求 cordis-host 0.1.1（ABI 1.1）及以上。宿主先交出原生工作线程，再驱动 Future，从而修复多个同步等待耗尽执行线程的卡死问题。旧宿主在轮询 Future 前返回 code 3。跨进程调用继续遵守既有截止时间。
+
+宿主发现调用取消且工作线程持续占满时，报告分组、方法名、占用线程数和持续时间，提示检查阻塞等待或长时间同步计算。同一占满阶段报告一次。任务监测条目在任务结束时回收。
+
+ABI 1.1 在 HostV1 表尾追加等待槽，v1.0 的布局及已有槽位保持；旧 SDK 插件可由新宿主装载。开发工具 0.2.2 生成的项目将 SDK 固定到本次发布标签的源码提交，依赖版本为 0.2.1。
+
+watch 0.1.1 继续使用 cordis.runtime@1.4 的 page_of 识别页面投影，最低核心版本为 0.1.1。打包继续采用编译路径映射、相对动态库安装名称及完整字节检查。
 
 ## 最小运行
 
@@ -49,6 +63,8 @@ api 是获得 PAYMENT_TOKEN 读取权限的后端实例名。使用方声明 `co
 本包采用 ad-hoc 签名，Developer ID 签名和公证待配置。从网页下载后，可右键选择“打开”，或针对程序执行 `xattr -d com.apple.quarantine <文件>`；目录方式为 `xattr -r -d com.apple.quarantine bin plugins`。
 
 Linux、Windows 待实测，crates.io 发布待安排。v0.x 期间 WIT list<u8> 写出为 CBOR 字节串，读取兼容字节串及旧整数数组。Rust、Python、TypeScript 插件的构建环境按语言准备。
+
+动态调用按接口声明使用 `cordis_sdk::Bytes` 编码字节字段；从 JSON 转换参数时也按接口类型转换。整数数组遵循 UP/1 每集合 65,536 项的上限。
 
 使用指南：https://github.com/Proton1917/Rust-Cordis/blob/{{version}}/docs/guide.md
 
