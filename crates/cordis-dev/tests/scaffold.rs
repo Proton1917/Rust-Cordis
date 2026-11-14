@@ -92,7 +92,7 @@ fn wait_active(project: &Path, running: &mut Running) -> Value {
 }
 
 #[test]
-fn generated_project_requires_sdk_02_at_the_development_build_revision() {
+fn generated_project_uses_sdk_manifest_version_at_development_revision() {
     let case = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "sdk-revision");
     let project = case.directory("dev-scaffold");
     run(Command::new(env!("CARGO_BIN_EXE_cordis-dev"))
@@ -101,7 +101,12 @@ fn generated_project_requires_sdk_02_at_the_development_build_revision() {
     let manifest: toml::Value =
         toml::from_str(&fs::read_to_string(project.join("Cargo.toml")).unwrap()).unwrap();
     let sdk = &manifest["workspace"]["dependencies"]["cordis-sdk"];
-    assert_eq!(sdk["version"].as_str(), Some("0.2.0"));
+    let sdk_manifest: toml::Value =
+        toml::from_str(include_str!("../../cordis-sdk/Cargo.toml")).unwrap();
+    let version = sdk_manifest["package"]["version"]
+        .as_str()
+        .expect("SDK 清单声明包版本");
+    assert_eq!(sdk["version"].as_str(), Some(version));
     assert_eq!(sdk["rev"].as_str(), Some(env!("CORDIS_SOURCE_REVISION")));
     case.success();
 }
