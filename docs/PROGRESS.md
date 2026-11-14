@@ -7,13 +7,13 @@
 | 项 | 值 |
 |---|---|
 | 最近完成的实现与检查 | v0.2.1 已发布；全部文件的完整字节检查通过，七个 arm64 Mach-O 签名有效，核心 0.1.1、HTTP 200、SIGINT 退出 0 |
-| 当前里程碑 | 按 d5cc0f98 准备 target 测试证据的脱敏存档，存档可下载后清理并调整 TestGuard |
+| 当前里程碑 | 脱敏证据预发布已上传并完成下载比对，正在清理测试现场和调整 TestGuard |
 | M23 接口确认 | beb4c8cf 批准的纯数据调用、资源释放和拥有型 Service 转交已实现并通过 AU-27a。Inject 命名声明共用类型化校验；Python 沿用 Remote.invoke，TypeScript 提供 getDynamic。ADR-0047 与实现随 18a62cf 提交，review 基线为 70db380 |
 | M23 版本 | 1c6187d3 批准发行标签 v0.2.0，改动的 cordis-sdk、cordis-dev 与 TypeScript SDK 升为 0.2.0；核心、宿主、Python SDK 和既有官方插件保持 0.1.0，ABI v1、UP/1 保持。发布页和包内 README 以组件表说明；脚手架验证生成的 SDK 版本及源码提交 |
 | M23 依赖锁文件 | ef9cfb5a 批准夹具 Cargo.lock 中 SDK 项随 0.2.0 机械联动；其余依赖保持既有版本。核心产品 src/Cargo.toml、ABI 与根锁文件中的核心依赖项保持 review 70db380 |
 | M23 固定 Git 验收 | 按 72c36897 在 18a62cf 推送后复验通过；设计方隔离副本同样指向 18a62cf 构建通过，v0.2.0 已发布 |
 | 当前验证 | fix 的 fmt、clippy、177 条矩阵、unsafe 通过，344 项测试通过。固定 Git 用例在已推送的 4e800c631064a344964f7f91c1b6210c1d659775 上执行，19.53 秒通过，app/watch/hello Active；日志 target/fix-watch-privacy/evidence/pinned-git.log |
-| 下一步 | 将 target 测试证据脱敏归档到 evidence-2026-11-13 独立预发布，确认下载可用并提交 evidence-archive.json，再按 e5b449b4 清理现场与调整 TestGuard，执行全量测试并以 review 提交推送；target 证据目标为 1G 以内 |
+| 下一步 | 按 e5b449b4 清理现场与调整 TestGuard，执行全量测试并以 review 提交推送；target 证据目标为 1G 以内。GitHub 存档已确认可下载，记录见 docs/measurements/evidence-archive.json |
 | M22 复核跟进 | 页面故障测试同步与身份缺席错误处理已在 70db380 完成；五轮并行负载测试通过。supervisor 为 5445 行 |
 | 发布复核跟进 | 两个重建资产已上传，远端文件名和大小与本地产物一致；设计方将再次下载核验。v0.1.0 保留 6 个 Mach-O，v0.2.0 保留 7 个并包含 secrets |
 | M22 边界 | 按设计方三项裁决：内核、up、channels、types、process 与 ABI 相对 df05064 保持；supervisor 先提取到 routing 再添加受信调用元数据，结束时至多 5450 代码行；web-deployment 限页面来源，runtime 限 service install |
@@ -922,6 +922,13 @@ RM-9 两次均为每实现固定 9 轮、每轮预热 10000 次、计量 100000 
 - 从 tar 解开后运行，核心输出 cordis 0.1.1，开发工具输出 cordis-dev 0.2.1；HTTP 回环临时端口 GET / 为 200，SIGINT 有序退出码 0。验收副本已释放，发布 tar.gz 与证据保留。
 - 发布地址 https://github.com/Proton1917/Rust-Cordis/releases/tag/v0.2.1 ，资产 cordis-v0.2.1-aarch64-apple-darwin.tar.gz 为 10,310,396 字节；gh release view 确认正式发布、单个资产及大小，git ls-remote 确认标签提交。完整数据见 [v0.2.1 发布验收](measurements/release-v0.2.1.json)。
 - 按 d5cc0f98 的最新顺序，接着上传脱敏测试证据，确认可下载后再清理本地现场和编译缓存，并修改 TestGuard。
+
+### 测试证据存档
+
+- 依据 d5cc0f98，在本地清理前建立预发布 https://github.com/Proton1917/Rust-Cordis/releases/tag/evidence-2026-11-13 ，标签指向当时 main 的 08c9dcc5cf86fb3ce5f5cf8ad97bcd4c2f4f9a6c，标题为“验收证据存档（M0–M23 与修复）”。
+- 资产 cordis-evidence-M0-M23-2026-11-13.tar.gz 为 46,854,251 字节，包含 82,167 个文件。编译产物、工具副本、依赖、浏览器配置、大测试载荷等 28,470 个文件列入排除清单；归档根目录 SCRUBBED.md 说明替换、排除文件及载荷生成方式。
+- 文本中的 HOME 绝对路径替换为 ~，用户名替换为 <user>；已逐项核对 .env 内容来自固定测试样例，并检索凭据格式和私钥块。压缩包全部成员解压后的内容和文件名按完整字节扫描，HOME 与用户名均为 0。
+- 从 GitHub 下载资产后，用 cmp 完整字节比对通过，确认存档可下载且与上传文件一致。结果见 [证据存档记录](measurements/evidence-archive.json)。后续按 e5b449b4 保留实际引用证据和指定保护目录，裁剪可重建数据。
 
 ## 第二阶段候选与恢复记录
 
