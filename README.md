@@ -120,7 +120,7 @@ cordis run
 
 另开终端执行 `cordis status` 查看实例。修改 `plugins/hello/src/lib.rs` 后重新 `cargo build`，或者直接修改 Python 插件源码，`watch` 插件会把变化提交给核心热替换；新版本失败时自动回到原版本和原状态。
 
-内核接口、契约验证、服务部署、发布打包、WIT 生成和 Python 依赖安装的完整说明见 [使用指南](docs/guide.md)。插件编写手册见 [cordis-plugin skill](skills/cordis-plugin/SKILL.md)。
+内核接口、契约验证、服务部署、发布打包、WIT 生成和 Python 依赖安装的完整说明见 [使用指南](docs/guide.md)。第一性原理与插件编写手册见 [cordis-first-principles skill](skills/cordis-first-principles/SKILL.md)。
 
 ## 组成
 
@@ -193,7 +193,7 @@ cordis run
 | [`docs/adr/`](docs/adr) | 决策记录 |
 | [`docs/measurements/`](docs/measurements) | 验收与测量的原始数据 |
 | [`docs/explainer/`](docs/explainer/index.html) | 图解说明页 |
-| [`skills/cordis-plugin/SKILL.md`](skills/cordis-plugin/SKILL.md) | 插件编写手册与模板 |
+| [`skills/cordis-first-principles/SKILL.md`](skills/cordis-first-principles/SKILL.md) | 第一性原理、插件编写手册与模板 |
 | [`docs/PROGRESS.md`](docs/PROGRESS.md) | 进度日志 |
 | [`AGENTS.md`](AGENTS.md) | 实现者的工作规则 |
 

@@ -347,7 +347,7 @@ CommonJS 的模块缓存以解析后的文件路径为键，别名错误会让�
 | `DOC-16` §8、§13 | `compat-js/1` 能力、`UX-1`–`UX-8` 逐字段定义；`plugin` 的组件来源扩展 | `C1` |
 | `DOC-13` | 新增 `compat/` 目录的职责与依赖 | `C1` |
 | `docs/guide.md` | 新增“运行原版 cordis 插件”一节：安装、档案、部署、导入导出、已知差异 | `C3` |
-| `skills/cordis-plugin` | 同步 guide | `C3` |
+| `skills/cordis-first-principles` | 同步 guide | `C3` |
 
 ## 12 待决事项
 

@@ -6,9 +6,10 @@ use super::{
 };
 use std::{fs, path::Path};
 
-const RUST: &str = include_str!("../../../../skills/cordis-plugin/templates/http.rs");
-const PYTHON: &str = include_str!("../../../../skills/cordis-plugin/templates/http.py");
-const TYPESCRIPT: &str = include_str!("../../../../skills/cordis-plugin/templates/http.ts");
+const RUST: &str = include_str!("../../../../skills/cordis-first-principles/templates/http.rs");
+const PYTHON: &str = include_str!("../../../../skills/cordis-first-principles/templates/http.py");
+const TYPESCRIPT: &str =
+    include_str!("../../../../skills/cordis-first-principles/templates/http.ts");
 const HTTP: &str = include_str!("../../../../plugins/http-api/wit/http.wit");
 const STREAM: &str = include_str!("../../../../plugins/stream-api/wit/stream.wit");
 

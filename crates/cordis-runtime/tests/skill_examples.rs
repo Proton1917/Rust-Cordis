@@ -96,7 +96,7 @@ fn shared_skill_templates_build_with_current_sdk() {
         .unwrap();
     let skill = env::var_os("CORDIS_SKILL_PATH")
         .map(PathBuf::from)
-        .unwrap_or_else(|| root.join("skills/cordis-plugin"));
+        .unwrap_or_else(|| root.join("skills/cordis-first-principles"));
     let project = guard.directory("skill-examples");
     fs::create_dir_all(&project).unwrap();
     workspace(&root, &project);

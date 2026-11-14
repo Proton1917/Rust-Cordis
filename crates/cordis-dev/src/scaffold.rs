@@ -13,8 +13,9 @@ pub use http::http_plugin;
 
 const REPOSITORY: &str = "https://github.com/Proton1917/Rust-Cordis.git";
 const SDK_REVISION: &str = env!("CORDIS_SOURCE_REVISION");
-const PLUGIN: &str = include_str!("../../../skills/cordis-plugin/templates/plugin.rs");
-const PLUGIN_MANIFEST: &str = include_str!("../../../skills/cordis-plugin/templates/plugin.toml");
+const PLUGIN: &str = include_str!("../../../skills/cordis-first-principles/templates/plugin.rs");
+const PLUGIN_MANIFEST: &str =
+    include_str!("../../../skills/cordis-first-principles/templates/plugin.toml");
 const WATCH: &str = include_str!("../../../plugins/watch/src/lib.rs");
 
 /// DOC-15 §12.1：目标目录由本次命令创建，固定 SDK 来源供全部插件共用。

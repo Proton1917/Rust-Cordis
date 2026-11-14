@@ -165,7 +165,7 @@ cordis run
 
 生成的 `hello` 组件在激活时发送日志事件；部署 `console-log` 插件可以把这些事件显示在终端。服务、效应、隔离域、状态导出和管理授权的接口见 [插件模型](11-plugin-model.md) 与 [SDK 接口](13-runtime-architecture.md#4-sdk-接口)。
 
-[Cordis 插件编写手册](../skills/cordis-plugin/SKILL.md) 说明共享接口、服务、事件、效应清理、冻结状态、契约验证与替换，并提供可复制的接口、提供方和契约套件模板。Claude Code 与 Codex 可加载同一份 skill；`cordis new-plugin` 直接读取其中的组件模板。
+[cordis-first-principles skill](../skills/cordis-first-principles/SKILL.md) 先讲职责放置的第一性原理，再说明共享接口、服务、事件、效应清理、冻结状态、契约验证与替换，并提供可复制的接口、提供方和契约套件模板。Claude Code 与 Codex 可加载同一份 skill；`cordis new-plugin` 直接读取其中的组件模板。
 
 ## 契约验证
 
