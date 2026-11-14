@@ -1,5 +1,7 @@
 # 验证与部署
 
+本篇讲开发阶段的契约验证与运行中替换。装成服务长期运行、日志、崩溃恢复与备份见[生产部署与运维](deployment.md)。
+
 ## 契约套件
 
 套件本身是原生插件，注入被测接口及 `cordis_sdk::builtin::Contract`。`cordis-contract::Suite` 提供 `check`、`equal`、`stage`、`state_roundtrip`、`finish`。
@@ -28,6 +30,6 @@
 
 `page_of` 从接口次版本 1.4（核心 0.1.1）起提供。需要它的组件在 inject 中声明 `Inject::new().with_name("cordis.runtime@1.4")`；在旧核心上该组件保持 Pending，不会读到缺少该字段的快照。
 
-## 迁移既有 Rust 代码
+## 迁移既有代码
 
-按明确的功能接口划分插件，公共数据类型进入接口 crate。把一次运行所需资源移入 `apply`，把关闭和回退动作登记为效应。把持续任务交给上下文，把持久文件归属数据目录，把跨版本业务数据定义为带版本的状态模式。保持其他插件依赖稳定接口，使实现可以独立替换。
+把现有应用或既有代码迁到 Rust-cordis 的原则、对照表、步骤与完成标志见[迁移现有应用](migration.md)。

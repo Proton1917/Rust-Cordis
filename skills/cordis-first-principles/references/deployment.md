@@ -1,0 +1,109 @@
+# 生产部署与运维
+
+本篇讲已经能在开发机上 `cordis run` 的项目如何长期运行：选平台、装服务、定分组、看日志、处理崩溃、备份。打包见[打包](packaging.md)，开发时的替换与契约验证见[验证与部署](verification-deployment.md)。
+
+## 平台状态
+
+| 平台 | 状态 |
+|---|---|
+| macOS（Apple Silicon） | 全部里程碑在这里开发和实测：构建、运行、替换、回滚、`service install`（launchd）、`cordis pack` 发布包 |
+| Linux | 代码路径存在（`.so` 插件、systemd 用户单元、ELF 发布检查），**没有实测过，也没有持续集成**。首次部署到 Linux 时按下文“首次上线检查”完整走一遍，遇到问题向 Rust-cordis 维护者报告 |
+| Windows | 不支持 |
+
+不要因为 macOS 上通过就默认 Linux 也通过。
+
+## 安装为服务
+
+在部署项目目录执行：
+
+```sh
+cordis service install --name com.example.app \
+  --env PATH=/usr/local/bin:/usr/bin:/bin \
+  --inherit-env LANG
+```
+
+| 项 | macOS | Linux |
+|---|---|---|
+| 服务配置 | `~/Library/LaunchAgents/<name>.plist`；root 用 `/Library/LaunchDaemons/` | systemd 用户单元目录（`~/.config/systemd/user/`），经 `systemctl --user` 启用 |
+| 核心退出后 | launchd `KeepAlive` 重新启动 | systemd `Restart=always`，间隔 1 秒 |
+| 核心的标准输出与标准错误 | 项目的 `service/stdout.log`、`service/stderr.log` | systemd 日志，`journalctl --user -u <单元名>` |
+
+- 先用 `--dry-run` 或 `--output service/app.plist` 生成配置检查一遍，再正式安装。
+- `--env` 与 `--inherit-env` 只放 PATH、LANG 这类普通变量。变量名含 SECRET、TOKEN、PASSWORD 或 KEY 时命令报错；机密走 secrets 插件（见 [HTTP](http.md)“页面来源与密钥”）。
+- Linux 用户单元默认只在该用户登录期间运行。服务器上需要开机即运行、注销后不停止时，按 systemd 的常规做法为运行用户执行 `loginctl enable-linger <用户>`。这一点是 systemd 自身的行为，Rust-cordis 没有在 Linux 上验证过。
+- `cordis service uninstall --name ...` 停止服务并删除配置，输出实际删除的路径。
+
+对外提供 HTTP 时，http 插件只监听本机地址，TLS 由反向代理终结；浏览器实际访问的外部地址写进 http 实例配置的 `public_origins`。
+
+## 分组与容量
+
+部署配置掌握“代码在哪个进程运行”这一事实，插件源码不需要知道自己在哪个分组。
+
+| 插件形态 | 进程 |
+|---|---|
+| Rust 原生插件 | 装进 `cordis-host` 进程。不写 `group` 时每个插件包自成一组；写相同 `group` 的插件包装进同一个宿主进程 |
+| Python、TypeScript 进程插件 | 每个插件包一个独立进程 |
+| 网页组件 | 运行在浏览器页面里，服务端不占进程 |
+
+分组的取舍：
+
+- **同组：** 同组原生插件之间直接调用，不经过核心，不受 `invoke_timeout_ms` 限制；代价是共享故障域，一个插件进程级崩溃（段错误、`abort`、栈溢出），整组重启。
+- **分开：** 每组多一个进程，调用经核心转交。
+- 新写的、调用外部网络或 C 库的、可能长时间阻塞的插件单独成组。频繁互调、彼此信任、都经过验证的插件可以合组。
+
+容量按进程累加：核心一个进程，每个原生分组一个 `cordis-host`，每个进程插件一个解释器进程。小内存机器上：
+
+1. 先在目标机器上 `cordis run`，用 `ps` 或 `top` 记录每个进程的常驻内存；
+2. 合并可信的原生插件分组，减少宿主进程数；
+3. Python 与 Node 插件各自带一个解释器，同一语言的多项小职责优先放进同一个插件包的多个组件，而不是多个插件包。
+
+## 运行时参数
+
+`cordis.toml` 的 `[runtime]` 段，括号内为缺省值：
+
+| 参数 | 含义 | 影响 |
+|---|---|---|
+| `invoke_timeout_ms`（30000） | 经核心转交的一次调用的截止时间 | 超时返回错误码 6；同一连接连续 3 次超时，核心判定该进程失效并终止它。长任务的写法见[调用、超时与长任务](calls.md) |
+| `apply_timeout_ms`（30000） | 一次 apply 的上限 | apply 里不做长时间等待 |
+| `cleanup_timeout_ms`（30000） | 一次效应清理的上限 | 清理中只关闭和等待自己的资源 |
+| `export_timeout_ms`（5000） | 一次状态导出的上限 | 导出器只复制内存状态，不做 I/O；大块数据放数据目录，状态里只存引用 |
+| `checkpoint_ms`（60000，0 表示关闭） | 定期检查点间隔 | 核心崩溃时最多丢失这段时间内的内存状态；有序退出总会写最终状态 |
+| `restart_max`（5）、`restart_backoff_ms`（500） | 原生分组崩溃后的重启次数与首次退避，退避逐次翻倍 | 进程插件在自己的清单中用 `restart = { max = 5, backoff_ms = 500 }` |
+| `require_verified`（false） | 只装载通过契约验证的库 | 生产环境建议开启，见[验证与部署](verification-deployment.md) |
+
+全局参数影响所有插件。不要为了一个慢方法调大 `invoke_timeout_ms`：它同时推迟了对所有卡死插件的发现。
+
+## 崩溃与恢复
+
+| 发生了什么 | 核心的处理 | 运维要做的 |
+|---|---|---|
+| 插件进程退出、协议错误或连续超时 | 终止该进程，撤回它的服务与效应，依赖它的实例转为 Pending；按退避重启，恢复的实例继承最近一次成功导出的状态 | 看日志找原因 |
+| 重启次数耗尽 | 实例保持失败状态，不再重启 | 修复后重新构建（watch 会提交替换）或重启服务 |
+| 核心退出 | 插件宿主在标准输入关闭时自行退出；服务管理器重新启动核心，实例继承最近一次检查点 | 检查检查点间隔是否满足可接受的丢失窗口 |
+| 原生插件 panic | `panic = "unwind"` 时作为错误码 5 返回给调用方；`abort` 时整组退出 | 发布配置保持 `unwind` |
+
+## 日志与状态
+
+- 插件日志：Rust `ctx.log`、Python 与 TypeScript `context.log` 发出日志事件。部署 `console-log` 插件，日志事件才会写到核心的标准错误。进程插件写到自己标准错误的行，核心以 `[stderr <实例名>]` 前缀转写。进程插件的标准输出承载 UP/1，不能 `print`。
+- 实例状态：`cordis status` 读取状态目录中每 100 ms 刷新一次的 `status.json`，列出实例、状态、错误、分组和最近一次替换批次。插件内部用 `cordis.runtime` 服务读取同一份快照。
+- 排障顺序：`cordis status` 找到失败或 Pending 的实例和它的错误 → 核心标准错误中该实例的日志 → 缺依赖时核对接口名与主版本 → 反复重启时看退避是否已耗尽。
+
+## 数据与备份
+
+状态目录（缺省 `state/`）保存检查点、运行中管理操作写入的叠加配置 `state/instances.toml`，以及各插件的数据目录。
+
+- 备份整个状态目录。要得到一致的副本，先停止服务（有序退出会写最终检查点），复制，再启动。
+- 恢复到另一台机器时，插件的状态模式名与版本必须被新机器上的插件接受。
+- 密钥文件由部署系统单独管理，不放进状态目录的备份，也不进入发布包（`cordis pack` 会按密钥服务的声明排除它）。
+
+## 首次上线检查
+
+在目标机器上逐项确认，Linux 上尤其不能省略：
+
+1. 从新目录解包发布包，`cordis version` 输出预期版本。
+2. `cordis run` 前台启动，`cordis status` 中全部实例为 Active。
+3. 走一遍关键业务流程，包括至少一次超过数秒的长任务。
+4. 杀掉一个插件进程，确认它按退避恢复，依赖方回到 Active。
+5. `service install` 后重启机器（Linux 上同时验证注销后服务仍在运行），确认服务自动启动。
+6. 停止服务，确认有序退出并写出检查点；再启动，确认状态被继承。
+7. 记录各进程常驻内存，确认在机器容量之内。
