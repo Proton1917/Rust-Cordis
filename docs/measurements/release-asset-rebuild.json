@@ -1,0 +1,290 @@
+{
+  "v0.1.0": {
+    "asset": "cordis-v0.1.0-aarch64-apple-darwin.tar.gz",
+    "size_bytes": 9998491,
+    "checks": {
+      "core_version": "cordis 0.1.0",
+      "developer_version": "cordis-dev 0.1.0",
+      "http_status": 200,
+      "shutdown_exit": 0,
+      "source_revision": "f8729ac777881607f208e434a9a6074426188a84",
+      "build_rules_revision": "4e800c631064a344964f7f91c1b6210c1d659775",
+      "build_seconds": 40.62926616589539,
+      "binaries": [
+        {
+          "file": "bin/cordis",
+          "architecture": "arm64",
+          "path_matches": 0,
+          "signature": "valid"
+        },
+        {
+          "file": "bin/cordis-host",
+          "architecture": "arm64",
+          "path_matches": 0,
+          "signature": "valid"
+        },
+        {
+          "file": "bin/cordis-dev",
+          "architecture": "arm64",
+          "path_matches": 0,
+          "signature": "valid"
+        },
+        {
+          "file": "plugins/libcordis_http.dylib",
+          "architecture": "arm64",
+          "path_matches": 0,
+          "signature": "valid"
+        },
+        {
+          "file": "plugins/libcordis_watch.dylib",
+          "architecture": "arm64",
+          "path_matches": 0,
+          "signature": "valid"
+        },
+        {
+          "file": "plugins/window/cordis-window",
+          "architecture": "arm64",
+          "path_matches": 0,
+          "signature": "valid"
+        }
+      ],
+      "files": [
+        {
+          "file": "LICENSE",
+          "size_bytes": 1144,
+          "matches": {
+            "HOME": 0,
+            "username": 0
+          }
+        },
+        {
+          "file": "README.md",
+          "size_bytes": 2496,
+          "matches": {
+            "HOME": 0,
+            "username": 0
+          }
+        },
+        {
+          "file": "bin/cordis",
+          "size_bytes": 8902480,
+          "matches": {
+            "HOME": 0,
+            "username": 0
+          }
+        },
+        {
+          "file": "bin/cordis-dev",
+          "size_bytes": 6041216,
+          "matches": {
+            "HOME": 0,
+            "username": 0
+          }
+        },
+        {
+          "file": "bin/cordis-host",
+          "size_bytes": 3321872,
+          "matches": {
+            "HOME": 0,
+            "username": 0
+          }
+        },
+        {
+          "file": "cordis.toml",
+          "size_bytes": 178,
+          "matches": {
+            "HOME": 0,
+            "username": 0
+          }
+        },
+        {
+          "file": "plugins/libcordis_http.dylib",
+          "size_bytes": 3666928,
+          "matches": {
+            "HOME": 0,
+            "username": 0
+          }
+        },
+        {
+          "file": "plugins/libcordis_watch.dylib",
+          "size_bytes": 1128272,
+          "matches": {
+            "HOME": 0,
+            "username": 0
+          }
+        },
+        {
+          "file": "plugins/window/cordis-plugin.toml",
+          "size_bytes": 96,
+          "matches": {
+            "HOME": 0,
+            "username": 0
+          }
+        },
+        {
+          "file": "plugins/window/cordis-window",
+          "size_bytes": 3144912,
+          "matches": {
+            "HOME": 0,
+            "username": 0
+          }
+        }
+      ],
+      "upload": "uploaded",
+      "remote_size_matches": true,
+      "tag_matches_original": true,
+      "rebuild_note_date": "2026-11-14"
+    }
+  },
+  "v0.2.0": {
+    "asset": "cordis-v0.2.0-aarch64-apple-darwin.tar.gz",
+    "size_bytes": 10288636,
+    "checks": {
+      "core_version": "cordis 0.1.0",
+      "developer_version": "cordis-dev 0.2.0",
+      "http_status": 200,
+      "shutdown_exit": 0,
+      "source_revision": "18a62cfaa110191574bf713e9cdb9a365a8a870e",
+      "build_rules_revision": "4e800c631064a344964f7f91c1b6210c1d659775",
+      "build_seconds": 11.804560167016461,
+      "binaries": [
+        {
+          "file": "bin/cordis",
+          "architecture": "arm64",
+          "path_matches": 0,
+          "signature": "valid"
+        },
+        {
+          "file": "bin/cordis-host",
+          "architecture": "arm64",
+          "path_matches": 0,
+          "signature": "valid"
+        },
+        {
+          "file": "bin/cordis-dev",
+          "architecture": "arm64",
+          "path_matches": 0,
+          "signature": "valid"
+        },
+        {
+          "file": "plugins/libcordis_http.dylib",
+          "architecture": "arm64",
+          "path_matches": 0,
+          "signature": "valid"
+        },
+        {
+          "file": "plugins/libcordis_watch.dylib",
+          "architecture": "arm64",
+          "path_matches": 0,
+          "signature": "valid"
+        },
+        {
+          "file": "plugins/libcordis_secrets.dylib",
+          "architecture": "arm64",
+          "path_matches": 0,
+          "signature": "valid"
+        },
+        {
+          "file": "plugins/window/cordis-window",
+          "architecture": "arm64",
+          "path_matches": 0,
+          "signature": "valid"
+        }
+      ],
+      "files": [
+        {
+          "file": "LICENSE",
+          "size_bytes": 1144,
+          "matches": {
+            "HOME": 0,
+            "username": 0
+          }
+        },
+        {
+          "file": "README.md",
+          "size_bytes": 2340,
+          "matches": {
+            "HOME": 0,
+            "username": 0
+          }
+        },
+        {
+          "file": "bin/cordis",
+          "size_bytes": 8902480,
+          "matches": {
+            "HOME": 0,
+            "username": 0
+          }
+        },
+        {
+          "file": "bin/cordis-dev",
+          "size_bytes": 6041440,
+          "matches": {
+            "HOME": 0,
+            "username": 0
+          }
+        },
+        {
+          "file": "bin/cordis-host",
+          "size_bytes": 3321872,
+          "matches": {
+            "HOME": 0,
+            "username": 0
+          }
+        },
+        {
+          "file": "cordis.toml",
+          "size_bytes": 178,
+          "matches": {
+            "HOME": 0,
+            "username": 0
+          }
+        },
+        {
+          "file": "plugins/libcordis_http.dylib",
+          "size_bytes": 3683680,
+          "matches": {
+            "HOME": 0,
+            "username": 0
+          }
+        },
+        {
+          "file": "plugins/libcordis_secrets.dylib",
+          "size_bytes": 713296,
+          "matches": {
+            "HOME": 0,
+            "username": 0
+          }
+        },
+        {
+          "file": "plugins/libcordis_watch.dylib",
+          "size_bytes": 1128224,
+          "matches": {
+            "HOME": 0,
+            "username": 0
+          }
+        },
+        {
+          "file": "plugins/window/cordis-plugin.toml",
+          "size_bytes": 96,
+          "matches": {
+            "HOME": 0,
+            "username": 0
+          }
+        },
+        {
+          "file": "plugins/window/cordis-window",
+          "size_bytes": 3144912,
+          "matches": {
+            "HOME": 0,
+            "username": 0
+          }
+        }
+      ],
+      "upload": "uploaded",
+      "remote_size_matches": true,
+      "tag_matches_original": true,
+      "rebuild_note_date": "2026-11-14"
+    }
+  }
+}

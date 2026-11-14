@@ -6,31 +6,31 @@
 
 | 项 | 值 |
 |---|---|
-| 最近完成的实现与检查 | page_of 与 pack 路径隐私修复：双页面 watch 替换、旧新版本兼容、打包默认拒绝与显式警告、签名和宿主装载通过；本地回归 343 项通过 |
-| 当前里程碑 | M23 后续 fix：按 442c17b7、e1b0b8b7 修复页面投影目标与发布路径；M23 和 v0.2.0 已完成 |
+| 最近完成的实现与检查 | 4e800c6 经设计方复核通过；v0.1.0、v0.2.0 资产已按原标签源码重建，完整字节、签名、版本与 HTTP 验收通过并完成同名替换 |
+| 当前里程碑 | 发布资产重建完成，等待设计方重新下载核验 |
 | M23 接口确认 | beb4c8cf 批准的纯数据调用、资源释放和拥有型 Service 转交已实现并通过 AU-27a。Inject 命名声明共用类型化校验；Python 沿用 Remote.invoke，TypeScript 提供 getDynamic。ADR-0047 与实现随 18a62cf 提交，review 基线为 70db380 |
 | M23 版本 | 1c6187d3 批准发行标签 v0.2.0，改动的 cordis-sdk、cordis-dev 与 TypeScript SDK 升为 0.2.0；核心、宿主、Python SDK 和既有官方插件保持 0.1.0，ABI v1、UP/1 保持。发布页和包内 README 以组件表说明；脚手架验证生成的 SDK 版本及源码提交 |
 | M23 依赖锁文件 | ef9cfb5a 批准夹具 Cargo.lock 中 SDK 项随 0.2.0 机械联动；其余依赖保持既有版本。核心产品 src/Cargo.toml、ABI 与根锁文件中的核心依赖项保持 review 70db380 |
 | M23 固定 Git 验收 | 按 72c36897 在 18a62cf 推送后复验通过；设计方隔离副本同样指向 18a62cf 构建通过，v0.2.0 已发布 |
-| 当前验证 | fix 的 fmt、clippy、177 条矩阵、unsafe 通过；全量回归与针对夹具修正的重测合计 343 项通过。固定 Git 用例使用推送后的修复提交，独立结果记录在 target/fix-watch-privacy/evidence/pinned-git.log |
-| 下一步 | 等待设计方复核本次 fix；推送后的固定 Git 验收与缓存清理记录在 target/fix-watch-privacy/evidence，结果通过当前会话回复。现有 release 资产保持原状 |
+| 当前验证 | fix 的 fmt、clippy、177 条矩阵、unsafe 通过，344 项测试通过。固定 Git 用例在已推送的 4e800c631064a344964f7f91c1b6210c1d659775 上执行，19.53 秒通过，app/watch/hello Active；日志 target/fix-watch-privacy/evidence/pinned-git.log |
+| 下一步 | 等待设计方对重建资产进行下载核验；v0.2.1 的发布由用户决定 |
 | M22 复核跟进 | 页面故障测试同步与身份缺席错误处理已在 70db380 完成；五轮并行负载测试通过。supervisor 为 5445 行 |
-| 发布复核跟进 | v0.1.0 与 v0.2.0 均经设计方独立下载核验；v0.2.0 已随包提供 secrets，README 包含 file/grants 和 0600 配置说明 |
+| 发布复核跟进 | 两个重建资产已上传，远端文件名和大小与本地产物一致；设计方将再次下载核验。v0.1.0 保留 6 个 Mach-O，v0.2.0 保留 7 个并包含 secrets |
 | M22 边界 | 按设计方三项裁决：内核、up、channels、types、process 与 ABI 相对 df05064 保持；supervisor 先提取到 routing 再添加受信调用元数据，结束时至多 5450 代码行；web-deployment 限页面来源，runtime 限 service install |
 | M22 受信信息 | 核心对 scoped 调用追加直接调用方 cordis.caller 与页面的 cordis.page；任何 intercept 来源提交 cordis.* 返回权限错误。secrets 以自己的 grants 配置结合可信调用方鉴权。机密由插件读取和解释，核心转交不透明载荷；AU-25/26 已搜索最详细日志、状态、检查点和错误中的测试值 |
 | M22 页面授权 | 22518c32 裁决：后端 caller={instance}，页面 caller={page_of} 且省略 instance；两者描述直接调用方。secrets 只接受 instance 授权，后端处理页面调用时仍以自己的 instance 读取密钥。三语言 helper 与全栈场景按此验证 |
 | M22 实际故障 | 独立线程 RPC 的 reactor 问题已按批准范围修复；Bridge::invoke 与 sleep/plugin/effect_wait/emit_async 进入宿主执行器。普通线程、自有 Tokio、取消与取消后继续调用场景通过，原失败和修复日志归档在 target/http-m22/evidence |
-| 发布 | v0.2.0 指向 18a62cf；资产为 10,344,873 字节。当时 strings 检查的路径匹配为 0；后续完整字节扫描发现 HTTP/watch/secrets 的 LC_ID_DYLIB 各残留一个 HOME 路径，已报告设计方。下载运行、版本与签名的既有结果保留 |
+| 发布 | 标签 v0.1.0→f8729ac、v0.2.0→18a62cf 保持；同名重建资产分别为 9,998,491、10,288,636 字节。所有文件的完整字节 HOME/用户名匹配为 0，Mach-O 签名有效，两包 GET / 均为 200、SIGINT 退出 0 |
 | M20 评审跟进 | segmentation_fault_isolates_group 的等待修正及五轮稳定性验收已完成；supervisor 保持 5480/5500 代码行 |
 | M21 性能结果 | RM-7 三方向各 10000 次，RM-8 三次替换完成。RM-9 首轮中位数比 1.07711183；停载重测中位数比 0.95774113、最大值比 0.90793525，满足原 1.05/1.15 判据。完整样本与测量条件并列归档 |
 | 后续事项 | Linux 实测、crates.io、插件包格式、Windows 移植、RM-9 方法研究与 ADR-0045 的优先级由用户决定；静态分派候选和原始测量资料按原路径保留 |
-| 清理 | v0.2.0 收尾清理已执行：target 从 20G 降至 5.9G，目录占用减少 14,660,546,560 字节，文件系统可用空间增加 14,211,248,128 字节。debug/shared 和本次验证副本已释放，验收证据、发布包与指定目录保留 |
+| 清理 | fix 清理 23G→6.9G 的记录保留。资产重建后释放 target/shared，移除源码及运行验证副本；target 为 7.6G→6.9G，目录占用减少 769,437,696 字节，文件系统可用空间增加 709,963,776 字节。原始与重建发布包、验收证据保留；记录 target/release-asset-rebuild/cleanup.json |
 | 执行安排 | 用户要求关闭全部子代理，由主会话独立完成 M22 与后续 M23；编译沿默认 target/debug 与 target/shared |
-| 后续顺序 | 本次两项修复合并提交；发布安排由用户决定 |
-| 验收资料 | docs/measurements/m23-acceptance.md、m23-pinned-git.json、release-v0.2.0.json 与 release-v0.2.0-cleanup.json；历次验收和网页状态资料保留 |
+| 后续顺序 | 设计方再次下载核验；后续发行由用户安排 |
+| 验收资料 | docs/measurements/release-asset-rebuild.json 保存两个资产的文件大小与完整检查结果；历史发布、fix 和网页验收资料继续保留 |
 | 文档交付 | README、guide、ADR-0047、skill、解释页、组件版本表与发布记录已同步 |
 | 窗口界面验收 | AU-17 已归档；用户运行记录为恢复 802 ms，截图、Cmd-Q、检查点与进程退出通过 |
-| 最后更新 | 2026-11-14（Asia/Shanghai），页面投影与 pack 路径隐私修复验收 |
+| 最后更新 | 2026-11-14（Asia/Shanghai），原标签资产重建、替换和缓存清理完成 |
 
 ## 环境
 
@@ -902,6 +902,17 @@ RM-9 两次均为每实现固定 9 轮、每轮预热 10000 次、计量 100000 
 - 既有发布观测补充：完整字节扫描定位 v0.1.0 的 HTTP/watch 与 v0.2.0 的 HTTP/watch/secrets 各有一处 LC_ID_DYLIB HOME 残留；原 strings 观测保留其检查范围。原始证据 target/fix-watch-privacy/evidence/released-full-byte-scan.json，已通过 3639b410 报告设计方，现有资产保持原状。
 - 退出检查：fmt、clippy、177 条矩阵、unsafe 通过。全量回归 340 项通过、3 项夹具失败；HTTP 改用 release 产物，应用与窗口改用工作区内 HOME 的默认状态目录后，受影响测试分别 9/9、1/1、1/1 通过，合计 343 项有效结果。完整命令、失败原因和证据见 [验收记录](measurements/fix-watch-and-pack.md)。固定 Git 用例在修复提交推送后执行，日志为 target/fix-watch-privacy/evidence/pinned-git.log。
 - 规模与锁文件：dev 源目录为 2694/2941 行，加共享映射模块的 45/49 行后为 2739/2990 行。夹具 Cargo.lock 随 types 0.1.1 更新；host driver 的 testkit 新增 serde_json 及其既有版本依赖，产品核心依赖保持。
+
+### 发布资产重建
+
+- 授权依据为 b68190fb、7466f651。设计方独立确认 v0.1.0 的 HTTP/watch、v0.2.0 的 HTTP/watch/secrets 各有一处 LC_ID_DYLIB 本机路径，并在 4e800c6 隔离复核通过后授权替换资产。
+- 从 Git 标签归档提取 f8729ac、18a62cf 的源码，构建时设置各自的 CORDIS_SOURCE_REVISION，采用 4e800c6 的共享规则生成 -Crpath=yes 和路径映射参数。源码保持标签内容，Cargo 使用 --locked 与 target/shared。构建分别耗时 40.63、11.80 秒；脚本为 target/release-asset-rebuild/run.py。
+- 保留原包组件组合、README、LICENSE 与部署配置；v0.1.0 含 6 个 Mach-O，v0.2.0 含 7 个并提供 secrets。签名后检查所有文件的完整字节，HOME 与用户名匹配均为 0，所有 Mach-O 为 arm64、codesign 有效；归档成员的属主使用中性名称 root。
+- 从新 tar.gz 解开并运行，HTTP 使用回环地址的临时端口。两包核心均输出 cordis 0.1.0，开发工具分别为 0.1.0、0.2.0，与原包一致；GET / 返回 200，SIGINT 有序退出码为 0。验证副本与源码副本在结束后释放，日志保存在 target/release-asset-rebuild/<标签>/evidence。
+- 执行 gh release upload --clobber 替换同名资产，再通过 gh release view 核对远端上传状态和大小：v0.1.0 为 9,998,491 字节，v0.2.0 为 10,288,636 字节。git ls-remote 确认两个标签仍指向原提交。
+- 两个发布说明均追加：“资产已于 2026-11-14 用相同源码重新构建，移除了库安装名中的构建机路径”。日期采用实际重建日期。完整检查记录见 [资产重建结果](measurements/release-asset-rebuild.json)，记录包含文件名、大小及结果。
+- 确认构建和验收进程退出后，cargo clean --target-dir target/shared 已执行；target 从 7.6G 降至 6.9G，目录占用减少 769,437,696 字节，文件系统可用空间增加 709,963,776 字节，详细记录为 target/release-asset-rebuild/cleanup.json。原包与新包分别作为原始观测和当前发布产物保留。
+- 兼容诊断与提交后 pinned Git 的方式已获 b68190fb 确认；固定 Git 验收实际结果为 1 项通过、19.53 秒。重建资产等待设计方再次下载核验，v0.2.1 由用户决定。
 
 ## 第二阶段候选与恢复记录
 
