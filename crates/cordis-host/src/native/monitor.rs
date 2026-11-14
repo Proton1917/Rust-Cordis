@@ -3,6 +3,7 @@
 use parking_lot::Mutex;
 use std::{
     cell::RefCell,
+    collections::HashMap,
     future::{Future, poll_fn},
     pin::pin,
     sync::{
@@ -20,7 +21,7 @@ pub(super) struct Monitor {
     epoch: Instant,
     workers: usize,
     group: OnceLock<String>,
-    states: Mutex<Vec<Weak<PollState>>>,
+    states: Mutex<HashMap<usize, Weak<PollState>>>,
     reported: AtomicBool,
 }
 
@@ -30,13 +31,41 @@ struct PollState {
     method: Mutex<String>,
 }
 
+/// ADR-0051：守卫持有任务状态，以其稳定地址登记，完成、取消与 panic 沿 Drop 移除。
+struct Registration(Arc<PollState>);
+
+impl Registration {
+    fn new(monitor: Arc<Monitor>) -> Self {
+        let registration = Self(Arc::new(PollState {
+            monitor,
+            started: AtomicU64::new(0),
+            method: Mutex::new("native task".into()),
+        }));
+        registration.0.monitor.states.lock().insert(
+            Arc::as_ptr(&registration.0) as usize,
+            Arc::downgrade(&registration.0),
+        );
+        registration
+    }
+}
+
+impl Drop for Registration {
+    fn drop(&mut self) {
+        self.0
+            .monitor
+            .states
+            .lock()
+            .remove(&(Arc::as_ptr(&self.0) as usize));
+    }
+}
+
 impl Monitor {
     pub(super) fn new(workers: usize) -> Arc<Self> {
         Arc::new(Self {
             epoch: Instant::now(),
             workers,
             group: OnceLock::new(),
-            states: Mutex::new(Vec::new()),
+            states: Mutex::new(HashMap::new()),
             reported: AtomicBool::new(false),
         })
     }
@@ -49,21 +78,12 @@ impl Monitor {
         self.epoch.elapsed().as_millis() as u64 + 1
     }
 
-    /// 每个任务登记一次，poll 起止通过原子时间戳与线程局部引用记录。
+    /// 任务登记与结束移除使用期望均摊常数时间；poll 起止记录沿原子时间戳与线程局部引用。
     pub(super) async fn track<F: Future>(self: Arc<Self>, future: F) -> F::Output {
-        let state = Arc::new(PollState {
-            monitor: self.clone(),
-            started: AtomicU64::new(0),
-            method: Mutex::new("native task".into()),
-        });
-        {
-            let mut states = self.states.lock();
-            states.retain(|entry| entry.strong_count() > 0);
-            states.push(Arc::downgrade(&state));
-        }
+        let registration = Registration::new(self);
         let mut future = pin!(future);
         poll_fn(|cx| {
-            let _scope = PollScope::enter(state.clone());
+            let _scope = PollScope::enter(registration.0.clone());
             future.as_mut().poll(cx)
         })
         .await
@@ -75,7 +95,7 @@ impl Monitor {
         let active: Vec<_> = self
             .states
             .lock()
-            .iter()
+            .values()
             .filter_map(Weak::upgrade)
             .filter_map(|state| {
                 let started = state.started.load(Ordering::Acquire);
@@ -159,5 +179,26 @@ impl Drop for Suspension {
         if let Some(state) = &self.0 {
             state.started.store(state.monitor.tick(), Ordering::Release);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Monitor;
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn completed_tasks_release_monitor_entries() {
+        let monitor = Monitor::new(2);
+        let mut tasks = tokio::task::JoinSet::new();
+        for _ in 0..10_000 {
+            tasks.spawn(monitor.clone().track(async {
+                tokio::task::yield_now().await;
+            }));
+        }
+        while let Some(result) = tasks.join_next().await {
+            result.unwrap();
+        }
+        let retained = monitor.states.lock().len();
+        assert_eq!(retained, 0, "全部任务结束后监测表释放其条目");
     }
 }
