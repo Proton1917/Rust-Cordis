@@ -6,14 +6,14 @@
 
 | 项 | 值 |
 |---|---|
-| 最近完成的实现与检查 | v0.2.1 已发布；全部文件的完整字节检查通过，七个 arm64 Mach-O 签名有效，核心 0.1.1、HTTP 200、SIGINT 退出 0 |
-| 当前里程碑 | 证据存档已按 58da3ff4 排除设计工作资料、进程列表和私有项目标记，完成复查并恢复公开；继续现场清理与 TestGuard 调整 |
+| 最近完成的实现与检查 | v0.2.1 发布、脱敏证据存档与设计方下载核验完成；TestGuard 调整全量 344 项通过，target 清理至 843M |
+| 当前里程碑 | 测试现场裁剪与成功归档策略已完成，等待设计方复核 |
 | M23 接口确认 | beb4c8cf 批准的纯数据调用、资源释放和拥有型 Service 转交已实现并通过 AU-27a。Inject 命名声明共用类型化校验；Python 沿用 Remote.invoke，TypeScript 提供 getDynamic。ADR-0047 与实现随 18a62cf 提交，review 基线为 70db380 |
 | M23 版本 | 1c6187d3 批准发行标签 v0.2.0，改动的 cordis-sdk、cordis-dev 与 TypeScript SDK 升为 0.2.0；核心、宿主、Python SDK 和既有官方插件保持 0.1.0，ABI v1、UP/1 保持。发布页和包内 README 以组件表说明；脚手架验证生成的 SDK 版本及源码提交 |
 | M23 依赖锁文件 | ef9cfb5a 批准夹具 Cargo.lock 中 SDK 项随 0.2.0 机械联动；其余依赖保持既有版本。核心产品 src/Cargo.toml、ABI 与根锁文件中的核心依赖项保持 review 70db380 |
 | M23 固定 Git 验收 | 按 72c36897 在 18a62cf 推送后复验通过；设计方隔离副本同样指向 18a62cf 构建通过，v0.2.0 已发布 |
 | 当前验证 | fix 的 fmt、clippy、177 条矩阵、unsafe 通过，344 项测试通过。固定 Git 用例在已推送的 4e800c631064a344964f7f91c1b6210c1d659775 上执行，19.53 秒通过，app/watch/hello Active；日志 target/fix-watch-privacy/evidence/pinned-git.log |
-| 下一步 | 公开证据资产已验证可下载；按 e5b449b4 清理现场与调整 TestGuard，完成全量测试和 review 提交推送，使 target 非编译证据占用低于 1G |
+| 下一步 | 等待设计方复核 TestGuard 的成功归档策略与清理记录；后续工作由用户安排 |
 | M22 复核跟进 | 页面故障测试同步与身份缺席错误处理已在 70db380 完成；五轮并行负载测试通过。supervisor 为 5445 行 |
 | 发布复核跟进 | 两个重建资产已上传，远端文件名和大小与本地产物一致；设计方将再次下载核验。v0.1.0 保留 6 个 Mach-O，v0.2.0 保留 7 个并包含 secrets |
 | M22 边界 | 按设计方三项裁决：内核、up、channels、types、process 与 ABI 相对 df05064 保持；supervisor 先提取到 routing 再添加受信调用元数据，结束时至多 5450 代码行；web-deployment 限页面来源，runtime 限 service install |
@@ -24,13 +24,13 @@
 | M20 评审跟进 | segmentation_fault_isolates_group 的等待修正及五轮稳定性验收已完成；supervisor 保持 5480/5500 代码行 |
 | M21 性能结果 | RM-7 三方向各 10000 次，RM-8 三次替换完成。RM-9 首轮中位数比 1.07711183；停载重测中位数比 0.95774113、最大值比 0.90793525，满足原 1.05/1.15 判据。完整样本与测量条件并列归档 |
 | 后续事项 | Linux 实测、crates.io、插件包格式、Windows 移植、RM-9 方法研究与 ADR-0045 的优先级由用户决定；静态分派候选和原始测量资料按原路径保留 |
-| 清理 | fix 清理 23G→6.9G 的记录保留。资产重建后释放 target/shared，移除源码及运行验证副本；target 为 7.6G→6.9G，目录占用减少 769,437,696 字节，文件系统可用空间增加 709,963,776 字节。原始与重建发布包、验收证据保留；记录 target/release-asset-rebuild/cleanup.json |
+| 清理 | 本次 target 从 8.3G 降至 843M，目录占用减少 7,977,402,368 字节，文件系统可用空间增加 6,477,475,840 字节。保留 46 个引用现场，移除 706 个迭代现场和 13,895 个可重建文件；target/debug、target/shared 已清理，保留正式产物、证据与指定保护资料。记录 docs/measurements/test-evidence-pruning.json |
 | 执行安排 | 用户要求关闭全部子代理，由主会话独立完成 M22 与后续 M23；编译沿默认 target/debug 与 target/shared |
-| 后续顺序 | v0.2.1 发布 → 证据脱敏存档到 GitHub 并验证下载 → review 提交存档记录 → 本地清理与 TestGuard 调整 → 全量测试、review 提交推送。保护 claude-edits、release-v0.1.0/dist 与 evidence、releases/*/evidence、phase3-acceptance/m21/rm9-*，并保留既有明确保护资料 |
-| 验收资料 | docs/measurements/release-v0.2.1.json 保存当前发布验收，release-asset-rebuild.json 保存历史资产重建检查；原始日志在 target/releases/v0.2.1/evidence |
+| 后续顺序 | 发布、公开存档、下载验证、本地清理和全量测试已完成；等待设计方复核 |
+| 验收资料 | docs/measurements/release-v0.2.1.json、evidence-archive.json、test-evidence-pruning.json 分别保存发布、存档和清理验收；原始日志在 target/releases/v0.2.1/evidence 与 target/evidence-archive |
 | 文档交付 | README、guide、ADR-0047、skill、解释页、组件版本表与发布记录已同步 |
 | 窗口界面验收 | AU-17 已归档；用户运行记录为恢复 802 ms，截图、Cmd-Q、检查点与进程退出通过 |
-| 最后更新 | 2026-11-14（Asia/Shanghai），原标签资产重建、替换和缓存清理完成 |
+| 最后更新 | 2026-11-14（Asia/Shanghai），v0.2.1、证据存档与测试现场清理完成 |
 
 ## 环境
 
@@ -259,7 +259,7 @@
 - Y-8：内核 5101 行、testkit 181 行、ABI 2595 行、SDK 738 行、宏 1232 行、UP/1 1508 行、supervisor 3664 行。UP/1 高于 1500 行目标 8 行；supervisor 的目标与上限按 ADR-0026 为 3500/4500，当前所有 crate 均在上限内。
 - Y-9：DOC-10–16、ADR-0009/0017 已按最新设计同步，新增 ADR-0023–0027；设计方的 AGENTS、CLAUDE 与 explainer 文件随本提交保存。
 - Y-10：提交主题 `M10: 实现 UP/1 与唯一核心的进程监管`，推送至 origin/main。
-- CP-9 正式提交复核：从已推送的 98394f9 导出隔离源码，直接构建其中 crates/cordis-up/fuzz 工程的 up1_decoder 目标；固定 max_total_time=1800，实际执行 1801 秒、1203602 次输入，退出 0，cov 2369、ft 6838、RSS 747MiB。完整输出在 target/m10-review/fuzz.log，源文件位于 target/m10-review/source/crates/cordis-up。命令为 `RUSTUP_TOOLCHAIN=nightly TMPDIR="$PWD/target/tmp" target/tools/bin/cargo-fuzz run --fuzz-dir target/m10-review/source/crates/cordis-up/fuzz --target-dir target/m10-review/fuzz-build up1_decoder "$PWD/target/up-m10/fuzz/corpus/up1_decoder" -- -max_total_time=1800 -timeout=2 -rss_limit_mb=2048 -max_len=16777216 -artifact_prefix="$PWD/target/m10-review/fuzz-artifacts/"`。此前 632926 次/1801 秒为候选实现证据，保留在 target/up-m10/fuzz/result.md。配置、清单和状态读取的 fuzz 随 M12 产品路径验收。
+- CP-9 正式提交复核：从已推送的 98394f9 导出隔离源码，直接构建其中 crates/cordis-up/fuzz 工程的 up1_decoder 目标；固定 max_total_time=1800，实际执行 1801 秒、1203602 次输入，退出 0，cov 2369、ft 6838、RSS 747MiB。完整命令和输出保存在 target/m10-review/fuzz.log，源文件位于 target/m10-review/source/crates/cordis-up；可重建工具副本的裁剪记录为 target/tools/pruned.json。此前 632926 次/1801 秒为候选实现证据，保留在 target/up-m10/fuzz/result.md。配置、清单和状态读取的 fuzz 随 M12 产品路径验收。
 - 偶发失败复核：98394f9 隔离副本连续运行 cargo test -p cordis-supervisor 共 30 轮，全部退出 0；第 21–30 轮并发执行 cargo test -p cordis --release，共 136 次 release 运行全部成功。逐轮结果在 target/m10-review/stability/results.json，完整日志按 round 编号保留。本轮未复现评审所见的一次失败，现有证据不足以确定该次用例名及原因；既定 30 轮结束后停止追加轮次。
 - 真实行为：核心统一决定依赖与清理顺序；事件回调可通过同连接调用服务；失败替换恢复旧状态；取消等待保持事务完成；SIGKILL 后撤回服务并继承最近快照；五次指数退避后停止重启；额度释放后继续登记。前端转发与派生组合按 DOC-15 保留对应阶段范围。
 - 资源回收：ADR-0027 使用安全 waitid 的 NOWAIT 观察，单一任务在保有 PID 时发送组信号，再由 Child.wait 唯一回收。自然退出、SIGKILL 及存活后代清理均通过；僵尸组 EPERM 在回收后以只读组查询确认为空。
@@ -930,6 +930,16 @@ RM-9 两次均为每实现固定 9 轮、每轮预热 10000 次、计量 100000 
 - 文本中的 HOME 绝对路径替换为 ~，用户名替换为 <user>；已逐项核对 .env 内容来自固定测试样例，并检索凭据格式和私钥块。压缩包全部成员解压后的内容和文件名按完整字节扫描，HOME、用户名、私有项目标记均为 0，归档目录中存在的条目均位于设计方工作目录之外。
 - 58da3ff4 指出初始资产含设计工作文件和本机进程列表，设计方将其暂设为 draft。重新筛选后替换同名资产，下载比对通过，再恢复公开的预发布状态；排除清单内涉及私有项目的名称也采用中性标记。
 - 从 GitHub 下载资产后，用 cmp 完整字节比对通过，确认存档可下载且与上传文件一致。结果见 [证据存档记录](measurements/evidence-archive.json)。后续按 e5b449b4 保留实际引用证据和指定保护目录，裁剪可重建数据。
+
+### 测试现场裁剪与成功归档
+
+- 依据 e5b449b4、d5cc0f98 与 541a6740，完成公开存档及设计方下载核验后裁剪本地现场。按 PROGRESS 与 docs/measurements 的实际路径引用，保留 45 个现场，删除 623 个迭代现场；保留目录中清除 11,255 个可重建文件，逐目录写入 pruned.json。
+- 首次裁剪前 target 为 8.3G，裁剪后为 1.6G，其中非编译数据为 795,357,184 字节。该阶段保留编译缓存用于全量验收，原始记录为 target/evidence-archive/prune-plan-initial.json、prune-result-initial.json。
+- claude-edits、正式发布资产及 evidence、rm9-*、Miri sysroot、fuzz 语料与结果、review-fix/m3/m4 按原约定保留。PROGRESS 中唯一受影响的工具副本引用改为原日志及 pruned.json。
+- TestGuard 成功现场保留日志、result/status JSON 和截图；其他 JSON、文本、CBOR、状态及 TOML 数据上限为 1 MiB。编译产物、语言依赖、浏览器配置和大载荷释放，pruned.json 记录文件名及大小，失败现场保持诊断材料。
+- 已用真实 64 MiB 状态文件复现旧归档行为，原测试失败日志为 target/evidence-archive/guard-before.log。修复后的清单位于 target/test-evidence/successful-subject-97163-7/testkit-cleanup/cleanup-success-97163-0/subject/pruned.json，记录 payload.state 的 67,108,864 字节；结果文件继续保留。格式与 testkit 的 clippy 通过，cargo test --workspace --no-fail-fast 退出 0，共 344 项通过、0 失败；RM-11 保持项目既有独立测量方式。输出 target/evidence-archive/workspace.log。
+- 全量测试后，按同一引用规则移除本轮新增的 83 个迭代现场和 2,640 个可重建文件，保留新归档行为的回归证据；各保留现场的 pruned.json 延续已有删除记录。随后执行 cargo clean --target-dir target/debug 和 target/shared，最终 target 为 843M，约 884 MB，低于 1 GB。
+- 两阶段合计移除 706 个迭代现场、13,895 个可重建文件，保留 46 个引用现场。相对首次裁剪前，目录占用减少 7,977,402,368 字节，文件系统可用空间增加 6,477,475,840 字节。完整数值、保护范围、命令与回归清单见 [现场清理验收](measurements/test-evidence-pruning.json)。
 
 ## 第二阶段候选与恢复记录
 

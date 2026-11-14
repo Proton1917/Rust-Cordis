@@ -158,51 +158,103 @@ impl Drop for TestGuard {
 
 /// 证据与编译产物按目录角色区分，目录遍历使用文件类型而非跟随符号链接。
 fn archive(source: &Path, destination: &Path) -> io::Result<usize> {
+    let mut pruned = Vec::new();
+    let count = archive_entries(source, destination, source, &mut pruned)?;
+    if !pruned.is_empty() {
+        fs::create_dir_all(destination)?;
+        fs::write(
+            destination.join("pruned.json"),
+            serde_json::to_vec_pretty(&serde_json::json!({ "removed_files": pruned }))?,
+        )?;
+    }
+    Ok(count)
+}
+
+/// 项目规则 11：成功现场保留日志、结果、图片和小型数据，移除项写入清单。
+fn archive_entries(
+    source: &Path,
+    destination: &Path,
+    root: &Path,
+    pruned: &mut Vec<serde_json::Value>,
+) -> io::Result<usize> {
     let mut count = 0;
     for entry in fs::read_dir(source)? {
         let entry = entry?;
         let kind = entry.file_type()?;
         let name = entry.file_name();
         if kind.is_dir() {
-            if matches!(
-                name.to_str(),
-                Some(
-                    "debug"
-                        | "release"
-                        | "incremental"
-                        | "build"
-                        | "deps"
-                        | ".fingerprint"
-                        | "node_modules"
-                        | "__pycache__"
-                        | ".dependencies"
-                        | ".git"
-                        | ".cordis"
-                        | "plugins"
-                        | "runtimes"
-                        | "provided-runtime"
-                        | "dist"
-                        | "delivered"
-                        | "contracts"
-                        | "bin"
-                )
-            ) || entry.path().extension() == Some(OsStr::new("app"))
-            {
-                continue;
+            if artifact_directory(&entry.path()) {
+                record_removed(&entry.path(), root, pruned)?;
+            } else {
+                count += archive_entries(&entry.path(), &destination.join(name), root, pruned)?;
             }
-            count += archive(&entry.path(), &destination.join(name))?;
-        } else if kind.is_file()
-            && matches!(
-                entry.path().extension().and_then(OsStr::to_str),
-                Some("json" | "jsonl" | "log" | "txt" | "cbor" | "state" | "toml" | "png" | "svg")
-            )
-        {
+        } else if kind.is_file() && retain_file(&entry.path(), entry.metadata()?.len()) {
             fs::create_dir_all(destination)?;
             fs::rename(entry.path(), destination.join(name))?;
             count += 1;
+        } else {
+            record_removed(&entry.path(), root, pruned)?;
         }
     }
     Ok(count)
+}
+
+fn artifact_directory(path: &Path) -> bool {
+    matches!(
+        path.file_name().and_then(OsStr::to_str),
+        Some(
+            "debug"
+                | "release"
+                | "incremental"
+                | "build"
+                | "deps"
+                | ".fingerprint"
+                | "node_modules"
+                | "npm-cache"
+                | ".cargo-home"
+                | "cargo-home"
+                | "browser-profile"
+                | "__pycache__"
+                | ".dependencies"
+                | ".git"
+                | ".cordis"
+                | "plugins"
+                | "runtimes"
+                | "provided-runtime"
+                | "dist"
+                | "delivered"
+                | "contracts"
+                | "bin"
+        )
+    ) || path.extension() == Some(OsStr::new("app"))
+}
+
+/// 结果、日志与截图保留；其他配置和状态数据以 1 MiB 为归档上限。
+fn retain_file(path: &Path, bytes: u64) -> bool {
+    let extension = path.extension().and_then(OsStr::to_str);
+    let name = path.file_name().and_then(OsStr::to_str).unwrap_or_default();
+    match extension {
+        Some("log" | "jsonl" | "png" | "svg") => true,
+        Some("json") if name.ends_with("result.json") || name.ends_with("status.json") => true,
+        Some("json" | "txt" | "cbor" | "state" | "toml") => bytes <= 1024 * 1024,
+        _ => false,
+    }
+}
+
+/// 目录按实际文件遍历，清单记录相对名称和大小，符号链接保持自身身份。
+fn record_removed(path: &Path, root: &Path, pruned: &mut Vec<serde_json::Value>) -> io::Result<()> {
+    let metadata = fs::symlink_metadata(path)?;
+    if metadata.is_dir() {
+        for entry in fs::read_dir(path)? {
+            record_removed(&entry?.path(), root, pruned)?;
+        }
+    } else {
+        pruned.push(serde_json::json!({
+            "file": path.strip_prefix(root).expect("已登记现场内的条目"),
+            "size_bytes": metadata.len(),
+        }));
+    }
+    Ok(())
 }
 
 struct Fixture<T> {

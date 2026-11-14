@@ -26,6 +26,10 @@ fn successful_case_moves_evidence_and_removes_artifacts() {
     fs::create_dir(&subject).unwrap();
     fs::write(subject.join("result.json"), b"{\"passed\":true}\n").unwrap();
     fs::write(subject.join("program.bin"), [1, 2, 3]).unwrap();
+    fs::File::create(subject.join("payload.state"))
+        .unwrap()
+        .set_len(64 * 1024 * 1024)
+        .unwrap();
     let evidence = guard.evidence_for(&subject);
     guard.success();
     drop(guard);
@@ -37,6 +41,21 @@ fn successful_case_moves_evidence_and_removes_artifacts() {
     assert!(
         !evidence.join("program.bin").exists(),
         "证据目录保留验收数据"
+    );
+    assert!(
+        !evidence.join("payload.state").exists(),
+        "成功现场的可生成大载荷应释放"
+    );
+    let pruned: serde_json::Value =
+        serde_json::from_slice(&fs::read(evidence.join("pruned.json")).unwrap()).unwrap();
+    assert!(
+        pruned["removed_files"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|file| {
+                file["file"] == "payload.state" && file["size_bytes"] == 64 * 1024 * 1024
+            })
     );
     outer.success();
 }

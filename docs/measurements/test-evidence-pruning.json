@@ -1,0 +1,62 @@
+{
+  "before": {
+    "target_kib": 8654128,
+    "target_human": "8.3G",
+    "non_compile_bytes": 8107491328,
+    "filesystem_free_bytes": 1262435782656
+  },
+  "after": {
+    "target_kib": 863696,
+    "target_human": "843M",
+    "filesystem_free_bytes": 1268913258496
+  },
+  "directory_reduction_bytes": 7977402368,
+  "filesystem_free_increase_bytes": 6477475840,
+  "removed_cases": 706,
+  "retained_cases": 46,
+  "removed_artifact_files": 13895,
+  "removed_compile_directories": [
+    "target/debug",
+    "target/shared"
+  ],
+  "protected": [
+    "claude-edits",
+    "release-v0.1.0",
+    "releases",
+    "release-asset-rebuild",
+    "phase3-acceptance/m21/rm9-*",
+    "fuzz corpora and results",
+    "miri",
+    "miri-sysroot",
+    "review-fix",
+    "review-m3",
+    "review-m4"
+  ],
+  "validation": {
+    "command": "cargo test --workspace --no-fail-fast",
+    "exit_code": 0,
+    "passed": 344,
+    "failed": 0,
+    "ignored": 1,
+    "filtered": 0,
+    "ignored_reason": "RM-11 remains an independent measurement",
+    "fmt": "passed",
+    "clippy": "cordis-testkit --all-targets passed",
+    "workspace_log": "target/evidence-archive/workspace.log",
+    "before_log": "target/evidence-archive/guard-before.log",
+    "regression_evidence": "target/test-evidence/successful-subject-97163-7/testkit-cleanup/cleanup-success-97163-0/subject",
+    "pruned": {
+      "removed_files": [
+        {
+          "file": "payload.state",
+          "size_bytes": 67108864
+        },
+        {
+          "file": "program.bin",
+          "size_bytes": 3
+        }
+      ]
+    }
+  },
+  "archive": "https://github.com/Proton1917/Rust-Cordis/releases/tag/evidence-2026-11-13"
+}
