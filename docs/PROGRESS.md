@@ -6,28 +6,28 @@
 
 | 项 | 值 |
 |---|---|
-| 最近完成的实现与检查 | 4e800c6 经设计方复核通过；v0.1.0、v0.2.0 资产已按原标签源码重建，完整字节、签名、版本与 HTTP 验收通过并完成同名替换 |
-| 当前里程碑 | 用户通过 16317bec 授权发布 v0.2.1；正在准备组件版本表、构建和发布验收 |
+| 最近完成的实现与检查 | v0.2.1 已发布；全部文件的完整字节检查通过，七个 arm64 Mach-O 签名有效，核心 0.1.1、HTTP 200、SIGINT 退出 0 |
+| 当前里程碑 | 按 d5cc0f98 准备 target 测试证据的脱敏存档，存档可下载后清理并调整 TestGuard |
 | M23 接口确认 | beb4c8cf 批准的纯数据调用、资源释放和拥有型 Service 转交已实现并通过 AU-27a。Inject 命名声明共用类型化校验；Python 沿用 Remote.invoke，TypeScript 提供 getDynamic。ADR-0047 与实现随 18a62cf 提交，review 基线为 70db380 |
 | M23 版本 | 1c6187d3 批准发行标签 v0.2.0，改动的 cordis-sdk、cordis-dev 与 TypeScript SDK 升为 0.2.0；核心、宿主、Python SDK 和既有官方插件保持 0.1.0，ABI v1、UP/1 保持。发布页和包内 README 以组件表说明；脚手架验证生成的 SDK 版本及源码提交 |
 | M23 依赖锁文件 | ef9cfb5a 批准夹具 Cargo.lock 中 SDK 项随 0.2.0 机械联动；其余依赖保持既有版本。核心产品 src/Cargo.toml、ABI 与根锁文件中的核心依赖项保持 review 70db380 |
 | M23 固定 Git 验收 | 按 72c36897 在 18a62cf 推送后复验通过；设计方隔离副本同样指向 18a62cf 构建通过，v0.2.0 已发布 |
 | 当前验证 | fix 的 fmt、clippy、177 条矩阵、unsafe 通过，344 项测试通过。固定 Git 用例在已推送的 4e800c631064a344964f7f91c1b6210c1d659775 上执行，19.53 秒通过，app/watch/hello Active；日志 target/fix-watch-privacy/evidence/pinned-git.log |
-| 下一步 | 提交 v0.2.1 包内 README 与进度文档，确认相对 4e800c6 仅有文档差异；构建 macOS arm64 产物并完成全部文件路径、签名、版本与 HTTP 验收，发布标签指向该文档提交。证据随 review 提交推送后清理编译缓存，保留证据和 dist |
+| 下一步 | 将 target 测试证据脱敏归档到 evidence-2026-11-13 独立预发布，确认下载可用并提交 evidence-archive.json，再按 e5b449b4 清理现场与调整 TestGuard，执行全量测试并以 review 提交推送；target 证据目标为 1G 以内 |
 | M22 复核跟进 | 页面故障测试同步与身份缺席错误处理已在 70db380 完成；五轮并行负载测试通过。supervisor 为 5445 行 |
 | 发布复核跟进 | 两个重建资产已上传，远端文件名和大小与本地产物一致；设计方将再次下载核验。v0.1.0 保留 6 个 Mach-O，v0.2.0 保留 7 个并包含 secrets |
 | M22 边界 | 按设计方三项裁决：内核、up、channels、types、process 与 ABI 相对 df05064 保持；supervisor 先提取到 routing 再添加受信调用元数据，结束时至多 5450 代码行；web-deployment 限页面来源，runtime 限 service install |
 | M22 受信信息 | 核心对 scoped 调用追加直接调用方 cordis.caller 与页面的 cordis.page；任何 intercept 来源提交 cordis.* 返回权限错误。secrets 以自己的 grants 配置结合可信调用方鉴权。机密由插件读取和解释，核心转交不透明载荷；AU-25/26 已搜索最详细日志、状态、检查点和错误中的测试值 |
 | M22 页面授权 | 22518c32 裁决：后端 caller={instance}，页面 caller={page_of} 且省略 instance；两者描述直接调用方。secrets 只接受 instance 授权，后端处理页面调用时仍以自己的 instance 读取密钥。三语言 helper 与全栈场景按此验证 |
 | M22 实际故障 | 独立线程 RPC 的 reactor 问题已按批准范围修复；Bridge::invoke 与 sleep/plugin/effect_wait/emit_async 进入宿主执行器。普通线程、自有 Tokio、取消与取消后继续调用场景通过，原失败和修复日志归档在 target/http-m22/evidence |
-| 发布 | 标签 v0.1.0→f8729ac、v0.2.0→18a62cf 保持；同名重建资产分别为 9,998,491、10,288,636 字节。所有文件的完整字节 HOME/用户名匹配为 0，Mach-O 签名有效，两包 GET / 均为 200、SIGINT 退出 0 |
+| 发布 | v0.2.1→83e4f509ba20276de8395c0fb70aa950d655ab9b，macOS arm64 资产 10,310,396 字节；核心 0.1.1、宿主 0.1.0、开发工具 0.2.1、watch 0.1.1、Rust SDK 0.2.0、运行时接口 1.4。历史标签及重建资产保持 |
 | M20 评审跟进 | segmentation_fault_isolates_group 的等待修正及五轮稳定性验收已完成；supervisor 保持 5480/5500 代码行 |
 | M21 性能结果 | RM-7 三方向各 10000 次，RM-8 三次替换完成。RM-9 首轮中位数比 1.07711183；停载重测中位数比 0.95774113、最大值比 0.90793525，满足原 1.05/1.15 判据。完整样本与测量条件并列归档 |
 | 后续事项 | Linux 实测、crates.io、插件包格式、Windows 移植、RM-9 方法研究与 ADR-0045 的优先级由用户决定；静态分派候选和原始测量资料按原路径保留 |
 | 清理 | fix 清理 23G→6.9G 的记录保留。资产重建后释放 target/shared，移除源码及运行验证副本；target 为 7.6G→6.9G，目录占用减少 769,437,696 字节，文件系统可用空间增加 709,963,776 字节。原始与重建发布包、验收证据保留；记录 target/release-asset-rebuild/cleanup.json |
 | 执行安排 | 用户要求关闭全部子代理，由主会话独立完成 M22 与后续 M23；编译沿默认 target/debug 与 target/shared |
-| 后续顺序 | v0.2.1 发布 → 证据 review 提交推送 → 清理编译缓存 → 设计方下载核验 |
-| 验收资料 | docs/measurements/release-asset-rebuild.json 保存两个资产的文件大小与完整检查结果；历史发布、fix 和网页验收资料继续保留 |
+| 后续顺序 | v0.2.1 发布 → 证据脱敏存档到 GitHub 并验证下载 → review 提交存档记录 → 本地清理与 TestGuard 调整 → 全量测试、review 提交推送。保护 claude-edits、release-v0.1.0/dist 与 evidence、releases/*/evidence、phase3-acceptance/m21/rm9-*，并保留既有明确保护资料 |
+| 验收资料 | docs/measurements/release-v0.2.1.json 保存当前发布验收，release-asset-rebuild.json 保存历史资产重建检查；原始日志在 target/releases/v0.2.1/evidence |
 | 文档交付 | README、guide、ADR-0047、skill、解释页、组件版本表与发布记录已同步 |
 | 窗口界面验收 | AU-17 已归档；用户运行记录为恢复 802 ms，截图、Cmd-Q、检查点与进程退出通过 |
 | 最后更新 | 2026-11-14（Asia/Shanghai），原标签资产重建、替换和缓存清理完成 |
@@ -913,6 +913,15 @@ RM-9 两次均为每实现固定 9 轮、每轮预热 10000 次、计量 100000 
 - 两个发布说明均追加：“资产已于 2026-11-14 用相同源码重新构建，移除了库安装名中的构建机路径”。日期采用实际重建日期。完整检查记录见 [资产重建结果](measurements/release-asset-rebuild.json)，记录包含文件名、大小及结果。
 - 确认构建和验收进程退出后，cargo clean --target-dir target/shared 已执行；target 从 7.6G 降至 6.9G，目录占用减少 769,437,696 字节，文件系统可用空间增加 709,963,776 字节，详细记录为 target/release-asset-rebuild/cleanup.json。原包与新包分别作为原始观测和当前发布产物保留。
 - 兼容诊断与提交后 pinned Git 的方式已获 b68190fb 确认；固定 Git 验收实际结果为 1 项通过、19.53 秒。重建资产等待设计方再次下载核验，v0.2.1 由用户决定。
+
+### v0.2.1 发布
+
+- 依据 16317bec，标签 v0.2.1 指向 83e4f509ba20276de8395c0fb70aa950d655ab9b。相对已复核的 4e800c6，差异为 docs/PROGRESS.md、历史资产重建记录及 tools/release/README.md，均属于文档。
+- 使用 4e800c6 的 release.build、共享路径映射和 -Crpath=yes 构建，七个程序与动态库由 release.inspect 完成 ad-hoc 签名和完整字节检查；随后扩展检查到包内全部文件，HOME 与用户名命中为 0。tar 成员属主为中性名称 root，保留包内组件与配置。
+- 包内 README 和 release notes 开头包含完整组件版本表及 cordis.runtime@1.4，并说明 page_of、watch 的最低核心版本、pack 默认路径映射与自查失败策略。发布包含核心、宿主、开发工具及 HTTP、watch、secrets、window。
+- 从 tar 解开后运行，核心输出 cordis 0.1.1，开发工具输出 cordis-dev 0.2.1；HTTP 回环临时端口 GET / 为 200，SIGINT 有序退出码 0。验收副本已释放，发布 tar.gz 与证据保留。
+- 发布地址 https://github.com/Proton1917/Rust-Cordis/releases/tag/v0.2.1 ，资产 cordis-v0.2.1-aarch64-apple-darwin.tar.gz 为 10,310,396 字节；gh release view 确认正式发布、单个资产及大小，git ls-remote 确认标签提交。完整数据见 [v0.2.1 发布验收](measurements/release-v0.2.1.json)。
+- 按 d5cc0f98 的最新顺序，接着上传脱敏测试证据，确认可下载后再清理本地现场和编译缓存，并修改 TestGuard。
 
 ## 第二阶段候选与恢复记录
 
