@@ -1,10 +1,17 @@
 # Cordis {{version}}
 
 {{components}}
+| cordis.runtime | 1.4 |
 
-发行版本代表组件的组合；v0.2.0 新增 SDK 能力，沿用版本 0.1.0 的核心。
+发行版本代表组件的组合；本版提供核心 0.1.1、watch 0.1.1 和开发工具 0.2.1，Rust 与 TypeScript SDK 沿用 0.2.0。
 
 平台为 macOS Apple Silicon（aarch64-apple-darwin）。本包包含 cordis、cordis-host、cordis-dev，以及 HTTP、watch、window、secrets 官方插件。
+
+## 修复内容
+
+watch 根据运行时快照的 page_of 字段选择部署实例作为替换目标，修复页面投影被当作独立目标而导致整批替换拒绝的问题。页面投影随所属部署更新，网页草稿、页面文档和应用外壳保持。快照接口升至 cordis.runtime@1.4，兼容既有 1.3 读取方；watch 0.1.1 需要核心 ≥ 0.1.1。
+
+cordis pack 默认重映射 HOME、CARGO_HOME、Rust sysroot 和项目目录，并保留用户编译参数。macOS 动态库在编译期采用相对安装名称。交付前对 Mach-O、ELF 和清单进行完整字节自查，命中构建用户的 HOME 或用户名时打包失败，诊断列出相对文件名与命中次数；显式 --allow-private-paths 可将检查降为警告。
 
 ## 最小运行
 
