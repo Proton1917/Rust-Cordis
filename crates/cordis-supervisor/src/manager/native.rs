@@ -241,22 +241,9 @@ impl Manager {
                 self.native_generation(group_name, plugin_name, &previous, &prepared)?;
             self.preflight(&group, &candidate).await?;
             let specification = self.restart_specification(&group, &candidate).await?;
-            let instances: Vec<_> = self
-                .group_instances(group_name)
-                .into_iter()
-                .filter(|instance| instance.data.plugin == plugin_name)
-                .collect();
-            let incoming = instances.iter().filter_map(|instance| {
-                candidate
-                    .components
-                    .get(&(
-                        instance.data.plugin.clone(),
-                        instance.data.component.clone(),
-                    ))
-                    .map(|component| (instance.fiber.context(), component.clone()))
-            });
-            let instances = self.include_incoming(instances.clone(), incoming);
-            let transition = self.prepare_transition(&instances, true).await?;
+            let transition = self
+                .prepare_replacement_transition(group_name, Some(plugin_name), &candidate)
+                .await?;
             Ok(NativeSwap {
                 group,
                 plugin: plugin_name.into(),

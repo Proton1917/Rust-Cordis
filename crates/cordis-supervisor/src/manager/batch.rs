@@ -606,13 +606,7 @@ impl Manager {
         let mut updated = Vec::new();
         for item in target {
             let specification = &item.specification;
-            let existing = self
-                .0
-                .catalog
-                .lock()
-                .instances
-                .get(&specification.name)
-                .cloned();
+            let existing = self.find_instance(&specification.name);
             if let Some(instance) = existing {
                 if *instance.data.config.lock() != specification.config {
                     *instance.data.config.lock() = specification.config.clone();
@@ -666,13 +660,7 @@ impl Manager {
             .collect::<Vec<_>>();
         let mut tasks = Vec::new();
         for item in &removed {
-            let instance = self
-                .0
-                .catalog
-                .lock()
-                .instances
-                .get(&item.specification.name)
-                .cloned();
+            let instance = self.find_instance(&item.specification.name);
             if let Some(instance) = instance {
                 tasks.push(instance.fiber.dispose());
             }

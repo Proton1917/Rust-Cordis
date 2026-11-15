@@ -932,18 +932,10 @@ impl Manager {
             self.retire(&candidate).await?;
             return Err(problem);
         }
-        let instances = self.group_instances(&group.name);
-        let incoming = instances.iter().filter_map(|instance| {
-            candidate
-                .components
-                .get(&(
-                    instance.data.plugin.clone(),
-                    instance.data.component.clone(),
-                ))
-                .map(|component| (instance.fiber.context(), component.clone()))
-        });
-        let instances = self.include_incoming(instances.clone(), incoming);
-        let transition = match self.prepare_transition(&instances, true).await {
+        let transition = match self
+            .prepare_replacement_transition(&group.name, None, &candidate)
+            .await
+        {
             Ok(transition) => transition,
             Err(problem) => {
                 self.retire(&candidate).await?;
@@ -1118,14 +1110,7 @@ impl Manager {
 
     /// SW-4、ADR-0016：当前绑定确定实际版本需求，候选提供声明覆盖这些需求后通过预检。
     fn preflight_interfaces(&self, group: &Group, candidate: &GroupGeneration) -> Result<()> {
-        let instances = self
-            .0
-            .catalog
-            .lock()
-            .instances
-            .values()
-            .cloned()
-            .collect::<Vec<_>>();
+        let instances = self.instances();
         let mut needed = HashMap::<String, u32>::new();
         for instance in instances {
             let current = instance.data.current.lock().upgrade();
@@ -1267,14 +1252,7 @@ impl Manager {
     ) -> Result<Vec<Fiber>> {
         let future = async {
             loop {
-                let instances = self
-                    .0
-                    .catalog
-                    .lock()
-                    .instances
-                    .values()
-                    .cloned()
-                    .collect::<Vec<_>>();
+                let instances = self.instances();
                 let mut changed: Vec<_> = instances
                     .into_iter()
                     .filter(|instance| {

@@ -1,0 +1,21 @@
+{
+  "adr": "ADR-0053",
+  "approval": "f49c81d0-6331-4967-affa-63b7f73590af",
+  "refactor": {
+    "base": "7d0b105e32c414806c4588df44dacf192bf5620e",
+    "behavior": "Shared replacement state preparation and instance directory access preserve lifecycle decisions.",
+    "supervisor_before": {"code": 5867, "total": 6340},
+    "supervisor_after": {"code": 5844, "total": 6323},
+    "workspace": {"command": "cargo test --workspace --no-fail-fast", "passed": 361, "failed": 0, "ignored": 1, "exit_code": 0},
+    "fmt": "passed",
+    "clippy": "cordis-supervisor all targets passed with -D warnings",
+    "logs": {
+      "workspace": "target/native-cache-fix/evidence/refactor-workspace.log",
+      "initial_compile_error": "target/native-cache-fix/evidence/refactor-compile-error.log",
+      "fmt": "target/native-cache-fix/evidence/refactor-fmt.log",
+      "clippy": "target/native-cache-fix/evidence/refactor-clippy.log",
+      "lines": "target/native-cache-fix/evidence/refactor-lines.json"
+    }
+  },
+  "file_lease_implementation": "pending"
+}

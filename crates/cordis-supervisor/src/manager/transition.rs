@@ -4,6 +4,31 @@ use super::*;
 use generation::{Binding, Configuration};
 
 impl Manager {
+    /// SW-5：分组和单库替换共用候选提供声明、实际绑定及状态冻结范围。
+    pub(super) async fn prepare_replacement_transition(
+        &self,
+        group: &str,
+        plugin: Option<&str>,
+        candidate: &GroupGeneration,
+    ) -> Result<lifecycle::Transition> {
+        let instances: Vec<_> = self
+            .group_instances(group)
+            .into_iter()
+            .filter(|instance| plugin.is_none_or(|name| instance.data.plugin == name))
+            .collect();
+        let incoming = instances.iter().filter_map(|instance| {
+            candidate
+                .components
+                .get(&(
+                    instance.data.plugin.clone(),
+                    instance.data.component.clone(),
+                ))
+                .map(|component| (instance.fiber.context(), component.clone()))
+        });
+        let instances = self.include_incoming(instances.clone(), incoming);
+        self.prepare_transition(&instances, true).await
+    }
+
     /// SW-8：记录实际进入候选纪元的实例，包含批次新增实例。
     pub(super) fn begin_confirmation(&self, transition: &lifecycle::Transition) {
         let mut instances: Vec<_> = self

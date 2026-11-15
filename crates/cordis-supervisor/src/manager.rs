@@ -406,13 +406,18 @@ impl Manager {
     }
 
     pub(super) fn instance(&self, name: &str) -> Result<Arc<Instance>> {
-        self.0
-            .catalog
-            .lock()
-            .instances
-            .get(name)
-            .cloned()
+        self.find_instance(name)
             .ok_or_else(|| error(4, "实例名称缺席"))
+    }
+
+    /// SW-6：配置调和按同一目录读取现有实例，缺席由对应操作决定添加或跳过。
+    pub(super) fn find_instance(&self, name: &str) -> Option<Arc<Instance>> {
+        self.0.catalog.lock().instances.get(name).cloned()
+    }
+
+    /// SW-4/SW-7：在目录锁内取得实例引用，后续依赖检查与等待在锁外执行。
+    pub(super) fn instances(&self) -> Vec<Arc<Instance>> {
+        self.0.catalog.lock().instances.values().cloned().collect()
     }
 
     fn generation(&self, connection: u64, context: u64) -> Result<ViewLease> {
