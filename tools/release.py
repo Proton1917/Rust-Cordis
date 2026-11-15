@@ -62,6 +62,9 @@ def component_versions():
     for label, directory in [
         ("cordis", "crates/cordis-runtime"), ("cordis-host", "crates/cordis-host"),
         ("cordis-dev", "crates/cordis-dev"), ("Rust SDK", "crates/cordis-sdk"),
+        ("cordis-types", "crates/cordis-types"),
+        ("cordis-supervisor", "crates/cordis-supervisor"),
+        ("cordis-routing", "crates/cordis-routing"),
         ("HTTP", "plugins/http"), ("watch", "plugins/watch"),
         ("window", "plugins/window"), ("secrets", "plugins/secrets"),
     ]:
