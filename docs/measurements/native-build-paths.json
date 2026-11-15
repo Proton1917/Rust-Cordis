@@ -1,0 +1,33 @@
+{
+  "platform": "aarch64-apple-darwin",
+  "baseline_tool": "cordis-dev 0.2.3",
+  "fixed_tool": "cordis-dev 0.2.4 source",
+  "fixture": "cc crate 1.11.1 compiles a C diagnostic function returning __FILE__; the Rust plugin calls the function",
+  "default_release_before": {"HOME_occurrences": 1, "username_occurrences": 1, "pack_exit": 1},
+  "release_with_line_tables_before": {
+    "app_HOME_occurrences": 27,
+    "watch_HOME_occurrences": 70,
+    "app_OSO_entries": 25,
+    "pack_exit": 1
+  },
+  "after": {
+    "pack_exit": 0,
+    "app_HOME_matches": 0,
+    "app_OSO_entries": 25,
+    "app_OSO_HOME_matches": 0,
+    "python_environment": {"HOME_occurrences": 0, "username_occurrences": 0},
+    "pack_regression": "scaffold_http_package_remaps_build_paths_and_preserves_user_flags passed",
+    "user_flags": "Rust cfg and remapping preserved; C integer flag and quoted label checked during compilation"
+  },
+  "shared_rules": "tools/path-remapping.json",
+  "entrypoints": ["cordis-dev pack", "tools/build_paths.py build_environment", "tools/release.py", "cordis-testkit build helper"],
+  "native_flags": ["-ffile-prefix-map", "-fdebug-prefix-map"],
+  "apple_link_flag": "-Clink-arg=-Wl,-oso_prefix,<HOME>/",
+  "logs": {
+    "default_before": "target/native-cache-fix/evidence/native-pack-before.log",
+    "debug_before": "target/native-cache-fix/evidence/native-pack-debug-before.log",
+    "pack_after": "target/native-cache-fix/evidence/native-pack-after.log",
+    "regression": "target/native-cache-fix/evidence/native-pack-regression.log",
+    "python_environment": "target/native-cache-fix/evidence/python-mapping-result.json"
+  }
+}

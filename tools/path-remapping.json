@@ -1,7 +1,11 @@
-[
-  ["flag", "-Crpath=yes"],
-  ["home", "/home/build"],
-  ["cargo_home", "/cargo"],
-  ["sysroot", "/rustup"],
-  ["project", "/src"]
-]
+{
+  "rust_flags": ["-Crpath=yes"],
+  "prefixes": [
+    ["home", "/home/build"],
+    ["cargo_home", "/cargo"],
+    ["sysroot", "/rustup"],
+    ["project", "/src"]
+  ],
+  "native_flags": ["-ffile-prefix-map={from}={to}", "-fdebug-prefix-map={from}={to}"],
+  "apple_link_flags": ["-Clink-arg=-Wl,-oso_prefix,{home}/"]
+}

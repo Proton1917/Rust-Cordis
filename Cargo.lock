@@ -455,7 +455,7 @@ dependencies = [
 
 [[package]]
 name = "cordis-dev"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "clap",
  "cordis-idl",
@@ -469,7 +469,9 @@ dependencies = [
  "pathdiff",
  "plist",
  "semver",
+ "serde",
  "serde_json",
+ "shlex",
  "tar",
  "tokio",
  "toml 1.2.1+spec-1.1.0",
@@ -626,11 +628,13 @@ dependencies = [
 
 [[package]]
 name = "cordis-testkit"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "cordis",
  "futures-util",
+ "serde",
  "serde_json",
+ "shlex",
 ]
 
 [[package]]

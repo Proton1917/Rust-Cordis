@@ -9,10 +9,7 @@ use std::{
 
 /// 发布验证的编译命令采用与 pack 相同的路径映射，产物目录继续由调用方选择。
 pub fn remap_paths(command: &mut std::process::Command, project: &Path) -> io::Result<()> {
-    command.env(
-        "CARGO_ENCODED_RUSTFLAGS",
-        super::build_paths::encoded_flags(project)?,
-    );
+    command.envs(super::build_paths::environment(project, None)?);
     Ok(())
 }
 

@@ -1,7 +1,7 @@
 [package]
 name = "cordis-testkit"
 description = "Deterministic executor and controllable clock for testing cordis components."
-version.workspace = true
+version = "0.1.1"
 edition.workspace = true
 rust-version.workspace = true
 publish.workspace = true
@@ -11,3 +11,5 @@ license.workspace = true
 cordis.workspace = true
 futures-util.workspace = true
 serde_json = "=1.0.154"
+serde.workspace = true
+shlex = "=2.0.1"

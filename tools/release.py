@@ -8,7 +8,7 @@ import tarfile
 import time
 import tomllib
 
-from build_paths import encoded_flags
+from build_paths import build_environment
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -28,7 +28,7 @@ def build(evidence):
     """ADR-0036：使用当前源码与共享编译目录，映射编译器保留的本机路径。"""
     revision = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
     environment = os.environ.copy()
-    environment["CARGO_ENCODED_RUSTFLAGS"] = encoded_flags(ROOT)
+    environment.update(build_environment(ROOT))
     environment["CORDIS_SOURCE_REVISION"] = revision
     environment["TMPDIR"] = str(ROOT / "target/tmp")
     target = Path(environment.get("CARGO_TARGET_DIR", ROOT / "target")) / "shared"

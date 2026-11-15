@@ -18,29 +18,26 @@ pub async fn build(project: &Path, target: &str, target_dir: &Path) -> Result<Ar
     let manifest = project.join("Cargo.toml");
     let output = match std::fs::metadata(manifest) {
         Ok(_) => {
-            tooling::command(
-                vec![
-                    "env".into(),
-                    format!(
-                        "CARGO_ENCODED_RUSTFLAGS={}",
-                        build_paths::encoded_flags(project)?
-                    ),
-                    tooling::executable("cargo", None)?
-                        .to_string_lossy()
-                        .into_owned(),
-                    "build".into(),
-                    "--release".into(),
-                    "--workspace".into(),
-                    "--target".into(),
-                    target.into(),
-                    "--target-dir".into(),
-                    target_dir.to_string_lossy().into_owned(),
-                    "--message-format=json-render-diagnostics".into(),
-                ],
-                project,
-                Duration::from_secs(600),
-            )
-            .await?
+            let mut command = vec!["env".into()];
+            command.extend(
+                build_paths::environment(project, Some(target))?
+                    .into_iter()
+                    .map(|(name, value)| format!("{name}={value}")),
+            );
+            command.extend([
+                tooling::executable("cargo", None)?
+                    .to_string_lossy()
+                    .into_owned(),
+                "build".into(),
+                "--release".into(),
+                "--workspace".into(),
+                "--target".into(),
+                target.into(),
+                "--target-dir".into(),
+                target_dir.to_string_lossy().into_owned(),
+                "--message-format=json-render-diagnostics".into(),
+            ]);
+            tooling::command(command, project, Duration::from_secs(600)).await?
         }
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Vec::new(),
         Err(error) => return Err(error.into()),

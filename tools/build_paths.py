@@ -1,26 +1,46 @@
 import json
 import os
 from pathlib import Path
+import shlex
 import subprocess
 import sys
 
 
-def encoded_flags(project):
-    """DOC-15 §12.2：规则顺序来自共享表，现有 Cargo 环境参数保留后置优先。"""
+def build_environment(project, target=None):
     home = Path(os.environ["HOME"])
     sources = {
-        "home": home,
-        "cargo_home": Path(os.environ.get("CARGO_HOME", home / ".cargo")).absolute(),
-        "sysroot": Path(subprocess.check_output([os.environ.get("RUSTC", "rustc"), "--print", "sysroot"], text=True).strip()),
-        "project": Path(project).resolve(),
+        "home": str(home),
+        "cargo_home": str(Path(os.environ.get("CARGO_HOME", home / ".cargo")).absolute()),
+        "sysroot": subprocess.check_output([os.environ.get("RUSTC", "rustc"), "--print", "sysroot"], text=True).strip(),
+        "project": str(Path(project).resolve()),
     }
-    definitions = json.loads(Path(__file__).with_name("path-remapping.json").read_text())
-    flags = [destination if source == "flag" else f"--remap-path-prefix={sources[source]}={destination}" for source, destination in definitions]
+    rules = json.loads(Path(__file__).with_name("path-remapping.json").read_text())
+    rust = list(rules["rust_flags"])
+    native = []
+    for source, destination in rules["prefixes"]:
+        rust.append(f"--remap-path-prefix={sources[source]}={destination}")
+        native.extend(flag.replace("{from}", sources[source]).replace("{to}", destination)
+                      for flag in rules["native_flags"])
+    apple = "-apple-" in target if target else sys.platform == "darwin"
+    if apple:
+        rust.extend(flag.replace("{home}", sources["home"]) for flag in rules["apple_link_flags"])
     if "CARGO_ENCODED_RUSTFLAGS" in os.environ:
-        flags.extend(flag for flag in os.environ["CARGO_ENCODED_RUSTFLAGS"].split("\x1f") if flag)
+        rust.extend(flag for flag in os.environ["CARGO_ENCODED_RUSTFLAGS"].split("\x1f") if flag)
     else:
-        flags.extend(os.environ.get("RUSTFLAGS", "").split())
-    return "\x1f".join(flags)
+        rust.extend(os.environ.get("RUSTFLAGS", "").split())
+    flags = {"CFLAGS": list(native), "CXXFLAGS": list(native)}
+    shell = os.environ.get("CC_SHELL_ESCAPED_FLAGS", "") not in ("", "0", "false", "no")
+    for name, value in os.environ.items():
+        if any(name == base or name.startswith(base + "_") or name.endswith("_" + base)
+               for base in ("CFLAGS", "CXXFLAGS", "ARFLAGS", "RANLIBFLAGS")):
+            flags.setdefault(name, []).extend(shlex.split(value) if shell else value.split())
+    result = {name: shlex.join(values) for name, values in flags.items()}
+    result.update({"CC_SHELL_ESCAPED_FLAGS": "1", "CARGO_ENCODED_RUSTFLAGS": "\x1f".join(rust)})
+    return result
+
+
+def encoded_flags(project):
+    return build_environment(project)["CARGO_ENCODED_RUSTFLAGS"]
 
 
 if __name__ == "__main__":

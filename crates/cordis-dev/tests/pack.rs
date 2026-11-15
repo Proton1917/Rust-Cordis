@@ -554,6 +554,10 @@ fn scaffold_http_package_remaps_build_paths_and_preserves_user_flags() {
     let _build = cordis_testkit::build::shared_build_lock(&tools.root).unwrap();
     let mut pack = pack_command(&tools, &project);
     pack.env_remove("CARGO_ENCODED_RUSTFLAGS").env("RUSTFLAGS", format!("--cfg pack_user_flag --check-cfg cfg(pack_user_flag) --remap-path-prefix={}=/customer-src", project.display()));
+    pack.env("CC_SHELL_ESCAPED_FLAGS", "1").env(
+        "CFLAGS",
+        "-DPACK_NATIVE_FLAG=7 '-DPACK_LABEL=\"two words\"'",
+    );
     command(&mut pack);
     let archive = fs::read_dir(project.join("dist"))
         .unwrap()
@@ -570,8 +574,8 @@ fn scaffold_http_package_remaps_build_paths_and_preserves_user_flags() {
     let mut evidence = Vec::new();
     inspect_binaries(&extracted, &extracted, &project, &mut evidence);
     assert!(
-        evidence.len() >= 6,
-        "核心、宿主、app、watch、HTTP 和处理方已打包"
+        evidence.len() >= 7,
+        "核心、宿主、app、watch、HTTP、处理方和 C 诊断插件已打包"
     );
     fs::write(
         project.join("privacy-result.json"),
@@ -620,6 +624,13 @@ fn prepare_http_application(tools: &Tools, project: &Path) {
         )
         .unwrap(),
     );
+    config["instance"].as_table_mut().unwrap().insert(
+        "native-diagnostic".into(),
+        toml::Value::try_from(serde_json::json!({
+            "plugin": format!("{}native_diagnostic{}", std::env::consts::DLL_PREFIX, std::env::consts::DLL_SUFFIX),
+            "component": "native-diagnostic"
+        })).unwrap(),
+    );
     fs::write(
         project.join("cordis.toml"),
         toml::to_string_pretty(&config).unwrap(),
@@ -634,6 +645,31 @@ fn prepare_http_application(tools: &Tools, project: &Path) {
         ),
     )
     .unwrap();
+    prepare_native_dependency(&tools.root, project);
+}
+
+/// 路径隐私回归同时覆盖 C 的 __FILE__、调试信息和 Apple 链接器的 OSO 条目。
+fn prepare_native_dependency(root: &Path, project: &Path) {
+    let fixture = root.join("crates/cordis-host/tests/fixtures/c-diagnostic");
+    let plugin = project.join("plugins/native-diagnostic");
+    for name in [
+        "Cargo.toml",
+        "build.rs",
+        "src/lib.rs",
+        "native/diagnostic.c",
+    ] {
+        let destination = plugin.join(name);
+        fs::create_dir_all(destination.parent().unwrap()).unwrap();
+        fs::copy(fixture.join(name), destination).unwrap();
+    }
+    let path = project.join("Cargo.toml");
+    let mut manifest: toml::Value = toml::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+    manifest.as_table_mut().unwrap().insert(
+        "profile".into(),
+        toml::Value::try_from(serde_json::json!({"release": {"debug": "line-tables-only"}}))
+            .unwrap(),
+    );
+    fs::write(path, toml::to_string_pretty(&manifest).unwrap()).unwrap();
 }
 
 fn pack_command(tools: &Tools, project: &Path) -> Command {

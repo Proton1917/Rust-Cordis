@@ -15,6 +15,28 @@ cordis pack --project . --target aarch64-apple-darwin --out dist --app
 
 cordis-dev 0.2.1 默认重映射 Cargo 构建的 HOME、CARGO_HOME、sysroot 和项目路径，并保留用户环境编译参数。交付前按完整字节检查所有 Mach-O、ELF 及清单，检测到当前 HOME 或用户名时返回错误，诊断列出相对文件名和命中次数。预构建的核心、宿主及第三方程序同样参与检查；用官方发布的核心与宿主即可，自行构建时采用发布构建和同一套路径映射。用户明确接受路径披露时可使用 --allow-private-paths，将检查降为警告。
 
+cordis-dev 0.2.4 的源码将同一套前缀映射同时传给 Rust 与遵循 `CFLAGS`/`CXXFLAGS` 的 C/C++ 构建脚本。原生参数包含 `-ffile-prefix-map` 和 `-fdebug-prefix-map`，覆盖 `cc` crate 编译的 `__FILE__` 字符串与调试信息；Apple 目标另传 `-Clink-arg=-Wl,-oso_prefix,$HOME/` 处理链接器 OSO 条目。已有 Rust 参数及各级 CFLAGS 保持后置顺序，CFLAGS 的引号由标准 shell 参数解析处理。发行进度以项目发布页为准。
+
+v0.2.3 的默认 Rust 映射会遗漏这两类路径：实测的 release C 诊断插件命中一次 HOME，带 release 行表时该插件命中 27 次、另一个 Rust 插件命中 70 次。修复后的同一构建通过完整字节检查，25 条 OSO 记录保留且 HOME 命中为 0。采用支持新环境入口的源码构建脚本时，使用 `tools/build_paths.py` 的 `build_environment(project, target)` 更新 Cargo 环境；`encoded_flags(project)` 继续返回 Rust 参数字符串。
+
+使用 v0.2.3 工具时，可以为本次打包显式补充参数。下面的示例保留现有环境值，项目路径和 HOME 各有对应的中性前缀：
+
+```sh
+cordis_native_maps="-ffile-prefix-map=$HOME=/home/build -fdebug-prefix-map=$HOME=/home/build -ffile-prefix-map=$PWD=/src -fdebug-prefix-map=$PWD=/src"
+export CFLAGS="${CFLAGS:+$CFLAGS }$cordis_native_maps"
+export CXXFLAGS="${CXXFLAGS:+$CXXFLAGS }$cordis_native_maps"
+cordis_oso_flag="-Clink-arg=-Wl,-oso_prefix,$HOME/"
+if [ "${CARGO_ENCODED_RUSTFLAGS+x}" = x ]; then
+  cordis_separator=$(printf '\037')
+  export CARGO_ENCODED_RUSTFLAGS="${CARGO_ENCODED_RUSTFLAGS}${CARGO_ENCODED_RUSTFLAGS:+$cordis_separator}$cordis_oso_flag"
+else
+  export RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }$cordis_oso_flag"
+fi
+cordis pack --project . --target aarch64-apple-darwin --out dist
+```
+
+该示例适用于路径以单个命令参数表达的目录；含空格路径或带引号的自定义 CFLAGS，优先使用新工具的环境入口。预构建库、忽略这些环境参数的自定义构建脚本及显式用户覆盖参数仍按最终产物的完整字节检查判定。
+
 普通发布输出 tar.gz，包内包含核心、宿主、插件、配置、资源和服务入口。macOS `.app` 把程序放在 Contents/MacOS，把部署文件放在 Contents/Resources；桌面应用配置 HTTP 与 window 插件，由窗口显示同一网页宿主。
 
 ## Python 与 Node

@@ -311,7 +311,8 @@ pub trait Kv: Send + Sync {
 
 | crate | 用途 | 使用者 |
 |---|---|---|
-| `serde` | 配置、DTO、状态块的序列化 | `cordis-abi`、`cordis-sdk`、`cordis-runtime`、`cordis-types`、`cordis-up`、`cordis-routing`、`cordis-web-deployment`、插件 |
+| `serde` | 配置、DTO、状态块和构建映射规则的序列化 | `cordis-abi`、`cordis-sdk`、`cordis-runtime`、`cordis-types`、`cordis-up`、`cordis-routing`、`cordis-web-deployment`、`cordis-dev`、插件 |
+| `shlex` | 保留 C/C++ 构建参数的分词与引号语义 | `cordis-dev`、`cordis-testkit` |
 | `serde_json` | JSON 验证印记、状态、报告与页面启动信息 | `cordis-host`、`cordis-runtime`、`cordis-dev`、`plugins/http` |
 | `semver` | 插件版本解析与接口数值版本处理 | `cordis-host`、`cordis-supervisor`、`cordis-routing`、`cordis-runtime`、`cordis-dev` |
 | `clap` | 命令行参数与子命令解析 | `cordis-runtime`、`cordis-host`、`cordis-dev` |
