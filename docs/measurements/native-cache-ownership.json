@@ -18,6 +18,29 @@
     }
   },
   "refactor_commit": "2ddb67307ec20f50524a41943a4e70f1ad98f120",
+  "implementation_commit": "bd300b6b377b1b3b748ea1b03797794366ee873d",
+  "final_verification": {
+    "tested_head": "4a34fd67dbf96009271e7a9dcb3c573d22d910f9",
+    "requested_by": "c61c7ebc-c0ef-48fa-beca-7c61f7a7fb8b",
+    "command": "cargo test --workspace --no-fail-fast",
+    "passed": 368,
+    "failed": 0,
+    "ignored": 1,
+    "exit_code": 0,
+    "log": "target/native-cache-fix/evidence/final-workspace.log"
+  },
+  "cleanup": {
+    "target_before_kib": 26656724,
+    "target_after_kib": 274440,
+    "target_after_du": "268M",
+    "directory_reduction_bytes": 27015458816,
+    "filesystem_available_increase_bytes": 27346849792,
+    "lsof": "Only the cleanup inventory and its du child were observed; both completed before deletion.",
+    "removed": ["target/debug", "target/shared", "downloaded runtime inputs", "completed staging trees", "rebuildable test programs and dependency copies"],
+    "preserved": ["release archives", "logs", "status and result files", "screenshots", "reproduction source", "miri-sysroot", "designer directories"],
+    "record": "target/native-cache-fix/evidence/cleanup.json",
+    "pruned_files": "target/native-cache-fix/evidence/cleanup-pruning.json"
+  },
   "file_lease_implementation": {
     "versions": {"cordis": "0.1.3", "cordis-host": "0.1.2", "cordis-supervisor": "0.1.2", "cordis-process": "0.1.1", "watch": "0.1.2"},
     "baseline_release": "v0.2.3",

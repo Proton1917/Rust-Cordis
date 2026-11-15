@@ -2,6 +2,9 @@
   "platform": "aarch64-apple-darwin",
   "baseline_tool": "cordis-dev 0.2.3",
   "fixed_tool": "cordis-dev 0.2.4 source",
+  "commit": "3fa76a88477cc346209b6ef23f37e288122e281a",
+  "independent_build": {"command": "cargo build --locked --workspace --all-targets", "result": "passed", "log": "target/native-cache-fix/evidence/pack-topic-build.log"},
+  "final_workspace": {"tested_head": "4a34fd67dbf96009271e7a9dcb3c573d22d910f9", "passed": 368, "failed": 0, "ignored": 1, "exit_code": 0},
   "fixture": "cc crate 1.11.1 compiles a C diagnostic function returning __FILE__; the Rust plugin calls the function",
   "default_release_before": {"HOME_occurrences": 1, "username_occurrences": 1, "pack_exit": 1},
   "release_with_line_tables_before": {
