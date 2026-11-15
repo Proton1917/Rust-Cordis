@@ -48,7 +48,7 @@ struct PreparedGroup {
     group: Arc<Group>,
     previous: Option<Arc<GroupGeneration>>,
     candidate: Arc<GroupGeneration>,
-    specification: Option<GroupSpec>,
+    specification: Option<LaunchPlan>,
     libraries: Vec<LibraryChange>,
 }
 
@@ -382,7 +382,7 @@ impl Manager {
         if prepared.contains_key(&specification.name) || specification.restart.max > 5 {
             return Err(error(2, "批次分组重复或重启次数超过5次"));
         }
-        let candidate = self.prepare_process(&specification).await?;
+        let (candidate, specification) = self.prepare_launch(specification).await?;
         let existing = self
             .0
             .catalog
@@ -734,7 +734,8 @@ impl Manager {
             self.retain_replacement_states(&name, &names, &transition.inherited);
         }
         for group in prepared.values() {
-            *group.group.specification.lock() = group.specification.clone();
+            self.replace_plan(&group.group, group.specification.clone())
+                .await;
             *group.group.health.lock() = Health {
                 state: "running".into(),
                 error: None,

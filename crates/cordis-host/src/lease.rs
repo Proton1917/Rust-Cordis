@@ -1,6 +1,7 @@
 //! DOC-12 §4、ADR-0012：库租约覆盖插件对象，退役与归零共同决定句柄释放。
 
 use cordis_abi::{Environment, Error, Result};
+use cordis_process::cache::CacheCopy;
 use futures_util::future::poll_fn;
 use libloading::Library;
 use parking_lot::Mutex;
@@ -31,6 +32,7 @@ fn libraries() -> &'static Mutex<HashMap<u64, Arc<Lease>>> {
 
 struct Image {
     library: Option<Library>,
+    copy: Option<CacheCopy>,
     waiters: Vec<Waker>,
 }
 
@@ -43,7 +45,7 @@ pub struct Lease {
 }
 
 impl Lease {
-    pub(crate) fn register(library: Library, policy: UnloadPolicy) -> Arc<Self> {
+    pub(crate) fn register(library: Library, policy: UnloadPolicy, copy: CacheCopy) -> Arc<Self> {
         let lease = Arc::new(Self {
             id: NEXT.fetch_add(1, Ordering::Relaxed),
             retired: AtomicBool::new(false),
@@ -51,6 +53,7 @@ impl Lease {
             policy,
             image: Mutex::new(Image {
                 library: Some(library),
+                copy: Some(copy),
                 waiters: Vec::new(),
             }),
         });
@@ -90,12 +93,29 @@ impl Lease {
         .await;
     }
 
-    /// DOC-12 §11：执行者在插件调用返回后，按核心指定的卸载策略回收映像。
+    /// DOC-12 §11、ADR-0053：静止后归还文件租约，映像继续遵循指定卸载策略。
     pub fn reap(&self) {
-        if self.policy == UnloadPolicy::WhenUnleased && self.retired() && self.count() == 0 {
-            let library = self.image.lock().library.take();
+        if self.retired() && self.count() == 0 {
+            let (library, copy) = {
+                let mut image = self.image.lock();
+                let library =
+                    (self.policy == UnloadPolicy::WhenUnleased).then(|| image.library.take());
+                (library, image.copy.take())
+            };
             drop(library);
+            drop(copy);
         }
+    }
+
+    /// SW-1：描述符握手完成后发布唯一副本，保持同一文件租约。
+    pub(crate) fn publish_copy(&self, name: &str) -> Result<std::path::PathBuf> {
+        self.image
+            .lock()
+            .copy
+            .as_mut()
+            .ok_or_else(|| Error::new(4, "库副本已退役"))?
+            .publish(name)
+            .map_err(|error| Error::new(1, error.to_string()))
     }
 }
 

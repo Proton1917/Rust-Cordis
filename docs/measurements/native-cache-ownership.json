@@ -17,5 +17,52 @@
       "lines": "target/native-cache-fix/evidence/refactor-lines.json"
     }
   },
-  "file_lease_implementation": "pending"
+  "refactor_commit": "2ddb67307ec20f50524a41943a4e70f1ad98f120",
+  "file_lease_implementation": {
+    "versions": {"cordis": "0.1.3", "cordis-host": "0.1.2", "cordis-supervisor": "0.1.2", "cordis-process": "0.1.1", "watch": "0.1.2"},
+    "baseline_release": "v0.2.3",
+    "baseline_descriptions": 3,
+    "baseline_copies_left": 3,
+    "descriptions_after": {"runs": 8, "copies_after_each": 0},
+    "starts_and_swaps": {"starts": 4, "swaps_each": 4, "active_copies": 1, "copies_after_shutdown": 0},
+    "cache_source_recovery": "original source removed; SIGKILL host; concurrent scans preserve the restart source and recover checkpoint value 137",
+    "scan_during_swap": "candidate activated with implementation 2 and retained value 137",
+    "sigkill_ownership": "unreferenced candidate reclaimed; explicit source lease retained until returned",
+    "lock_deadline": "two source pin tasks time out at 300ms; healthy service replies; replacement receives code 6",
+    "cleanup_failure": "immutable old file causes a real deletion failure; new describe succeeds and its copy is reclaimed",
+    "core_sigkill": "CP-10/CP-11 recovers native in-memory KV bytes [1,3,7] from a checkpoint; final host cache is empty",
+    "workspace": {"command": "cargo test --workspace --no-fail-fast", "runs": 1, "passed": 366, "failed": 1, "ignored": 1, "exit_code": 101},
+    "workspace_failure": {
+      "test": "watch_replaces_rolls_back_suppresses_same_candidate_and_reloads",
+      "cause": "watch referenced retired host copies whose lifetime is now reclaimed",
+      "repair": "watch compares installed references or owned contents; absent legacy copies allow a new candidate check",
+      "targeted_watch": "passed",
+      "legacy_reference_test": "passed"
+    },
+    "fmt": "passed",
+    "clippy": "workspace passed; changed watch all targets passed",
+    "independent_staged_tree_build": {
+      "command": "cargo build --locked --workspace --all-targets --manifest-path target/native-cache-fix/lease-stage/Cargo.toml",
+      "result": "passed",
+      "scope": "File lease topic only; packaging and long-task documentation changes excluded.",
+      "log": "target/native-cache-fix/evidence/lease-stage-build.log"
+    },
+    "conformance_cases": 177,
+    "unsafe_audit": "passed in workspace run",
+    "miri": {"boundary": 16, "layout": 2, "result": "passed"},
+    "source_lines": {
+      "cordis-supervisor": {"code": 5941, "total": 6429, "limit": 6000},
+      "cordis-process": {"code": 640, "total": 712, "limit": 700},
+      "cordis-host": {"code": 2978, "total": 3306, "limit": 3500}
+    },
+    "logs": {
+      "workspace": "target/native-cache-fix/evidence/feature-workspace.log",
+      "cache_scenarios": "target/native-cache-fix/evidence/bounded-cache-tests.log",
+      "core_recovery": "target/native-cache-fix/evidence/core-recovery.log",
+      "watch_after_repair": "target/native-cache-fix/evidence/watch-fixed.log",
+      "watch_legacy_reference": "target/native-cache-fix/evidence/watch-legacy.log",
+      "miri": "target/native-cache-fix/evidence/miri.log",
+      "source_lines": "target/native-cache-fix/evidence/final-lines.txt"
+    }
+  }
 }

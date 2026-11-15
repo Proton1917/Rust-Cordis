@@ -6,13 +6,14 @@ use cordis_abi::{
     ABI_MAJOR, AbiBytes, AbiUnit, Apply, ComponentV1, Entry, Environment, Error, PluginV1,
     RemoteFuture, Resolve, Result,
 };
+use cordis_process::cache::{CacheCopy, CacheDirectory, CachePin};
 use cordis_types::VerificationReceipt;
 use cordis_up::payload::{Component as ComponentInfo, Dependency as DependencyInfo, Plugin};
 use libloading::Library;
 use semver::Version;
 use std::{
     collections::HashMap,
-    fs::{self, File, OpenOptions},
+    fs::File,
     mem::size_of,
     path::{Path, PathBuf},
     sync::Arc,
@@ -29,6 +30,8 @@ pub struct LibraryOptions {
 
 pub struct LibraryStore {
     options: LibraryOptions,
+    cache: CacheDirectory,
+    sources: parking_lot::Mutex<Vec<CachePin>>,
 }
 
 #[derive(Clone, Debug)]
@@ -124,47 +127,36 @@ pub struct OpenError {
 }
 
 impl LibraryStore {
-    pub fn new(options: LibraryOptions) -> Result<Self> {
-        fs::create_dir_all(&options.directory).map_err(io_error)?;
-        Ok(Self { options })
-    }
-
-    /// DOC-11 SW-1：目录锁保护全局序号分配，预留文件后释放锁再复制和装载。
-    fn reserve_copy(&self, extension: &str) -> Result<(u64, PathBuf, File)> {
-        let lock = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .truncate(false)
-            .open(self.options.directory.join(".sequence.lock"))
-            .map_err(io_error)?;
-        lock.lock().map_err(io_error)?;
-        let mut maximum = 0;
-        for entry in fs::read_dir(&self.options.directory).map_err(io_error)? {
-            let name = entry.map_err(io_error)?.file_name();
-            if let Some((stem, "dylib" | "so")) = name.to_string_lossy().rsplit_once('.')
-                && let Some((_, sequence)) = stem.rsplit_once('-')
-                && let Ok(sequence) = sequence.parse::<u64>()
-            {
-                maximum = maximum.max(sequence);
-            }
+    pub fn new(options: LibraryOptions, sources: &[PathBuf]) -> Result<Self> {
+        let cache = CacheDirectory::new(&options.directory).map_err(io_error)?;
+        let sources = sources
+            .iter()
+            .map(|path| CachePin::open(path))
+            .collect::<std::io::Result<Vec<_>>>()
+            .map_err(io_error)?
+            .into_iter()
+            .flatten()
+            .collect();
+        if let Err(error) = cache.prune() {
+            eprintln!("库副本回收失败：{error}");
         }
-        let sequence = maximum
-            .checked_add(1)
-            .ok_or_else(|| Error::new(2, "库副本序号已达到上限"))?;
-        let path = self
-            .options
-            .directory
-            .join(format!("candidate-{sequence}.{extension}"));
-        let output = OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&path)
-            .map_err(io_error)?;
-        Ok((sequence, path, output))
+        Ok(Self {
+            options,
+            cache,
+            sources: parking_lot::Mutex::new(sources),
+        })
     }
 
-    /// DOC-11 SW-1、SW-2：创建唯一副本后读取入口与描述符，失败返回已创建的副本路径。
+    /// ADR-0053：有序退出时归还启动来源，其他核心或宿主持有的来源继续保留。
+    pub(crate) fn release_sources(&self) {
+        self.sources.lock().clear();
+    }
+
+    pub(crate) fn directory(&self) -> &Path {
+        self.cache.directory()
+    }
+
+    /// DOC-11 SW-1、SW-2：创建唯一副本后读取入口与描述符，失败记录路径并归还副本。
     pub fn open(
         &self,
         source: &Path,
@@ -172,13 +164,15 @@ impl LibraryStore {
     ) -> std::result::Result<NativeLibrary, OpenError> {
         let mut copy = None;
         let result = (|| {
+            let _source = CachePin::open(source).map_err(io_error)?;
             let extension = source
                 .extension()
                 .and_then(|extension| extension.to_str())
                 .filter(|extension| matches!(*extension, "dylib" | "so"))
                 .ok_or_else(|| Error::new(2, "原生库扩展名需要为 dylib 或 so"))?;
             let mut input = File::open(source).map_err(io_error)?;
-            let (sequence, staged, mut output) = self.reserve_copy(extension)?;
+            let (sequence, owned, mut output) = self.cache.reserve(extension).map_err(io_error)?;
+            let staged = owned.path().to_owned();
             copy = Some(staged.clone());
             std::io::copy(&mut input, &mut output).map_err(io_error)?;
             output.sync_all().map_err(io_error)?;
@@ -192,7 +186,7 @@ impl LibraryStore {
             } else {
                 None
             };
-            let descriptor = self.load_descriptor(&staged, environment)?;
+            let descriptor = self.load_descriptor(owned, environment)?;
             let lease = descriptor.lease.clone();
             let decoded = self.decode(descriptor, receipt.as_ref(), sequence, staged.clone());
             match decoded {
@@ -215,14 +209,14 @@ impl LibraryStore {
         receipt: Option<&VerificationReceipt>,
         copy: &mut Option<PathBuf>,
     ) -> Result<NativeLibrary> {
-        let path = self.options.directory.join(format!(
-            "{}-{}.{extension}",
-            loaded.info.name, loaded.info.sequence
-        ));
-        if let Err(error) = fs::rename(&loaded.info.path, &path) {
-            loaded.retire();
-            return Err(io_error(error));
-        }
+        let name = format!("{}-{}.{extension}", loaded.info.name, loaded.info.sequence);
+        let path = match loaded.lease.publish_copy(&name) {
+            Ok(path) => path,
+            Err(error) => {
+                loaded.retire();
+                return Err(error);
+            }
+        };
         *copy = Some(path.clone());
         if let Some(receipt) = receipt
             && let Err(error) = verification::preserve(&path, receipt)
@@ -235,9 +229,13 @@ impl LibraryStore {
     }
 
     /// DOC-12 §3、§10：校验入口协议，描述符构造失败时回收初始库租约。
-    fn load_descriptor(&self, staged: &Path, environment: Environment) -> Result<Arc<Descriptor>> {
+    fn load_descriptor(
+        &self,
+        copy: CacheCopy,
+        environment: Environment,
+    ) -> Result<Arc<Descriptor>> {
         // SAFETY: DOC-15 Q0，原生库只在独立宿主进程装载，副本路径属于本次准备操作。
-        let library = unsafe { Library::new(staged) };
+        let library = unsafe { Library::new(copy.path()) };
         let library = library.map_err(|error| Error::new(2, error.to_string()))?;
         // SAFETY: DOC-12 §3，ABI版本符号为只读u32，library覆盖读取期间。
         let major = unsafe {
@@ -254,7 +252,7 @@ impl LibraryStore {
                 .get::<Entry>(b"cordis_plugin_v1\0")
                 .map_err(|error| Error::new(2, error.to_string()))?
         };
-        let lease = Lease::register(library, self.options.unload);
+        let lease = Lease::register(library, self.options.unload, copy);
         match Self::descriptor(entry, lease.clone(), environment) {
             Ok(descriptor) => Ok(descriptor),
             Err(error) => {
@@ -460,5 +458,12 @@ fn validate_interface(value: &str) -> Result<()> {
 }
 
 fn io_error(error: std::io::Error) -> Error {
-    Error::new(1, error.to_string())
+    Error::new(
+        if error.kind() == std::io::ErrorKind::TimedOut {
+            6
+        } else {
+            1
+        },
+        error.to_string(),
+    )
 }

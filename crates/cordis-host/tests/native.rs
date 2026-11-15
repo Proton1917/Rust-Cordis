@@ -73,6 +73,10 @@ native_scenarios! {
     native_confirmation_restores_dependent_state => "confirmation-state",
     retired_image_threshold_restarts_group => "threshold",
     shared_directory_allocates_monotonic_copies => "allocation",
+    native_cache_bounds_descriptions_starts_and_swaps => "cache-bounded",
+    native_cache_scan_preserves_restart_and_replacement => "cache-recovery",
+    native_cache_reclaims_unowned_files_after_sigkill => "cache-orphan",
+    native_cache_lock_wait_has_a_deadline => "cache-lock",
     service_panic_preserves_host => "panic",
     apply_panic_reports_failure => "apply-panic",
     abort_isolates_group => "abort",
@@ -82,4 +86,10 @@ native_scenarios! {
     endless_computation_isolates_group => "spin",
     concurrent_raw_wait_exhausts_native_workers => "blocking-wait",
     sdk_wait_preserves_native_workers => "safe-wait",
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn native_cache_cleanup_error_preserves_new_loads() {
+    scenario("cache-cleanup-error");
 }

@@ -106,7 +106,7 @@ impl Host {
 
     /// DOC-15 CP-1：初始化宿主数据和独立原生执行器，运行时构造错误直接返回。
     pub fn new(options: HostOptions, io: tokio::runtime::Handle) -> Result<Self> {
-        let store = LibraryStore::new(options.library.clone())?;
+        let store = LibraryStore::new(options.library.clone(), &options.libraries)?;
         let native = RuntimeOwner::new(options.native_workers)?;
         let executor = NativeExecutor::new(native.handle(), io.clone());
         Ok(Self(Arc::new(Inner {
@@ -307,6 +307,7 @@ impl Host {
         let lease = library.retire();
         lease.quiet().await;
         lease.reap();
+        self.prune_cache().await;
         Ok(payload::LibraryRetired {
             leases: lease.count() as u64,
             closed: lease.closed(),
@@ -732,8 +733,22 @@ impl Host {
         for library in libraries {
             self.retire(library).await?;
         }
+        self.0.store.release_sources();
+        self.prune_cache().await;
         self.0.stopped.store(true, Ordering::Release);
         Ok(())
+    }
+
+    /// ADR-0053：租约归还后的目录回收独立执行，回收错误保留诊断。
+    async fn prune_cache(&self) {
+        if let Err(error) = cordis_process::cache::prune_directories(
+            vec![self.0.store.directory().to_owned()],
+            self.0.options.request_timeout,
+        )
+        .await
+        {
+            eprintln!("库副本回收失败：{error}");
+        }
     }
 
     /// DOC-16：握手建立进程身份并装入核心指定的初始原生库。

@@ -12,7 +12,7 @@ struct NativeSwap {
     plugin: String,
     previous: Arc<GroupGeneration>,
     candidate: Arc<GroupGeneration>,
-    specification: Option<GroupSpec>,
+    specification: Option<LaunchPlan>,
     old_library: u64,
     new_library: u64,
     transition: lifecycle::Transition,
@@ -166,10 +166,33 @@ impl Manager {
         &self,
         group: &Group,
         candidate: &GroupGeneration,
-    ) -> Result<Option<GroupSpec>> {
-        let Some(mut specification) = group.specification.lock().clone() else {
+    ) -> Result<Option<LaunchPlan>> {
+        let Some(plan) = group.specification.lock().clone() else {
             return Ok(None);
         };
+        self.launch_plan(plan.specification.clone(), candidate)
+            .await
+            .map(Some)
+    }
+
+    /// ADR-0053：仅原生描述符进入缓存来源计划，普通进程沿原命令启动。
+    pub(super) async fn launch_plan(
+        &self,
+        mut specification: GroupSpec,
+        candidate: &GroupGeneration,
+    ) -> Result<LaunchPlan> {
+        let mut sources = Vec::new();
+        if !candidate
+            .descriptor
+            .plugins
+            .iter()
+            .any(|plugin| plugin.format == 1)
+        {
+            return Ok(LaunchPlan {
+                specification,
+                _pins: Arc::default(),
+            });
+        }
         let status = self.library_status(&candidate.connection).await?;
         let mut command = Vec::new();
         let mut arguments = specification.command.into_iter();
@@ -189,13 +212,29 @@ impl Manager {
                 .iter()
                 .find(|library| library.id == id)
                 .ok_or_else(|| error(4, "宿主缺少活动库状态"))?;
+            sources.push(library.path.clone());
             command.extend([
                 "--library".into(),
                 library.path.to_string_lossy().into_owned(),
             ]);
         }
         specification.command = command;
-        Ok(Some(specification))
+        let pins = cordis_process::cache::pin_sources(sources, self.0.options.handshake_timeout)
+            .await
+            .map_err(|problem| {
+                error(
+                    if problem.kind() == std::io::ErrorKind::TimedOut {
+                        6
+                    } else {
+                        1
+                    },
+                    problem.to_string(),
+                )
+            })?;
+        Ok(LaunchPlan {
+            specification,
+            _pins: Arc::new(pins),
+        })
     }
 
     /// DOC-15 CP-4：库激活和退役共用清理截止时间，超时触发连接回收。
@@ -490,7 +529,8 @@ impl Manager {
             error: None,
         };
         if let Some(specification) = &swap.specification {
-            *swap.group.specification.lock() = Some(specification.clone());
+            self.replace_plan(&swap.group, Some(specification.clone()))
+                .await;
         }
         self.retain_replacement_states(
             &swap.group.name,
@@ -578,7 +618,7 @@ impl Manager {
     pub(super) async fn enforce_image_limit(
         &self,
         group: &str,
-        specification: Option<GroupSpec>,
+        specification: Option<LaunchPlan>,
         retired_images: u64,
         started: std::time::Instant,
     ) -> Result<Option<ReplaceReport>> {
@@ -587,7 +627,12 @@ impl Manager {
         {
             let original = self.last_replacement_states(group);
             let restarted = self
-                .replace_with_states(specification, HashMap::new(), None, started)
+                .replace_with_states(
+                    specification.specification.clone(),
+                    HashMap::new(),
+                    None,
+                    started,
+                )
                 .await;
             self.0
                 .catalog

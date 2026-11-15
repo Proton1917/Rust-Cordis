@@ -78,7 +78,7 @@ enum Rejected {
 impl Rejected {
     fn matches(&self, candidate: &Image) -> Result<bool> {
         match self {
-            Self::Copy(path) => Ok(image(path)? == *candidate),
+            Self::Copy(path) => Ok(optional_image(path)?.is_some_and(|saved| saved == *candidate)),
             Self::Content(saved) => Ok(saved == candidate),
         }
     }
@@ -88,20 +88,62 @@ fn problem(error: impl std::fmt::Display) -> Error {
     Error::new(1, error.to_string())
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn missing_legacy_rejection_copy_allows_reconsideration() {
+        let case = cordis_testkit::cleanup::TestGuard::for_package(
+            Path::new(env!("CARGO_MANIFEST_DIR")),
+            "watch-legacy-copy",
+        );
+        let directory = case.directory("watch-legacy");
+        fs::create_dir_all(&directory).unwrap();
+        let source = std::env::current_exe().unwrap();
+        let copy = directory.join("retired-copy");
+        fs::copy(&source, &copy).unwrap();
+        let rejected = Rejected::Copy(copy.clone());
+        let candidate = image(&source).unwrap();
+        assert!(rejected.matches(&candidate).unwrap());
+        fs::remove_file(copy).unwrap();
+        assert!(!rejected.matches(&candidate).unwrap());
+        case.success();
+    }
+}
+
 fn image(path: &Path) -> Result<Image> {
-    fn collect(root: &Path, relative: &Path, files: &mut BTreeMap<PathBuf, Vec<u8>>) -> Result<()> {
+    optional_image(path)?.ok_or_else(|| Error::new(1, "监视来源缺席"))
+}
+
+fn optional_image(path: &Path) -> Result<Option<Image>> {
+    let kind = match fs::symlink_metadata(path) {
+        Ok(metadata) => metadata.file_type(),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(problem(error)),
+    };
+    fn collect(
+        root: &Path,
+        relative: &Path,
+        kind: fs::FileType,
+        files: &mut BTreeMap<PathBuf, Vec<u8>>,
+    ) -> Result<()> {
         let path = if relative.as_os_str().is_empty() {
             root.to_owned()
         } else {
             root.join(relative)
         };
-        let kind = fs::symlink_metadata(&path).map_err(problem)?.file_type();
         if kind.is_file() {
             files.insert(relative.to_owned(), fs::read(path).map_err(problem)?);
         } else if kind.is_dir() {
             for entry in fs::read_dir(path).map_err(problem)? {
                 let entry = entry.map_err(problem)?;
-                collect(root, &relative.join(entry.file_name()), files)?;
+                collect(
+                    root,
+                    &relative.join(entry.file_name()),
+                    entry.file_type().map_err(problem)?,
+                    files,
+                )?;
             }
         } else {
             return Err(Error::new(2, "监视来源需要普通文件或目录"));
@@ -109,8 +151,8 @@ fn image(path: &Path) -> Result<Image> {
         Ok(())
     }
     let mut files = BTreeMap::new();
-    collect(path, Path::new(""), &mut files)?;
-    Ok(Image(files))
+    collect(path, Path::new(""), kind, &mut files)?;
+    Ok(Some(Image(files)))
 }
 
 fn native(path: &Path) -> bool {
@@ -178,19 +220,13 @@ fn save(path: &Path, saved: &Saved) -> Result<()> {
     fs::rename(staged, path).map_err(problem)
 }
 
-/// DOC-11 §7：优先引用宿主保留的被拒库，配置与描述符前失败保存实际候选内容。
+/// DOC-11 §7、ADR-0053：比较依据取自已安装引用或候选内容，寿命归 watch 持有。
 fn rejected(snapshot: &RuntimeSnapshot, candidate: Image) -> Result<Rejected> {
-    for library in snapshot
-        .libraries
+    for plugin in snapshot
+        .available_plugins
         .iter()
-        .rev()
-        .filter(|library| library.retired)
+        .filter(|plugin| managed_source(&plugin.path))
     {
-        if image(&library.path)? == candidate {
-            return Ok(Rejected::Copy(library.path.clone()));
-        }
-    }
-    for plugin in &snapshot.available_plugins {
         if image(&plugin.path)? == candidate {
             return Ok(Rejected::Copy(plugin.path.clone()));
         }

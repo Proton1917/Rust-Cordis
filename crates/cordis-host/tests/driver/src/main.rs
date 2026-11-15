@@ -2,6 +2,7 @@
 
 mod allocation;
 mod blocking_wait;
+mod native_cache;
 mod replacement_state;
 
 use clap::Parser;
@@ -58,6 +59,8 @@ struct Artifacts {
 
 #[derive(Parser)]
 struct Selection {
+    #[arg(long)]
+    hold_cache_lock: Option<PathBuf>,
     #[arg(long)]
     reuse_artifacts: bool,
     #[arg(long, conflicts_with = "reuse_artifacts")]
@@ -1110,6 +1113,9 @@ fn observe_state(
 #[tokio::main(flavor = "multi_thread", worker_threads = 2)]
 async fn main() -> Result<()> {
     let selection = Selection::parse();
+    if let Some(directory) = selection.hold_cache_lock {
+        return native_cache::hold_lock(&directory);
+    }
     let root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
         .canonicalize()?;
@@ -1158,6 +1164,11 @@ async fn main() -> Result<()> {
             "confirmation-state" => replacement_state::run(&artifacts).await?,
             "threshold" => swaps(&artifacts, true).await?,
             "allocation" => allocation::run(&artifacts).await?,
+            "cache-bounded" => native_cache::bounded(&artifacts).await?,
+            "cache-recovery" => native_cache::recovery(&artifacts).await?,
+            "cache-orphan" => native_cache::orphan(&artifacts).await?,
+            "cache-lock" => native_cache::bounded_lock(&artifacts).await?,
+            "cache-cleanup-error" => native_cache::cleanup_error(&artifacts).await?,
             "blocking-wait" | "safe-wait" | "legacy-wait" => {
                 blocking_wait::run(&artifacts, &case).await?
             }

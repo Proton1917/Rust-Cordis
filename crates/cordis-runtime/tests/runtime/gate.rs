@@ -208,3 +208,68 @@ fn verified_runtime_install_replace_and_threshold_restart_use_real_receipts() {
     core.finish();
     case.success();
 }
+
+/// ADR-0053、CP-10/CP-11：核心 SIGKILL 后恢复内存 KV 检查点，并回收旧宿主的缓存。
+#[test]
+fn native_checkpoints_recover_after_core_sigkill() {
+    let case = TestGuard::for_package(
+        Path::new(env!("CARGO_MANIFEST_DIR")),
+        "native-core-recovery",
+    );
+    let _fixture = fixture().for_case(&case);
+    let artifacts = artifacts(&case);
+    let (project, _) = deployment(&case, &artifacts);
+    let config = project.join("cordis.toml");
+    let mut settings: toml::Value = toml::from_str(&fs::read_to_string(&config).unwrap()).unwrap();
+    settings["runtime"]["checkpoint_ms"] = 100.into();
+    fs::write(&config, toml::to_string_pretty(&settings).unwrap()).unwrap();
+    let mut core = Process::start_binary(&artifacts.tools.join("cordis"), &project, "before-kill");
+    active(&project, "client");
+    assert_eq!(
+        send(&project, 1, "kv@1.0", "put", json!(["crash", [1, 3, 7]]))["ok"],
+        true
+    );
+    let expected = cordis_up::Value::Map(vec![(
+        "entries".into(),
+        cordis_up::Value::Map(vec![(
+            "crash".into(),
+            cordis_up::Value::Bytes(vec![1, 3, 7]),
+        )]),
+    )]);
+    until("原生 KV 写入进入真实检查点", || {
+        let bytes = fs::read(project.join("state/store.state")).ok()?;
+        let state = storage::parse_state(&bytes).ok()?;
+        (state.data == expected).then_some(())
+    });
+    let before = status(&project).unwrap();
+    assert!(
+        before["libraries"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|library| library["path"]
+                .as_str()
+                .is_some_and(|path| path.contains(".cordis/lib/kv/")))
+    );
+    core.kill();
+    let mut restarted =
+        Process::start_binary(&artifacts.tools.join("cordis"), &project, "after-kill");
+    active(&project, "client");
+    assert_eq!(
+        send(&project, 2, "kv@1.0", "get", json!(["crash"]))["value"],
+        json!([1, 3, 7])
+    );
+    assert!(project.join("state/consumed/store.state").is_file());
+    assert_eq!(manage(&project, 3, "shutdown", json!([]))["ok"], true);
+    restarted.finish();
+    let remaining = fs::read_dir(project.join(".cordis/lib/kv"))
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .filter(|path| {
+            path.extension()
+                .is_some_and(|ext| ext == "dylib" || ext == "so")
+        })
+        .count();
+    assert_eq!(remaining, 0);
+    case.success();
+}

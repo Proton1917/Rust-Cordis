@@ -135,8 +135,8 @@ impl Manager {
             {
                 return Err(error(2, "连接分组已经存在"));
             }
-            let version = manager.prepare_process(&specification).await?;
             let name = specification.name.clone();
+            let (version, specification) = manager.prepare_launch(specification).await?;
             manager.install_group(name.clone(), Some(specification), version)?;
             Ok(manager
                 .snapshot()
@@ -185,7 +185,7 @@ impl Manager {
     fn install_group(
         &self,
         name: String,
-        specification: Option<GroupSpec>,
+        specification: Option<LaunchPlan>,
         version: Arc<GroupGeneration>,
     ) -> Result<()> {
         let group = Arc::new(Group {
@@ -204,6 +204,21 @@ impl Manager {
     }
 
     /// CP-4、CP-7：启动拥有型进程；握手失败时先终止并回收，再交回原错误。
+    pub(super) async fn prepare_launch(
+        &self,
+        specification: GroupSpec,
+    ) -> Result<(Arc<GroupGeneration>, LaunchPlan)> {
+        let generation = self.prepare_process(&specification).await?;
+        match self.launch_plan(specification, &generation).await {
+            Ok(plan) => Ok((generation, plan)),
+            Err(problem) => {
+                self.retire(&generation).await?;
+                Err(problem)
+            }
+        }
+    }
+
+    /// CP-4、CP-7：初始连接的错误由进程拥有者统一退出和回收。
     pub(super) async fn prepare_process(
         &self,
         specification: &GroupSpec,
@@ -683,6 +698,7 @@ impl Manager {
             if let Err(problem) = manager.retire(&current).await {
                 failure.get_or_insert(problem);
             }
+            manager.replace_plan(&group, None).await;
             let discarded = {
                 let mut catalog = manager.0.catalog.lock();
                 instances
@@ -927,7 +943,7 @@ impl Manager {
         }
         let group = self.group(&specification.name)?;
         let previous = group.current.lock().clone();
-        let candidate = self.prepare_process(&specification).await?;
+        let (candidate, specification) = self.prepare_launch(specification).await?;
         if let Err(problem) = self.preflight(&group, &candidate).await {
             self.retire(&candidate).await?;
             return Err(problem);
@@ -1003,13 +1019,13 @@ impl Manager {
     async fn commit_group(
         &self,
         group: Arc<Group>,
-        specification: GroupSpec,
+        specification: LaunchPlan,
         previous: Arc<GroupGeneration>,
         candidate: Arc<GroupGeneration>,
         transition: Transition,
         mut report: ReplaceReport,
     ) -> Result<ReplaceReport> {
-        *group.specification.lock() = Some(specification);
+        self.replace_plan(&group, Some(specification)).await;
         *group.health.lock() = Health {
             state: "running".into(),
             error: None,
@@ -1456,7 +1472,7 @@ impl Manager {
     async fn restart_group(
         &self,
         group: Arc<Group>,
-        specification: GroupSpec,
+        specification: LaunchPlan,
         cohort: &[String],
     ) -> Result<()> {
         let mut shutdown = self.0.stop.subscribe();
@@ -1475,7 +1491,10 @@ impl Manager {
             }
             group.restarts.fetch_add(1, Ordering::AcqRel);
             group.health.lock().state = "restarting".into();
-            let candidate = match self.prepare_process(&specification).await {
+            let (candidate, plan) = match self
+                .prepare_launch(specification.specification.clone())
+                .await
+            {
                 Ok(candidate) => candidate,
                 Err(problem) => {
                     group.health.lock().error = Some(saved_error(&problem));
@@ -1490,6 +1509,7 @@ impl Manager {
             if !self.restore_candidate(&group, &candidate, cohort).await? {
                 continue;
             }
+            self.replace_plan(&group, Some(plan)).await;
             group.health.lock().state = "running".into();
             self.monitor(group, candidate)?;
             return Ok(());
@@ -1701,6 +1721,7 @@ impl Manager {
             if let Err(problem) = self.retire(&current).await {
                 failure.get_or_insert(problem);
             }
+            self.replace_plan(&group, None).await;
             group.health.lock().state = "stopped".into();
         }
         let discarded = std::mem::take(&mut self.0.catalog.lock().instances);

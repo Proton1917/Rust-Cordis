@@ -1,7 +1,7 @@
 [package]
 name = "cordis-process"
 description = "Bounded subprocess execution and process-group ownership for Cordis."
-version.workspace = true
+version = "0.1.1"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true

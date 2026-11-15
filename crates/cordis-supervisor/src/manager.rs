@@ -100,11 +100,25 @@ pub(super) struct Health {
 }
 pub(super) struct Group {
     name: String,
-    specification: Mutex<Option<GroupSpec>>,
+    specification: Mutex<Option<LaunchPlan>>,
     current: Mutex<Arc<GroupGeneration>>,
     definitions: Mutex<HashMap<(String, String), ComponentDef>>,
     restarts: AtomicU32,
     health: Mutex<Health>,
+}
+
+/// ADR-0053：重启命令与其缓存来源共享所有权，克隆计划延续文件租约。
+#[derive(Clone)]
+pub(super) struct LaunchPlan {
+    specification: GroupSpec,
+    _pins: Arc<Vec<cordis_process::cache::CachePin>>,
+}
+
+impl std::ops::Deref for LaunchPlan {
+    type Target = GroupSpec;
+    fn deref(&self) -> &Self::Target {
+        &self.specification
+    }
 }
 
 pub(super) struct Instance {

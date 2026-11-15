@@ -21,7 +21,7 @@
 | `crates/cordis-routing` | 对象出口目录、资源转交、调用转发与元数据额度（ADR-0041） |
 | `crates/cordis-channels` | 转发授权、有界帧桥接与每页面独立的 UP/1 连接（ADR-0041） |
 | `crates/cordis-web-deployment` | 网页资源登记、页面子实例与全栈替换的页面步骤（ADR-0041） |
-| `crates/cordis-process` | 共享的安全进程执行、组回收与受限探测；开发工具与监管器复用 |
+| `crates/cordis-process` | 共享的安全进程执行、组回收、受限探测与文件租约；宿主、开发工具与监管器复用 |
 | `crates/cordis-runtime` | 核心可执行文件 cordis：运行、状态、检查点、管理接口与服务安装 |
 | `crates/cordis-dev` | 独立开发工具：脚手架、验证、打包与代码生成，通过 cordis-host 读取原生描述符 |
 | `crates/cordis-idl` | 开发工具使用的 WIT 解析、共享类型模型与 Rust/Python/TypeScript 绑定生成 |
@@ -61,7 +61,7 @@
 | cordis-channels | cordis-up |
 | cordis-web-deployment | cordis、cordis-supervisor、cordis-channels、cordis-up |
 | cordis-process | cordis-up |
-| cordis-host | cordis-up、cordis-abi、cordis-types |
+| cordis-host | cordis-up、cordis-abi、cordis-types、cordis-process（ADR-0053 文件租约） |
 | cordis-dev | cordis-up、cordis-process、cordis-types、cordis-idl；通过子进程使用 cordis、cordis-host |
 | cordis-http | cordis-sdk、web-api、forward-api、http-api、stream-api |
 | cordis-window | cordis-up |

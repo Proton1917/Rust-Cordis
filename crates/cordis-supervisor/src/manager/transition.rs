@@ -111,9 +111,34 @@ impl Manager {
             .lock()
             .clone()
             .ok_or_else(|| error(4, "原连接退出且缺少进程启动计划"))?;
-        let restored = self.prepare_process(&specification).await?;
+        let (restored, plan) = self
+            .prepare_launch(specification.specification.clone())
+            .await?;
+        self.replace_plan(group, Some(plan)).await;
         self.monitor(group.clone(), restored.clone())?;
         Ok(restored)
+    }
+
+    /// ADR-0053：计划更新只在锁内转交所有权，旧来源在锁外归还并提交有界回收。
+    pub(super) async fn replace_plan(&self, group: &Group, next: Option<LaunchPlan>) {
+        let previous = std::mem::replace(&mut *group.specification.lock(), next);
+        let directories: std::collections::BTreeSet<_> = previous
+            .iter()
+            .flat_map(|plan| plan._pins.iter().map(|pin| pin.directory().to_owned()))
+            .collect();
+        drop(previous);
+        if !directories.is_empty()
+            && let Err(problem) = cordis_process::cache::prune_directories(
+                directories.into_iter().collect(),
+                self.0.options.cleanup_timeout,
+            )
+            .await
+        {
+            self.0
+                .context
+                .logger()
+                .warn(format!("库副本回收失败：{problem}"));
+        }
     }
 
     /// ADR-0052 R-2：候选确认窗口回滚时报告被撤销的实例及窗口时长。

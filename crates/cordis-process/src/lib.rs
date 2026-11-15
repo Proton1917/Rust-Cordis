@@ -2,6 +2,8 @@
 //! CP-7、CP-10、ADR-0027/0029：持有子进程、组信号和回收的唯一执行路径。
 //! 插件连接与有界探测共享该路径；输出、退出状态和清理错误分别交给调用方。
 
+pub mod cache;
+
 use cordis_up::{
     Value, WireError,
     rpc::{Connection, ConnectionOptions, Handler},
