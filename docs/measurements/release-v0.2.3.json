@@ -1,0 +1,767 @@
+{
+  "version": "v0.2.3",
+  "tag_revision": "33ea39ff846c618b7b0e4d377250ef14e8fc68c4",
+  "asset": "cordis-v0.2.3-aarch64-apple-darwin.tar.gz",
+  "size_bytes": 10415985,
+  "build_seconds": 30.21679383306764,
+  "build_profile": "release",
+  "platform": "aarch64-apple-darwin",
+  "component_audit": [
+    {
+      "component": "cordis",
+      "before": "0.1.0",
+      "current": "0.1.0",
+      "product_sources_changed": []
+    },
+    {
+      "component": "cordis-abi",
+      "before": "0.1.1",
+      "current": "0.1.1",
+      "product_sources_changed": []
+    },
+    {
+      "component": "cordis-channels",
+      "before": "0.1.0",
+      "current": "0.1.0",
+      "product_sources_changed": []
+    },
+    {
+      "component": "cordis-contract",
+      "before": "0.1.0",
+      "current": "0.1.0",
+      "product_sources_changed": []
+    },
+    {
+      "component": "cordis-dev",
+      "before": "0.2.2",
+      "current": "0.2.3",
+      "product_sources_changed": []
+    },
+    {
+      "component": "cordis-host",
+      "before": "0.1.1",
+      "current": "0.1.1",
+      "product_sources_changed": []
+    },
+    {
+      "component": "cordis-idl",
+      "before": "0.1.0",
+      "current": "0.1.0",
+      "product_sources_changed": []
+    },
+    {
+      "component": "cordis-process",
+      "before": "0.1.0",
+      "current": "0.1.0",
+      "product_sources_changed": []
+    },
+    {
+      "component": "cordis-routing",
+      "before": "0.1.0",
+      "current": "0.1.1",
+      "product_sources_changed": [
+        "crates/cordis-routing/src/directory.rs",
+        "crates/cordis-routing/src/lib.rs",
+        "crates/cordis-routing/src/lifetime.rs",
+        "crates/cordis-routing/src/transfer.rs"
+      ]
+    },
+    {
+      "component": "cordis-runtime",
+      "before": "0.1.1",
+      "current": "0.1.2",
+      "product_sources_changed": [
+        "crates/cordis-runtime/src/control.rs",
+        "crates/cordis-runtime/src/control/batch.rs",
+        "crates/cordis-runtime/src/control/outcomes.rs",
+        "crates/cordis-runtime/src/runtime.rs",
+        "crates/cordis-runtime/src/status.rs"
+      ]
+    },
+    {
+      "component": "cordis-sdk",
+      "before": "0.2.1",
+      "current": "0.2.1",
+      "product_sources_changed": []
+    },
+    {
+      "component": "cordis-sdk-macros",
+      "before": "0.1.0",
+      "current": "0.1.0",
+      "product_sources_changed": []
+    },
+    {
+      "component": "cordis-supervisor",
+      "before": "0.1.0",
+      "current": "0.1.1",
+      "product_sources_changed": [
+        "crates/cordis-supervisor/src/manager.rs",
+        "crates/cordis-supervisor/src/manager/batch.rs",
+        "crates/cordis-supervisor/src/manager/generation.rs",
+        "crates/cordis-supervisor/src/manager/lifecycle.rs",
+        "crates/cordis-supervisor/src/manager/native.rs",
+        "crates/cordis-supervisor/src/manager/routing.rs",
+        "crates/cordis-supervisor/src/manager/transition.rs",
+        "crates/cordis-supervisor/src/manager/views.rs"
+      ]
+    },
+    {
+      "component": "cordis-testkit",
+      "before": "0.1.0",
+      "current": "0.1.0",
+      "product_sources_changed": []
+    },
+    {
+      "component": "cordis-types",
+      "before": "0.1.1",
+      "current": "0.1.2",
+      "product_sources_changed": [
+        "crates/cordis-types/src/lib.rs"
+      ]
+    },
+    {
+      "component": "cordis-up",
+      "before": "0.1.0",
+      "current": "0.1.0",
+      "product_sources_changed": []
+    },
+    {
+      "component": "cordis-web-deployment",
+      "before": "0.1.0",
+      "current": "0.1.0",
+      "product_sources_changed": []
+    },
+    {
+      "component": "console-log",
+      "before": "0.1.0",
+      "current": "0.1.0",
+      "product_sources_changed": []
+    },
+    {
+      "component": "counter",
+      "before": "0.1.0",
+      "current": "0.1.0",
+      "product_sources_changed": []
+    },
+    {
+      "component": "counter-component",
+      "before": "0.1.0",
+      "current": "0.1.0",
+      "product_sources_changed": []
+    },
+    {
+      "component": "forward-api",
+      "before": "0.1.0",
+      "current": "0.1.0",
+      "product_sources_changed": []
+    },
+    {
+      "component": "cordis-http",
+      "before": "0.1.0",
+      "current": "0.1.1",
+      "product_sources_changed": [
+        "plugins/http/src/routes/request.rs"
+      ]
+    },
+    {
+      "component": "http-api",
+      "before": "0.1.0",
+      "current": "0.1.0",
+      "product_sources_changed": []
+    },
+    {
+      "component": "http-echo",
+      "before": "0.1.0",
+      "current": "0.1.0",
+      "product_sources_changed": []
+    },
+    {
+      "component": "kv-api",
+      "before": "0.1.0",
+      "current": "0.1.0",
+      "product_sources_changed": []
+    },
+    {
+      "component": "kv-contract",
+      "before": "0.1.0",
+      "current": "0.1.0",
+      "product_sources_changed": []
+    },
+    {
+      "component": "kv-file",
+      "before": "0.1.0",
+      "current": "0.1.0",
+      "product_sources_changed": []
+    },
+    {
+      "component": "kv-mem",
+      "before": "0.1.0",
+      "current": "0.1.0",
+      "product_sources_changed": []
+    },
+    {
+      "component": "kv-mem-component",
+      "before": "0.1.0",
+      "current": "0.1.0",
+      "product_sources_changed": []
+    },
+    {
+      "component": "cordis-secrets",
+      "before": "0.1.0",
+      "current": "0.1.0",
+      "product_sources_changed": []
+    },
+    {
+      "component": "secrets-api",
+      "before": "0.1.0",
+      "current": "0.1.0",
+      "product_sources_changed": []
+    },
+    {
+      "component": "stream-api",
+      "before": "0.1.0",
+      "current": "0.1.0",
+      "product_sources_changed": []
+    },
+    {
+      "component": "cordis-watch",
+      "before": "0.1.1",
+      "current": "0.1.1",
+      "product_sources_changed": []
+    },
+    {
+      "component": "web-api",
+      "before": "0.1.0",
+      "current": "0.1.0",
+      "product_sources_changed": []
+    },
+    {
+      "component": "cordis-window",
+      "before": "0.1.0",
+      "current": "0.1.0",
+      "product_sources_changed": []
+    },
+    {
+      "component": "window-api",
+      "before": "0.1.0",
+      "current": "0.1.0",
+      "product_sources_changed": []
+    }
+  ],
+  "protocols": {
+    "cordis.runtime": "1.5",
+    "ABI": "1.1",
+    "UP/1": 1
+  },
+  "binaries": [
+    {
+      "file": "bin/cordis",
+      "architecture": "arm64",
+      "path_matches": 0,
+      "signature": "valid"
+    },
+    {
+      "file": "bin/cordis-host",
+      "architecture": "arm64",
+      "path_matches": 0,
+      "signature": "valid"
+    },
+    {
+      "file": "bin/cordis-dev",
+      "architecture": "arm64",
+      "path_matches": 0,
+      "signature": "valid"
+    },
+    {
+      "file": "plugins/libcordis_http.dylib",
+      "architecture": "arm64",
+      "path_matches": 0,
+      "signature": "valid"
+    },
+    {
+      "file": "plugins/libcordis_watch.dylib",
+      "architecture": "arm64",
+      "path_matches": 0,
+      "signature": "valid"
+    },
+    {
+      "file": "plugins/libcordis_secrets.dylib",
+      "architecture": "arm64",
+      "path_matches": 0,
+      "signature": "valid"
+    },
+    {
+      "file": "plugins/window/cordis-window",
+      "architecture": "arm64",
+      "path_matches": 0,
+      "signature": "valid"
+    }
+  ],
+  "privacy": {
+    "method": "grep -c -a -F",
+    "archive_bytes": 10415985,
+    "archive_matches": {
+      "user_directory": 0,
+      "HOME": 0,
+      "username": 0,
+      "private_project": 0,
+      "private_project_lowercase": 0,
+      "designer_directory": 0
+    },
+    "notes_matches": {
+      "user_directory": 0,
+      "HOME": 0,
+      "username": 0,
+      "private_project": 0,
+      "private_project_lowercase": 0,
+      "designer_directory": 0
+    },
+    "metadata_matches": {
+      "user_directory": 0,
+      "HOME": 0,
+      "username": 0,
+      "private_project": 0,
+      "private_project_lowercase": 0,
+      "designer_directory": 0
+    },
+    "files": [
+      {
+        "file": "LICENSE",
+        "bytes": 1144,
+        "matches": {
+          "user_directory": 0,
+          "HOME": 0,
+          "username": 0,
+          "private_project": 0,
+          "private_project_lowercase": 0,
+          "designer_directory": 0
+        }
+      },
+      {
+        "file": "README.md",
+        "bytes": 5007,
+        "matches": {
+          "user_directory": 0,
+          "HOME": 0,
+          "username": 0,
+          "private_project": 0,
+          "private_project_lowercase": 0,
+          "designer_directory": 0
+        }
+      },
+      {
+        "file": "bin/cordis",
+        "bytes": 9147376,
+        "matches": {
+          "user_directory": 0,
+          "HOME": 0,
+          "username": 0,
+          "private_project": 0,
+          "private_project_lowercase": 0,
+          "designer_directory": 0
+        }
+      },
+      {
+        "file": "bin/cordis-dev",
+        "bytes": 6099952,
+        "matches": {
+          "user_directory": 0,
+          "HOME": 0,
+          "username": 0,
+          "private_project": 0,
+          "private_project_lowercase": 0,
+          "designer_directory": 0
+        }
+      },
+      {
+        "file": "bin/cordis-host",
+        "bytes": 3389424,
+        "matches": {
+          "user_directory": 0,
+          "HOME": 0,
+          "username": 0,
+          "private_project": 0,
+          "private_project_lowercase": 0,
+          "designer_directory": 0
+        }
+      },
+      {
+        "file": "cordis.toml",
+        "bytes": 178,
+        "matches": {
+          "user_directory": 0,
+          "HOME": 0,
+          "username": 0,
+          "private_project": 0,
+          "private_project_lowercase": 0,
+          "designer_directory": 0
+        }
+      },
+      {
+        "file": "plugins/libcordis_http.dylib",
+        "bytes": 3660720,
+        "matches": {
+          "user_directory": 0,
+          "HOME": 0,
+          "username": 0,
+          "private_project": 0,
+          "private_project_lowercase": 0,
+          "designer_directory": 0
+        }
+      },
+      {
+        "file": "plugins/libcordis_secrets.dylib",
+        "bytes": 713264,
+        "matches": {
+          "user_directory": 0,
+          "HOME": 0,
+          "username": 0,
+          "private_project": 0,
+          "private_project_lowercase": 0,
+          "designer_directory": 0
+        }
+      },
+      {
+        "file": "plugins/libcordis_watch.dylib",
+        "bytes": 1129104,
+        "matches": {
+          "user_directory": 0,
+          "HOME": 0,
+          "username": 0,
+          "private_project": 0,
+          "private_project_lowercase": 0,
+          "designer_directory": 0
+        }
+      },
+      {
+        "file": "plugins/window/cordis-plugin.toml",
+        "bytes": 96,
+        "matches": {
+          "user_directory": 0,
+          "HOME": 0,
+          "username": 0,
+          "private_project": 0,
+          "private_project_lowercase": 0,
+          "designer_directory": 0
+        }
+      },
+      {
+        "file": "plugins/window/cordis-window",
+        "bytes": 3144928,
+        "matches": {
+          "user_directory": 0,
+          "HOME": 0,
+          "username": 0,
+          "private_project": 0,
+          "private_project_lowercase": 0,
+          "designer_directory": 0
+        }
+      }
+    ]
+  },
+  "download": {
+    "revision": "33ea39ff846c618b7b0e4d377250ef14e8fc68c4",
+    "archive_cmp": "passed",
+    "privacy": {
+      "method": "grep -c -a -F",
+      "archive_bytes": 10415985,
+      "archive_matches": {
+        "user_directory": 0,
+        "HOME": 0,
+        "username": 0,
+        "private_project": 0,
+        "private_project_lowercase": 0,
+        "designer_directory": 0
+      },
+      "notes_matches": {
+        "user_directory": 0,
+        "HOME": 0,
+        "username": 0,
+        "private_project": 0,
+        "private_project_lowercase": 0,
+        "designer_directory": 0
+      },
+      "metadata_matches": {
+        "user_directory": 0,
+        "HOME": 0,
+        "username": 0,
+        "private_project": 0,
+        "private_project_lowercase": 0,
+        "designer_directory": 0
+      },
+      "files": [
+        {
+          "file": "LICENSE",
+          "bytes": 1144,
+          "matches": {
+            "user_directory": 0,
+            "HOME": 0,
+            "username": 0,
+            "private_project": 0,
+            "private_project_lowercase": 0,
+            "designer_directory": 0
+          }
+        },
+        {
+          "file": "README.md",
+          "bytes": 5007,
+          "matches": {
+            "user_directory": 0,
+            "HOME": 0,
+            "username": 0,
+            "private_project": 0,
+            "private_project_lowercase": 0,
+            "designer_directory": 0
+          }
+        },
+        {
+          "file": "bin/cordis",
+          "bytes": 9147376,
+          "matches": {
+            "user_directory": 0,
+            "HOME": 0,
+            "username": 0,
+            "private_project": 0,
+            "private_project_lowercase": 0,
+            "designer_directory": 0
+          }
+        },
+        {
+          "file": "bin/cordis-dev",
+          "bytes": 6099952,
+          "matches": {
+            "user_directory": 0,
+            "HOME": 0,
+            "username": 0,
+            "private_project": 0,
+            "private_project_lowercase": 0,
+            "designer_directory": 0
+          }
+        },
+        {
+          "file": "bin/cordis-host",
+          "bytes": 3389424,
+          "matches": {
+            "user_directory": 0,
+            "HOME": 0,
+            "username": 0,
+            "private_project": 0,
+            "private_project_lowercase": 0,
+            "designer_directory": 0
+          }
+        },
+        {
+          "file": "cordis.toml",
+          "bytes": 178,
+          "matches": {
+            "user_directory": 0,
+            "HOME": 0,
+            "username": 0,
+            "private_project": 0,
+            "private_project_lowercase": 0,
+            "designer_directory": 0
+          }
+        },
+        {
+          "file": "plugins/libcordis_http.dylib",
+          "bytes": 3660720,
+          "matches": {
+            "user_directory": 0,
+            "HOME": 0,
+            "username": 0,
+            "private_project": 0,
+            "private_project_lowercase": 0,
+            "designer_directory": 0
+          }
+        },
+        {
+          "file": "plugins/libcordis_secrets.dylib",
+          "bytes": 713264,
+          "matches": {
+            "user_directory": 0,
+            "HOME": 0,
+            "username": 0,
+            "private_project": 0,
+            "private_project_lowercase": 0,
+            "designer_directory": 0
+          }
+        },
+        {
+          "file": "plugins/libcordis_watch.dylib",
+          "bytes": 1129104,
+          "matches": {
+            "user_directory": 0,
+            "HOME": 0,
+            "username": 0,
+            "private_project": 0,
+            "private_project_lowercase": 0,
+            "designer_directory": 0
+          }
+        },
+        {
+          "file": "plugins/window/cordis-plugin.toml",
+          "bytes": 96,
+          "matches": {
+            "user_directory": 0,
+            "HOME": 0,
+            "username": 0,
+            "private_project": 0,
+            "private_project_lowercase": 0,
+            "designer_directory": 0
+          }
+        },
+        {
+          "file": "plugins/window/cordis-window",
+          "bytes": 3144928,
+          "matches": {
+            "user_directory": 0,
+            "HOME": 0,
+            "username": 0,
+            "private_project": 0,
+            "private_project_lowercase": 0,
+            "designer_directory": 0
+          }
+        }
+      ]
+    },
+    "versions": {
+      "cordis": "cordis 0.1.2",
+      "cordis-host": "cordis-host 0.1.1",
+      "cordis-dev": "cordis-dev 0.2.3"
+    },
+    "signatures": [
+      {
+        "file": "bin/cordis",
+        "signature": "valid",
+        "architecture": "arm64"
+      },
+      {
+        "file": "bin/cordis-host",
+        "signature": "valid",
+        "architecture": "arm64"
+      },
+      {
+        "file": "bin/cordis-dev",
+        "signature": "valid",
+        "architecture": "arm64"
+      },
+      {
+        "file": "plugins/libcordis_http.dylib",
+        "signature": "valid",
+        "architecture": "arm64"
+      },
+      {
+        "file": "plugins/libcordis_watch.dylib",
+        "signature": "valid",
+        "architecture": "arm64"
+      },
+      {
+        "file": "plugins/libcordis_secrets.dylib",
+        "signature": "valid",
+        "architecture": "arm64"
+      },
+      {
+        "file": "plugins/window/cordis-window",
+        "signature": "valid",
+        "architecture": "arm64"
+      }
+    ],
+    "http": {
+      "observation": {
+        "status": 200,
+        "body_bytes": 1534
+      },
+      "sigint_exit_code": 0,
+      "shutdown_seconds": 0.02181116701103747
+    },
+    "generated_project": {
+      "sdk": {
+        "git": "https://github.com/Proton1917/Rust-Cordis.git",
+        "rev": "33ea39ff846c618b7b0e4d377250ef14e8fc68c4",
+        "version": "0.2.1"
+      },
+      "observation": {
+        "active": [
+          "app",
+          "watch"
+        ]
+      },
+      "sigint_exit_code": 0,
+      "shutdown_seconds": 0.021433500107377768
+    },
+    "cross_group_state": {
+      "observation": {
+        "written": 137,
+        "restored": 137,
+        "before": {
+          "context": 7,
+          "inherited": null,
+          "pid": 125,
+          "upstream": 1
+        },
+        "after": {
+          "context": 10,
+          "inherited": 137,
+          "pid": 125,
+          "upstream": 2
+        },
+        "independent_host_count": 3,
+        "replacement": {
+          "replaced": true
+        }
+      },
+      "sigint_exit_code": 0,
+      "shutdown_seconds": 0.04202100005932152
+    }
+  },
+  "workspace": {
+    "command": "cargo test --workspace --no-fail-fast",
+    "runs": 1,
+    "exit_code": 0,
+    "passed": 361,
+    "failed": 0,
+    "ignored": 1
+  },
+  "fmt": "passed",
+  "clippy": "cordis-dev all targets passed with -D warnings",
+  "design_review": {
+    "commit": "f4694fe",
+    "workspace": "361 passed, 0 failed, 1 ignored",
+    "checks": [
+      "fmt",
+      "workspace clippy",
+      "177 conformance cases",
+      "unsafe audit",
+      "cordis-abi Miri"
+    ]
+  },
+  "remote": {
+    "assets": [
+      {
+        "name": "cordis-v0.2.3-aarch64-apple-darwin.tar.gz",
+        "size": 10415985,
+        "state": "uploaded"
+      }
+    ],
+    "draft": false,
+    "prerelease": false,
+    "tag": "v0.2.3",
+    "url": "https://github.com/Proton1917/Rust-Cordis/releases/tag/v0.2.3"
+  },
+  "evidence": "target/releases/v0.2.3/evidence",
+  "cleanup_record": "target/releases/v0.2.3/evidence/cleanup.json",
+  "cleanup": {
+    "target_before_kib": 13346088,
+    "target_after_kib": 887200,
+    "target_after_du": "866M",
+    "directory_reduction_bytes": 12757901312,
+    "filesystem_available_before_kib": 1221302388,
+    "filesystem_available_after_kib": 1233351576,
+    "filesystem_available_increase_bytes": 12338368512,
+    "cache_open_files": 0,
+    "cargo_rustc_cordis_host_processes": 0,
+    "compiled_caches_removed": ["target/debug", "target/shared", "target/releases/v0.2.3/download/project/target"],
+    "verified_copies_removed": ["target/releases/v0.2.3/package", "target/releases/v0.2.3/download"],
+    "preserved": ["release archive", "evidence", "verification source", "miri-sysroot", "pack-runtime-inputs", "existing review directories"]
+  }
+}

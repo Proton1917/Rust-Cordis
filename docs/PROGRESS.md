@@ -8,31 +8,31 @@
 
 | 项 | 值 |
 |---|---|
-| 最近完成的实现与检查 | ADR-0052：跨分组及原生依赖方状态交接、确认期丢弃报告、路由调用退役已实现；单次全量 359 通过、2 失败、1 忽略，两处失败修复后的对应复验及全栈批量回滚通过 |
-| 当前里程碑 | ADR-0052（f4694fe）经设计方复核通过；v0.2.3 已获用户批准，正在执行发布构建和下载验收 |
+| 最近完成的实现与检查 | v0.2.3 已发布并完成全新下载验收；单次 workspace 全量 361 通过、0 失败、1 忽略；跨分组下游状态在上游替换后保持 137 |
+| 当前里程碑 | ADR-0052（f4694fe）经设计方复核通过，随 v0.2.3 发布；发布验收记录与本轮缓存清理完成 |
 | M23 接口确认 | beb4c8cf 批准的纯数据调用、资源释放和拥有型 Service 转交已实现并通过 AU-27a。Inject 命名声明共用类型化校验；Python 沿用 Remote.invoke，TypeScript 提供 getDynamic。ADR-0047 与实现随 18a62cf 提交，review 基线为 70db380 |
 | M23 版本 | 1c6187d3 批准发行标签 v0.2.0，改动的 cordis-sdk、cordis-dev 与 TypeScript SDK 升为 0.2.0；核心、宿主、Python SDK 和既有官方插件保持 0.1.0，ABI v1、UP/1 保持。发布页和包内 README 以组件表说明；脚手架验证生成的 SDK 版本及源码提交 |
 | M23 依赖锁文件 | ef9cfb5a 批准夹具 Cargo.lock 中 SDK 项随 0.2.0 机械联动；其余依赖保持既有版本。核心产品 src/Cargo.toml、ABI 与根锁文件中的核心依赖项保持 review 70db380 |
 | M23 固定 Git 验收 | 按 72c36897 在 18a62cf 推送后复验通过；设计方隔离副本同样指向 18a62cf 构建通过，v0.2.0 已发布 |
-| 当前验证 | 设计方报告 f4694fe 的 git archive 隔离副本单次全量 361 通过、0 失败、1 忽略；fmt、clippy、177 矩阵、unsafe 与 cordis-abi Miri 通过。本机原始全量及修复后局部复验记录保留在 measurements/dependent-state-transitions.json |
-| 下一步 | 用户已批准 v0.2.3：核对组件版本，构建 macOS arm64 资产，完成隐私检查、全新下载运行及跨分组状态替换验证，记录后清理本轮缓存 |
+| 当前验证 | 发布版本提交前全量一次通过；fmt 与 cordis-dev clippy 通过。新目录下载后的完整字节隐私检查、签名、版本、HTTP、固定标签 SDK 项目与跨分组替换均通过，记录 measurements/release-v0.2.3.json |
+| 下一步 | 等待用户安排 |
 | M22 复核跟进 | 页面故障测试同步与身份缺席错误处理已在 70db380 完成；五轮并行负载测试通过。supervisor 为 5445 行 |
 | 发布复核跟进 | 两个重建资产已上传，远端文件名和大小与本地产物一致；设计方将再次下载核验。v0.1.0 保留 6 个 Mach-O，v0.2.0 保留 7 个并包含 secrets |
 | M22 边界 | 按设计方三项裁决：内核、up、channels、types、process 与 ABI 相对 df05064 保持；supervisor 先提取到 routing 再添加受信调用元数据，结束时至多 5450 代码行；web-deployment 限页面来源，runtime 限 service install |
 | M22 受信信息 | 核心对 scoped 调用追加直接调用方 cordis.caller 与页面的 cordis.page；任何 intercept 来源提交 cordis.* 返回权限错误。secrets 以自己的 grants 配置结合可信调用方鉴权。机密由插件读取和解释，核心转交不透明载荷；AU-25/26 已搜索最详细日志、状态、检查点和错误中的测试值 |
 | M22 页面授权 | 22518c32 裁决：后端 caller={instance}，页面 caller={page_of} 且省略 instance；两者描述直接调用方。secrets 只接受 instance 授权，后端处理页面调用时仍以自己的 instance 读取密钥。三语言 helper 与全栈场景按此验证 |
 | M22 实际故障 | 独立线程 RPC 的 reactor 问题已按批准范围修复；Bridge::invoke 与 sleep/plugin/effect_wait/emit_async 进入宿主执行器。普通线程、自有 Tokio、取消与取消后继续调用场景通过，原失败和修复日志归档在 target/http-m22/evidence |
-| 发布 | v0.2.2→e12ac3a1eeaee4f56bf46eba1c936877dc54871a，macOS arm64 资产 10,331,002 字节；核心 0.1.1、宿主 0.1.1、开发工具 0.2.2、Rust SDK 0.2.1、ABI 1.1。历史标签及资产保持 |
+| 发布 | v0.2.3→33ea39ff846c618b7b0e4d377250ef14e8fc68c4，macOS arm64 资产 10,415,985 字节；核心 0.1.2、宿主 0.1.1、开发工具 0.2.3、Rust SDK 0.2.1、ABI 1.1。历史标签及资产保持 |
 | M20 评审跟进 | segmentation_fault_isolates_group 的等待修正及五轮稳定性验收已完成；supervisor 保持 5480/5500 代码行 |
 | M21 性能结果 | RM-7 三方向各 10000 次，RM-8 三次替换完成。RM-9 首轮中位数比 1.07711183；停载重测中位数比 0.95774113、最大值比 0.90793525，满足原 1.05/1.15 判据。完整样本与测量条件并列归档 |
 | 后续事项 | Linux 实测、crates.io、插件包格式、Windows 移植、RM-9 方法研究与 ADR-0045 的优先级由用户决定；静态分派候选和原始测量资料在 GitHub 存档中保留原相对路径 |
-| 清理 | ADR-0052 验收后经进程和打开文件查询确认空闲，使用 cargo clean 分别清理 target/debug 与 target/shared；target 从 17G 降至 846M，目录占用减少 17,467,092,992 字节，文件系统可用空间同期增加 17,021,706,240 字节；保留 miri-sysroot、pack-runtime-inputs、发布包、日志与验收现场 |
+| 清理 | v0.2.3 验收后确认所选目录空闲，清理 target/debug、shared、生成项目编译缓存及已核验的装配/下载副本；target 从 13,346,088 KiB 降至 887,200 KiB（866M），目录占用减少 12,757,901,312 字节，文件系统可用空间同期增加 12,338,368,512 字节；保留发布包、证据、miri-sysroot 与 pack-runtime-inputs |
 | 执行安排 | 用户要求关闭全部子代理，由主会话独立完成 M22 与后续 M23；编译沿默认 target/debug 与 target/shared |
 | 后续顺序 | 发布、公开存档、下载验证、本地清理和 TestGuard 全量验收已完成；后续工作由用户安排 |
 | 验收资料 | docs/measurements 中保存发布、存档及清理记录；原始日志在 GitHub 原存档和补充资产中，按 target/ 原相对路径恢复 |
 | 文档交付 | README、guide、ADR-0047、skill、解释页、组件版本表与发布记录已同步 |
 | 窗口界面验收 | AU-17 已归档；用户运行记录为恢复 802 ms，截图、Cmd-Q、检查点与进程退出通过 |
-| 最后更新 | 2026-11-15（Asia/Shanghai），ADR-0052 验收记录与编译缓存清理完成 |
+| 最后更新 | 2026-11-15（Asia/Shanghai），v0.2.3 发布、下载验收与编译缓存清理完成 |
 
 ### ADR-0052：依赖重建、回滚报告与调用退役
 
@@ -52,13 +52,31 @@ fmt、workspace clippy -D warnings、177 条矩阵、unsafe 审计及 Miri 通�
 
 设计方的 SKILL.md 与 resources-state.md 随本次提交。状态章节按实现明确核心 0.1.2、cordis.runtime@1.5、路由退役 code 4、主动取消 code 7，以及同宿主直接调用的效应与租约规则。本次源码修订保留既有 v0.2.2 发布标签和资产。
 
-### v0.2.3 发布准备
+### v0.2.3 发布与验收
 
-用户已批准发布 v0.2.3，平台为 macOS arm64。组件核对覆盖 v0.2.2 到当前 main 的全部产品源码：核心程序 0.1.2、cordis-types 0.1.2、HTTP 0.1.1、cordis.runtime@1.5 沿用 ADR-0052 的修订；有源码变更的 cordis-supervisor、cordis-routing 补升为 0.1.1；开发工具升为 0.2.3，以固定本次标签的 SDK 修订。宿主 0.1.1、Rust SDK 0.2.1、ABI 1.1、UP/1 及其他既有组件保持原版本。
+发布地址：https://github.com/Proton1917/Rust-Cordis/releases/tag/v0.2.3 。标签指向 33ea39ff846c618b7b0e4d377250ef14e8fc68c4；资产 `cordis-v0.2.3-aarch64-apple-darwin.tar.gz` 为 10,415,985 字节，正式发布状态。组件核对覆盖 v0.2.2 到发布提交的全部产品源码，有源码变更的 supervisor 与 routing 补升为 0.1.1。
 
-发布包和发布说明以组件表开头，说明状态交接、确认期丢弃报告、在途调用 code 4、HTTP GET/HEAD 替换宽限及接口兼容范围，并匿名感谢外部审查者。资产、成员文件、tar 元数据和发布说明按完整字节执行隐私检索。下载验收使用包内程序生成固定标签 SDK 的项目，并验证跨分组下游状态在上游替换后保持 137。验证记录随发布验收提交保存。
+| 组件或协议 | 版本 |
+|---|---|
+| cordis、cordis-types | 0.1.2 |
+| cordis-host、cordis-supervisor、cordis-routing | 0.1.1 |
+| cordis-dev | 0.2.3 |
+| Rust SDK | 0.2.1 |
+| HTTP | 0.1.1，内置网页 SDK 0.2.0 |
+| watch | 0.1.1 |
+| window、secrets、Python SDK、网页宿主 | 0.1.0 |
+| TypeScript SDK | 0.2.0 |
+| cordis.runtime | 1.5 |
+| ABI | 1.1 |
+| UP/1 | 1 |
+
+发布包和发布说明以组件表开头，说明状态交接、确认期丢弃报告、在途调用 code 4、HTTP GET/HEAD 替换宽限及接口兼容范围，并匿名感谢外部审查者。七个 Mach-O 为 arm64，ad-hoc 签名有效。资产、11 个成员文件、tar 元数据和实际发布说明均执行 `grep -c -a -F` 完整字节检索，用户目录、用户名、私有项目标记和设计方目录匹配均为 0。
 
 发布版本提交前执行一次 `cargo test --workspace --no-fail-fast`，361 通过、0 失败、1 忽略，退出码 0；fmt 与 cordis-dev all-targets clippy -D warnings 通过。日志位于 `target/releases/v0.2.3/evidence/`。
+
+从全新目录下载资产后，cmp 完整字节比较、签名与版本检查通过。包内核心运行后 GET / 返回 200。随包 cordis new 生成的 SDK 依赖使用公开 Git URL，version 为 0.2.1、rev 为标签提交；构建后 app/watch Active。下载目录中的原生探针分置三个独立宿主，下游实际写入 137；上游从实现 1 替换为 2 后，下游加载上下文由 7 变为 10、继承值和读取值均为 137，下游宿主 PID 保持。三个运行场景的 SIGINT 退出码均为 0，退出耗时约 22、21、42 ms。
+
+完整记录见 [release-v0.2.3.json](measurements/release-v0.2.3.json)。清理前进程查询与 lsof 确认所选缓存和下载目录空闲，清理后 target 为 866M；正式发布压缩包、原始日志、验证程序和状态记录保留。后续构建会重新生成已释放的编译缓存。
 
 ### v0.2.2 组件版本
 
