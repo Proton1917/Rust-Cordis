@@ -65,6 +65,8 @@ def component_versions():
         ("cordis-types", "crates/cordis-types"),
         ("cordis-supervisor", "crates/cordis-supervisor"),
         ("cordis-routing", "crates/cordis-routing"),
+        ("cordis-process", "crates/cordis-process"),
+        ("cordis-testkit", "crates/cordis-testkit"),
         ("HTTP", "plugins/http"), ("watch", "plugins/watch"),
         ("window", "plugins/window"), ("secrets", "plugins/secrets"),
     ]:

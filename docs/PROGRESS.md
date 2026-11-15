@@ -9,13 +9,13 @@
 | 项 | 值 |
 |---|---|
 | 最近完成的实现与检查 | ADR-0053 文件租约、C/C++ 与 Apple OSO 映射、长任务异常结束规则分别提交；最终代码 HEAD 4a34fd6 全量 368 通过、0 失败、1 忽略 |
-| 当前里程碑 | 文件租约 bd300b6 经用户委托复核通过；打包映射 3fa76a8、长任务文档 4a34fd6 已提交；验证与缓存清理完成，后续发布由用户安排 |
+| 当前里程碑 | 用户通过 97486868 批准发布 v0.2.4；以 91c240d 加发布准备提交构建 macOS arm64 资产，包含文件租约 bd300b6、打包映射 3fa76a8 与长任务文档 4a34fd6 |
 | M23 接口确认 | beb4c8cf 批准的纯数据调用、资源释放和拥有型 Service 转交已实现并通过 AU-27a。Inject 命名声明共用类型化校验；Python 沿用 Remote.invoke，TypeScript 提供 getDynamic。ADR-0047 与实现随 18a62cf 提交，review 基线为 70db380 |
 | M23 版本 | 1c6187d3 批准发行标签 v0.2.0，改动的 cordis-sdk、cordis-dev 与 TypeScript SDK 升为 0.2.0；核心、宿主、Python SDK 和既有官方插件保持 0.1.0，ABI v1、UP/1 保持。发布页和包内 README 以组件表说明；脚手架验证生成的 SDK 版本及源码提交 |
 | M23 依赖锁文件 | ef9cfb5a 批准夹具 Cargo.lock 中 SDK 项随 0.2.0 机械联动；其余依赖保持既有版本。核心产品 src/Cargo.toml、ABI 与根锁文件中的核心依赖项保持 review 70db380 |
 | M23 固定 Git 验收 | 按 72c36897 在 18a62cf 推送后复验通过；设计方隔离副本同样指向 18a62cf 构建通过，v0.2.0 已发布 |
 | 当前验证 | 4a34fd6 的 workspace 全量 368 通过、0 失败、1 忽略；fmt、clippy、177 矩阵、unsafe、Miri 18 项通过。文件租约独立暂存树及打包主题均通过 locked all-targets 构建，skill 验证通过 |
-| 下一步 | 本轮完成，等待用户安排 |
+| 下一步 | 发布 v0.2.4：构建、完整字节检查、上传、下载 cmp 与实际运行验证，记录结果后清理本次编译产物 |
 | M22 复核跟进 | 页面故障测试同步与身份缺席错误处理已在 70db380 完成；五轮并行负载测试通过。supervisor 为 5445 行 |
 | 发布复核跟进 | 两个重建资产已上传，远端文件名和大小与本地产物一致；设计方将再次下载核验。v0.1.0 保留 6 个 Mach-O，v0.2.0 保留 7 个并包含 secrets |
 | M22 边界 | 按设计方三项裁决：内核、up、channels、types、process 与 ABI 相对 df05064 保持；supervisor 先提取到 routing 再添加受信调用元数据，结束时至多 5450 代码行；web-deployment 限页面来源，runtime 限 service install |
@@ -32,7 +32,26 @@
 | 验收资料 | docs/measurements 中保存发布、存档及清理记录；原始日志在 GitHub 原存档和补充资产中，按 target/ 原相对路径恢复 |
 | 文档交付 | README、guide、ADR-0047、skill、解释页、组件版本表与发布记录已同步 |
 | 窗口界面验收 | AU-17 已归档；用户运行记录为恢复 802 ms，截图、Cmd-Q、检查点与进程退出通过 |
-| 最后更新 | 2026-11-15（Asia/Shanghai），文件租约、打包映射和长任务文档验证与清理完成 |
+| 最后更新 | 2026-11-15（Asia/Shanghai），v0.2.4 发布准备 |
+
+### v0.2.4 发布
+
+用户通过 97486868 授权发布原生库缓存回收与打包路径映射修复。发布准备只更新包内说明和组件表，沿用 4a34fd6 的最终代码验证（workspace 368 通过、0 失败、1 忽略）。发布构建固定 CORDIS_SOURCE_REVISION 为标签提交；发行资产保持 v0.2.3 的目录结构，包含七个 macOS arm64 程序或动态库。
+
+| 组件或协议 | 版本 |
+|---|---|
+| cordis | 0.1.3 |
+| cordis-host、cordis-supervisor、watch | 0.1.2 |
+| cordis-process、cordis-testkit | 0.1.1 |
+| cordis-dev | 0.2.4 |
+| cordis-types | 0.1.2 |
+| cordis-routing、HTTP | 0.1.1 |
+| Rust SDK | 0.2.1 |
+| window、secrets、Python SDK、网页宿主 | 0.1.0 |
+| TypeScript SDK、HTTP 内置网页 SDK | 0.2.0 |
+| cordis.runtime | 1.5 |
+| ABI | 1.1 |
+| UP/1 | 1 |
 
 ### ADR-0053：原生库副本回收
 
