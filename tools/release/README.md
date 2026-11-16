@@ -2,10 +2,40 @@
 
 {{components}}
 | cordis.runtime | 1.5 |
+| 离线程序绑定 JSON | 1 |
 
-发行版本代表组件的组合；本版提供核心 0.1.3、宿主 0.1.2、开发工具 0.2.4 和 Rust SDK 0.2.1。各组件版本及协议版本以表格为准。
+发行版本代表组件的组合；本版提供核心 0.1.4、宿主 0.1.2、开发工具 0.2.4 和 Rust SDK 0.2.1。各组件版本及协议版本以表格为准。
 
 平台为 macOS Apple Silicon（aarch64-apple-darwin）。本包包含 cordis、cordis-host、cordis-dev，以及 HTTP、watch、window、secrets 官方插件。
+
+## 离线程序绑定查询
+
+核心运行期间和停机后，通过官方命令读取每个实例最后持久确认的程序绑定：
+
+```sh
+cordis status --offline --config /srv/example/cordis.toml
+```
+
+输出为带版本的 JSON：
+
+```json
+{
+  "schema_version": 1,
+  "instances": {
+    "store": {
+      "declared_source": "store",
+      "installed_reference": "installed-7",
+      "plugin_directory": "/srv/example/plugins"
+    }
+  }
+}
+```
+
+实例映射保存确认时的声明来源、已安装引用及绝对安装根目录。查询保持配置和状态文件原样；候选确认期返回上一份已提交绑定，确认并持久化后返回新版。停机后修改当前配置或移动程序文件时，查询仍返回原绑定事实。
+
+退出码 0 表示成功；配置或记录读取、解析失败返回 1，诊断写入标准错误；命令行参数错误返回 2。有效空记录输出 `instances: {}`。JSON 版本 1 允许追加字段，删除字段或改变字段类型、含义时提升版本。部署工具检查版本后将这些引用加入保留集合，并结合回滚版本、分发来源和其他部署引用决定回收范围。
+
+本次更新位于核心命令行与程序绑定模块，设计见 ADR-0054。升级核心程序即可使用查询，ABI 1.1、UP/1 和 cordis.runtime@1.5 沿用现有契约。
 
 ## 原生库缓存回收
 
@@ -23,7 +53,7 @@ cordis-dev 0.2.4 将同一套 HOME、CARGO_HOME、sysroot 和项目路径映射�
 
 打包末尾继续对产物完整字节检查 HOME 与用户名，命中即失败；显式 `--allow-private-paths` 可降为警告。预构建库及自定义构建脚本的产物也接受最终检查。
 
-本次修复位于宿主、进程支持、监管器、watch 与打包工具。内核库、Rust SDK 0.2.1、ABI 1.1、UP/1 和 cordis.runtime@1.5 保持既有契约，已编译插件可继续使用。发布包的路径结构沿用 v0.2.3。感谢外部使用方提供复现与验证反馈。
+缓存回收与路径映射由宿主、进程支持、监管器、watch 和打包工具分别承担。内核库、Rust SDK 0.2.1、ABI 1.1、UP/1 和 cordis.runtime@1.5 保持既有契约，已编译插件可继续使用。发布包的路径结构沿用 v0.2.4。
 
 ## 替换状态与调用生命周期
 
