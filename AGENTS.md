@@ -24,7 +24,7 @@
 
 ## 当前阶段
 
-项目现处于**发布后维护**阶段；当前正式版本为 v0.2.4，后续维护由新的对话按用户安排接手。
+项目现处于**发布后维护**阶段；当前正式版本为 v0.2.5，后续维护按用户安排接续。
 
 | 阶段 | 里程碑 | 内容 | 状态 |
 |---|---|---|---|
@@ -37,15 +37,16 @@
 | 发布后维护 | `v0.2.2` | 新增 Context::wait、宿主执行线程占满诊断及 ABI 1.1 追加扩展，修复原生同步等待耗尽线程（ADR-0051）。 | 已发布，标签提交 `e12ac3a` |
 | 发布后维护 | `v0.2.3` | 修复依赖方重建的状态继承，披露确认期回滚丢弃状态，确定在途调用与流的 code 4，并加入 HTTP 替换宽限（ADR-0052、运行时接口 1.5）。 | 已发布，标签提交 `33ea39f` |
 | 发布后维护 | `v0.2.4` | 文件租约保护重启来源并回收原生库副本（ADR-0053），补全 C/C++ 与 Apple OSO 打包路径映射及长任务异常结束规则。 | 已发布，标签提交 `c1ee7e7`；下载验收与缓存清理完成 |
+| 发布后维护 | `v0.2.5` | 核心 0.1.4 提供 `cordis status --offline`，以 schema_version 1 查询逐实例已确认程序绑定（ADR-0054）。 | 已发布，标签提交 `6b10acb`；下载包运行与停机查询、验收及缓存清理完成 |
 | 规划 | `C0`–`C4` | 原版 cordis 插件生态兼容（`DOC-17`、ADR-0050）：Node 兼容宿主、兼容包 `cordis`、`UP/1` 能力 `compat-js/1`、差分验收 | 仅设计，未排期。不要开工，等项目所有者安排；开工时先做 `C0`、`C1`，`C1` 关口后停下等待决定 |
 
 M0–M23 的实现已完成，包含 M15/M21 的 skill 与 `docs/explainer/` 解释页。M12–M21 曾按连续推进安排执行；发布后维护按下节的接手与复核流程进行。
 
 ## 新会话接手
 
-- 当前发布为 [v0.2.4](https://github.com/Proton1917/Rust-Cordis/releases/tag/v0.2.4)，标签提交 `c1ee7e76aa4f3d0913d6bd092cd57ae11a7cdb7b`；验收与清理记录提交 `1e379e2`。
+- 当前发布为 [v0.2.5](https://github.com/Proton1917/Rust-Cordis/releases/tag/v0.2.5)，标签提交 `6b10acb4ad30b0412259d06886278f0934d5ef4b`；验收与清理记录见 `docs/measurements/release-v0.2.5.json`。
 - 阅读顺序：本文件 → [PROGRESS 当前状态](docs/PROGRESS.md#当前状态) → 任务相关 ADR → [cordis-first-principles](skills/cordis-first-principles/SKILL.md) 的相关引用。
-- 近期设计依据为 ADR-0051/0052/0053；发布证据见 `docs/measurements/release-v0.2.4.json`，历史结果按 PROGRESS 的发布与里程碑小节查阅。
+- 近期设计依据为 ADR-0051/0052/0053/0054；发布证据见 `docs/measurements/release-v0.2.5.json`，历史结果按 PROGRESS 的发布与里程碑小节查阅。
 - 设计及架构变更先写 ADR，说明事实掌握者、职责放置、范围与验收；设计方批准后实施，范围变化交设计方确认，批准依据记入 ADR 与 PROGRESS。
 - 交付前按 [principles.md](skills/cordis-first-principles/references/principles.md) 自查职责、效应、状态、调用与资源释放，并由设计方复核。
 - 代码变更在最终代码 HEAD 执行一次 `cargo test --workspace --no-fail-fast`，从同一输出统计通过、失败、忽略数，全绿后推送；其他检查按受影响范围与验收要求执行。纯文档提交执行 `git diff --check`。

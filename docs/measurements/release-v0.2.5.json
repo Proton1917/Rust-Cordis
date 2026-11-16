@@ -1,0 +1,97 @@
+{
+  "version": "v0.2.5",
+  "tag_revision": "6b10acb4ad30b0412259d06886278f0934d5ef4b",
+  "platform": "aarch64-apple-darwin",
+  "asset": "cordis-v0.2.5-aarch64-apple-darwin.tar.gz",
+  "size_bytes": 10596012,
+  "build_seconds": 35.057458333903924,
+  "build_command": "conda run -n base python tools/release.py v0.2.5",
+  "components": {
+    "cordis": "0.1.4",
+    "cordis-host": "0.1.2",
+    "cordis-dev": "0.2.4",
+    "Rust SDK": "0.2.1"
+  },
+  "contracts": {
+    "offline_source_schema": 1,
+    "cordis.runtime": "1.5",
+    "ABI": "1.1",
+    "UP/1": 1
+  },
+  "package_validation": {
+    "binaries": 7,
+    "architecture": "arm64",
+    "signatures": "valid ad-hoc",
+    "files": 11,
+    "same_layout_as": "v0.2.4",
+    "privacy": {
+      "method": "complete-byte grep -c -a -F",
+      "scope": "archive, all package files, tar metadata and release notes",
+      "patterns": ["HOME", "username", "user_directory", "private_project", "private_project_lowercase", "designer_directory"],
+      "matches": 0
+    }
+  },
+  "download_validation": {
+    "archive_cmp": "passed",
+    "signature_architecture_privacy": "reused through identical archive bytes",
+    "public_http_status": 200,
+    "runtime": {
+      "http_status": 200,
+      "http_body_bytes": 1534,
+      "sigint_exit_code": 0,
+      "shutdown_seconds": 0.014519625110551715,
+      "offline_schema_version": 1,
+      "instance": "http",
+      "declared_source": "libcordis_http.dylib",
+      "installed_reference": "installed-1.dylib",
+      "plugin_directory_matches_release_plugin_root": true,
+      "running_reference_matches_offline_reference": true,
+      "offline_after_stop": "matches_running_references",
+      "stopped_runtime_instances": []
+    },
+    "generated_project": {
+      "validation": "generated SDK manifest reference",
+      "git": "https://github.com/Proton1917/Rust-Cordis.git",
+      "rev": "6b10acb4ad30b0412259d06886278f0934d5ef4b",
+      "version": "0.2.1"
+    }
+  },
+  "code_validation": {
+    "revision": "c150eb086bace99843d0615014ceb861264cd5ea",
+    "scope": "three relevant runtime integration scenarios authorized by user",
+    "scenarios": [
+      "confirmed_sources_preserve_group_versions_without_shadowing_configuration",
+      "batch_confirmation_discard_is_persisted_and_published",
+      "offline_queries_observe_atomic_commits_and_empty_deployments"
+    ],
+    "result": "passed",
+    "source": "docs/PROGRESS.md ADR-0054",
+    "reuse": "release preparation changed documentation only"
+  },
+  "remote": {
+    "tag": "v0.2.5",
+    "draft": false,
+    "prerelease": false,
+    "published_at": "2026-11-16T03:15:48Z",
+    "url": "https://github.com/Proton1917/Rust-Cordis/releases/tag/v0.2.5",
+    "asset_state": "uploaded",
+    "asset_url": "https://github.com/Proton1917/Rust-Cordis/releases/download/v0.2.5/cordis-v0.2.5-aarch64-apple-darwin.tar.gz"
+  },
+  "evidence": "target/releases/v0.2.5/evidence",
+  "cleanup": {
+    "removed_directory_size_kib": 815256,
+    "directory_reduction_bytes": 834822144,
+    "filesystem_available_before_kib": 1225552028,
+    "filesystem_available_after_kib": 1226239376,
+    "filesystem_available_increase_bytes": 703844352,
+    "open_files_before_cleanup": 0,
+    "removed": [
+      "target/shared",
+      "target/releases/v0.2.5/package",
+      "target/releases/v0.2.5/download",
+      "target/releases/v0.2.5/generated-project"
+    ],
+    "preserved": ["release archive", "release evidence and scripts", "existing releases", "Miri sysroot", "designer directories"],
+    "release_directory_after_kib": 10784
+  }
+}
