@@ -16,6 +16,7 @@ fn batch_confirmation_discard_is_persisted_and_published() {
     let mut core = Process::start(&project, "discard");
     active(&project, "admin");
     active(&project, "client");
+    let confirmed = offline::query(&project);
     let reference = manage(
         &project,
         1,
@@ -32,6 +33,7 @@ fn batch_confirmation_discard_is_persisted_and_published() {
     );
     assert_eq!(reply["ok"], true);
     version(&project, "0.2.0");
+    assert_eq!(offline::query(&project), confirmed);
     active(&project, "client");
     let written = send(&project, 3, "fixture.counter@1.0", "set", json!([129]));
     assert_eq!(written["ok"], true, "{written}");
@@ -68,6 +70,7 @@ fn batch_confirmation_discard_is_persisted_and_published() {
         json!(["client", "store"])
     );
     version(&project, "0.1.0");
+    assert_eq!(offline::query(&project), confirmed);
     assert_eq!(
         send(&project, 4, "fixture.counter@1.0", "get", json!([]))["value"],
         17

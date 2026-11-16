@@ -21,6 +21,9 @@ mod isolation;
 #[path = "runtime/confirmation.rs"]
 mod confirmation;
 
+#[path = "runtime/offline.rs"]
+mod offline;
+
 struct Process(Option<Child>);
 impl Process {
     fn start(project: &Path, label: &str) -> Self {
@@ -727,6 +730,7 @@ fn confirmed_sources_preserve_group_versions_without_shadowing_configuration() {
     );
     assert_eq!(manage(&project, 4, "shutdown", json!([]))["ok"], true);
     core.finish();
+    offline::check_stopped_bindings(&project, &snapshot);
     case.success();
 }
 

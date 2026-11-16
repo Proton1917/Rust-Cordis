@@ -75,7 +75,7 @@ cordis（核心进程，纯 Rust，无 unsafe，不含插件代码）
 
 | 程序 | 命令 | 依赖 |
 |---|---|---|
-| `cordis`（核心） | `run`、`status`（读取 `state/status.json`）、`service install`、`service uninstall`、`version` | 核心 crate |
+| `cordis`（核心） | `run`、`status`（运行快照；`--offline` 查询最近持久确认的程序绑定，ADR-0054）、`service install`、`service uninstall`、`version` | 核心 crate |
 | `cordis-dev`（开发工具） | `new`、`new-plugin`、`idl gen`、`verify`、`pack` | `wit-parser` 等工具依赖，不进入核心的依赖树 |
 
 1. `cordis` 收到自己不认识的子命令时，执行与它同目录的 `cordis-dev`（其次为 `PATH` 中的 `cordis-dev`），参数原样传递，退出码原样返回。使用者照常写 `cordis new`、`cordis pack`。核心中只有这段转交逻辑，不含任何工具的代码；找不到 `cordis-dev` 时报告“该命令由开发工具 cordis-dev 提供，当前未安装”。

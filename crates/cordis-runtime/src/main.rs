@@ -9,7 +9,7 @@ async fn main() {
     let result = match Cli::parse().command {
         None => cli::run_default().await.map(|_| 0),
         Some(Action::Run(arguments)) => arguments.run().await.map(|_| 0),
-        Some(Action::Status(arguments)) => cli::status(&arguments.config).map(|status| {
+        Some(Action::Status(arguments)) => arguments.read().map(|status| {
             println!("{status}");
             0
         }),

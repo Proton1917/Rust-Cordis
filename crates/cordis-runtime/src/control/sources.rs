@@ -3,12 +3,52 @@
 use super::*;
 use cordis_supervisor::manager::Snapshot;
 use serde::{Deserialize, Serialize};
+use std::path::Path;
 
 #[derive(Clone, Deserialize, Serialize, PartialEq)]
 struct Source {
     declared_source: String,
     installed_reference: String,
     plugin_directory: PathBuf,
+}
+
+#[derive(Serialize)]
+pub(crate) struct OfflineSources {
+    schema_version: u32,
+    instances: BTreeMap<String, OfflineSource>,
+}
+
+#[derive(Serialize)]
+struct OfflineSource {
+    declared_source: String,
+    installed_reference: String,
+    plugin_directory: PathBuf,
+}
+
+/// ADR-0054：复用持久格式解码；公开字段独立映射，目录以配置真实位置展开。
+pub(crate) fn offline_sources(path: &Path, project: &Path) -> Result<OfflineSources> {
+    let instances = read_confirmed(path)?
+        .into_iter()
+        .map(|(name, source)| {
+            (
+                name,
+                OfflineSource {
+                    declared_source: source.declared_source,
+                    installed_reference: source.installed_reference,
+                    plugin_directory: config::resolve_path(project, &source.plugin_directory),
+                },
+            )
+        })
+        .collect();
+    Ok(OfflineSources {
+        schema_version: 1,
+        instances,
+    })
+}
+
+/// DOC-11 §10、ADR-0054：恢复和查询共用受限读取，原子发布保证整份记录一致。
+fn read_confirmed(path: &Path) -> Result<BTreeMap<String, Source>> {
+    serde_json::from_slice(&crate::storage::read(path)?).map_err(parameter)
 }
 
 pub(crate) struct SourceBindings {
@@ -34,10 +74,7 @@ impl SourceBindings {
     /// DOC-11 §10：在发现可变基础来源前读取已确认副本，首次部署使用空记录。
     pub(super) fn load(&mut self) -> Result<()> {
         match std::fs::metadata(&self.path) {
-            Ok(_) => {
-                self.confirmed =
-                    serde_json::from_slice(&crate::storage::read(&self.path)?).map_err(parameter)?
-            }
+            Ok(_) => self.confirmed = read_confirmed(&self.path)?,
             Err(problem) if problem.kind() == std::io::ErrorKind::NotFound => {}
             Err(problem) => return Err(crate::storage::io_error(problem)),
         }

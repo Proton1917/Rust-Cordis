@@ -8,16 +8,34 @@
 
 | 项 | 值 |
 |---|---|
-| 阶段与接手 | 发布后维护；用户已安排后续维护转入新对话，本轮交接仅整理仓库文档 |
+| 阶段与接手 | 发布后维护；ADR-0054 离线程序绑定查询已实现，核心组件源码版本为 0.1.4 |
 | 当前发布 | v0.2.4 → c1ee7e76aa4f3d0913d6bd092cd57ae11a7cdb7b，macOS arm64；验收与清理记录提交 1e379e2，组件表及资产信息见下方发布小节 |
-| 最近修复 | 文件租约 bd300b6、C/C++ 与 Apple OSO 映射 3fa76a8、长任务异常结束规则 4a34fd6 已随 v0.2.4 交付；设计与依据见 ADR-0053 及对应小节 |
-| 当前验证 | v0.2.4 的完整字节检查、七个 arm64 签名、下载 cmp、HTTP 200、有序退出及固定标签 SDK 生成项目通过；沿用 4a34fd6 的 workspace 368 通过、0 失败、1 忽略及 fmt、clippy、177 矩阵、unsafe、Miri 18 项结果 |
+| 最近修复 | 核心 0.1.4 新增 `cordis status --offline`，输出 schema_version 1 的逐实例确认绑定；实现与设计依据见 ADR-0054 |
+| 当前验证 | 按用户本次范围要求，runtime 构建、三个相关集成场景、fmt 与 diff 检查通过；设计方静态复核通过。发布包验收仍对应 v0.2.4 |
 | 规模约束 | supervisor 为 5941 / 6429（代码行 / 总行），上限 6000，新增职责先去重；内核为 4230 / 5112，本轮保持 |
-| 缓存与证据 | v0.2.4 验收后 target 为 285,492 KiB（279M）；保留发布包、证据、复现源码、Miri sysroot 和设计方目录，清理数值见下方发布小节；主记录在 docs/measurements，历史现场按 GitHub 原存档与补充包的原相对路径恢复 |
-| 下一步 | 新会话按 AGENTS“新会话接手”阅读，等待用户指定维护任务；C0–C4 保持设计状态，Linux 实测、crates.io、插件包格式、Windows、RM-9、ADR-0045 及按分组配置执行线程数由用户决定优先级 |
-| 最后更新 | 2026-11-15（Asia/Shanghai），v0.2.4 发布后维护交接 |
+| 缓存与证据 | ADR-0054 的 debug/shared 编译缓存与旧版复现程序已清理，保留原始日志及 TestGuard 验收资料；既有发布包、Miri sysroot 和设计方目录继续保留，数值见对应小节 |
+| 下一步 | 后续维护按用户安排接续；核心组件源码为 0.1.4，发行组合仍为 v0.2.4，C0–C4 及其他规划事项保持原安排 |
+| 最后更新 | 2026-11-16（Asia/Shanghai），离线程序绑定查询实现与验收 |
 
 ## 发布后维护记录
+
+### ADR-0054：已确认程序绑定的离线查询
+
+用户要求提供带版本的官方查询入口，在核心停止后按实例读取 declared source、installed reference 和 plugin directory。已核对 `cli::status`、`control/sources.rs`、状态发布与恢复调用点，以及真实多分组来源绑定和确认回滚测试。方案采用 `cordis status --offline`，首版 JSON 使用 `schema_version: 1`，读取最近持久确认的实例映射并展开已记录的插件安装根目录。
+
+职责位于 `cordis-runtime` 的命令行与程序绑定所有者模块，依据第一性原理第 2、3、5 条和带版本契约要求。绑定记录缺席或损坏时返回失败，配置修改与候选确认保持现有持久语义。设计及验收范围见 [ADR-0054](adr/0054-offline-source-query.md)。用户授权 Claude 通过 ebd936bd-ad3d-44d3-9935-572fa1e216d1 代为批准，并于本轮明确将交付范围定为相关测试、版本更新、提交推送。
+
+核心组件为 0.1.4，运行时接口仍为 1.5。离线命令复用绑定所有者的受限解码，以单独的公开结构输出 `schema_version` 和 `instances`。查询保持配置和状态文件原样，安装目录按已记录值展开；配置中的新声明、停机时移动的程序文件独立于最后确认绑定。CLI、DOC-11、DOC-15、使用指南、README 和部署技能提供同一契约。
+
+`cargo build --locked -p cordis-runtime` 通过，构建耗时 11.28 秒；构建程序的 `cordis version` 输出 0.1.4。三项相关集成场景通过：`confirmed_sources_preserve_group_versions_without_shadowing_configuration` 覆盖独立分组、停机快照、只读访问、目录变更及字段损坏；`batch_confirmation_discard_is_persisted_and_published` 覆盖候选确认期及失败回滚；`offline_queries_observe_atomic_commits_and_empty_deployments` 覆盖两个实例的并发提交、停用保留、全部移除后的空映射及记录缺失和截断。测试命令为 `cargo test --locked -p cordis-runtime --test runtime -- <上述场景名>`，验证范围按用户要求限定在这些场景。
+
+原始执行输出保存在 `target/offline-query/evidence/`：`build.log`、`tests.log`、`tests-configuration-fix.log` 和 `tests-concurrent-handoff.log`。首轮为 1 通过、2 失败；两项测试的 TOML 可选字段构造修正后，局部复验为 2 通过、0 失败。设计复核要求并发读取在旧记录观测后才发起提交，测试改为通道通知与十秒截止；该受影响场景复验为 1 通过、0 失败。三个场景的有效结果分别来自上述对应输出，实际查询结果及进程日志由 TestGuard 保存到 `target/test-evidence/`。v0.2.4 对目标命令返回参数错误的原始证据为 `before.stderr`。
+
+设计方经 9a9c6382-11e1-4395-a42c-fab77586d8c9 与 7162c832-756a-4ff0-b16a-e828e3468b71 复核通过，确认事实归属、版本契约、只读路径、并发旧版或新版记录及测试范围。最终 `cargo fmt --all --check` 与 `git diff --check` 通过。
+
+最终并发场景采集 9 份完整记录，8 份为旧版，1 份为新版；两个实例的引用一同从 installed-3 更新至 installed-4，提交后的查询继续保持新版。原始记录为 `target/test-evidence/offline-commit-26239-0/runtime-m12/cases/source-bindings/offline-commit-26239-0/offline-commit.json`。停止后的查询证据位于 `target/test-evidence/source-bindings-25548-2/`。
+
+打开文件查询确认本次编译目录及旧版复现程序空闲后，执行 `cargo clean --target-dir target/debug` 和 `cargo clean --target-dir target/shared`，释放本次旧版复现程序目录。清理目录原占用为 1,196,968 KiB，目录占用减少 1,225,695,232 字节，文件系统可用空间增加 1,098,813,440 字节。原始证据、失败现场及设计方目录保留；后续构建会重新编译依赖。
 
 ### v0.2.4 发布
 

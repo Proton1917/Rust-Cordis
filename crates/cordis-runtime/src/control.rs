@@ -6,7 +6,7 @@ mod outcomes;
 mod sources;
 mod web;
 pub(crate) use outcomes::{BatchOutcomes, PendingBatch};
-pub(crate) use sources::SourceBindings;
+pub(crate) use sources::{SourceBindings, offline_sources};
 
 use crate::{
     builtins::{Logs, Management, Permissions},

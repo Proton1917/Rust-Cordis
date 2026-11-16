@@ -28,8 +28,8 @@ pub struct Cli {
 pub enum Action {
     /// 按项目配置启动核心与插件进程。
     Run(RunOptions),
-    /// 读取项目状态文件。
-    Status(ConfigurationPath),
+    /// 读取运行快照或已确认程序绑定。
+    Status(StatusOptions),
     /// 生成、安装或卸载系统服务配置。
     Service {
         #[command(subcommand)]
@@ -45,6 +45,26 @@ pub enum Action {
 pub struct ConfigurationPath {
     #[arg(short, long, default_value = "cordis.toml")]
     pub config: PathBuf,
+}
+
+#[derive(Args)]
+pub struct StatusOptions {
+    #[command(flatten)]
+    pub configuration: ConfigurationPath,
+    /// 输出带版本的已确认程序绑定，适用于运行期间和停机后。
+    #[arg(long)]
+    pub offline: bool,
+}
+
+impl StatusOptions {
+    /// ADR-0054：离线模式读取已确认绑定，普通模式继续读取运行快照。
+    pub fn read(self) -> Result<String> {
+        if self.offline {
+            offline_status(&self.configuration.config)
+        } else {
+            status(&self.configuration.config)
+        }
+    }
 }
 
 #[derive(Args)]
@@ -126,16 +146,27 @@ pub fn forward(arguments: &[OsString]) -> Result<i32> {
 
 /// DOC-11 §10：按配置定位已发布状态文件，读取和 JSON 格式错误直接返回。
 pub fn status(configuration: &Path) -> Result<String> {
-    let configuration = configuration.canonicalize().map_err(io_error)?;
-    let parsed = crate::deployment::load(&configuration)?;
-    let directory = config::resolve_path(
-        configuration.parent().expect("configuration parent"),
-        &parsed.runtime.state_dir,
-    );
+    let (_, directory) = status_location(configuration)?;
     let value: serde_json::Value =
         serde_json::from_slice(&storage::read(&directory.join("status.json"))?)
             .map_err(parameter)?;
     serde_json::to_string_pretty(&value).map_err(parameter)
+}
+
+/// ADR-0054：公开最近持久确认的绑定，读取失败直接返回，路径按原记录展开。
+pub fn offline_status(configuration: &Path) -> Result<String> {
+    let (project, directory) = status_location(configuration)?;
+    let snapshot = crate::control::offline_sources(&directory.join("sources.json"), &project)?;
+    serde_json::to_string_pretty(&snapshot).map_err(parameter)
+}
+
+/// ADR-0036、ADR-0054：两种查询共用配置与应用状态目录解析。
+fn status_location(configuration: &Path) -> Result<(PathBuf, PathBuf)> {
+    let configuration = configuration.canonicalize().map_err(io_error)?;
+    let parsed = crate::deployment::load(&configuration)?;
+    let project = configuration.parent().expect("configuration parent");
+    let directory = config::resolve_path(project, &parsed.runtime.state_dir);
+    Ok((project.to_owned(), directory))
 }
 
 /// ADR-0036：Finder 启动沿可执行文件定位 Bundle 部署，命令行沿当前目录。

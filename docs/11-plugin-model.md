@@ -290,6 +290,8 @@ cordis.manage@1 提供 install、add、remove、replace、rollback、configure�
 
 管理变更保存到 state/instances.toml，启动时覆盖基础配置中的同名实例；删除操作保留相应持久标记。status 显示覆盖来源。基础 cordis.toml 由人维护，管理操作记录调用方、方法、目标及结果。对调用方自身的 remove、replace 在响应之后执行。
 
+核心组件 0.1.4 起，`cordis status --offline --config <配置文件>` 提供逐实例已确认程序绑定的公开查询，输出 `schema_version: 1`、实例映射及各实例的 `declared_source`、`installed_reference`、绝对 `plugin_directory`。运行与停机期间均读取最近持久确认的完整记录，候选确认期保留原绑定。记录缺席或损坏时退出码为 1，有效空记录输出空实例映射。完整契约见 [ADR-0054](adr/0054-offline-source-query.md)，命令示例见[使用指南](guide.md#停机后的程序绑定查询)。
+
 install 的 source 位于项目目录或调用方的数据目录，安装使用单调序号；完整字节相同的内容复用已有插件引用。运行时串行处理管理操作并执行既定验证、时限与回滚规则。调用方的服务可见性和每次方法调用分别由核心检查（ADR-0024）。`replace_batch` 的完整窗口事务及附加重读授权见 ADR-0031。
 
 ### 10.2 隔离域与拦截

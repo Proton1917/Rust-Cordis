@@ -120,6 +120,8 @@ cordis run
 
 另开终端执行 `cordis status` 查看实例。修改 `plugins/hello/src/lib.rs` 后重新 `cargo build`，或者直接修改 Python 插件源码，`watch` 插件会把变化提交给核心热替换；新版本失败时自动回到原版本和原状态。
 
+核心组件 0.1.4 起，`cordis status --offline --config cordis.toml` 在运行期间和停机后返回带版本的逐实例程序绑定，包含声明来源、已安装引用与绝对安装根目录。部署工具可据此选择升级保留的版本，字段与错误码见[离线查询说明](docs/guide.md#停机后的程序绑定查询)。
+
 内核接口、契约验证、服务部署、发布打包、WIT 生成和 Python 依赖安装的完整说明见 [使用指南](docs/guide.md)。第一性原理与插件编写手册见 [cordis-first-principles skill](skills/cordis-first-principles/SKILL.md)。
 
 ## 组成
