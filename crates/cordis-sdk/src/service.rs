@@ -12,6 +12,8 @@ pub trait Interface: Send + Sync + 'static {
     const MAJOR: u32;
     const MINOR: u32;
     const METHOD_COUNT: usize;
+    /// ADR-0056：类型化方法表的布局摘要，由方法名与各槽位的 C 函数类型计算。
+    const LAYOUT_DIGEST: u32 = 0;
     fn proxy(object: Arc<Object>) -> Result<Arc<Self>>;
     fn object(value: Arc<Self>, environment: Environment) -> Result<Object>;
     fn scoped_object(

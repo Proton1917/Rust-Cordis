@@ -24,7 +24,7 @@ class Case:
         (self.project / "tmp").mkdir()
         for name in ("libcordis_http.dylib", "libhttp_echo.dylib", "libconsole_log.dylib"):
             shutil.copy2(self.options.tools / name, plugins / name)
-        configuration = '[runtime]\ncheckpoint_ms=50\nconfirm_ms=20\napply_timeout_ms=120000\n'
+        configuration = '[runtime]\ncheckpoint_ms=50\nconfirm_ms=20\nlifecycle_timeout_ms=120000\n'
         configuration += '[instance.console]\nplugin="libconsole_log.dylib"\ncomponent="console"\nconfig={level=3}\n'
         configuration += '[instance.http]\nplugin="libcordis_http.dylib"\ncomponent="http"\nforwarder=true\nconfig={max_body_bytes=104857600,route_timeout_ms=120000,public_origins=["https://app.example.test"]}\n'
         for language, prefix in self.prefixes.items():

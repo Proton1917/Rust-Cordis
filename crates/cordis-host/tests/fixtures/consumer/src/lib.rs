@@ -1,4 +1,5 @@
 mod blocking_wait;
+mod tokio_context;
 
 use cordis_sdk::prelude::*;
 use loader_fixture_api::{Control, Counter, Metadata, NewCounter, ScopedCounter};
@@ -504,6 +505,7 @@ cordis_sdk::export_plugin!(
         PrivateReader,
         Carrier,
         Callers,
-        blocking_wait::BlockingWait
+        blocking_wait::BlockingWait,
+        tokio_context::TokioProbe
     ]
 );

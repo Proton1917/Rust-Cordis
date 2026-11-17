@@ -124,13 +124,7 @@ impl Peer {
             }
             .run(),
         );
-        tokio::spawn(read_diagnostics(
-            id,
-            stderr,
-            options.stderr_line_bytes,
-            connection.clone(),
-            log,
-        ));
+        tokio::spawn(read_diagnostics(id, stderr, options.stderr_line_bytes, log));
         Ok(Self {
             connection,
             process,
@@ -245,27 +239,26 @@ fn spawn_child(command: &[String], cwd: &Path, stdin: Stdio) -> Result<Child> {
         .map_err(io_error)
 }
 
-/// CP-3：逐行保留有界诊断；读取失败或超限时终止对应连接。
-async fn read_diagnostics(
-    id: u64,
-    stderr: ChildStderr,
-    limit: usize,
-    connection: Connection,
-    log: Log,
-) {
+/// CP-3：诊断保留有界前缀，超长行持续排空至换行，读取错误记入日志。
+async fn read_diagnostics(id: u64, stderr: ChildStderr, limit: usize, log: Log) {
     let mut input = BufReader::new(stderr);
     let mut line = Vec::new();
+    let mut truncated = false;
     loop {
         let available = match input.fill_buf().await {
             Ok(bytes) => bytes,
             Err(problem) => {
-                connection.terminate(&problem.to_string());
+                log(id, format!("标准错误读取失败：{problem}"));
                 break;
             }
         };
         if available.is_empty() {
             if !line.is_empty() {
-                log(id, String::from_utf8_lossy(&line).into_owned());
+                let mut message = String::from_utf8_lossy(&line).into_owned();
+                if truncated {
+                    message.push_str(" [诊断已截断]");
+                }
+                log(id, message);
             }
             break;
         }
@@ -273,17 +266,20 @@ async fn read_diagnostics(
             .iter()
             .position(|byte| *byte == b'\n')
             .map_or(available.len(), |index| index + 1);
-        if line.len() + count > limit {
-            connection.terminate("插件标准错误行超出长度限制");
-            break;
-        }
-        line.extend_from_slice(&available[..count]);
-        let complete = line.last() == Some(&b'\n');
+        let complete = available[count - 1] == b'\n';
+        let content = count - usize::from(complete);
+        let retained = content.min(limit - line.len());
+        line.extend_from_slice(&available[..retained]);
+        truncated |= retained < content;
         input.consume(count);
         if complete {
-            line.pop();
-            log(id, String::from_utf8_lossy(&line).into_owned());
+            let mut message = String::from_utf8_lossy(&line).into_owned();
+            if truncated {
+                message.push_str(" [诊断已截断]");
+            }
+            log(id, message);
             line.clear();
+            truncated = false;
         }
     }
 }

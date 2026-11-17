@@ -164,6 +164,9 @@ pub struct BatchOutcome {
     pub caller: String,
     pub state: String,
     pub error: Option<String>,
+    /// 被拒绝时的错误码。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub code: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub discarded_confirmation: Option<ConfirmationDiscard>,
 }

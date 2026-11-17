@@ -10,9 +10,17 @@
 //! `Context::wait` 由 cordis-host 0.1.1（ABI 1.1）交出工作线程，支持借用 Future、
 //! 嵌套等待及 `Context::spawn_thread` 的系统线程。旧宿主在轮询前返回 code 3。
 //! 跨进程调用继续遵守截止时间；可能超过截止时间的业务采用提交与查询接口。
+//!
+//! # tokio
+//!
+//! ADR-0055：默认开启的 `tokio` feature 为每个插件库提供一个 tokio 运行时上下文。
+//! 插件代码可以直接使用 `tokio::spawn`、`tokio::time` 以及依赖 tokio 的库（如 reqwest）。
+//! 全局 `tokio::spawn` 的任务属于插件库而非实例；需要随实例停用而结束的后台工作
+//! 仍使用 [`Context::spawn`]。不需要 tokio 的插件可以用 `default-features = false` 关闭。
 
 extern crate self as cordis_sdk;
 
+mod ambient;
 pub mod builtin;
 mod bytes;
 mod context;
@@ -50,6 +58,7 @@ pub mod prelude {
 
 #[doc(hidden)]
 pub mod __private {
+    pub use crate::ambient::{install as install_ambient, running as ambient_running};
     pub use cordis_abi as abi;
 
     pub fn decode_bool(value: u8) -> crate::Result<bool> {

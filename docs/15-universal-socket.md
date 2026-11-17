@@ -94,7 +94,7 @@ cordis（核心进程，纯 Rust，无 unsafe，不含插件代码）
 | `remove(name)` | 卸下并删除实例 |
 | `replace(name, plugin)` | 按 `DOC-11` §6 热替换 |
 | `replace_batch(replacements, reload, request_id)` | `cordis.manage@1.1`：持久化受理后返回 BatchTicket；按最终候选集合执行整批替换，reload 为 true 时包含配置变化，Runtime@1.2 的 last_batch 发布实际结果，见 ADR-0031 |
-| `rollback(name)` | 回到该实例的上一版本（`DOC-11` §7） |
+| `rollback(name)` | 以单项批次换回该实例的上一版本，状态继承当前导出值（2026-11-16 起不再保存和恢复各版本的旧快照） |
 | `configure(name, config)` | 更新实例配置，按内核的 `update` 语义处理 |
 | `reload()` | 重读 `cordis.toml`，调和与当前实例的差异 |
 | `shutdown()` | 核心有序退出（写出检查点，按依赖逆序卸下全部实例） |

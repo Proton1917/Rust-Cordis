@@ -175,7 +175,7 @@ struct EventRecord<'a> {
 #[derive(Clone)]
 pub struct Logs(pub Weak<Manager>);
 impl Logs {
-    /// DOC-15 §3.2：插件标准错误原样输出，结构日志进入内置事件接口。
+    /// DOC-15 §3.2：插件标准错误经有界处理后输出，结构日志进入内置事件接口。
     pub fn record(&self, record: LogRecord) {
         if record.origin == LogOrigin::Stderr {
             eprintln!("[{}] {}", record.instance, record.message);

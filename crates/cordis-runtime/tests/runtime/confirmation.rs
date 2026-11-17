@@ -63,12 +63,6 @@ fn batch_confirmation_discard_is_persisted_and_published() {
     let discarded = &outcome["discarded_confirmation"];
     assert_eq!(discarded["instances"], json!(["client", "store"]));
     assert_eq!(discarded["configured_ms"], 3000);
-    let records: Value =
-        serde_json::from_slice(&fs::read(project.join("state/batches.json")).unwrap()).unwrap();
-    assert_eq!(
-        records["admin"]["discarded_confirmation"]["instances"],
-        json!(["client", "store"])
-    );
     version(&project, "0.1.0");
     assert_eq!(offline::query(&project), confirmed);
     assert_eq!(

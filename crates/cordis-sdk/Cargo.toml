@@ -1,6 +1,6 @@
 [package]
 name = "cordis-sdk"
-version = "0.2.1"
+version = "0.2.2"
 edition.workspace = true
 rust-version = "1.85"
 publish.workspace = true
@@ -12,6 +12,12 @@ cordis-sdk-macros.workspace = true
 cordis-types.workspace = true
 serde.workspace = true
 futures-lite = { version = "=2.6.1", default-features = false, features = ["std"] }
+tokio = { version = "1.40", default-features = false, features = ["rt-multi-thread"], optional = true }
+
+[features]
+default = ["tokio"]
+# ADR-0055：为插件代码提供库级 tokio 执行上下文。
+tokio = ["dep:tokio"]
 
 [dev-dependencies]
 cordis-abi = { workspace = true, features = ["test-support"] }

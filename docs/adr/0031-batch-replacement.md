@@ -4,6 +4,7 @@
 |---|---|
 | 状态 | 已决定（2026-11-12） |
 | 影响 | DOC-15 §3.2–§3.3；DOC-11 SW-1–SW-9；cordis.manage@1.1；M12 watch 与核心监管 |
+| 修订 | 2026-11-16：批次结果只保存在内存中，取消 `batches.json` 持久化、`interrupted` 状态与按请求标识重放；核心重启后调用方用同一标识重新提交。单项 `replace`、`rollback` 也走批次，不再保存各版本的旧快照 |
 
 ## 要求与来源
 
@@ -30,7 +31,7 @@ async fn replace_batch(
 
 ## 事务步骤
 
-1. 解析整批目标及可选的新配置，形成最终实例、分组与候选描述集合。准备全部库和进程候选，按最终集合检查配置、接口依赖和验证印记。
+1. 解析整批目标及可选的新配置，形成最终实例、分组与候选描述集合。准备全部库和进程候选，按最终集合检查接口依赖和验证印记。组件身份、配置及挂载关系保持相同的实例复用已有配置检查结果，其余实例执行远端配置检查。
 2. 保存原运行配置、部署引用及所有受影响实例的原状态块。导出缺席以明确的空状态记录，导出失败时对已冻结实例解冻并结束本批。
 3. 原生组按本批逻辑插件合成候选定义，保留同组其余定义的身份；进程插件准备新的进程连接。全部定义提交后统一等待受影响实例稳定并执行确认期。
 4. 任一候选失败时，恢复整批原定义、运行配置和原状态。恢复失败的实例保留实际失败状态，错误同时报告原操作及恢复结果。
@@ -52,9 +53,9 @@ async fn replace_batch(
 
 watch 在发出请求前，将随机请求标识与窗口完整内容保存为待确认记录。标识采用 uuid 1.26.1 的 v4 生成，依赖限于 watch，最低 Rust 版本为 1.85。该标识承担请求身份，内容比较继续读取完整字节。
 
-核心按调用方保存最近一项 `BatchOutcome { id, caller, state, error }`，返回受理凭据 `BatchTicket { id }` 前持久化 pending，响应写出后执行批次；完成后写入 succeeded 或 rejected。预约取消和核心重启把残留 pending 记录为 interrupted。Runtime 接口提升至 1.2，`RuntimeSnapshot.last_batch` 提供这些实际结果。watch 保持单个待确认窗口：pending 等待结果，succeeded 清除记录，rejected 保存拒绝副本，interrupted 允许重新提交；旧任务清理后的新实例从同一记录接续。
+核心在内存中按调用方保存最近一项 `BatchOutcome { id, caller, state, error }`，返回受理凭据 `BatchTicket { id }` 前登记 pending，响应写出后执行批次；完成后记录 succeeded 或 rejected。预约取消记录为 rejected。相同标识的重复投递沿用最近结果。核心重启后记录为空，调用方可以使用原标识重新提交。`RuntimeSnapshot.last_batch` 提供这些实际结果。watch 保持单个待确认窗口：pending 等待结果，succeeded 清除记录，rejected 保存拒绝副本；受理记录缺席时按次数上限重提。
 
-`watch.config.max_interrupted_retries` 限定单窗口的中断重提次数，默认 1。达到上限后保留来源并等待下一次文件变化，新的窗口使用新的请求标识。
+`watch.config.max_submission_retries` 限定每次 watch 实例运行期间同一窗口的受理确认重提次数，默认 1；旧名称 `max_interrupted_retries` 作为反序列化别名。达到上限后保留来源并等待下一次文件变化，新的窗口使用新的请求标识。
 
 ## 验收
 

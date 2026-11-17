@@ -32,7 +32,7 @@ def prepare(options, language, provider_language=None):
     source = provider(options, plugins, provider_language)
     (project / "source.bin").write_bytes(bytes(range(256)) * 4096)
     shared = provider_language == "same"
-    configuration = '[runtime]\ncheckpoint_ms=0\nconfirm_ms=20\napply_timeout_ms=30000\n'
+    configuration = '[runtime]\ncheckpoint_ms=0\nconfirm_ms=20\nlifecycle_timeout_ms=30000\n'
     configuration += f'[instance.store]\nplugin={json.dumps(source)}\ncomponent="kv-store"\ngroup={json.dumps("shared" if shared else "store")}\n'
     if options.scenario == "lifecycle":
         configuration += 'config={path="dynamic.cbor"}\n'

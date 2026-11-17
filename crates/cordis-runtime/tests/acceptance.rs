@@ -28,6 +28,7 @@ fn eight_independent_libraries_and_one_hundred_instances() {
     populate_instances(&project);
     let built = command(Command::new("cargo").current_dir(&project).args([
         "build",
+        "--offline",
         "--target-dir",
         "target",
         "--message-format=json",
@@ -91,6 +92,7 @@ fn rebuild_one(project: &std::path::Path) -> Vec<String> {
     fs::write(source, original.replace("已激活", "已更新")).unwrap();
     let output = command(Command::new("cargo").current_dir(project).args([
         "build",
+        "--offline",
         "--target-dir",
         "target",
         "--message-format=json",
@@ -108,8 +110,10 @@ fn rebuild_one(project: &std::path::Path) -> Vec<String> {
     changed
 }
 
+/// 脚手架生成的项目把 SDK 钉在公开仓库的固定修订上。该修订只有推送后才能下载，
+/// 所以这里只检查钉住的地址与修订，构建改用本地 SDK 源码；联网下载属于发布核验。
 #[test]
-fn readme_first_plugin_builds_from_pinned_git_sdk() {
+fn readme_first_plugin_builds_and_runs() {
     let case = TestGuard::for_package(std::path::Path::new(env!("CARGO_MANIFEST_DIR")), "readme");
     let tools = tools().for_case(&case);
     let project = tools.project(&case, "readme");
@@ -124,13 +128,26 @@ fn readme_first_plugin_builds_from_pinned_git_sdk() {
     let manifest: Table =
         toml::from_str(&fs::read_to_string(project.join("Cargo.toml")).unwrap()).unwrap();
     let sdk = &manifest["workspace"]["dependencies"]["cordis-sdk"];
-    let revision = sdk["rev"].as_str().unwrap();
+    let revision = sdk["rev"].as_str().unwrap().to_owned();
     assert_eq!(
         sdk["git"].as_str(),
         Some("https://github.com/Proton1917/Rust-Cordis.git")
     );
+    assert_eq!(revision.len(), 40, "SDK 应钉在完整的提交号上");
+    let mut manifest = manifest;
+    let local = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../cordis-sdk");
+    manifest["workspace"]["dependencies"]["cordis-sdk"] = toml::Value::Table(Table::from_iter([(
+        "path".to_owned(),
+        toml::Value::String(local.canonicalize().unwrap().to_string_lossy().into_owned()),
+    )]));
+    fs::write(
+        project.join("Cargo.toml"),
+        toml::to_string(&manifest).unwrap(),
+    )
+    .unwrap();
     let built = command(Command::new("cargo").current_dir(&project).args([
         "build",
+        "--offline",
         "--target-dir",
         "target",
     ]));

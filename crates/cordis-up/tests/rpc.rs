@@ -128,6 +128,30 @@ async fn local_encoding_limit_preserves_the_connection() {
         "local encoding failure closed a healthy peer"
     );
     assert_eq!(error.code, 8);
+    assert!(
+        error
+            .message
+            .starts_with("通知 data 的参数编码失败：UP/1 容量超限：max_frame"),
+        "{}",
+        error.message
+    );
+    let invoke = Value::Map(vec![
+        (Value::Text("method".into()), Value::Text("bundle".into())),
+        (Value::Text("args".into()), Value::Bytes(vec![6; 2048])),
+    ]);
+    let error = first
+        .request("invoke", invoke, Duration::from_secs(2))
+        .await
+        .err()
+        .unwrap();
+    assert_eq!(error.code, 8);
+    assert!(
+        error.message.starts_with(
+            "invoke（方法 bundle） 的参数编码失败：UP/1 容量超限：max_frame 超过上限 1024"
+        ),
+        "{}",
+        error.message
+    );
     let error = first
         .request(
             "bytes",
@@ -138,6 +162,13 @@ async fn local_encoding_limit_preserves_the_connection() {
         .err()
         .unwrap();
     assert_eq!(error.code, 8);
+    assert!(
+        error
+            .message
+            .starts_with("bytes 的返回值编码失败：UP/1 容量超限：max_frame"),
+        "对端返回值超限时调用方应得到方向与容量说明：{}",
+        error.message
+    );
     assert!(first.is_alive() && second.is_alive());
     let sum = first
         .request(

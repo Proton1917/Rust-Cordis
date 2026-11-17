@@ -10,34 +10,6 @@ pub(super) enum WebChange {
 
 impl Controller {
     /// DOC-15 §11.4：先解析全部目标资源，再冻结当前页面；准备失败恢复已冻结的前缀。
-    pub(super) async fn prepare_web_changes(
-        &self,
-        replacement: &Replacement,
-    ) -> Result<Vec<WebChange>> {
-        let candidates = replacement
-            .affected
-            .iter()
-            .map(|name| {
-                let mounted = &self.mounted[name];
-                let next = replacement
-                    .candidate
-                    .web
-                    .as_ref()
-                    .map(|_| {
-                        Self::web_spec(
-                            name,
-                            &mounted.settings,
-                            &replacement.candidate,
-                            &mounted._view,
-                        )
-                    })
-                    .transpose()?;
-                Ok((name.clone(), next, false))
-            })
-            .collect::<Result<Vec<_>>>()?;
-        self.prepare_web_targets(candidates).await
-    }
-
     pub(super) async fn prepare_web_targets(
         &self,
         candidates: Vec<(String, Option<cordis_web_deployment::Spec>, bool)>,

@@ -186,7 +186,7 @@ async fn native_description(
     let bytes = cordis_supervisor::run_capture(
         &command,
         directory,
-        Duration::from_millis(options.apply_timeout_ms),
+        Duration::from_millis(options.lifecycle_timeout_ms),
         cordis_up::Limits::DEFAULT.max_frame,
     )
     .await?;

@@ -42,6 +42,16 @@ class Case:
     def status(self):
         return json.loads((self.project / "state/status.json").read_text())
 
+    def batch_outcome(self, caller, request_id=None):
+        """ADR-0031：读取状态快照中该调用方最近一次批次的结果；尚未发布时返回 None。"""
+        path = self.project / "state/status.json"
+        if not path.exists():
+            return None
+        for outcome in self.status().get("last_batch", []):
+            if outcome["caller"] == caller and request_id in (None, outcome["id"]):
+                return outcome
+        return None
+
     async def wait(self, condition, description, timeout=35):
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:

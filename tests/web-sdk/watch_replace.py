@@ -44,11 +44,11 @@ async def rejected_projection(case, snapshot):
     ticket = await case.manage("replace_batch", [[[page["name"], parent["reference"]]], False, request])
     assert ticket["ok"], ticket
     def completed():
-        result = json.loads((case.project / "state/batches.json").read_text()).get("admin")
-        return result if result and result["id"] == request and result["state"] != "pending" else None
+        result = case.batch_outcome("admin", request)
+        return result if result and result["state"] != "pending" else None
     outcome = await case.wait(completed, "显式页面目标批次拒绝")
-    assert outcome["state"] == "rejected" and page["name"] in outcome["error"]["message"], outcome
-    assert outcome["error"]["code"] == 4, outcome
+    assert outcome["state"] == "rejected" and page["name"] in outcome["error"], outcome
+    assert outcome["code"] == 4, outcome
     return outcome
 
 
@@ -62,11 +62,8 @@ async def run(case):
         origins.append(await page.evaluate('() => { globalThis.beforeDocument=document; globalThis.beforeShell=document.querySelector("#application-shell"); return performance.timeOrigin; }'))
     await asyncio.to_thread(build_candidate, case)
     def outcome():
-        path = case.project / "state/batches.json"
-        if not path.exists():
-            return None
-        result = json.loads(path.read_text()).get("watch")
-        if result and result["state"] in {"rejected", "interrupted"}:
+        result = case.batch_outcome("watch")
+        if result and result["state"] == "rejected":
             raise AssertionError(result)
         return result if result and result["state"] == "succeeded" else None
     accepted = await case.wait(outcome, "watch 批次成功")

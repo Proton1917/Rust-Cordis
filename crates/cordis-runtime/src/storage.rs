@@ -1,4 +1,4 @@
-//! DOC-15 §3.2、CP-11：持久化部署、检查点及与上一插件引用对应的原快照。
+//! DOC-15 §3.2、CP-11：持久化部署与各实例的检查点。
 
 use crate::config::{self, Overlay, Result, parameter};
 use cordis_up::{Limits, Value, WireError, payload};
@@ -30,10 +30,23 @@ pub fn read(path: &Path) -> Result<Vec<u8>> {
 
 /// CP-11：同步暂存文件后原子替换目标，失败保留文件系统错误。
 pub fn write(path: &Path, bytes: &[u8]) -> Result<()> {
+    publish(path, bytes, true)
+}
+
+/// CP-11：原子替换目标但不强制刷盘，用于随时可从实时状态重建的快照（如 `status.json`）。
+///
+/// 读者仍只会看到完整的旧文件或新文件；断电后最多丢失最近一次快照，核心启动时会重新生成。
+pub fn write_snapshot(path: &Path, bytes: &[u8]) -> Result<()> {
+    publish(path, bytes, false)
+}
+
+fn publish(path: &Path, bytes: &[u8], durable: bool) -> Result<()> {
     let staged = path.with_extension("next");
     let mut file = File::create(&staged).map_err(io_error)?;
     file.write_all(bytes).map_err(io_error)?;
-    file.sync_all().map_err(io_error)?;
+    if durable {
+        file.sync_all().map_err(io_error)?;
+    }
     fs::rename(staged, path).map_err(io_error)
 }
 
@@ -109,47 +122,32 @@ impl Store {
     }
 
     /// CP-11：逐实例发布真实导出状态，写入失败交由运行时记录。
+    ///
+    /// 已发布文件与本次导出逐字节相同时跳过写入：检查点周期可以很短（例如 1 秒），
+    /// 每次都 `sync_all` 会让空闲实例持续刷盘。
     pub fn checkpoint(&self, states: &HashMap<String, payload::State>) -> Result<()> {
+        let mut failure = None;
         for (name, state) in states {
-            config::instance_name(name)?;
-            let value = Value::serialized(state).map_err(parameter)?;
-            let bytes = cordis_up::encode_value(&value, &Limits::DEFAULT).map_err(parameter)?;
-            write(&self.directory.join(format!("{name}.state")), &bytes)?;
-        }
-        Ok(())
-    }
-
-    /// DOC-11 §7：按实例和不可变安装引用保存原快照，empty 文件记录导出器缺席。
-    pub fn save_replacement(
-        &self,
-        name: &str,
-        reference: &str,
-        state: Option<&payload::State>,
-    ) -> Result<()> {
-        let directory = self.replacement_directory(name, reference)?;
-        fs::create_dir_all(&directory).map_err(io_error)?;
-        let (filename, superseded, bytes) = match state {
-            Some(state) => {
+            let result = (|| {
+                config::instance_name(name)?;
                 let value = Value::serialized(state).map_err(parameter)?;
                 let bytes = cordis_up::encode_value(&value, &Limits::DEFAULT).map_err(parameter)?;
-                ("state", "empty", bytes)
+                let path = self.directory.join(format!("{name}.state"));
+                if fs::read(&path).is_ok_and(|current| current == bytes) {
+                    return Ok(());
+                }
+                write(&path, &bytes)
+            })();
+            if let Err(problem) = result {
+                failure.get_or_insert_with(|| {
+                    WireError::new(
+                        problem.code,
+                        format!("实例 {name} 检查点保存失败：{}", problem.message),
+                    )
+                });
             }
-            None => ("empty", "state", Vec::new()),
-        };
-        write(&directory.join(filename), &bytes)?;
-        remove_file(&directory.join(superseded))
-    }
-
-    /// DOC-11 §7：显式空状态与缺失快照分别处理；状态字节沿用 CP-9 已验证的读取入口。
-    pub fn replacement(&self, name: &str, reference: &str) -> Result<Option<payload::State>> {
-        let directory = self.replacement_directory(name, reference)?;
-        match fs::metadata(directory.join("empty")) {
-            Ok(_) => Ok(None),
-            Err(problem) if problem.kind() == std::io::ErrorKind::NotFound => {
-                parse_state(&read(&directory.join("state"))?).map(Some)
-            }
-            Err(problem) => Err(io_error(problem)),
         }
+        failure.map_or(Ok(()), Err)
     }
 
     /// DOC-11 §7、CP-11：发布替换继承状态，并移除旧消费记录以保持重启后的相同语义。
@@ -171,43 +169,6 @@ impl Store {
             }
         }
         Ok(())
-    }
-
-    /// DOC-15 §3.2：部署成功发布后，仅保留其 previous 引用的原快照。
-    pub fn retain_replacements(&self, overlay: &Overlay) -> Result<()> {
-        let root = self.directory.join("replacements");
-        let entries = match fs::read_dir(&root) {
-            Ok(entries) => entries,
-            Err(problem) if problem.kind() == std::io::ErrorKind::NotFound => return Ok(()),
-            Err(problem) => return Err(io_error(problem)),
-        };
-        for instance in entries {
-            let instance = instance.map_err(io_error)?;
-            let name = instance.file_name();
-            let previous = name.to_str().and_then(|name| overlay.previous.get(name));
-            if let Some(previous) = previous {
-                for version in fs::read_dir(instance.path()).map_err(io_error)? {
-                    let version = version.map_err(io_error)?;
-                    if version.file_name() != previous.plugin.as_str() {
-                        fs::remove_dir_all(version.path()).map_err(io_error)?;
-                    }
-                }
-            } else {
-                fs::remove_dir_all(instance.path()).map_err(io_error)?;
-            }
-        }
-        Ok(())
-    }
-
-    /// DOC-11 §7：实例和安装引用作为独立路径组成部分，在存储边界核验。
-    fn replacement_directory(&self, name: &str, reference: &str) -> Result<PathBuf> {
-        config::instance_name(name)?;
-        config::instance_name(reference)?;
-        Ok(self
-            .directory
-            .join("replacements")
-            .join(name)
-            .join(reference))
     }
 
     /// DOC-11 §5：删除已移除实例或失效组件身份的活动及消费检查点。
@@ -242,5 +203,41 @@ fn remove_file(path: &Path) -> Result<()> {
         Ok(()) => Ok(()),
         Err(problem) if problem.kind() == std::io::ErrorKind::NotFound => Ok(()),
         Err(problem) => Err(io_error(problem)),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use cordis_testkit::cleanup::TestGuard;
+
+    #[test]
+    fn checkpoint_preserves_other_instances_after_file_error() {
+        let case =
+            TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "checkpoint-files");
+        let store = Store::create(case.directory("checkpoint-files")).unwrap();
+        let states: HashMap<_, _> = ["first", "second"]
+            .into_iter()
+            .map(|name| {
+                (
+                    name.to_owned(),
+                    payload::State {
+                        schema: "counter".into(),
+                        version: 1,
+                        data: 37u64.into(),
+                    },
+                )
+            })
+            .collect();
+        let mut names = states.keys();
+        let blocked = names.next().unwrap();
+        let healthy = names.next().unwrap();
+        fs::create_dir(store.directory.join(format!("{blocked}.next"))).unwrap();
+        assert!(store.checkpoint(&states).is_err());
+        assert_eq!(
+            store.load(healthy).unwrap().unwrap().data,
+            Value::from(37u64)
+        );
+        case.success();
     }
 }

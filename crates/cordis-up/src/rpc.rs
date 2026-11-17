@@ -306,7 +306,8 @@ impl Connection {
     }
 
     async fn send(&self, message: Message, outgoing: Outgoing) -> Result<()> {
-        let bytes = crate::encode(&message, &self.0.options.limits).map_err(encoding_error)?;
+        let bytes = crate::encode(&message, &self.0.options.limits)
+            .map_err(|problem| encoding_error(problem, &describe(&message)))?;
         self.send_bytes(bytes, outgoing).await
     }
 
@@ -322,7 +323,8 @@ impl Connection {
         Ok(())
     }
 
-    async fn respond(&self, id: u64, result: Result<Outgoing>) -> Result<()> {
+    /// CP-8：返回值超限时，调用方收到的错误说明调用目标与超出的容量项。
+    async fn respond(&self, id: u64, label: &str, result: Result<Outgoing>) -> Result<()> {
         let (result, outgoing) = match result {
             Ok(mut outgoing) => (Ok(outgoing.take_value()), outgoing),
             Err(problem) => (Err(problem), Outgoing::new(Value::Null)),
@@ -332,7 +334,7 @@ impl Connection {
             Ok(bytes) => self.send_bytes(bytes, outgoing).await,
             Err(problem) => {
                 drop(outgoing);
-                let failure = WireError::new(encoding_error(problem).code, "");
+                let failure = encoding_error(problem, &format!("{label} 的返回值"));
                 self.send(
                     Message::Response {
                         id,
@@ -365,15 +367,17 @@ impl Connection {
             .next
             .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |id| id.checked_add(1))
             .map_err(|_| error(8, "请求编号空间已耗尽"))?;
+        let params = outgoing.take_value();
+        let label = call_label(method, &params);
         let bytes = crate::encode(
             &Message::Request {
                 id,
                 method: method.into(),
-                params: outgoing.take_value(),
+                params,
             },
             &self.0.options.limits,
         )
-        .map_err(encoding_error)?;
+        .map_err(|problem| encoding_error(problem, &format!("{label} 的参数")))?;
         let (send, receive) = oneshot::channel();
         {
             let mut pending = self.0.pending.lock();
@@ -442,7 +446,7 @@ impl Connection {
             },
             &self.0.options.limits,
         )
-        .map_err(encoding_error)?;
+        .map_err(|problem| encoding_error(problem, &format!("通知 {method} 的参数")))?;
         let result = self
             .0
             .send
@@ -648,7 +652,7 @@ async fn receive_request(
         Ok(permit) => permit,
         Err(_) => {
             return peer
-                .respond(id, Err(error(8, "该进程的在途请求容量已满")))
+                .respond(id, &method, Err(error(8, "该进程的在途请求容量已满")))
                 .await
                 .is_ok();
         }
@@ -706,6 +710,7 @@ async fn serve_request(
     _permit: tokio::sync::OwnedSemaphorePermit,
     cancelled: Option<oneshot::Receiver<()>>,
 ) {
+    let label = call_label(&method, params.value());
     let call = handler.request(peer.clone(), method, params);
     let result = match cancelled {
         Some(cancelled) => tokio::select! {
@@ -716,7 +721,7 @@ async fn serve_request(
     };
     let removed = peer.0.inbound.lock().remove(&id);
     drop(removed);
-    let _closed = peer.respond(id, result).await;
+    let _closed = peer.respond(id, &label, result).await;
 }
 
 /// DOC-16 §6–§8：即时资源簿记先于后续帧，用户通知保持FIFO与等待期限。
@@ -813,12 +818,42 @@ fn error(code: u32, message: impl Into<String>) -> WireError {
     }
 }
 
-fn encoding_error(problem: crate::CodecError) -> WireError {
+/// CP-8、DOC-16 §3：编码失败的错误说明方向、调用目标与容量数字，不包含载荷内容。
+fn encoding_error(problem: crate::CodecError, context: &str) -> WireError {
     let code = match &problem {
         crate::CodecError::Limit(_) | crate::CodecError::Cbor(_) => 8,
         crate::CodecError::Schema(_) | crate::CodecError::TrailingBytes => 2,
     };
-    WireError::new(code, problem.to_string())
+    WireError::new(code, format!("{context}编码失败：{problem}"))
+}
+
+/// 调用标签：UP/1 方法名；`invoke` 等携带接口方法名的请求附上该名称。
+fn call_label(method: &str, params: &Value) -> String {
+    let target = match params {
+        Value::Map(entries) => entries.iter().find_map(|(key, value)| match (key, value) {
+            (Value::Text(key), Value::Text(name)) if key == "method" => Some(name.as_str()),
+            _ => None,
+        }),
+        _ => None,
+    };
+    match target {
+        Some(name) => format!("{method}（方法 {name}）"),
+        None => method.to_owned(),
+    }
+}
+
+/// 按消息种类描述编码失败的位置。
+fn describe(message: &Message) -> String {
+    match message {
+        Message::Request { method, params, .. } => format!("{} 的参数", call_label(method, params)),
+        Message::Notification { method, .. } => format!("通知 {method} 的参数"),
+        Message::Response {
+            id, result: Ok(_), ..
+        } => format!("响应 #{id} 的返回值"),
+        Message::Response {
+            id, result: Err(_), ..
+        } => format!("响应 #{id} 的错误详情"),
+    }
 }
 
 fn failure_message(reason: String) -> String {

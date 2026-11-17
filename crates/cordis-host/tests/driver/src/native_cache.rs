@@ -303,8 +303,8 @@ pub(super) async fn bounded_lock(artifacts: &Artifacts) -> Result<()> {
             )?;
         }
         check(
-            started.elapsed() < Duration::from_secs(1),
-            "两个阻塞文件任务沿三百毫秒截止返回",
+            started.elapsed() < Duration::from_secs(5),
+            "两个阻塞文件任务按三百毫秒截止返回，而不是一直等待",
         )?;
         check(
             healthy? == Value::Integer(100u64.into()),

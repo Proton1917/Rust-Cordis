@@ -174,9 +174,12 @@ impl PluginDescriptor {
 // SAFETY: DOC-12 §3、§10，指针来自PluginDescriptor::into_raw，唯一所有权转入。
 unsafe extern "C" fn release_descriptor(raw: *const PluginV1, err: *mut AbiError) -> AbiStatus {
     // SAFETY: DOC-12 §10，repr(C)保证raw位于PluginDescriptor首部。
-    unsafe {
+    let status = unsafe {
         release_boundary(err, || {
             drop(Box::from_raw(raw.cast_mut().cast::<PluginDescriptor>()))
         })
-    }
+    };
+    // ADR-0055：描述符是插件库的最后一个握手对象，释放后关闭库级执行环境。
+    crate::ambient::release();
+    status
 }

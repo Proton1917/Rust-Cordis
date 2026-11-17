@@ -1,4 +1,3 @@
-import json
 from pathlib import Path
 import shutil
 
@@ -21,22 +20,18 @@ async def install(case, source):
 
 
 async def replace_batch(case, replacements, request_id, expected):
-    """ADR-0031：受理票据匹配请求，最终结果读取核心持久化的权威记录。"""
+    """ADR-0031：受理票据匹配请求，最终结果从状态快照读取。"""
     ticket = await case.manage("replace_batch", [replacements, False, request_id])
     assert ticket["ok"] and ticket["value"]["id"] == request_id, ticket
 
     def completed():
-        path = case.project / "state/batches.json"
-        records = json.loads(path.read_text())
-        record = records["admin"]
-        return record if record["id"] == request_id and record["state"] != "pending" else None
+        record = case.batch_outcome("admin", request_id)
+        return record if record and record["state"] != "pending" else None
 
-    outcome = await case.wait(completed, f"{request_id} 权威结果完成")
+    outcome = await case.wait(completed, f"{request_id} 结果完成")
     assert outcome["state"] == expected, outcome
     if expected == "rejected":
-        assert "候选页面激活失败" in json.dumps(outcome["error"], ensure_ascii=False), outcome
-        detail = outcome["error"]["detail"]
-        assert isinstance(detail, dict) and detail.get("committed") is False, outcome
+        assert "候选页面激活失败" in outcome["error"], outcome
     result = {"ticket": ticket, "outcome": outcome}
     case.save(request_id + ".json", result)
     return result

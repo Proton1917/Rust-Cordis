@@ -86,6 +86,7 @@ native_scenarios! {
     endless_computation_isolates_group => "spin",
     concurrent_raw_wait_exhausts_native_workers => "blocking-wait",
     sdk_wait_preserves_native_workers => "safe-wait",
+    plugin_code_uses_library_tokio_runtime => "tokio-context",
 }
 
 #[cfg(target_os = "macos")]

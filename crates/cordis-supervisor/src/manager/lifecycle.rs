@@ -644,35 +644,6 @@ impl Manager {
         self.0.catalog.lock().checkpoints.clone()
     }
 
-    /// DOC-11 §7：读取最近成功替换在 SW-5 导出的原快照；缺席导出器的实例记录 None。
-    pub fn last_replacement_states(&self, group: &str) -> HashMap<String, Option<payload::State>> {
-        self.0
-            .catalog
-            .lock()
-            .replacement_states
-            .get(group)
-            .cloned()
-            .unwrap_or_default()
-    }
-
-    /// DOC-11 SW-9：成功确认时保存本次导出结果，供运行时与上一版本引用共同持久化。
-    pub(super) fn retain_replacement_states(
-        &self,
-        group: &str,
-        names: &[String],
-        inherited: &HashMap<String, Option<payload::State>>,
-    ) {
-        let states = names
-            .iter()
-            .map(|name| (name.clone(), inherited.get(name).cloned().flatten()))
-            .collect();
-        self.0
-            .catalog
-            .lock()
-            .replacement_states
-            .insert(group.into(), states);
-    }
-
     /// CP-7：先释放该组实例与定义，再退役进程；独立清理失败分别保留。
     pub async fn detach_group(&self, name: &str) -> Result<()> {
         let name = name.to_owned();
@@ -730,7 +701,7 @@ impl Manager {
         .await
     }
 
-    /// DOC-11 §9、CP-11：停止结构变更后导出最终状态；失败解冻，成功保持至shutdown。
+    /// DOC-11 §9、CP-11：停止结构变更后保存各实例成功导出的状态，冻结持有至 shutdown。
     pub async fn export_shutdown(&self) -> Result<HashMap<String, payload::State>> {
         self.transaction(|manager| async move {
             if let Some(frozen) = manager.0.shutdown_export.lock().as_ref() {
@@ -747,13 +718,6 @@ impl Manager {
                 .cloned()
                 .collect::<Vec<_>>();
             let frozen = manager.export(&names, false).await;
-            if let Some(problem) = &frozen.failure {
-                let problem = problem.clone();
-                let thawed = manager.thaw(&frozen).await;
-                manager.0.exported.store(false, Ordering::Release);
-                thawed?;
-                return Err(problem);
-            }
             let states = frozen.states.clone();
             manager.0.catalog.lock().checkpoints.extend(states.clone());
             *manager.0.shutdown_export.lock() = Some(frozen);
@@ -788,11 +752,12 @@ impl Manager {
             .lock()
             .checkpoints
             .extend(frozen.states.clone());
-        let thawed = self.thaw(&frozen).await;
-        if let Some(problem) = &frozen.failure {
-            return Err(problem.clone());
+        if let Err(problem) = self.thaw(&frozen).await {
+            self.0
+                .context
+                .logger()
+                .error(format!("检查点解冻失败：{problem}"));
         }
-        thawed?;
         Ok(frozen.states)
     }
 
@@ -832,10 +797,11 @@ impl Manager {
                     frozen.states.insert(instance.data.name.clone(), state);
                 }
                 Err(problem) => {
-                    self.0
-                        .context
-                        .logger()
-                        .error(saved_error(&problem).to_string());
+                    self.0.context.logger().error(format!(
+                        "实例 {} 导出失败：{}",
+                        instance.data.name,
+                        saved_error(&problem)
+                    ));
                     frozen.failure.get_or_insert(problem);
                     if stop_on_error {
                         break;
@@ -900,26 +866,16 @@ impl Manager {
     }
 
     /// DOC-11 SW-1–SW-9：从当前导出状态替换分组，失败恢复原版本及原快照。
-    pub async fn replace_group(&self, specification: GroupSpec) -> Result<ReplaceReport> {
-        self.restore_group(specification, HashMap::new()).await
-    }
-
-    /// DOC-11 §7：以保存的原快照恢复上一分组版本。
     ///
-    /// states 按实例名提供继承覆盖；本次操作失败时使用当前版本在 SW-5 导出的状态恢复。
-    pub async fn restore_group(
-        &self,
-        specification: GroupSpec,
-        states: HashMap<String, Option<payload::State>>,
-    ) -> Result<ReplaceReport> {
+    /// 运行时的部署变更统一走批次；此入口保留给契约往返等整组重启场景。
+    pub async fn replace_group(&self, specification: GroupSpec) -> Result<ReplaceReport> {
         let group = specification.name.clone();
         let committed = Arc::new(AtomicBool::new(false));
         let marker = committed.clone();
         self.transaction(move |manager| async move {
             let started = std::time::Instant::now();
-            manager.validate_restore_states(&specification.name, None, &states)?;
             manager
-                .replace_with_states(specification, states, Some(marker), started)
+                .replace_process_group(specification, Some(marker), started)
                 .await
         })
         .await
@@ -929,11 +885,9 @@ impl Manager {
     }
 
     /// SW-3–SW-9、ADR-0013：候选预检后冻结旧状态，重建并确认；失败恢复原连接与原快照。
-    /// states为显式手工回滚状态，自动失败回滚始终使用本次替换前导出值。
-    pub(super) async fn replace_with_states(
+    pub(super) async fn replace_process_group(
         &self,
         specification: GroupSpec,
-        states: HashMap<String, Option<payload::State>>,
         committed: Option<Arc<AtomicBool>>,
         started: std::time::Instant,
     ) -> Result<ReplaceReport> {
@@ -959,9 +913,7 @@ impl Manager {
             }
         };
         group.health.lock().state = "replacing".into();
-        let mut candidate_states = transition.inherited.clone();
-        candidate_states.extend(states);
-        self.inherit(&candidate_states);
+        self.inherit(&transition.inherited);
         self.activate(&group, candidate.clone(), None)?;
         let mut report = ReplaceReport {
             group: group.name.clone(),
@@ -1032,7 +984,6 @@ impl Manager {
         };
         group.restarts.store(0, Ordering::Release);
         report.committed = true;
-        self.retain_replacement_states(&group.name, &transition.names, &transition.inherited);
         self.record_group_report(report.clone());
         drop(transition);
         let completion = async {

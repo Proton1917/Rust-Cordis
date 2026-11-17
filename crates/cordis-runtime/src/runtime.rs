@@ -18,7 +18,7 @@ use parking_lot::Mutex;
 use std::{collections::BTreeMap, path::PathBuf, sync::Arc, time::Duration};
 use tokio::{
     signal::unix::{Signal, SignalKind, signal},
-    sync::{mpsc, watch},
+    sync::{Notify, mpsc, watch},
     task::{JoinError, JoinHandle},
     time::{Instant, MissedTickBehavior},
 };
@@ -76,12 +76,13 @@ async fn create_controller(
     ))?;
     let overlay = store.overlay()?;
     let settings = &configuration.runtime;
+    let lifecycle = Duration::from_millis(settings.lifecycle_timeout_ms);
     let options = ManagerOptions {
-        apply_timeout: Duration::from_millis(settings.apply_timeout_ms),
-        cleanup_timeout: Duration::from_millis(settings.cleanup_timeout_ms),
-        export_timeout: Duration::from_millis(settings.export_timeout_ms),
+        apply_timeout: lifecycle,
+        cleanup_timeout: lifecycle,
+        export_timeout: lifecycle,
         invoke_timeout: Duration::from_millis(settings.invoke_timeout_ms),
-        swap_timeout: Duration::from_millis(settings.swap_timeout_ms),
+        swap_timeout: lifecycle,
         confirm: Duration::from_millis(settings.confirm_ms),
         retired_image_limit: settings.retired_image_limit as u64,
         ..ManagerOptions::default()
@@ -94,7 +95,8 @@ async fn create_controller(
     let view = View::new(&manager, diagnostics.clone());
     let logs = register_services(root, &manager, &store, &view)?;
     let permissions = Arc::new(Mutex::new(BTreeMap::new()));
-    let (handle, requests) = Handle::channel(Duration::from_millis(settings.swap_timeout_ms));
+    // 管理请求的等待属于调用时限，与生命周期操作的时限分开。
+    let (handle, requests) = Handle::channel(Duration::from_millis(settings.invoke_timeout_ms));
     let controller = Controller::new(
         manager,
         configuration,
@@ -171,7 +173,11 @@ async fn serve(
     interrupt: &mut Signal,
     session: Option<&Session>,
 ) -> Result<()> {
-    let mut writer = StatusWriter::start(view, controller.store.directory.join("status.json"));
+    let mut writer = StatusWriter::start(
+        view,
+        controller.store.directory.join("status.json"),
+        controller.logs.clone(),
+    );
     if let Some(session) = session {
         let result = tokio::select! {
             result = session.run(&mut controller) => result,
@@ -222,7 +228,9 @@ async fn dispatch_loop(
             }
             request = requests.recv() => {
                 let request = request.ok_or_else(|| WireError::new(7, "管理队列已结束"))?;
-                if let Some(request) = dispatch(controller, request).await { return Ok(Some(request)); }
+                let finished = dispatch(controller, request).await;
+                writer.refresh.notify_one();
+                if let Some(request) = finished { return Ok(Some(request)); }
             }
         }
     }
@@ -284,33 +292,56 @@ async fn finish(
     stopped.and(written)
 }
 
+/// 状态文件的兜底刷新周期。每次刷新都经 UP/1 查询所有原生宿主的库状态，
+/// 周期过短会让空闲部署持续产生跨进程调用；管理请求完成后另有即时刷新。
+const STATUS_PERIOD: Duration = Duration::from_secs(1);
+
 struct StatusWriter {
     stop: watch::Sender<bool>,
+    refresh: Arc<Notify>,
     task: JoinHandle<Result<()>>,
     result: Option<Result<()>>,
 }
 
 impl StatusWriter {
     /// DOC-15 CP-11：停止标记在每次写入前读取，标记到达后写出最终快照再结束。
-    fn start(view: View, path: PathBuf) -> Self {
+    /// 周期刷新覆盖异步变化（崩溃恢复、宿主状态），`refresh` 让管理请求的结果立即可见。
+    fn start(view: View, path: PathBuf, logs: Logs) -> Self {
         let (stop, mut stopped) = watch::channel(false);
+        let refresh = Arc::new(Notify::new());
+        let requested = refresh.clone();
         let task = tokio::spawn(async move {
             let mut previous = Vec::new();
-            let mut interval = tokio::time::interval(Duration::from_millis(100));
-            interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
+            let mut interval = tokio::time::interval(STATUS_PERIOD);
+            interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
             loop {
                 let finishing = *stopped.borrow_and_update();
-                status::write(&path, &view, &mut previous).await?;
+                if let Some(manager) = view.manager.upgrade() {
+                    let sources = view.diagnostics.lock().source_bindings.clone();
+                    if let Some(sources) = sources
+                        && let Err(problem) = sources.lock().confirm(&manager.snapshot())
+                    {
+                        logs.emit(0, "runtime", &format!("代码来源保存失败：{problem}"));
+                    }
+                }
+                if let Err(problem) = status::write(&path, &view, &mut previous).await {
+                    logs.emit(0, "runtime", &format!("状态快照发布失败：{problem}"));
+                }
                 if finishing {
                     return Ok(());
                 }
-                tokio::select! { _ = interval.tick() => {}, result = stopped.changed() => {
-                    if result.is_err() { return Ok(()); }
-                } }
+                tokio::select! {
+                    _ = interval.tick() => {},
+                    _ = requested.notified() => interval.reset(),
+                    result = stopped.changed() => {
+                        if result.is_err() { return Ok(()); }
+                    }
+                }
             }
         });
         Self {
             stop,
+            refresh,
             task,
             result: None,
         }
@@ -338,4 +369,46 @@ impl StatusWriter {
 
 fn kernel(problem: cordis::Error) -> WireError {
     WireError::new(1, problem.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use cordis_testkit::cleanup::TestGuard;
+    use std::{fs, path::Path};
+
+    #[tokio::test]
+    async fn status_writer_recovers_from_file_error() {
+        let case = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "status-writer");
+        let directory = case.directory("status-writer");
+        fs::create_dir_all(directory.join("status.next")).unwrap();
+        let root = Context::new(Arc::new(Executor::new()));
+        let manager = Arc::new(
+            Manager::new(root.clone(), ManagerOptions::default())
+                .await
+                .unwrap(),
+        );
+        let diagnostics = Arc::new(Mutex::new(Diagnostics::default()));
+        let view = View::new(&manager, diagnostics);
+        let writer = StatusWriter::start(
+            view,
+            directory.join("status.json"),
+            Logs(Arc::downgrade(&manager)),
+        );
+        tokio::task::yield_now().await;
+        assert!(!writer.task.is_finished(), "状态写入失败后继续运行发布任务");
+        fs::remove_dir(directory.join("status.next")).unwrap();
+        writer.refresh.notify_one();
+        tokio::time::timeout(Duration::from_secs(2), async {
+            while !directory.join("status.json").is_file() {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .unwrap();
+        writer.finish().await.unwrap();
+        manager.shutdown().await.unwrap();
+        root.fiber().dispose().await.unwrap();
+        case.success();
+    }
 }

@@ -37,7 +37,7 @@ dependencies = [
 
 [[package]]
 name = "cordis-abi"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "ciborium",
  "scoped-tls",
@@ -46,13 +46,14 @@ dependencies = [
 
 [[package]]
 name = "cordis-sdk"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "cordis-abi",
  "cordis-sdk-macros",
  "cordis-types",
  "futures-lite",
  "serde",
+ "tokio",
 ]
 
 [[package]]
@@ -264,6 +265,15 @@ dependencies = [
  "proc-macro2",
  "quote",
  "unicode-ident",
+]
+
+[[package]]
+name = "tokio"
+version = "1.54.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b52fd3255258d26fac7264ab5a76b53c13367136dc011d3d6ad4f8ed070396a3"
+dependencies = [
+ "pin-project-lite",
 ]
 
 [[package]]

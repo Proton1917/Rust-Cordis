@@ -204,7 +204,7 @@ fn manage(project: &Path, id: u64, method: &str, args: Value) -> Value {
     }
     let request_id = args[2].as_str().unwrap();
     assert_eq!(reply["value"]["id"], request_id, "{reply}");
-    let outcome = until("batch reaches a durable final result", || {
+    let outcome = until("batch reaches a final result", || {
         let snapshot = status(project)?;
         snapshot["last_batch"]
             .as_array()?
@@ -216,12 +216,8 @@ fn manage(project: &Path, id: u64, method: &str, args: Value) -> Value {
             })
             .cloned()
     });
-    let records: Value =
-        serde_json::from_slice(&fs::read(project.join("state/batches.json")).unwrap()).unwrap();
-    let record = &records["admin"];
-    assert_eq!(record["id"], request_id);
-    json!({ "ok": outcome["state"] == "succeeded", "code": record["error"]["code"],
-        "detail": record["error"]["detail"], "value": outcome["error"] })
+    json!({ "ok": outcome["state"] == "succeeded", "code": outcome["code"],
+        "value": outcome["error"] })
 }
 
 fn version(project: &Path, expected: &str) {
@@ -262,7 +258,7 @@ fn management_and_checkpoints_survive_core_restart() {
     plugin(&project.join("plugins/client"), "client", "v1");
     plugin(&project.join("sources/store-v2"), "store", "v2");
     let mut configuration = format!(
-        "requires_core = '^0.1'\n[runtime]\ncheckpoint_ms = 100\nconfirm_ms = 20\napply_timeout_ms = 3000\ncleanup_timeout_ms = 3000\nswap_timeout_ms = 5000\n\n[instance.store]\nplugin = 'store'\nconfig = {{ initial = 41, writes = 5 }}\n\n[instance.admin]\nplugin = 'admin'\ngrants = {{ 'cordis.manage@1' = ['install', 'replace', 'rollback', 'configure', 'reload', 'shutdown'] }}\nconfig = {{ commands = {}, results = {} }}\n\n[instance.denied]\nplugin = 'admin'\nconfig = {{ commands = {}, results = {} }}\n",
+        "requires_core = '^0.1'\n[runtime]\ncheckpoint_ms = 100\nconfirm_ms = 20\nlifecycle_timeout_ms = 5000\n\n[instance.store]\nplugin = 'store'\nconfig = {{ initial = 41, writes = 5 }}\n\n[instance.admin]\nplugin = 'admin'\ngrants = {{ 'cordis.manage@1' = ['install', 'replace', 'rollback', 'configure', 'reload', 'shutdown'] }}\nconfig = {{ commands = {}, results = {} }}\n\n[instance.denied]\nplugin = 'admin'\nconfig = {{ commands = {}, results = {} }}\n",
         quoted(&project.join("commands")),
         quoted(&project.join("results")),
         quoted(&project.join("denied-commands")),
@@ -366,7 +362,8 @@ fn management_and_checkpoints_survive_core_restart() {
         true
     );
     version(&project, "0.1.0");
-    checkpoint(&project, 46);
+    // 回滚换回上一版本的代码，状态继承当前值。
+    checkpoint(&project, 91);
     assert_eq!(
         manage(&project, 9, "replace", json!(["store", reference]))["ok"],
         true
@@ -424,7 +421,7 @@ fn management_and_checkpoints_survive_core_restart() {
         true
     );
     version(&project, "0.1.0");
-    checkpoint(&project, 46);
+    checkpoint(&project, 137);
     let shutdown = manage(&project, 10, "shutdown", json!([]));
     assert_eq!(shutdown["ok"], true, "{shutdown}");
     core.finish();
@@ -432,14 +429,14 @@ fn management_and_checkpoints_survive_core_restart() {
         storage::parse_state(&fs::read(project.join("state/store.state")).unwrap()).unwrap();
     assert_eq!(
         u64::try_from(persisted.data.as_integer().unwrap()).unwrap(),
-        46
+        137
     );
     case.success();
 }
 
-/// DOC-11 §7：空原快照在回滚时恢复组件初值，并清除新版本检查点。
+/// DOC-11 §7：回滚换回上一版本并跨核心重启保持；无状态的旧版本也能正常接手。
 #[test]
-fn rollback_restores_absent_state_after_new_version_exports() {
+fn rollback_returns_to_previous_version_across_restart() {
     let case = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "empty-rollback");
     let _fixture = fixture().for_case(&case);
     let project = managed_project(&case, "empty-rollback", "stateless");
@@ -459,14 +456,16 @@ fn rollback_restores_absent_state_after_new_version_exports() {
     checkpoint(&project, 99);
     let rolled_back = manage(&project, 4, "rollback", json!(["store"]));
     assert_eq!(rolled_back["ok"], true, "{rolled_back}");
-    let restored = send(&project, 5, "fixture.counter@1.0", "get", json!([]));
-    assert_eq!(restored["value"], 17, "{restored}");
+    version(&project, "0.1.0");
+    let answered = send(&project, 5, "fixture.counter@1.0", "get", json!([]));
+    assert_eq!(answered["ok"], true, "{answered}");
     assert_eq!(manage(&project, 6, "shutdown", json!([]))["ok"], true);
     core.finish();
     let mut core = Process::start(&project, "empty-restarted");
     active(&project, "admin");
-    let restored = send(&project, 7, "fixture.counter@1.0", "get", json!([]));
-    assert_eq!(restored["value"], 17, "{restored}");
+    version(&project, "0.1.0");
+    let answered = send(&project, 7, "fixture.counter@1.0", "get", json!([]));
+    assert_eq!(answered["ok"], true, "{answered}");
     assert_eq!(manage(&project, 8, "shutdown", json!([]))["ok"], true);
     core.finish();
     case.success();
@@ -474,7 +473,9 @@ fn rollback_restores_absent_state_after_new_version_exports() {
 
 /// DOC-11 SW-9：旧进程拒绝退役时，已提交的新版本跨核心重启继续生效。
 #[test]
-fn committed_replacement_error_persists_active_version() {
+fn replace_restores_original_after_committed_retirement_failure() {
+    // 单项 replace 是只有一项的批次，按 ADR-0031 第 5 条：
+    // 监管器已确认新版本（内层 committed=true），旧进程退役失败后管理层恢复原版本与原快照（外层 committed=false）。
     let case = TestGuard::for_package(
         Path::new(env!("CARGO_MANIFEST_DIR")),
         "committed-retirement",
@@ -483,37 +484,34 @@ fn committed_replacement_error_persists_active_version() {
     let project = managed_project(&case, "committed-retirement", "shutdown-fail");
     let mut core = Process::start(&project, "retirement-first");
     active(&project, "admin");
+    let written = send(&project, 1, "fixture.counter@1.0", "set", json!([63]));
+    assert_eq!(written["ok"], true, "{written}");
     let installed = manage(
         &project,
-        1,
+        2,
         "install",
         json!([project.join("sources/store-v2")]),
     );
     assert_eq!(installed["ok"], true, "{installed}");
-    let replaced = manage(&project, 2, "replace", json!(["store", installed["value"]]));
+    let replaced = manage(&project, 3, "replace", json!(["store", installed["value"]]));
     assert_eq!(replaced["code"], 1003, "{replaced}");
-    assert_eq!(replaced["detail"]["committed"], true, "{replaced}");
-    version(&project, "0.2.0");
+    assert_eq!(replaced["detail"]["committed"], false, "{replaced}");
+    assert_eq!(replaced["detail"]["cause"]["committed"], true, "{replaced}");
+    version(&project, "0.1.0");
     let overlay = storage::Store::create(project.join("state"))
         .unwrap()
         .overlay()
         .unwrap();
-    assert_eq!(
-        overlay.instance["store"].plugin,
-        installed["value"].as_str().unwrap()
+    assert_ne!(
+        overlay
+            .instance
+            .get("store")
+            .map(|entry| entry.plugin.as_str()),
+        installed["value"].as_str()
     );
-    let written = send(&project, 3, "fixture.counter@1.0", "set", json!([63]));
-    assert_eq!(written["ok"], true, "{written}");
-    checkpoint(&project, 63);
-    assert_eq!(manage(&project, 4, "shutdown", json!([]))["ok"], true);
-    core.finish();
-    let mut core = Process::start(&project, "retirement-restarted");
-    active(&project, "admin");
-    version(&project, "0.2.0");
-    let restored = send(&project, 5, "fixture.counter@1.0", "get", json!([]));
+    let restored = send(&project, 4, "fixture.counter@1.0", "get", json!([]));
     assert_eq!(restored["value"], 63, "{restored}");
-    assert_eq!(manage(&project, 6, "shutdown", json!([]))["ok"], true);
-    core.finish();
+    core.kill();
     case.success();
 }
 
@@ -564,7 +562,6 @@ fn batch_restores_configuration_and_accepts_joint_interface_change() {
         ]),
     );
     assert_eq!(rejected["code"], 1001, "{rejected}");
-    assert_eq!(rejected["detail"]["committed"], false, "{rejected}");
     version(&project, "0.1.0");
     assert_eq!(
         send(&project, 5, "fixture.counter@1.0", "get", json!([]))["value"],
@@ -646,7 +643,6 @@ fn batch_restores_window_after_committed_retirement_failure() {
         json!([[["store", installed]], true, "retirement"]),
     );
     assert_eq!(result["code"], 1003, "{result}");
-    assert_eq!(result["detail"]["committed"], false, "{result}");
     version(&project, "0.1.0");
     assert_eq!(
         send(&project, 4, "fixture.counter@1.0", "get", json!([]))["value"],
@@ -660,19 +656,51 @@ fn batch_restores_window_after_committed_retirement_failure() {
     case.success();
 }
 
-/// ADR-0031：受理凭据与最终结果分离，同ID复用确定结果，中断后继续同一窗口。
+/// ADR-0031：批次先返回受理票据，结果从快照读取；完成后用同一标识重发会重新执行；
+/// 配置解析错误在票据之后成为拒绝结果；核心重启后用原标识重提可以完成。
 #[test]
-fn batch_tickets_replay_results_and_resume_after_core_restart() {
+fn batch_tickets_report_results_and_resubmit_after_core_restart() {
     let case = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "batch-tickets");
     let _fixture = fixture().for_case(&case);
     let project = managed_project(&case, "batch-tickets", "v1");
-    plugin(&project.join("sources/store-waiting"), "store", "waiting");
     let mut core = Process::start(&project, "tickets-first");
     active(&project, "admin");
     active(&project, "client");
-    ticket_replay_and_parse_failure(&project);
-    ticket_restart(&project, &mut core);
-    assert_eq!(manage(&project, 20, "shutdown", json!([]))["ok"], true);
+    let installed = manage(
+        &project,
+        1,
+        "install",
+        json!([project.join("sources/store-v2")]),
+    )["value"]
+        .clone();
+    let arguments = json!([[["store", installed]], false, "once"]);
+    assert_eq!(
+        manage(&project, 2, "replace_batch", arguments.clone())["ok"],
+        true
+    );
+    version(&project, "0.2.0");
+    // 同一标识重发：结果只在内存中按最近一次记录，已完成的批次再次执行；版本相同，不做改动。
+    assert_eq!(
+        manage(&project, 3, "replace_batch", arguments.clone())["ok"],
+        true
+    );
+    version(&project, "0.2.0");
+    let configuration = fs::read(project.join("cordis.toml")).unwrap();
+    fs::write(project.join("cordis.toml"), "[invalid").unwrap();
+    let rejected = manage(
+        &project,
+        4,
+        "replace_batch",
+        json!([[], true, "invalid-config"]),
+    );
+    assert_eq!(rejected["code"], 2, "{rejected}");
+    fs::write(project.join("cordis.toml"), configuration).unwrap();
+    core.kill();
+    core = Process::start(&project, "tickets-restarted");
+    active(&project, "admin");
+    assert_eq!(manage(&project, 5, "replace_batch", arguments)["ok"], true);
+    version(&project, "0.2.0");
+    assert_eq!(manage(&project, 6, "shutdown", json!([]))["ok"], true);
     core.finish();
     case.success();
 }
@@ -795,107 +823,6 @@ fn group_version<'a>(snapshot: &'a Value, group: &str) -> &'a str {
         .unwrap()
 }
 
-/// ADR-0031：已完成ID保持原结果，配置解析错误在返回凭据后成为真实拒绝记录。
-fn ticket_replay_and_parse_failure(project: &Path) {
-    let installed = manage(
-        project,
-        1,
-        "install",
-        json!([project.join("sources/store-v2")]),
-    )["value"]
-        .clone();
-    assert_eq!(
-        manage(
-            project,
-            2,
-            "replace_batch",
-            json!([[["store", installed]], false, "once"])
-        )["ok"],
-        true
-    );
-    let revision = instance(&active(project, "store"), "store").unwrap()["revision"].clone();
-    assert_eq!(
-        manage(
-            project,
-            3,
-            "replace_batch",
-            json!([[["store", "missing"]], false, "once"])
-        )["ok"],
-        true
-    );
-    assert_eq!(
-        manage(project, 4, "configure", json!(["store", { "initial": 17 }]))["ok"],
-        true
-    );
-    let records: Value =
-        serde_json::from_slice(&fs::read(project.join("state/batches.json")).unwrap()).unwrap();
-    assert_eq!(records["admin"]["state"], "succeeded");
-    assert_eq!(
-        instance(&active(project, "store"), "store").unwrap()["revision"],
-        revision
-    );
-    let configuration = fs::read(project.join("cordis.toml")).unwrap();
-    fs::write(project.join("cordis.toml"), "[invalid").unwrap();
-    let rejected = manage(
-        project,
-        5,
-        "replace_batch",
-        json!([[], true, "invalid-config"]),
-    );
-    assert_eq!(rejected["code"], 2, "{rejected}");
-    fs::write(project.join("cordis.toml"), configuration).unwrap();
-}
-
-/// CP-7、ADR-0031：真实核心被杀后残留pending变interrupted，依赖就绪后重提原ID。
-fn ticket_restart(project: &Path, core: &mut Process) {
-    let ready = project.join("ready");
-    assert_eq!(
-        manage(
-            project,
-            6,
-            "configure",
-            json!(["store", { "initial": 17, "ready": ready }])
-        )["ok"],
-        true
-    );
-    let installed = manage(
-        project,
-        7,
-        "install",
-        json!([project.join("sources/store-waiting")]),
-    )["value"]
-        .clone();
-    let arguments = json!([[["store", installed]], false, "interrupted"]);
-    let accepted = send(
-        project,
-        8,
-        "cordis.manage@1.1",
-        "replace_batch",
-        arguments.clone(),
-    );
-    assert_eq!(accepted["value"]["id"], "interrupted", "{accepted}");
-    let records: Value =
-        serde_json::from_slice(&fs::read(project.join("state/batches.json")).unwrap()).unwrap();
-    assert_eq!(records["admin"]["state"], "pending");
-    core.kill();
-    *core = Process::start(project, "tickets-restarted");
-    active(project, "admin");
-    until("restart publishes interrupted batch", || {
-        let snapshot = status(project)?;
-        snapshot["last_batch"]
-            .as_array()?
-            .iter()
-            .any(|outcome| outcome["id"] == "interrupted" && outcome["state"] == "interrupted")
-            .then_some(())
-    });
-    fs::write(ready, "ready").unwrap();
-    assert_eq!(manage(project, 9, "replace_batch", arguments)["ok"], true);
-    assert_eq!(
-        send(project, 10, "fixture.counter@1.0", "get", json!([]))["value"],
-        17
-    );
-}
-
 /// M12：为管理恢复场景建立真实进程插件与有授权的调用方。
 fn managed_project(case: &TestGuard, name: &str, mode: &str) -> PathBuf {
     let project = project(case, name);
@@ -904,7 +831,7 @@ fn managed_project(case: &TestGuard, name: &str, mode: &str) -> PathBuf {
     plugin(&project.join("plugins/client"), "client", "v1");
     plugin(&project.join("sources/store-v2"), "store", "v2");
     let mut configuration = format!(
-        "[runtime]\ncheckpoint_ms = 100\nconfirm_ms = 0\ncleanup_timeout_ms = 200\n\n[instance.store]\nplugin = 'store'\nconfig = {{ initial = 17 }}\n\n[instance.admin]\nplugin = 'admin'\ngrants = {{ 'cordis.manage@1' = ['*'] }}\nconfig = {{ commands = {}, results = {} }}\n",
+        "[runtime]\ncheckpoint_ms = 100\nconfirm_ms = 0\nlifecycle_timeout_ms = 1000\n\n[instance.store]\nplugin = 'store'\nconfig = {{ initial = 17 }}\n\n[instance.admin]\nplugin = 'admin'\ngrants = {{ 'cordis.manage@1' = ['*'] }}\nconfig = {{ commands = {}, results = {} }}\n",
         quoted(&project.join("commands")),
         quoted(&project.join("results")),
     );

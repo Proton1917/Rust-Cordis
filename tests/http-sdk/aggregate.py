@@ -22,7 +22,7 @@ def exchange(options):
     directory = project(options, "aggregate")
     plugins = directory / "plugins"
     shutil.copy2(options.tools / "libhttp_test_native.dylib", plugins / "libhttp_test_native.dylib")
-    configuration = '[runtime]\ncheckpoint_ms=0\napply_timeout_ms=120000\n'
+    configuration = '[runtime]\ncheckpoint_ms=0\nlifecycle_timeout_ms=120000\n'
     for language in ("rust", "python", "typescript"):
         configuration += f'[scope.{language}]\nisolate={{"test.byte-payload@1"="{language}"}}\n'
         if language == "rust":

@@ -661,7 +661,7 @@ server {
 
 WIT 的 `list<u8>` 在方法、记录、变体和容器中统一编码为 CBOR 字节串，读取同时兼容旧整数数组。Rust 聚合字段使用 `cordis_sdk::Bytes`，可通过 `Vec<u8>.into()` 构造；Python 使用 `bytes`，TypeScript 使用 `Uint8Array`。已有 v0.x 的 KV 状态继续按相同模式与版本继承。
 
-Rust 插件可以在自己拥有的线程或 Tokio 运行时中调用 SDK。宿主接管跨进程调用、计时器和生命周期操作的执行；丢弃普通调用 Future 会向远端传播取消，已受理的组件装入和效应清理继续完成。插件通过效应清理等待自有线程退出，并在退出前释放服务与资源引用。
+Rust 插件可以直接使用 Tokio 接口：SDK 默认的 `tokio` feature 为每个插件库创建一个单工作线程的运行时，插件代码在任何宿主线程上执行时都处于它的上下文中，`tokio::spawn`、`tokio::time` 与 reqwest 等库可以直接使用；库退役时运行时关闭（ADR-0055）。全局 `tokio::spawn` 的任务属于插件库，需要随实例停用而结束的工作使用 `ctx.spawn`。不需要 Tokio 的插件以 `default-features = false` 关闭该 feature。插件也可以在自己拥有的线程或 Tokio 运行时中调用 SDK。宿主接管跨进程调用、计时器和生命周期操作的执行；丢弃普通调用 Future 会向远端传播取消，已受理的组件装入和效应清理继续完成。插件通过效应清理等待自有线程退出，并在退出前释放服务与资源引用。
 
 Scoped 提供方通过三种 SDK 的 `caller(metadata)` 取得直接调用方：后端为 `{ instance }`，页面为 `{ page_of }`。服务页面的插件按 `page_of` 显式授权。后端处理页面请求期间继续使用自己的实例身份调用其他服务。
 

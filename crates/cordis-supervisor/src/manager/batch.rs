@@ -178,9 +178,7 @@ impl Manager {
         };
         decision.committed.store(true, Ordering::Release);
         self.record_batch_reports(&prepared, affected, paused, None, None, None);
-        let committed = self
-            .commit_batch(&prepared, &before, &target, &transition)
-            .await;
+        let committed = self.commit_batch(&prepared).await;
         drop(transition);
         let finished = match committed {
             Ok(()) => self.retire_batch(&prepared, &before, &target).await,
@@ -450,13 +448,23 @@ impl Manager {
             {
                 return Err(error(3, "批次来源清单与握手版本冲突"));
             }
-            self.resolve(&component, &specification.config).await?;
             if components
                 .insert(specification.name.clone(), component)
                 .is_some()
             {
                 return Err(error(2, "批次最终实例名称重复"));
             }
+        }
+        let affected = batch_affected(prepared, before, target);
+        for item in target
+            .iter()
+            .filter(|item| affected.contains(&item.specification.name))
+        {
+            self.resolve(
+                &components[&item.specification.name],
+                &item.specification.config,
+            )
+            .await?;
         }
         if permit_pending {
             return Ok(());
@@ -471,7 +479,6 @@ impl Manager {
                     .or_insert(interface.minor);
             }
         }
-        let affected = batch_affected(prepared, before, target);
         for item in target.iter() {
             if affected.contains(&item.specification.name)
                 || self
@@ -710,29 +717,10 @@ impl Manager {
         Ok((paused, changed.len()))
     }
 
-    /// SW-9：保存全批提交事实和原快照，进程监管继续指向本次活动版本。
-    async fn commit_batch(
-        &self,
-        prepared: &BTreeMap<String, PreparedGroup>,
-        before: &[BatchInstance],
-        _target: &[BatchInstance],
-        transition: &lifecycle::Transition,
-    ) -> Result<()> {
-        let previous_groups = before
-            .iter()
-            .map(|item| item.specification.group.clone())
-            .collect::<HashSet<_>>();
-        for name in previous_groups {
-            let names = before
-                .iter()
-                .filter(|item| {
-                    item.specification.group == name
-                        && transition.names.contains(&item.specification.name)
-                })
-                .map(|item| item.specification.name.clone())
-                .collect::<Vec<_>>();
-            self.retain_replacement_states(&name, &names, &transition.inherited);
-        }
+    /// SW-9：保存全批提交事实，进程监管继续指向本次活动版本。
+    ///
+    /// 原快照由调用方从 [`BatchCompletion::original_states`] 取得并持久化。
+    async fn commit_batch(&self, prepared: &BTreeMap<String, PreparedGroup>) -> Result<()> {
         for group in prepared.values() {
             self.replace_plan(&group.group, group.specification.clone())
                 .await;
@@ -824,18 +812,47 @@ impl Manager {
                 }
             }
         }
-        if let Err(problem) = self
+        let restarted = self
             .enforce_image_limit(
-                &group.group.name,
                 group.specification.clone(),
                 retired_images,
                 std::time::Instant::now(),
             )
-            .await
-        {
+            .await;
+        self.record_image_restart(group, &restarted);
+        if let Err(problem) = restarted {
             failure.get_or_insert(problem);
         }
         failure.map_or(Ok(()), Err)
+    }
+
+    /// RM-3/RM-4：阈值重启属于本次换库，换库报告计入重启的暂停与受影响实例。
+    fn record_image_restart(
+        &self,
+        group: &PreparedGroup,
+        restarted: &Result<Option<ReplaceReport>>,
+    ) {
+        let mut catalog = self.0.catalog.lock();
+        for library in &group.libraries {
+            let Some((_, report)) = catalog
+                .native_reports
+                .get_mut(&(group.group.name.clone(), library.plugin.clone()))
+            else {
+                continue;
+            };
+            match restarted {
+                Ok(Some(restart)) => {
+                    report.pause_ms = report.pause_ms.saturating_add(restart.pause_ms);
+                    report.affected_instances =
+                        report.affected_instances.max(restart.affected_instances);
+                }
+                Ok(None) => {}
+                Err(problem) => {
+                    report.succeeded = false;
+                    report.failure = Some(metadata::clipped(&problem.message));
+                }
+            }
+        }
     }
 
     /// DOC-11 SW-9：报告记录本批实际影响实例数、提交事实与恢复结果。

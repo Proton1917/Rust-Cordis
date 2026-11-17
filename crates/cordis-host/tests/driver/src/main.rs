@@ -4,6 +4,7 @@ mod allocation;
 mod blocking_wait;
 mod native_cache;
 mod replacement_state;
+mod tokio_context;
 
 use clap::Parser;
 use cordis::{
@@ -1148,6 +1149,7 @@ async fn main() -> Result<()> {
             "spin",
             "blocking-wait",
             "safe-wait",
+            "tokio-context",
         ]
         .map(str::to_owned)
         .to_vec()
@@ -1169,6 +1171,7 @@ async fn main() -> Result<()> {
             "cache-orphan" => native_cache::orphan(&artifacts).await?,
             "cache-lock" => native_cache::bounded_lock(&artifacts).await?,
             "cache-cleanup-error" => native_cache::cleanup_error(&artifacts).await?,
+            "tokio-context" => tokio_context::run(&artifacts).await?,
             "blocking-wait" | "safe-wait" | "legacy-wait" => {
                 blocking_wait::run(&artifacts, &case).await?
             }

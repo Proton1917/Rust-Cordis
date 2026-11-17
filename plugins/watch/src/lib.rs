@@ -21,7 +21,9 @@ pub struct Config {
     pub paths: Vec<PathBuf>,
     pub configuration: PathBuf,
     pub debounce_ms: u64,
-    pub max_interrupted_retries: u32,
+    /// 受理结果缺席时的重提次数，旧配置名称继续映射至该项。
+    #[serde(alias = "max_interrupted_retries")]
+    pub max_submission_retries: u32,
 }
 impl Default for Config {
     fn default() -> Self {
@@ -29,7 +31,7 @@ impl Default for Config {
             paths: vec!["target/debug".into()],
             configuration: "cordis.toml".into(),
             debounce_ms: 300,
-            max_interrupted_retries: 1,
+            max_submission_retries: 1,
         }
     }
 }
@@ -59,7 +61,6 @@ struct PendingBatch {
     replacements: Vec<(String, String)>,
     reload: bool,
     candidates: BTreeMap<PathBuf, Rejected>,
-    retries: u32,
 }
 
 struct BatchPlan {
@@ -243,8 +244,8 @@ struct Session {
     state: PathBuf,
     saved: Saved,
     debounce: Duration,
-    max_interrupted_retries: u32,
-    submitted: Option<String>,
+    submissions: u64,
+    max_submission_retries: u32,
 }
 
 impl Session {
@@ -332,7 +333,6 @@ impl Session {
                 replacements: plan.replacements,
                 reload: plan.reload,
                 candidates,
-                retries: 0,
             });
             if let Err(error) = save(&self.state, &self.saved) {
                 self.saved.awaiting.take();
@@ -344,11 +344,15 @@ impl Session {
 
     /// ADR-0031：受理票据对应已持久化窗口，传输不确定时保留记录供后续接续。
     async fn send_pending(&mut self) -> Result<()> {
+        if self.submissions > u64::from(self.max_submission_retries) {
+            self.reject_pending()?;
+            return Err(Error::new(6, "批次受理确认重提次数已耗尽，等待来源变化"));
+        }
         let pending = self.saved.awaiting.as_ref().expect("pending window");
         let id = pending.id.clone();
         let replacements = pending.replacements.clone();
         let reload = pending.reload;
-        self.submitted = Some(id.clone());
+        self.submissions += 1;
         match self
             .manage
             .replace_batch(replacements, reload, id.clone())
@@ -385,9 +389,7 @@ impl Session {
             .into_iter()
             .find(|outcome| outcome.id == id);
         let Some(outcome) = outcome else {
-            if self.submitted.as_deref() != Some(&id) {
-                self.send_pending().await?;
-            }
+            self.send_pending().await?;
             return Ok(());
         };
         match outcome.state.as_str() {
@@ -403,33 +405,15 @@ impl Session {
                     &format!("watch批次被拒绝：{}", outcome.error.unwrap_or_default()),
                 )
             }
-            "interrupted" => self.retry_interrupted().await,
             state => Err(Error::new(3, format!("批次状态 {state} 超出接口约定"))),
         }
-    }
-
-    /// ADR-0031、CP-6：中断后的自动重提按配置限次，到限后等待新的文件变化。
-    async fn retry_interrupted(&mut self) -> Result<()> {
-        let pending = self.saved.awaiting.as_mut().expect("pending window");
-        if pending.retries >= self.max_interrupted_retries {
-            let pending = self.saved.awaiting.take().expect("pending window");
-            self.saved.pending.extend(pending.candidates.into_keys());
-            self.submitted = None;
-            save(&self.state, &self.saved)?;
-            return self
-                .context
-                .log(1, "watch中断重提次数已到上限，等待文件变化");
-        }
-        pending.retries += 1;
-        save(&self.state, &self.saved)?;
-        self.send_pending().await
     }
 
     fn reject_pending(&mut self) -> Result<()> {
         let pending = self.saved.awaiting.take().expect("pending window");
         self.saved.rejected = pending.candidates;
         self.saved.pending.clear();
-        self.submitted = None;
+        self.submissions = 0;
         save(&self.state, &self.saved)
     }
 
@@ -439,7 +423,7 @@ impl Session {
             || !self.saved.pending.is_empty()
         {
             self.saved = Saved::default();
-            self.submitted = None;
+            self.submissions = 0;
             save(&self.state, &self.saved)?;
         }
         Ok(())
@@ -644,8 +628,8 @@ impl Component for Watch {
                 state,
                 saved,
                 debounce: Duration::from_millis(config.debounce_ms),
-                max_interrupted_retries: config.max_interrupted_retries,
-                submitted: None,
+                submissions: 0,
+                max_submission_retries: config.max_submission_retries,
             }
             .run(),
         )

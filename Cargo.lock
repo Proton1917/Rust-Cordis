@@ -428,7 +428,7 @@ dependencies = [
 
 [[package]]
 name = "cordis-abi"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "ciborium",
  "proc-macro2",
@@ -574,7 +574,7 @@ dependencies = [
 
 [[package]]
 name = "cordis-sdk"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "cordis-abi",
  "cordis-sdk-macros",

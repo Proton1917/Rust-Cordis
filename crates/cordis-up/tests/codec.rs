@@ -1,5 +1,5 @@
 use cordis_up::{
-    CodecError, Limits, Message, ObjectRef, Value, WireError, decode, encode,
+    CodecError, LimitExceeded, Limits, Message, ObjectRef, Value, WireError, decode, encode,
     payload::{Invoke, State},
     payload_refs,
 };
@@ -118,11 +118,29 @@ fn frame_body_limit_truncation_and_trailing_data_are_rejected() {
         max_frame: bytes.len() - 1,
         ..limits
     };
+    let Err(CodecError::Limit(exceeded)) = decode(&bytes, &smaller) else {
+        panic!("超帧输入应报告 max_frame");
+    };
+    assert_eq!(
+        exceeded,
+        LimitExceeded {
+            limit: "max_frame",
+            maximum: bytes.len() - 1,
+            actual: Some(bytes.len()),
+        }
+    );
+    assert_eq!(
+        exceeded.to_string(),
+        format!("max_frame={}，上限 {}", bytes.len(), bytes.len() - 1)
+    );
     assert!(matches!(
-        decode(&bytes, &smaller),
-        Err(CodecError::Limit("max_frame"))
+        encode(&message, &smaller),
+        Err(CodecError::Limit(LimitExceeded {
+            limit: "max_frame",
+            actual: None,
+            ..
+        }))
     ));
-    assert!(encode(&message, &smaller).is_err());
     assert!(decode(&bytes[..bytes.len() - 1], &Limits::default()).is_err());
     let mut trailing = bytes;
     trailing.push(0xf6);
@@ -233,4 +251,31 @@ fn decoding_budget_scope_restores_after_failure() {
     assert!(
         matches!(plain, Message::Request { params: Value::Array(values), .. } if values.len() == 5)
     );
+}
+
+// CP-8、DOC-16 §3：值图超限报告超出的容量项与上限，集合超限附带实测长度。
+#[test]
+fn value_limits_report_the_exceeded_budget() {
+    let limits = Limits {
+        max_values: 8,
+        max_collection: 4,
+        ..Limits::default()
+    };
+    let wide = request(Value::Array(vec![Value::Null; 5]));
+    assert!(matches!(
+        encode(&wide, &limits),
+        Err(CodecError::Limit(LimitExceeded {
+            limit: "max_collection",
+            maximum: 4,
+            actual: Some(5),
+        }))
+    ));
+    let nested = request(Value::Array(vec![
+        Value::Array(vec![Value::Null; 4]),
+        Value::Array(vec![Value::Null; 4]),
+    ]));
+    let Err(error) = encode(&nested, &limits) else {
+        panic!("超过值数量上限的消息应被拒绝");
+    };
+    assert_eq!(error.to_string(), "UP/1 容量超限：max_values 超过上限 8");
 }

@@ -1,7 +1,8 @@
 use crate::{
     AbiBuf, AbiBytes, AbiError, AbiObject, AbiStatus, AbiStr, AbiUnit, AsyncCall, Buf, CborValue,
-    Environment, Error, Invoke, InvokeAsync, InvokeFuture, OBJECT_TYPED_METHODS, ObjectHeader,
-    RemoteFuture, Result, SyncCall, boundary, error::release_boundary,
+    Environment, Error, Invoke, InvokeAsync, InvokeFuture, OBJECT_TYPED_DIGEST,
+    OBJECT_TYPED_METHODS, ObjectHeader, RemoteFuture, Result, SyncCall, boundary,
+    error::release_boundary,
 };
 use std::{ffi::c_void, mem::size_of, sync::Arc};
 
@@ -65,6 +66,13 @@ impl ObjectHeader {
 
     pub const fn with_flags(mut self, flags: u32) -> Self {
         self.flags = flags;
+        self
+    }
+
+    /// ADR-0056：记录类型化方法表的布局摘要，使用方据此决定能否按槽位调用。
+    pub const fn with_typed_digest(mut self, digest: u32) -> Self {
+        self.flags |= OBJECT_TYPED_DIGEST;
+        self.reserved = digest;
         self
     }
 }
@@ -150,6 +158,15 @@ impl Object {
     }
     pub fn has_typed_methods(&self) -> bool {
         self.header().flags & OBJECT_TYPED_METHODS != 0
+    }
+
+    /// ADR-0056：提供方带有布局摘要且等于使用方声明的摘要时，类型化槽位的签名才与
+    /// 使用方一致。其他情况（旧提供方、接口修订不同）应按方法名经通用入口调用。
+    pub fn typed_layout_matches(&self, digest: u32) -> bool {
+        let header = self.header();
+        header.flags & OBJECT_TYPED_METHODS != 0
+            && header.flags & OBJECT_TYPED_DIGEST != 0
+            && header.reserved == digest
     }
     pub fn method_names(&self) -> Result<Vec<String>> {
         let header = self.header();

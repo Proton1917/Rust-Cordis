@@ -8,6 +8,6 @@ pub mod payload;
 pub mod rpc;
 
 pub use ciborium::value::Value;
-pub use codec::{CodecError, Limits, decode, decode_value, encode, encode_value};
+pub use codec::{CodecError, LimitExceeded, Limits, decode, decode_value, encode, encode_value};
 pub use message::{Message, WireError};
 pub use payload::{OBJECT_TAG, ObjectRef, payload_refs};

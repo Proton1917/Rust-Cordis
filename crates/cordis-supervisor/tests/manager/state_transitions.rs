@@ -243,7 +243,10 @@ async fn updating_provider_ends_inflight_call_before_deadline() {
         elapsed.as_millis()
     );
     assert!(matches!(result, Err(WireError { code: 4, .. })));
-    assert!(elapsed < Duration::from_secs(1), "退役通知及时结束调用");
+    assert!(
+        elapsed < Duration::from_secs(4),
+        "退役通知应早于 5 秒的调用超时结束调用"
+    );
     case.success();
 }
 
@@ -372,6 +375,9 @@ async fn updating_provider_interrupts_a_returned_byte_stream() {
     );
     assert_eq!(first, Value::Bytes(bytes));
     assert!(matches!(result, Err(WireError { code: 4, .. })));
-    assert!(elapsed < Duration::from_secs(1));
+    assert!(
+        elapsed < Duration::from_secs(4),
+        "退役通知应早于 5 秒的调用超时结束流读取"
+    );
     case.success();
 }

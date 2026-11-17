@@ -133,7 +133,6 @@ pub(super) struct Catalog {
     checkpoints: HashMap<String, payload::State>,
     reports: BTreeMap<String, ReplaceReport>,
     native_reports: BTreeMap<(String, String), (u64, cordis_types::SwapReport)>,
-    replacement_states: HashMap<String, HashMap<String, Option<payload::State>>>,
 }
 
 pub(super) struct Effects {
@@ -339,35 +338,6 @@ impl Manager {
             Ok(())
         }
     }
-    /// DOC-11 §7、DOC-16 状态协议：恢复输入限于本次替换范围，状态载荷保持可持久化数据。
-    pub(super) fn validate_restore_states(
-        &self,
-        group: &str,
-        plugin: Option<&str>,
-        states: &HashMap<String, Option<payload::State>>,
-    ) -> Result<()> {
-        let roots: Vec<_> = self
-            .group_instances(group)
-            .into_iter()
-            .filter(|instance| plugin.is_none_or(|plugin| instance.data.plugin == plugin))
-            .collect();
-        let allowed: HashSet<_> = self
-            .affected_instances(&roots)
-            .into_iter()
-            .map(|instance| instance.data.name.clone())
-            .collect();
-        for (name, state) in states {
-            if !allowed.contains(name) {
-                return Err(error(2, "恢复快照的实例超出本次替换范围"));
-            }
-            if let Some(state) = state {
-                payload::persistent_value(&state.data)
-                    .map_err(|problem| error(2, problem.to_string()))?;
-            }
-        }
-        Ok(())
-    }
-
     /// DOC-15 §3.2：提交后由队列拥有操作，调用者结束等待时事务继续完成。
     async fn transaction<T, F, Fut>(&self, action: F) -> Result<T>
     where

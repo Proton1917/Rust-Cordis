@@ -51,6 +51,22 @@ pub(super) fn render(identity: &Identity, item: &ItemTrait, methods: &[Method]) 
 }
 
 impl Definition<'_> {
+    /// ADR-0056：按声明顺序对方法名与槽位 C 函数类型计算 32 位 FNV-1a 摘要。
+    ///
+    /// 用户结构体在槽位中以 CBOR 字节传递，字段变化不影响内存布局，不进入摘要；
+    /// 槽位顺序、参数个数、原始类型、同步与异步的差异都会改变摘要。
+    fn digest(&self) -> u32 {
+        let mut hash: u32 = 0x811c_9dc5;
+        for method in self.methods {
+            let entry = format!("{}\n{}\n", method.signature.ident, method.function_type());
+            for byte in entry.bytes() {
+                hash ^= u32::from(byte);
+                hash = hash.wrapping_mul(0x0100_0193);
+            }
+        }
+        hash
+    }
+
     fn proxy(&self) -> TokenStream {
         let name = &self.item.ident;
         let visibility = &self.item.vis;
@@ -59,7 +75,7 @@ impl Definition<'_> {
             .methods
             .iter()
             .enumerate()
-            .map(|(index, method)| method.proxy(index));
+            .map(|(index, method)| method.proxy(index, self.digest()));
         quote! {
             #[doc(hidden)]
             #[doc = "DOC-12 §7、§11：对象所有者保持服务实现、虚表及其库租约，直到最后一份代理引用释放。"]
@@ -75,6 +91,7 @@ impl Definition<'_> {
         let major = self.identity.major;
         let minor = self.identity.minor;
         let method_count = self.methods.len();
+        let digest = self.digest();
         let constructors = self.constructors();
         quote! {
             impl ::cordis_sdk::Interface for dyn #name {
@@ -82,6 +99,7 @@ impl Definition<'_> {
                 const MAJOR: u32 = #major;
                 const MINOR: u32 = #minor;
                 const METHOD_COUNT: usize = #method_count;
+                const LAYOUT_DIGEST: u32 = #digest;
                 fn proxy(object: ::std::sync::Arc<::cordis_sdk::__private::abi::Object>) -> ::cordis_sdk::Result<::std::sync::Arc<Self>> {
                     ::cordis_sdk::__private::check_interface(&object, #full_name)?;
                     Ok(::std::sync::Arc::new(#proxy { object }))
@@ -132,6 +150,7 @@ impl Definition<'_> {
     fn table(&self) -> TokenStream {
         let name = &self.item.ident;
         let full_name = self.identity.full_name();
+        let digest = self.digest();
         let method_count = self.methods.len();
         let fields: Vec<_> = (0..method_count)
             .map(|index| format_ident!("method_{index}"))
@@ -152,13 +171,13 @@ impl Definition<'_> {
             pub(super) static VTABLE: VTable = VTable {
                 header: ::cordis_sdk::__private::abi::ObjectHeader::for_type::<dyn #name>(
                     ::std::mem::size_of::<VTable>(), 1, #full_name,
-                ).with_dispatch(&METHODS, invoke, invoke_async),
+                ).with_dispatch(&METHODS, invoke, invoke_async).with_typed_digest(#digest),
                 #(#fields,)*
             };
             pub(super) static SCOPED_VTABLE: VTable = VTable {
                 header: ::cordis_sdk::__private::abi::ObjectHeader::for_type::<dyn #name>(
                     ::std::mem::size_of::<VTable>(), 1, #full_name,
-                ).with_dispatch(&SCOPED_METHODS, invoke, invoke_async),
+                ).with_dispatch(&SCOPED_METHODS, invoke, invoke_async).with_typed_digest(#digest),
                 #(#fields,)*
             };
             static METHODS: [::cordis_sdk::__private::abi::AbiStr; #method_count] = [

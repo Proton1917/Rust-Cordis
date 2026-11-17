@@ -95,7 +95,7 @@ WIT 的 `async func` 只表示方法本身是异步实现，调用仍受截止�
   - 同步服务方法或 `ctx.spawn_thread` 线程中需要等待异步 SDK 调用时，用 `context.wait(future)`，例如 `context.wait(secrets.get(name))`。签名为 `Context::wait<F, T>(&self, future: F) -> Result<T>`，其中 `F: Future<Output = Result<T>>`；Future 可以借用局部值，不要求 `Send`，可以嵌套。它要求 SDK 0.2.1 及以上、宿主 cordis-host 0.1.1（ABI 1.1）及以上；在旧宿主上返回错误码 3，Future 不会被执行。
   - 也可以把方法在接口中声明为异步（WIT `async func`，trait 中写 `async fn`）。从同步改为异步属于不兼容修改，发布新的接口主版本（见[接口版本与升级](versioning.md)）。
   - 不调用 `futures::executor::block_on` 或任何自建运行时的 `block_on`。
-  - 外部 HTTP 请求在 `ctx.spawn` 的异步任务中用异步客户端发出；客户端需要 Tokio 时，使用插件自己的 Tokio 运行时，并把它的创建与关闭登记为效应（[资源与状态](resources-state.md) PR-3）。
+  - 外部 HTTP 请求在 `ctx.spawn` 的异步任务中用异步客户端发出；需要 Tokio 的客户端（如 reqwest）可以直接使用，SDK 为插件库提供 Tokio 运行时上下文（[资源与状态](resources-state.md) PR-3）。
   - 必须使用阻塞库时，放进 `ctx.spawn_thread` 的独立线程，循环中用 `context.is_current()?` 判断是否退出。阻塞发生在插件自己的线程上，执行器不受影响。
 - **Python：** 插件运行在一个 asyncio 事件循环里，所有请求共用它。服务方法和任务中不做同步阻塞 I/O（`requests`、`time.sleep`、同步数据库驱动），否则这一进程收不到也回不了任何请求，其他调用跟着超时，连续三次后整个进程被终止。用异步客户端，或 `await asyncio.to_thread(...)` 把阻塞调用移出事件循环。
 - **TypeScript：** 同理，不用同步 I/O（`fs.readFileSync` 读大文件、`execSync`、`Atomics.wait`），CPU 密集的计算放进 worker 线程。

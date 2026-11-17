@@ -18,7 +18,7 @@ def run(options):
         for _ in range(64):
             file.write(block)
     shutil.copy2(options.tools / "libhttp_test_native.dylib", project / "plugins/libhttp_test_native.dylib")
-    configuration = '[runtime]\ncheckpoint_ms=0\napply_timeout_ms=120000\n[instance.provider]\nplugin="libhttp_test_native.dylib"\ncomponent="stream-provider"\ngroup="provider"\nconfig={file=' + json.dumps(str(source)) + '}\n'
+    configuration = '[runtime]\ncheckpoint_ms=0\nlifecycle_timeout_ms=120000\n[instance.provider]\nplugin="libhttp_test_native.dylib"\ncomponent="stream-provider"\ngroup="provider"\nconfig={file=' + json.dumps(str(source)) + '}\n'
     for language in ("same", "rust", "python", "typescript"):
         output, result = project / (language + ".bin"), project / (language + ".json")
         if language in ("same", "rust"):

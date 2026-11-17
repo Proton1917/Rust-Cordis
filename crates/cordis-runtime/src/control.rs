@@ -39,17 +39,6 @@ struct Mounted {
     manage: Option<Effect>,
 }
 
-/// DOC-11 §7：保存一次插件替换涉及的部署版本和显式继承状态。
-struct Replacement {
-    group: String,
-    candidate: Package,
-    previous: Package,
-    affected: Vec<String>,
-    packages: Vec<Package>,
-    overlay: Overlay,
-    inherited: HashMap<String, Option<payload::State>>,
-}
-
 pub struct Controller {
     web: Arc<cordis_web_deployment::Deployment>,
     pub manager: Arc<Manager>,
@@ -100,10 +89,7 @@ impl Controller {
         } = services;
         let project = path.parent().expect("configuration parent").to_owned();
         let plugins = locations.installed.clone();
-        let outcomes = Arc::new(Mutex::new(BatchOutcomes::new(
-            store.directory.join("batches.json"),
-            diagnostics.clone(),
-        )));
+        let outcomes = Arc::new(Mutex::new(BatchOutcomes::new(diagnostics.clone())));
         let sources = Arc::new(Mutex::new(SourceBindings::new(
             store.directory.join("sources.json"),
             plugins
@@ -149,7 +135,6 @@ impl Controller {
 
     /// DOC-15 §3.2：发现来源、建立进程分组，再按检查点挂载实例；局部错误记入诊断。
     pub async fn start(&mut self) -> Result<()> {
-        self.outcomes.lock().load()?;
         self.sources.lock().load()?;
         if self
             .sources
@@ -252,7 +237,10 @@ impl Controller {
 
     /// DOC-15 §3.2：已授权请求由单一队列按方法分派，具体事务负责持久化。
     pub async fn execute(&mut self, request: &Request) -> Result<Value> {
-        self.sources.lock().confirm(&self.manager.snapshot())?;
+        if let Err(problem) = self.sources.lock().confirm(&self.manager.snapshot()) {
+            self.logs
+                .emit(0, "runtime", &format!("代码来源保存失败：{problem}"));
+        }
         if let Operation::ReplaceBatch { request_id, .. } = &request.operation {
             return self.execute_recorded_batch(request, request_id).await;
         }
@@ -292,7 +280,8 @@ impl Controller {
                     .await?;
             }
             Operation::Replace { name, plugin } => {
-                self.replace(name, plugin, false).await?;
+                self.replace_batch(&[(name.clone(), plugin.clone())], None)
+                    .await?;
             }
             Operation::ReplaceBatch {
                 replacements,
@@ -302,15 +291,7 @@ impl Controller {
                 self.replace_batch(replacements, configuration.clone()?)
                     .await?;
             }
-            Operation::Rollback(name) => {
-                let previous = self
-                    .overlay
-                    .previous
-                    .get(name)
-                    .cloned()
-                    .ok_or_else(|| WireError::new(4, "实例的上一版本引用缺席"))?;
-                self.replace(name, &previous.plugin, true).await?;
-            }
+            Operation::Rollback(name) => self.rollback(name).await?,
             Operation::Reload(configuration) => {
                 self.commit_configuration(configuration.clone(), self.overlay.clone())
                     .await?;
@@ -771,7 +752,7 @@ impl Controller {
     async fn settle(&self, name: &str) -> Result<()> {
         let mounted = self.mounted.get(name).expect("mounted instance retained");
         tokio::time::timeout(
-            Duration::from_millis(self.configuration.runtime.apply_timeout_ms),
+            Duration::from_millis(self.configuration.runtime.lifecycle_timeout_ms),
             mounted.fiber.settled(),
         )
         .await
@@ -789,105 +770,6 @@ impl Controller {
             .await
     }
 
-    /// DOC-11 SW-5–SW-9：提交后的退役错误仍持久化活动版本，并保留原错误供调用方处理。
-    async fn replace(&mut self, name: &str, reference: &str, rollback: bool) -> Result<()> {
-        let replacement = self.prepare_replacement(name, reference, rollback).await?;
-        if replacement.candidate.reference == replacement.previous.reference && !rollback {
-            return Ok(());
-        }
-        let web = self.prepare_web_changes(&replacement).await?;
-        let outcome = self
-            .replace_package(
-                &replacement.group,
-                &replacement.previous,
-                &replacement.candidate,
-                &replacement.packages,
-                replacement.inherited.clone(),
-            )
-            .await;
-        if let Err(problem) = &outcome
-            && !replacement_committed(problem)
-        {
-            if let Err(recovery) = self.rollback_web_changes(&web).await {
-                return Err(web::recovery_error("替换", problem.clone(), recovery));
-            }
-            return outcome;
-        }
-        let mut original =
-            self.deployment_states(self.manager.last_replacement_states(&replacement.group));
-        if matches!(replacement.candidate.entry, Entry::Web) {
-            original.extend(replacement.affected.iter().map(|name| (name.clone(), None)));
-        }
-        if let Err(problem) = self.finish_web_changes(&web).await {
-            return self
-                .restore_replacement(replacement, original, web, problem)
-                .await;
-        }
-        if let Err(problem) = self.persist_replacement(&replacement, &original) {
-            return self
-                .restore_replacement(replacement, original, web, problem)
-                .await;
-        }
-        self.accept_replacement(replacement)?;
-        self.store.retain_replacements(&self.overlay)?;
-        outcome
-    }
-
-    /// DOC-11 §7：将受影响实例的上一版本和对应原快照组成同一替换请求。
-    async fn prepare_replacement(
-        &mut self,
-        name: &str,
-        reference: &str,
-        rollback: bool,
-    ) -> Result<Replacement> {
-        let candidate = self.installed_package(reference).await?;
-        let current = self
-            .mounted
-            .get(name)
-            .ok_or_else(|| WireError::new(4, "目标实例尚待装载"))?;
-        if candidate.name != current.package.name {
-            return Err(WireError::new(3, "库替换需要相同逻辑插件名称"));
-        }
-        if matches!(candidate.entry, Entry::Web) != matches!(current.package.entry, Entry::Web) {
-            return Err(WireError::new(
-                3,
-                "网页与后端实例的形态转换通过配置变更执行",
-            ));
-        }
-        let group = current.group.clone();
-        let previous = current.package.clone();
-        let affected = self
-            .mounted
-            .iter()
-            .filter(|(_, item)| item.group == group && item.package.name == candidate.name)
-            .map(|(name, _)| name.clone())
-            .collect::<Vec<_>>();
-        let mut packages = if matches!(previous.entry, Entry::Web) {
-            vec![previous.clone()]
-        } else {
-            self.groups
-                .get(&group)
-                .expect("mounted group retained")
-                .clone()
-        };
-        for package in &mut packages {
-            if package.name == candidate.name {
-                *package = candidate.clone();
-            }
-        }
-        let mut replacement = Replacement {
-            group,
-            candidate,
-            previous,
-            affected,
-            packages,
-            overlay: self.overlay.clone(),
-            inherited: HashMap::new(),
-        };
-        self.prepare_replacement_states(&mut replacement, rollback)?;
-        Ok(replacement)
-    }
-
     /// ADR-0041/0052：部署实例按运行时目录恢复，页面快照由网页事务持有。
     fn deployment_states(
         &self,
@@ -897,164 +779,16 @@ impl Controller {
         states
     }
 
-    /// DOC-11 §7：上一版本记录使用实际装载副本，回滚按各实例读取该版本的原快照。
-    fn prepare_replacement_states(
-        &self,
-        replacement: &mut Replacement,
-        rollback: bool,
-    ) -> Result<()> {
-        let desired = self.configuration.entries(&self.overlay);
-        for name in &replacement.affected {
-            let current = &desired[name];
-            let mut prior = OverlayEntry::from(current);
-            prior.plugin = replacement.previous.reference.clone();
-            replacement.overlay.previous.insert(name.clone(), prior);
-            if rollback {
-                replacement.inherited.insert(
-                    name.clone(),
-                    self.store
-                        .replacement(name, &replacement.candidate.reference)?,
-                );
-            }
-            let mut update = OverlayEntry::from(current);
-            update.plugin = replacement.candidate.reference.clone();
-            replacement.overlay.instance.insert(name.clone(), update);
-        }
-        Ok(())
-    }
-
-    /// DOC-15 §3.2：先保存原快照和启动继承状态，再原子发布引用它们的部署叠加层。
-    fn persist_replacement(
-        &self,
-        replacement: &Replacement,
-        original: &HashMap<String, Option<payload::State>>,
-    ) -> Result<()> {
-        for name in &replacement.affected {
-            let state = original
-                .get(name)
-                .ok_or_else(|| WireError::new(1, "替换事务缺少原状态记录"))?;
-            self.store
-                .save_replacement(name, &replacement.previous.reference, state.as_ref())?;
-        }
-        let inherited = if replacement.inherited.is_empty() {
-            original
-        } else {
-            &replacement.inherited
-        };
-        self.store.restore_states(inherited)?;
-        self.store.save_overlay(&replacement.overlay)
-    }
-
-    /// DOC-11 §7、DOC-15 §11.4：页面或持久化失败均恢复同次快照，保留实际提交事实。
-    async fn restore_replacement(
-        &mut self,
-        replacement: Replacement,
-        original: HashMap<String, Option<payload::State>>,
-        pages: Vec<web::WebChange>,
-        problem: WireError,
-    ) -> Result<()> {
-        let page_configuration = self.restore_web_configurations(&pages);
-        let packages = if matches!(replacement.previous.entry, Entry::Web) {
-            vec![replacement.previous.clone()]
-        } else {
-            self.groups[&replacement.group].clone()
-        };
-        let recovery = self
-            .replace_package(
-                &replacement.group,
-                &replacement.candidate,
-                &replacement.previous,
-                &packages,
-                original.clone(),
-            )
-            .await;
-        if recovery
-            .as_ref()
-            .map_or_else(replacement_committed, |()| true)
-        {
-            let page_recovery = self.rollback_web_changes(&pages).await;
-            self.store.restore_states(&original)?;
-            self.store.retain_replacements(&self.overlay)?;
-            self.refresh_batch_fibers()?;
-            if let Err(recovery) = page_configuration.and(page_recovery) {
-                return Err(web::recovery_error("替换", problem, recovery));
-            }
-        } else {
-            self.accept_replacement(replacement)?;
-        }
-        match recovery {
-            Ok(()) => Err(problem),
-            Err(recovery) => Err(WireError::new(
-                1,
-                format!("替换失败：{problem}；恢复结果：{recovery}"),
-            )),
-        }
-    }
-
-    /// DOC-11 SW-9：根据监管器的提交事实更新挂载记录及后续分组启动计划。
-    fn accept_replacement(&mut self, replacement: Replacement) -> Result<()> {
-        for name in &replacement.affected {
-            let mounted = self
-                .mounted
-                .get_mut(name)
-                .expect("affected instance retained");
-            mounted.package = replacement.candidate.clone();
-            mounted.settings.plugin = replacement.candidate.reference.clone();
-        }
-        if !matches!(replacement.candidate.entry, Entry::Web) {
-            self.groups.insert(replacement.group, replacement.packages);
-        }
-        self.overlay = replacement.overlay;
-        self.logs.emit(
-            2,
-            "runtime",
-            &format!(
-                "replace plugin={} affected={}",
-                replacement.candidate.name,
-                replacement.affected.join(",")
-            ),
-        );
-        self.refresh()
-    }
-
-    /// DOC-11 §7、DOC-15 AU-5：两端为原生插件时在宿主内换库，跨插口切换整个分组。
-    async fn replace_package(
-        &self,
-        group: &str,
-        current: &Package,
-        candidate: &Package,
-        packages: &[Package],
-        states: HashMap<String, Option<payload::State>>,
-    ) -> Result<()> {
-        match &candidate.entry {
-            Entry::Native { library } if matches!(current.entry, Entry::Native { .. }) => {
-                self.manager
-                    .restore_library(
-                        group.to_owned(),
-                        candidate.name.clone(),
-                        library.clone(),
-                        states,
-                    )
-                    .await?;
-            }
-            Entry::Native { .. } | Entry::Process { .. } => {
-                self.manager
-                    .restore_group(
-                        catalog::plan(
-                            group,
-                            packages,
-                            &self.project,
-                            &self.configuration.runtime,
-                            &self.locations,
-                        )?,
-                        states,
-                    )
-                    .await?;
-            }
-            Entry::Web if matches!(current.entry, Entry::Web) => {}
-            Entry::Web => return Err(WireError::new(3, "网页插件与后端插件采用各自实例形态")),
-        }
-        Ok(())
+    /// DOC-11 §7：回滚是把实例换回上一版本引用的单项批次，状态继承当前导出值。
+    async fn rollback(&mut self, name: &str) -> Result<()> {
+        let previous = self
+            .overlay
+            .previous
+            .get(name)
+            .cloned()
+            .ok_or_else(|| WireError::new(4, "实例的上一版本引用缺席"))?;
+        self.replace_batch(&[(name.to_owned(), previous.plugin)], None)
+            .await
     }
 }
 

@@ -154,7 +154,7 @@ pub struct Reserved {
     request: Request,
 }
 impl Reserved {
-    /// ADR-0031：预约和排队请求共同持有未完成批次，取消时由守卫保存 interrupted。
+    /// ADR-0031：预约和排队请求共同持有批次，取消时由守卫记录拒绝结果。
     pub(crate) fn track_batch(mut self, pending: crate::control::PendingBatch) -> Self {
         self.request.pending_batch = Some(pending);
         self

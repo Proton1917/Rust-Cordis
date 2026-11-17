@@ -113,23 +113,14 @@ impl Manager {
     }
 
     /// DOC-11 SW-1–SW-9：按当前导出状态替换单个逻辑插件，失败恢复原版本。
+    ///
+    /// 运行时的部署变更统一走批次；网页页面组的组件实例挂在父实例之下，
+    /// 批次的实例集合不覆盖它们，所以页面模块更新使用此入口。
     pub async fn replace_library(
         &self,
         group: String,
         plugin: String,
         path: PathBuf,
-    ) -> Result<SwapReport> {
-        self.restore_library(group, plugin, path, HashMap::new())
-            .await
-    }
-
-    /// DOC-11 §7：以保存的原快照恢复上一原生版本，失败恢复操作前版本及状态。
-    pub async fn restore_library(
-        &self,
-        group: String,
-        plugin: String,
-        path: PathBuf,
-        states: HashMap<String, Option<payload::State>>,
     ) -> Result<SwapReport> {
         let committed = Arc::new(AtomicBool::new(false));
         let marker = committed.clone();
@@ -137,9 +128,8 @@ impl Manager {
         let reported_plugin = plugin.clone();
         self.transaction(move |manager| async move {
             let started = std::time::Instant::now();
-            manager.validate_restore_states(&group, Some(&plugin), &states)?;
             manager
-                .swap_library(&group, &plugin, &path, states, marker, started)
+                .swap_library(&group, &plugin, &path, marker, started)
                 .await
         })
         .await
@@ -380,12 +370,11 @@ impl Manager {
         group_name: &str,
         plugin_name: &str,
         path: &Path,
-        states: HashMap<String, Option<payload::State>>,
         committed: Arc<AtomicBool>,
         started: std::time::Instant,
     ) -> Result<SwapReport> {
         let swap = self.prepare_native(group_name, plugin_name, path).await?;
-        self.activate_native(&swap, states).await?;
+        self.activate_native(&swap).await?;
         let mut report = SwapReport {
             plugin: plugin_name.into(),
             previous_library: swap.old_library,
@@ -425,11 +414,7 @@ impl Manager {
     }
 
     /// DOC-11 SW-6：宿主切换成功后提交内核定义，宿主拒绝时解冻原版本。
-    async fn activate_native(
-        &self,
-        swap: &NativeSwap,
-        states: HashMap<String, Option<payload::State>>,
-    ) -> Result<()> {
+    async fn activate_native(&self, swap: &NativeSwap) -> Result<()> {
         swap.group.health.lock().state = "replacing".into();
         let activated = self
             .library_command::<()>(
@@ -449,9 +434,7 @@ impl Manager {
             .await?;
             return Err(problem);
         }
-        let mut candidate_states = swap.transition.inherited.clone();
-        candidate_states.extend(states);
-        self.inherit(&candidate_states);
+        self.inherit(&swap.transition.inherited);
         self.activate(&swap.group, swap.candidate.clone(), Some(&swap.plugin))
     }
 
@@ -532,11 +515,6 @@ impl Manager {
             self.replace_plan(&swap.group, Some(specification.clone()))
                 .await;
         }
-        self.retain_replacement_states(
-            &swap.group.name,
-            &swap.transition.names,
-            &swap.transition.inherited,
-        );
         self.record_native(&swap, &report);
         drop(std::mem::take(&mut swap.transition.frozen));
         let retired_images = self.retire_native(&swap, &mut report).await?;
@@ -580,12 +558,7 @@ impl Manager {
         started: std::time::Instant,
     ) -> Result<SwapReport> {
         let restarted = self
-            .enforce_image_limit(
-                &swap.group.name,
-                swap.specification.take(),
-                retired_images,
-                started,
-            )
+            .enforce_image_limit(swap.specification.take(), retired_images, started)
             .await;
         match restarted {
             Ok(Some(restarted)) => {
@@ -614,10 +587,9 @@ impl Manager {
         Ok(report)
     }
 
-    /// DOC-15 §8.7：退役映像超过配置阈值时重启该组，并保留本次替换的原版本快照。
+    /// DOC-15 §8.7：退役映像超过配置阈值时重启该组，实例继承重启前导出的状态。
     pub(super) async fn enforce_image_limit(
         &self,
-        group: &str,
         specification: Option<LaunchPlan>,
         retired_images: u64,
         started: std::time::Instant,
@@ -625,21 +597,10 @@ impl Manager {
         if retired_images > self.0.options.retired_image_limit
             && let Some(specification) = specification
         {
-            let original = self.last_replacement_states(group);
-            let restarted = self
-                .replace_with_states(
-                    specification.specification.clone(),
-                    HashMap::new(),
-                    None,
-                    started,
-                )
-                .await;
-            self.0
-                .catalog
-                .lock()
-                .replacement_states
-                .insert(group.into(), original);
-            return restarted.map(Some);
+            return self
+                .replace_process_group(specification.specification.clone(), None, started)
+                .await
+                .map(Some);
         }
         Ok(None)
     }

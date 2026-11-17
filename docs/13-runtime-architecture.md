@@ -97,11 +97,11 @@
 | `cordis-idl` | 2500 | 4000（ADR-0039） |
 | `cordis-contract` | 500 | 1000 |
 
-目标与上限统计 `src/` 中的 Rust 代码行，排除空行、普通注释与文档注释；同一行同时有代码与注释时计为代码行。`docs/PROGRESS.md` 同时报告“代码行 / 总行”并记录统计工具与算法。
+目标与上限统计 `src/` 中的 Rust 代码行，排除空行、普通注释与文档注释；同一行同时有代码与注释时计为代码行。统计工具为 `tools/source_lines.py`。
 
-ADR-0052 的复核条件：supervisor 在 f4694fe 为 5867 代码行，余量 133 行。后续每项新增职责在同一提交中先通过去重腾出所需行数，优先合并 batch.rs 与 lifecycle.rs 的重复事务步骤；supervisor 上限固定为 6000。
+supervisor 上限固定为 6000 代码行（2026-11-16 为 5840）。
 
-超过目标时在 `docs/PROGRESS.md` 记录原因。通过职责拆分、去重和复用调整实现，保持标准格式、必要注释与完整功能；调整后代码行仍超过上限时写 ADR，继续推进，由设计方复核。全部模块与关键函数使用文档注释说明负责步骤、前置条件和失败处理，并引用相应条款。约 60 行以上的函数按实际步骤拆分。
+超过上限时通过拆分职责、去重和复用降低代码行，不靠删除注释或压缩写法。
 
 ## 2 内核改动
 
@@ -318,7 +318,7 @@ pub trait Kv: Send + Sync {
 | `clap` | 命令行参数与子命令解析 | `cordis-runtime`、`cordis-host`、`cordis-dev` |
 | `ciborium` | CBOR 编解码（`ADR-0010`） | `cordis-abi`、`cordis-sdk`、`cordis-host`、`cordis-up` |
 | `libloading` | 打开动态库 | `cordis-host` |
-| `tokio` | 执行器、计时、双向消息、子进程 I/O、路由退役通知（ADR-0052）与插件自有网络运行时 | `cordis-runtime`、`cordis-supervisor`、`cordis-routing`、`cordis-channels`、`cordis-web-deployment`、`cordis-host`、`cordis-up`、`cordis-process`、`cordis-dev`、`plugins/http`、`plugins/window` |
+| `tokio` | 执行器、计时、双向消息、子进程 I/O、路由退役通知（ADR-0052）、插件自有网络运行时与插件库级运行时上下文（ADR-0055，`cordis-sdk` 的可选 feature） | `cordis-sdk`、`cordis-runtime`、`cordis-supervisor`、`cordis-routing`、`cordis-channels`、`cordis-web-deployment`、`cordis-host`、`cordis-up`、`cordis-process`、`cordis-dev`、`plugins/http`、`plugins/window` |
 | `nix` | 安全的 POSIX 进程组信号接口（ADR-0021） | `cordis-process` |
 | `rustix` | 安全的 waitid 状态观察与待回收子进程管理（ADR-0027） | `cordis-process` |
 | `libfuzzer-sys` | CP-9 输入模糊测试（ADR-0021） | 独立 fuzz 工作区的开发构建 |
@@ -339,4 +339,4 @@ pub trait Kv: Send + Sync {
 | `url` 2.5.8 | 页面地址与版本资源 URL（ADR-0038、ADR-0041） | `plugins/http`、`cordis-web-deployment` |
 | `dotenv-parser` 0.1.3 | 密钥文件的 .env 语法与字面值解析（ADR-0046 §3.10） | `plugins/secrets` |
 
-开发依赖不受此表限制，但需要在 `PROGRESS.md` 记录新增项。
+开发依赖不受此表限制。

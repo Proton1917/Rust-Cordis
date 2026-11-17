@@ -145,6 +145,8 @@ fn plugin_entry(
                 ::cordis_sdk::__private::abi::entry_boundary(host, library, out, err, |environment| {
                     __cordis_plugin::ENVIRONMENT.set(environment)
                         .map_err(|_| ::cordis_sdk::Error::new(4, "插件入口已调用"))?;
+                    // ADR-0055：之后的边界调用都在插件库的执行环境中运行。
+                    ::cordis_sdk::__private::install_ambient();
                     let metadata = ::cordis_sdk::__private::abi::PluginMetadata {
                         name: (#name).to_string(),
                         version: (#version).to_string(),

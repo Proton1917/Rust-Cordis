@@ -27,15 +27,48 @@ impl Limits {
 
     fn validate(self) -> Result<(), CodecError> {
         if self.max_frame == 0 || self.max_frame > u32::MAX as usize {
-            return Err(CodecError::Limit("max_frame"));
+            return Err(CodecError::Schema(
+                "Limits.max_frame 需要在 1 与 u32::MAX 之间".into(),
+            ));
         }
         if self.max_depth < 4 || self.max_depth > 128 {
-            return Err(CodecError::Limit("max_depth"));
+            return Err(CodecError::Schema(
+                "Limits.max_depth 需要在 4 与 128 之间".into(),
+            ));
         }
         if self.max_values == 0 {
-            return Err(CodecError::Limit("max_values"));
+            return Err(CodecError::Schema("Limits.max_values 需要为正数".into()));
         }
         Ok(())
+    }
+}
+
+/// DOC-16 §3：超出的容量项、配置上限与实测值，供调用方定位超限的数据。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct LimitExceeded {
+    /// `Limits` 中的字段名：max_frame、max_depth、max_collection 或 max_values。
+    pub limit: &'static str,
+    pub maximum: usize,
+    /// 实测值；计数在越过上限时即停止的场合为 None。
+    pub actual: Option<usize>,
+}
+
+impl LimitExceeded {
+    fn error(limit: &'static str, maximum: usize, actual: Option<usize>) -> CodecError {
+        CodecError::Limit(Self {
+            limit,
+            maximum,
+            actual,
+        })
+    }
+}
+
+impl fmt::Display for LimitExceeded {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.actual {
+            Some(actual) => write!(formatter, "{}={actual}，上限 {}", self.limit, self.maximum),
+            None => write!(formatter, "{} 超过上限 {}", self.limit, self.maximum),
+        }
     }
 }
 impl Default for Limits {
@@ -46,8 +79,8 @@ impl Default for Limits {
 
 #[derive(Debug, thiserror::Error)]
 pub enum CodecError {
-    #[error("UP/1 limit exceeded: {0}")]
-    Limit(&'static str),
+    #[error("UP/1 容量超限：{0}")]
+    Limit(LimitExceeded),
     #[error("invalid CBOR: {0}")]
     Cbor(String),
     #[error("invalid UP/1 message: {0}")]
@@ -77,7 +110,11 @@ impl Drop for DecodeScope {
 pub fn decode(bytes: &[u8], limits: &Limits) -> Result<Message, CodecError> {
     limits.validate()?;
     if bytes.len() > limits.max_frame {
-        return Err(CodecError::Limit("max_frame"));
+        return Err(LimitExceeded::error(
+            "max_frame",
+            limits.max_frame,
+            Some(bytes.len()),
+        ));
     }
     let _scope = DecodeScope::enter(*limits);
     let mut reader = Cursor::new(bytes);
@@ -105,13 +142,7 @@ pub fn encode(message: &Message, limits: &Limits) -> Result<Vec<u8>, CodecError>
         } => (&error.detail, 4),
     };
     validate_value(value, limits, overhead)?;
-    let mut writer = LimitedWriter {
-        bytes: Vec::new(),
-        limit: limits.max_frame,
-    };
-    ciborium::ser::into_writer(message, &mut writer)
-        .map_err(|error| CodecError::Cbor(error.to_string()))?;
-    Ok(writer.bytes)
+    write_limited(message, limits)
 }
 
 /// CP-8：持久状态和接口值复用同一集合、深度与节点预算。
@@ -120,7 +151,11 @@ pub fn decode_value(bytes: &[u8], limits: &Limits) -> Result<Value, CodecError> 
     struct LimitedValue(#[serde(deserialize_with = "standalone_value")] Value);
     limits.validate()?;
     if bytes.len() > limits.max_frame {
-        return Err(CodecError::Limit("max_frame"));
+        return Err(LimitExceeded::error(
+            "max_frame",
+            limits.max_frame,
+            Some(bytes.len()),
+        ));
     }
     let _scope = DecodeScope::enter(*limits);
     let mut reader = Cursor::new(bytes);
@@ -137,13 +172,21 @@ pub fn decode_value(bytes: &[u8], limits: &Limits) -> Result<Value, CodecError> 
 pub fn encode_value(value: &Value, limits: &Limits) -> Result<Vec<u8>, CodecError> {
     limits.validate()?;
     validate_value(value, limits, 0)?;
+    write_limited(value, limits)
+}
+
+/// CP-2：按帧上限序列化；写入器越界时报告 max_frame，其余失败保留 CBOR 原因。
+fn write_limited<T: serde::Serialize>(value: &T, limits: &Limits) -> Result<Vec<u8>, CodecError> {
     let mut writer = LimitedWriter {
         bytes: Vec::new(),
         limit: limits.max_frame,
+        exceeded: false,
     };
-    ciborium::ser::into_writer(value, &mut writer)
-        .map_err(|problem| CodecError::Cbor(problem.to_string()))?;
-    Ok(writer.bytes)
+    match ciborium::ser::into_writer(value, &mut writer) {
+        Ok(()) => Ok(writer.bytes),
+        Err(_) if writer.exceeded => Err(LimitExceeded::error("max_frame", limits.max_frame, None)),
+        Err(problem) => Err(CodecError::Cbor(problem.to_string())),
+    }
 }
 
 fn standalone_value<'de, D: de::Deserializer<'de>>(deserializer: D) -> Result<Value, D::Error> {
@@ -178,24 +221,32 @@ fn validate_value(value: &Value, limits: &Limits, overhead: usize) -> Result<(),
     while let Some((value, depth)) = pending.pop() {
         count += 1;
         if count > limits.max_values {
-            return Err(CodecError::Limit("max_values"));
+            return Err(LimitExceeded::error("max_values", limits.max_values, None));
         }
         match value {
             Value::Array(items) => {
                 if depth >= limits.max_depth {
-                    return Err(CodecError::Limit("max_depth"));
+                    return Err(LimitExceeded::error("max_depth", limits.max_depth, None));
                 }
                 if items.len() > limits.max_collection {
-                    return Err(CodecError::Limit("max_collection"));
+                    return Err(LimitExceeded::error(
+                        "max_collection",
+                        limits.max_collection,
+                        Some(items.len()),
+                    ));
                 }
                 pending.extend(items.iter().map(|value| (value, depth + 1)));
             }
             Value::Map(items) => {
                 if depth >= limits.max_depth {
-                    return Err(CodecError::Limit("max_depth"));
+                    return Err(LimitExceeded::error("max_depth", limits.max_depth, None));
                 }
                 if items.len() > limits.max_collection {
-                    return Err(CodecError::Limit("max_collection"));
+                    return Err(LimitExceeded::error(
+                        "max_collection",
+                        limits.max_collection,
+                        Some(items.len()),
+                    ));
                 }
                 for (key, value) in items {
                     pending.push((key, depth + 1));
@@ -204,7 +255,7 @@ fn validate_value(value: &Value, limits: &Limits, overhead: usize) -> Result<(),
             }
             Value::Tag(tag, value) => {
                 if depth >= limits.max_depth {
-                    return Err(CodecError::Limit("max_depth"));
+                    return Err(LimitExceeded::error("max_depth", limits.max_depth, None));
                 }
                 resource_tag(*tag, value).map_err(CodecError::Schema)?;
                 pending.push((value, depth + 1));
@@ -219,10 +270,12 @@ fn validate_value(value: &Value, limits: &Limits, overhead: usize) -> Result<(),
 struct LimitedWriter {
     bytes: Vec<u8>,
     limit: usize,
+    exceeded: bool,
 }
 impl Write for LimitedWriter {
     fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
         if bytes.len() > self.limit.saturating_sub(self.bytes.len()) {
+            self.exceeded = true;
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 "max_frame",

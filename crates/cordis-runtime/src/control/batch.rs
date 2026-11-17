@@ -120,7 +120,7 @@ impl Controller {
             }
         };
         let finalized = match self.finish_web_changes(&pages).await {
-            Ok(()) => self.persist_batch(&target, &states).await,
+            Ok(()) => self.persist_batch(&target).await,
             Err(problem) => Err(problem),
         };
         if let Err(problem) = finalized {
@@ -128,8 +128,7 @@ impl Controller {
                 .restore_batch(target, before, desired, states, pages, problem)
                 .await;
         }
-        self.accept_batch_target(target).await?;
-        self.store.retain_replacements(&self.overlay)
+        self.accept_batch_target(target).await
     }
 
     /// ADR-0031：候选按窗口前实例身份定位，代表实例移除后继续作用于同组同逻辑插件。
@@ -423,29 +422,7 @@ impl Controller {
     }
 
     /// DOC-15 §3.2、CP-11：原快照和当前导出状态成功写入后一次发布最终叠加层。
-    async fn persist_batch(
-        &self,
-        target: &TargetDeployment,
-        original: &HashMap<String, Option<payload::State>>,
-    ) -> Result<()> {
-        for (name, previous) in &target.overlay.previous {
-            if target
-                .instances
-                .get(name)
-                .is_some_and(|item| item.package.reference != previous.plugin)
-            {
-                if let Some(state) = original.get(name) {
-                    self.store
-                        .save_replacement(name, &previous.plugin, state.as_ref())?;
-                } else if self
-                    .mounted
-                    .get(name)
-                    .is_some_and(|item| matches!(item.package.entry, Entry::Web))
-                {
-                    self.store.save_replacement(name, &previous.plugin, None)?;
-                }
-            }
-        }
+    async fn persist_batch(&self, target: &TargetDeployment) -> Result<()> {
         let exported = self.manager.checkpoint().await?;
         let states = target
             .instances
@@ -487,7 +464,6 @@ impl Controller {
             self.refresh_batch_fibers()?;
             self.store.restore_states(&original)?;
             release_target(target).await?;
-            self.store.retain_replacements(&self.overlay)?;
             if let Err(recovery) = page_configuration.and(page_recovery) {
                 return Err(web::recovery_error("批次", problem, recovery));
             }

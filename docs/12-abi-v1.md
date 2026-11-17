@@ -99,8 +99,8 @@ ABI v1 连接同一 `cordis-host` 进程中的宿主与原生插件，以及组�
 struct ObjectHeader {
     uint64_t  size;          // 虚表总字节数，含首部
     uint32_t  kind;          // 1 接口实现，2 同步回调，3 异步回调，4 状态导出器
-    uint32_t  flags;         // 位0表示接口具备类型化方法表
-    uint32_t  reserved;      // 0
+    uint32_t  flags;         // 位0：具备类型化方法表；位1（ABI 1.2）：reserved 存放布局摘要
+    uint32_t  reserved;      // flags 位1为1时为类型化方法表的布局摘要，否则为 0
     AbiStr    interface;     // 接口标识 "kv@1.3"；回调为空串
     AbiStatus (*clone)(void *data, AbiObject *out, AbiError *err);
     AbiStatus (*drop)(void *data, AbiError *err);
@@ -125,7 +125,14 @@ AbiStatus method(void *data, <参数...>, <返回值 out 指针>, AbiError *err)
 
 次版本追加的方法排在末尾。调用方在调用第 `i` 个方法前检查 `size >= sizeof(ObjectHeader) + (i + 1) * 8`，不满足时返回 `code = 3`，不读取越界内存。
 
-接口调用方先读取 flags。位 0 为 1 时按上述方法槽调用；位 0 为 0 时按方法名进入 invoke 或 invoke_async。接口声明的方法按同一顺序出现在名称表与类型化表中，两个入口保持相同行为。
+接口调用方先读取 flags。位 0 为 0 时按方法名进入 invoke 或 invoke_async。位 0 为 1 时，调用方只在以下条件同时成立时按上述方法槽调用，其余情况按方法名调用（ADR-0056）：
+
+- flags 位 1 为 1；
+- reserved 中的布局摘要等于调用方按自身接口声明计算的摘要。
+
+摘要为按声明顺序排列的“方法名、该槽位的 C 函数类型”文本的 32 位 FNV-1a 值，由 `#[interface]` 宏在编译期计算。名称与版本相同而方法顺序、参数个数、原始类型或同步异步形式不同的两份声明得到不同摘要。槽位强制转换为调用方声明的函数类型，摘要不一致时按槽位调用属于未定义行为，所以调用方改走按名称的通用入口。ABI 1.1 及更早的对象位 1 为 0，新调用方对它们按名称调用。
+
+接口声明的方法按同一顺序出现在名称表与类型化表中，两个入口保持相同行为。
 
 Scoped 提供方在名称表末尾追加保留方法 `cordis.scope`，其通用入口接受一个元数据值并返回视图对象的资源引用。类型化表继续按接口 trait 的方法声明排布。基对象和视图对象都可以提供类型化表，视图在提供方所在宿主中创建。Rust 安全包装将可选作用域工厂保存在对象的源侧数据中，克隆对象同时保留工厂；保留方法的参数转换、工厂调用与结果编码处于 ABI panic 边界内。
 
@@ -222,7 +229,7 @@ struct WakerVTable {
 1. 异步方法与异步回调返回 `AbiFuture`。轮询方按 Rust `Future` 的规则轮询，返回 Ready 后不再轮询，随后调用 `drop`。
 2. 未完成即 `drop` 表示取消。实现方保证取消后不再访问 `waker`。
 3. `AbiWaker` 由轮询方提供。实现方保存唤醒器时必须 `clone`。
-4. 轮询 `AbiFuture` 的始终是宿主的执行器。插件不运行自己的执行器来轮询宿主交给它的 Future（`DOC-11` `PR-3` 所述的自有运行时只用于插件内部的 tokio 接口）。
+4. 轮询 `AbiFuture` 的始终是宿主的执行器。插件不运行自己的执行器来轮询宿主交给它的 Future（ADR-0055 的库级 tokio 运行时只为插件内部的 tokio 接口提供上下文，不轮询宿主交给插件的 Future）。
 5. 同一 Future 的 poll 与 drop 串行执行，Future 具有 Send 语义；Waker 的各项操作支持跨线程。poll 失败时 Future 进入终结状态，结果槽保持原状；调用方随后释放 Future。
 6. out 的具体类型由产生 Future 的方法约定，与同步方法的成功返回映射相同。apply、spawn、sleep、异步回调及效应操作均返回 `AbiUnit`。组件 apply 与异步效应遵循 A-7，运行至完成或协作结束后进行生命周期清理。
 

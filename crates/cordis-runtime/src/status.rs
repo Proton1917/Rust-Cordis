@@ -138,9 +138,6 @@ impl View {
             }
             snapshot.instances.extend(web.snapshot());
         }
-        if let Some(sources) = &diagnostics.source_bindings {
-            sources.lock().confirm(&snapshot)?;
-        }
         complete_instances(&mut snapshot, &diagnostics);
         Ok(Status {
             core_version: env!("CARGO_PKG_VERSION"),
@@ -304,11 +301,11 @@ fn component(component: &cordis_up::payload::Component) -> ComponentInfo {
     }
 }
 
-/// DOC-15 CP-11：快照变化时通过状态存储原子发布，错误由运行时结束路径处理。
+/// DOC-15 CP-11：快照变化时原子发布，写入错误交由发布任务记录。
 pub async fn write(path: &Path, view: &View, previous: &mut Vec<u8>) -> Result<()> {
     let bytes = serde_json::to_vec_pretty(&view.snapshot().await?).map_err(parameter)?;
     if *previous != bytes {
-        storage::write(path, &bytes)?;
+        storage::write_snapshot(path, &bytes)?;
         *previous = bytes;
     }
     Ok(())
