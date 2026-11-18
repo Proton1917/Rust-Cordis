@@ -177,7 +177,7 @@ cordis run
 | 追加 | M22 | HTTP 路由、通用字节流、页面调用来源与密钥插件 | 完成；[v0.1.0](https://github.com/Proton1917/Rust-Cordis/releases/tag/v0.1.0) 已发布 |
 | | M23 | SDK 动态调用、拥有型资源与命名依赖 | 完成；[v0.2.0](https://github.com/Proton1917/Rust-Cordis/releases/tag/v0.2.0) 已发布 |
 
-早期里程碑的运行条件与结果见[历史记录](docs/history/progress-2026-11-16.md)。当前提交按改动的实际影响选择验证范围，具体约定见[项目交付规则](AGENTS.md#交付规则)。
+早期里程碑的运行条件与结果见[历史记录](docs/history/progress-2026-11-16.md)。
 
 ## 文档
 
@@ -197,7 +197,7 @@ cordis run
 | [`docs/explainer/`](docs/explainer/index.html) | 图解说明页 |
 | [`skills/cordis-first-principles/SKILL.md`](skills/cordis-first-principles/SKILL.md) | 第一性原理、插件编写手册与模板 |
 | [`docs/PROGRESS.md`](docs/PROGRESS.md) | 进度日志 |
-| [`AGENTS.md`](AGENTS.md) | 实现者的工作规则 |
+| [`AGENTS.md`](AGENTS.md) | 项目入口与文档导航 |
 
 ## 许可证
 
