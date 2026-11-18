@@ -18,7 +18,9 @@ cargo run -p cordis --example plugins
 4. 再次提供服务后，消费者以新的依赖纪元进入 `Active`。
 5. 根纤程释放全部组件后，事件、服务、组件和效应计数恢复初始值。
 
-## 宿主和上下文
+## 进程内的宿主和上下文
+
+此处的宿主向内核提供执行器和时钟。部署原生动态库的宿主进程另见[运行时架构](../../docs/15-universal-socket.md)。
 
 `Context::new(Arc<H>)` 接收实现 `Spawn + Clock` 的宿主。`Spawn::spawn` 持续轮询已提交任务，`Clock` 提供当前时间和异步等待。示例通过 Tokio 实现这两个接口，确定性测试使用 `cordis-testkit::TestExecutor`。
 
@@ -101,19 +103,6 @@ cargo run -p cordis --example plugins
 
 `Error` 可克隆，携带消息、登记位置和聚合成员。内核驱动的组件执行与释放回调发生 panic 时转为调用失败；调用方驱动的事件回调发生 panic 时沿调用链传播。内核在调用用户代码和轮询用户任务前释放状态锁，支持回调重入。
 
-## 验证
+## 行为参考
 
-在工作区根目录运行项目命令：
-
-```bash
-cargo fmt --all --check
-cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace
-cargo run -p cordis --example plugins
-cargo doc --workspace --no-deps
-conda run -n base python tools/conformance.py check --through M6
-```
-
-[tests/stress.rs](tests/stress.rs) 配置 8 个 Tokio 工作线程，固定执行 1000 轮，整次运行上限为 120 秒。每轮的 8 个隔离域通过屏障并发发起配置更新和重启；每次等待返回后立即检查配置值、实际 `apply` 次数及纤程状态。随后执行依赖撤回、重供和根回收，检查消费者先于提供方清理及计数快照恢复。
-
-语义条款位于 [docs/01-semantics.md](../../docs/01-semantics.md)，架构及接口映射位于 [docs/02-architecture.md](../../docs/02-architecture.md)，177 条上游用例的对应位置位于 [docs/04-conformance.md](../../docs/04-conformance.md)。
+[可运行示例](examples/plugins.rs)展示服务撤回、恢复和实例清理，[并发场景](tests/stress.rs)记录多线程下的最终状态。需要查某项行为的依据时，可从[语义规格](../../docs/01-semantics.md)或[上游用例对照](../../docs/04-conformance.md)定位。

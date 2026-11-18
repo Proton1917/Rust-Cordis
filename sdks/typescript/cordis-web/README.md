@@ -181,18 +181,8 @@ DOM、监听器、定时器和服务 Client 在同一效应中取得，并通过
 
 浏览器保留已导入的 ES 模块缓存，刷新页面可释放该文档的模块与内存。跨刷新数据适合保存在后端服务；`exportState` 服务于核心协调的加载代之间迁移。
 
-## 运行记录
+## 可操作的示例
 
-真实 Chrome 场景已经覆盖以下行为，运行入口见 [`tests/web-sdk`](../../../tests/web-sdk)：
+[网页示例](../../../examples/web/README.md)提供页面笔记、Rust 存储与 Python 存储三个入口。打开两页可以观察共享的数据和每页独立的计数；撤回必需服务后，相应组件等待，服务恢复后重新激活。
 
-| 场景 | 已观察的行为 | 证据目录，相对仓库根 |
-|---|---|---|
-| `pure-replace` | 两页文本与计数分别继承；坏 apply 恢复原模块；文档时间起点保持 | `target/web-m20/frontend/evidence/pure-replace-first` |
-| `fullstack` | Rust 后端替换为 Python 0.2.0，存储内容与两页计数继承；坏前端候选使后端与页面共同恢复 | `target/web-m20/frontend/evidence/fullstack-first` |
-| `http-restart` | 默认动态端口沿原地址恢复，令牌轮换，两页重连后完成按钮调用 | `target/web-m20/frontend/evidence/http-restart-default` |
-| `realm-close` | 两页同名域计数保持独立；关闭一页后另一页继续调用并保持 context/revision | `target/web-m20/routing/evidence/realm-controls` |
-| `dependencies` | 两页同时调用 Rust 存储、Python 文本规范化及 TypeScript 字符计数；三个提供方逐项撤回和插回，页面分别进入 Pending 并恢复；关闭一页后另一页继续调用 | `target/web-m20/frontend/evidence/dependencies-reconfigured` |
-| `channel-faults` | 超大帧、畸形 CBOR、内层 channel 和真实洪泛使故障页关闭，健康页面继续调用 | `target/web-m20/routing/evidence/channel-faults` |
-| `scaffold` | 生成的网页插件动态加入两页，替换时保留状态，移除时撤回 DOM、子实例和资源登记 | `target/web-m20/frontend/evidence/scaffold-first` |
-
-规范与协议分别见 [DOC-15 §11](../../../docs/15-universal-socket.md#11-前端插件与全栈插件)、[DOC-16](../../../docs/16-up1-protocol.md)；部署和命名域实现见 [ADR-0041](../../../docs/adr/0041-routing-channels-web-deployment.md)。
+[页面流程图](../../../docs/design/flow/index.html)保存实际页面和状态切换说明。[协议](../../../docs/16-up1-protocol.md)说明连接和资源转交，[部署架构](../../../docs/15-universal-socket.md#11-前端插件与全栈插件)说明核心、HTTP 插件与浏览器的职责。

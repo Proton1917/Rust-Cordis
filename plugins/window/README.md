@@ -1,6 +1,8 @@
 # 系统窗口插件
 
-`window` 作为独立进程运行。主线程使用 tao 和系统 WebView 显示页面，协议线程经 UP/1 接收核心的生命周期与服务请求。macOS 使用 WKWebView，Linux 使用 WebKitGTK。
+`window` 用系统 WebView 显示 HTTP 插件提供的页面。窗口使用操作系统的 UI 主线程，UP/1 通信在另外的线程执行。这个插件有自己的进程，普通原生动态库则可以共享 `cordis-host`。macOS 使用 WKWebView；Linux 构建依赖见下文。
+
+## 配置和启动页
 
 部署需要 HTTP 插件提供 `cordis.web@1.0`，并为窗口实例授予管理接口的 `shutdown` 方法：
 
@@ -17,6 +19,8 @@ config = { title = "我的应用", width = 1000, height = 720, quit_on_last_wind
 ```
 
 启动时窗口插件从 HTTP 服务取得当前页面地址与会话令牌。窗口关闭策略、标题和尺寸来自实例配置；`quit_on_last_window` 默认开启。Cmd-Q 或关闭最后一个窗口时，插件请求核心有序退出，核心保存检查点并清理全部插件。窗口进程故障后，核心按分组的重启策略恢复它，已有后端实例继续运行。
+
+## 窗口的生命周期
 
 | 接口 | 行为 |
 |---|---|

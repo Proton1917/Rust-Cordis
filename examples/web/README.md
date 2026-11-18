@@ -1,17 +1,21 @@
 # 网页插件示例
 
-web-notes 是页面笔记组件，保存当前页面的文本和本地计数。kv-dashboard-rust 与 kv-dashboard-python 分别附带 Rust、Python KV 提供方，页面通过生成的 kv@1.0 Client 执行字节读写、列出存储键，并保存各页面独立的输入框和计数状态。
+打开两个页面就能观察服务和页面的不同寿命。`web-notes` 的文字与计数归各页面所有；两个 KV 面板通过共享存储读写同一份字节值，输入框和计数仍由各页独立维护。KV 提供方分别采用 Rust 与 Python。
 
 三个页面共享 source/web-ui 中的控件和样式源码，构建后各插件的 web/index.js 独立发布。页面从 `/_cordis/cordis-web.js` 导入宿主 API。组件创建的 DOM、事件监听、在途调用和服务引用都由其效应清理。
 
-在此目录安装构建依赖并生成网页资源：
+## 构建网页资源
+
+在 `examples/web/` 执行：
 
 ```bash
 npm ci --ignore-scripts
 npm run build
 ```
 
-准备后端时使用当前源码对应的 kv-mem 动态库，并传入 Rust-cordis 的工作区路径：
+## 准备后端并启动
+
+从本目录将已构建的 HTTP 和 KV 动态库传给准备脚本：
 
 ```bash
 node prepare-backends.mjs \
@@ -34,6 +38,6 @@ node prepare-backends.mjs \
 
 两种 KV 实现的逻辑名均为 kv，组件为 kv-store，浏览器组件为 kv-store/web。分别作为全栈部署来源，也可用于同一逻辑插件的 Rust/Python 替换。前端状态模式统一为 web.kv-dashboard@1，后端状态模式为 kv.snapshot@1。web-notes 使用独立的 web.notes@1。
 
-主要界面控件采用可访问名称：笔记内容、存储键、存储内容、写入存储、读取内容、刷新键列表、计数加一和本地计数。组件根节点的 data-plugin 分别为 web-notes、kv-dashboard-rust、kv-dashboard-python，供多页面运行检查定位。
+## 资源与许可
 
-设计变量与按钮尺寸参考 Open Claude UI 02d021fceaf2a907f9e63a8125621bdda1b85d60，MIT 许可证保存于 source/web-ui/LICENSE.open-claude-ui。组件样式限定在 ShadowRoot，支持窄屏、深色偏好与减少动态效果。
+页面控件位于 [source/web-ui](source/web-ui)，样式封装在各自的 ShadowRoot 中。[样式参考的许可证](source/web-ui/LICENSE.open-claude-ui)随源码提供。网页模块的连接、清理与状态迁移接口见[浏览器宿主](../../sdks/typescript/cordis-web/README.md)。

@@ -1,8 +1,10 @@
 # TypeScript 进程插件 SDK
 
-SDK 在 Node 22 及以上版本执行组件，通过标准输入输出的 UP/1 与核心通信。组件声明依赖、提供接口和状态模式，核心负责加载次序、依赖重建、效应清理与替换。标准错误输出承载诊断信息。
+这个包用于在 Node 22 或更高版本中运行后端插件。组件通过标准输入输出与核心交换 UP/1 帧，核心协调依赖与生命周期。网页模块另用[浏览器宿主](../cordis-web/README.md)。
 
-在本目录执行 `npm ci --ignore-scripts` 和 `npm run build`。运行依赖为 cbor-x 1.6.0；TypeScript 5.9.3 与 @types/node 22.15.30 服务于源码构建。插件通过本地 `file:` 依赖引用此目录。
+## 构建与启动
+
+从 `sdks/typescript/` 执行 `npm ci --ignore-scripts` 和 `npm run build`，即可生成进程 SDK 和网页宿主。进程 SDK 使用 `cbor-x` 编解码，插件工程可通过本地 `file:` 依赖引用这个包。
 
 ```typescript
 import {run} from "cordis-sdk";
@@ -21,6 +23,8 @@ await run("hello", [{
 ```
 
 组件对象包含 `name` 和 `apply(context, config)`。`inject` 将接口标识映射到必需性，`provides`、`listens` 列出服务和事件；`stateSchema`、`stateVersionMin`、`stateVersionMax` 描述继承范围。可选的 `resolve(config)` 在配置提交前检查业务规则。
+
+## 调用服务与持有资源
 
 `cordis idl gen --lang ts` 生成接口、数据类型和远程 Client。导入整个生成模块作为 binding，再通过 `await context.get("kv@1.0", binding, binding.KvClient)` 取得服务。提供方通过 `await context.provide("kv@1.0", provider, binding)` 登记。脚本提供方的结果可以是普通值或 Promise；传输始终按协议异步完成。
 
