@@ -177,7 +177,7 @@ cordis run
 | 追加 | M22 | HTTP 路由、通用字节流、页面调用来源与密钥插件 | 完成；[v0.1.0](https://github.com/Proton1917/Rust-Cordis/releases/tag/v0.1.0) 已发布 |
 | | M23 | SDK 动态调用、拥有型资源与命名依赖 | 完成；[v0.2.0](https://github.com/Proton1917/Rust-Cordis/releases/tag/v0.2.0) 已发布 |
 
-每个里程碑一个提交，须通过格式、clippy、全部测试（M18 时 307 条）、177 条一致性矩阵、`unsafe` 审计和行数预算检查。逐项记录见 [PROGRESS](docs/PROGRESS.md)，各阶段验收摘要见 [使用指南](docs/guide.md#里程碑验收摘要m0m18)。
+早期里程碑的运行条件与结果见[历史记录](docs/history/progress-2026-11-16.md)。当前提交按改动的实际影响选择验证范围，具体约定见[项目交付规则](AGENTS.md#交付规则)。
 
 ## 文档
 

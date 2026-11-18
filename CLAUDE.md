@@ -14,7 +14,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 第一性原理
 
-判据见 `AGENTS.md`（用户 2026-11-13 要求）。写 ADR 时加一节“职责放置”，逐项说明新增能力为什么只能放在所选位置；ADR-0046 §0、§3.9 与 ADR-0055、ADR-0056 可作范例。方案写完后逐条用判据检查一遍：初稿常见的偏差是图方便把协议细节或机密放进核心（ADR-0046 初稿把 Cookie 放进了核心）。
+设计决定说明事实的所有者和运行边界，项目判据与验证范围以 [AGENTS.md](AGENTS.md) 为准。HTTP 与页面身份的职责分配见 [ADR-0046](docs/adr/0046-http-routes.md)，原生插件与宿主的归属见 [ADR-0057](docs/adr/0057-shared-host-and-plugin-contract.md)。
 
 身份类字段先检查会不会与其他实体同名（ADR-0046 初版让页面调用方使用前端实例名作身份，与后端实例名冲突）。
 
