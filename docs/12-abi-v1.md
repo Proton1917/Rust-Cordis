@@ -1,61 +1,47 @@
-# 12 插件二进制接口 ABI v1
+# 原生插件二进制接口
 
-| 项 | 内容 |
+ABI 规定两个独立编译的程序怎样交换数据和执行调用，包括机器入口、参数表示、结果、内存寿命及错误。业务接口描述一个服务的行为。两层契约的使用者不同：前者由宿主和 SDK 实现，后者由业务插件定义。下面的固定入口属于下一版设计；已部署的 ABI v1 见末节。
+
+## 装载与绑定
+
+插件以版本化引导入口声明 ABI 主版本和可用能力。宿主按该版本读取描述，取得组件、依赖、提供的接口及状态模式，再与部署要求匹配。候选在现有实例切换前完成装载与接口绑定。能力或版本冲突指明插件、方法、期望值和实际值，旧实例继续服务。
+
+业务方法以接口名、主版本和稳定方法名识别。消费方根据共同声明生成类型化代理，提供方生成分派入口。绑定核对所需方法的参数、结果与同步或异步约定。方法顺序属于源码组织；兼容追加的方法有自己的身份。缓存的绑定随提供方加载代退役。改变业务语义通过新主版本与契约用例表达。
+
+## 固定调用入口
+
+| 动作 | 契约与责任 |
 |---|---|
-| 文档编号 | `DOC-12` |
-| 状态 | v1.0 前缀已冻结（2026-11-12）；ADR-0051 追加 ABI v1.1 的宿主协同等待槽 |
-| 读者 | 实现者；为其他语言编写插件绑定的人 |
-| 输入 | `DOC-15` 公理 `Q0`；`DOC-10` 的 `Q3`、`Q4`；`DOC-11` 的插件模型；`ADR-0010`、`ADR-0012`、`ADR-0018`、`ADR-0019` |
-| 输出 | 平台约定、入口与握手、基本类型布局、所有权规则、错误与 panic 规则、对象与虚表、异步约定、宿主虚表、插件描述符、租约、兼容规则 |
-| 不包含 | 插件作者使用的 Rust 接口（`DOC-13` §4）；装载器内部实现 |
+| 发起 | 调用者提交目标句柄、方法身份及编码后的参数。入口只在调用期间借用输入；需延后处理时取得明确的所有权。 |
+| 完成 | 同步结果直接返回。异步请求通过调用编号交付一次终态；语言 Future、闭包、唤醒器及执行器由创建方持有。 |
+| 释放 | 分配方回收缓冲区。可供另一插件使用的对象带有明确的释放操作，宿主按实例与加载代登记。 |
+| 退役 | 取消与完成竞争时只接受一次终态，迟到的结果归还附带资源。调用和清理结束后再退役仍被引用的代码。 |
 
-本文是规范性文档。`crates/cordis-abi` 是它的 Rust 实现，`docs/abi/v1-layout.txt` 是由测试生成的布局记录，三者必须一致（`DOC-14` 退出条件 `Y-7`）。
+同宿主调用使用本进程内固定签名的入口，跨宿主调用经 UP/1。两种传输共享业务方法、值与错误的定义。目标设计将业务方法的类型变化限制在绑定检查和数据解码中。正式发布新 ABI 前，需要冻结机器签名、布局、所有权、线程和兼容期，并用不同编译器独立构建两端验证。
 
-## 1 设计依据
+## 绑定、应答和卸载的完整过程
 
-ABI v1 连接同一 `cordis-host` 进程中的宿主与原生插件，以及组内的原生插件。核心 `cordis` 的插件边界为 `UP/1` 消息；ABI 类型、库装载和插件函数指针均留在插件宿主进程。本文中的宿主指 `cordis-host`。
+以 `store@1` 的写入方法为例。消费方声明所需的最低次版本、方法名与参数结果类型。绑定时，宿主为当前提供方和加载代建立本地句柄。Rust 侧仍使用生成的方法调用；SDK 在边界编码业务参数，提供方分派器按自身声明解码。新实现追加查询方法以后，旧消费方仍按原方法身份调用写入。需要新方法的消费方依较高的最低次版本绑定。
 
-| 要求 | 来源 | 本文的对应做法 |
-|---|---|---|
-| 插件可以用不同编译器版本构建 | `G7` | 只用 C 调用约定与 `#[repr(C)]` 布局；不传递任何 Rust 标准库类型 |
-| 布局由本项目规定，不随第三方 crate 版本变化 | `ADR-0010` | 全部类型在本文中定义 |
-| 不出现跨分配器释放 | `DOC-10` §8 第 1 项 | 拥有所有权的值携带自己的释放函数（§5） |
-| 不出现跨边界展开 | 同上 | 每个边界函数在被调用侧捕获 panic（§6） |
-| 旧库代码可判定静止 | `Q4` | 每个对象携带租约（§11） |
-| 追加能力不破坏旧插件 | `ADR-0014` | 虚表首部记录长度，追加只在末尾（§7.2） |
+调用编号解决应答配对，业务操作标识解决提交状态查询，二者寿命不同。提供方将写入结果与业务操作标识一起持久提交后，返回一个小回执。消费方在应答传输中断后先按业务操作标识查询，已有提交直接返回原回执。对结果待确认且缺少幂等约定的写入，调用方保留操作标识并查询业务所有者，以查询结果决定后续动作。
 
-## 2 平台约定
+异步调用从“已受理”进入“已完成、已取消或提供方退役”之一。发起方释放完成槽后，迟到应答只归还关联资源。正在执行的同步 FFI 调用必须等到返回才能释放其代码租约。设有截止时间的逻辑调用可以提前结束等待；加载器仍持有执行中的库，直至库代码真正退出。宿主发生进程级故障时，核心以连接寿命回收该组资源。这样既能让使用者及时结束等待，也能使动态库释放时机有实际依据。
 
-| 项 | 约定 |
-|---|---|
-| 目标平台 | `aarch64-apple-darwin`、`x86_64-unknown-linux-gnu`。均为 64 位小端 |
-| 调用约定 | `extern "C"` |
-| 指针与长度 | 指针 8 字节；长度与计数一律用 `u64`，不用 `usize` |
-| 布尔 | `u8`，0 为假，1 为真，其他值视为协议错误 |
-| 字符串 | UTF-8，不以 0 结尾，以指针加长度表示 |
-| 线程 | 宿主函数可以从任意线程调用；插件导出的函数必须能从任意线程调用（`Send + Sync` 语义） |
+## 大数据与业务提交
 
-## 3 入口与握手
+普通值承担小型参数和回执。文件、完整清单等随业务量增长的数据采用分页、字节流或版本化快照引用。写入者记录已提交的操作标识与快照，返回小型回执；应答传输失败后，调用者据此查询原操作结果。流在读完、取消或提供方退役时回收资源。
 
-插件库导出两个符号：
+值超出传输预算和二进制调用签名冲突各有独立诊断。错误说明接口、方法、请求或返回阶段，以及触及的限额或版本；业务正文留在数据所有者处。[协议容量](16-up1-protocol.md) · [方法表的历史缺陷](adr/0056-typed-layout-digest.md)
 
-| 符号 | 类型 | 内容 |
-|---|---|---|
-| `CORDIS_PLUGIN_ABI` | `static u32` | 插件编译时使用的 ABI 主版本，v1 为 `1` |
-| `cordis_plugin_v1` | `extern "C" fn(host: *const HostV1, library: LibraryId, out: *mut *const PluginV1, err: *mut AbiError) -> AbiStatus` | 入口函数 |
+## ABI v1 与兼容期
 
-握手顺序：
+v0.2.5 使用宿主 ABI 1.1；主分支基线 85860d8 包含 ABI 1.2。v1 读取 `CORDIS_PLUGIN_ABI` 和 `cordis_plugin_v1`，使用 `HostV1`、`PluginV1`、`AbiObject`、`AbiBuf`、`AbiFuture` 及库租约。组内服务提供类型化方法表和按名称调用的入口。1.2 的新消费方比较布局标记与摘要，旧消费方沿其编译版本的逻辑执行。
 
-1. `cordis-host` 的装载器读取 `CORDIS_PLUGIN_ABI`，按宿主支持的 ABI 主版本集合完成版本检查，通过后调用入口。
-2. 调用 `cordis_plugin_v1`，传入宿主虚表和装载器为该库分配的 `LibraryId`。插件保存二者（宿主虚表在插件宿主进程生命期内有效），写出描述符指针。
-3. 装载器校验描述符（§10）。校验失败时调用描述符的 `release` 并报错。
-4. 描述符在装载器调用 `release` 之前保持有效。
+兼容期内，旧库经匹配 v1 的宿主运行，新旧宿主经 UP/1 暴露公开契约。已安装应用可逐组升级；兼容支持期见 [ADR-0014](adr/0014-versioning.md)。[原始类型](../crates/cordis-abi/src/raw.rs) · [v1.0 布局基准](abi/v1-layout.txt) · [v1.1 布局基准](abi/v1.1-layout.txt) · [v1 全部槽位与字段](https://github.com/Proton1917/Rust-Cordis/blob/85860d8b1fd784f6935084c611b07e12755cd7b8/docs/12-abi-v1.md)
 
-入口函数被调用至多一次。
+## 附录　v1 机器边界速查
 
-## 4 基本类型
-
-全部类型为 `#[repr(C)]`。
+这些表供维护既有二进制程序时查询。v1 的拥有型缓冲在创建方释放；对象、回调、唤醒器与未终结的异步调用维持对应的代码租约。握手时使用描述符大小和版本决定可读取的范围。
 
 | 类型 | 字段 | 用途 |
 |---|---|---|
@@ -71,171 +57,7 @@ ABI v1 连接同一 `cordis-host` 进程中的宿主与原生插件，以及组�
 | `AbiUnit` | `reserved: u8`，值为 0 | 单位结果 |
 | `AbiState` | `schema: AbiBuf, version: u32, reserved: u32, data: AbiBuf` | 拥有的状态块，reserved 为 0 |
 
-`AbiError.code` 取值：`1` 一般错误，`2` 无效参数，`3` 版本不足（调用超出提供方次版本的方法），`4` 对象已失效（实例已停用），`5` panic，`6` 超时，`7` 被取消。`1000` 以上留给接口自定义。
-
-## 5 所有权与内存
-
-1. 借用类型（`AbiStr`、`AbiBytes`、指针参数）只在本次调用期间有效。被调用侧需要保留时自行复制。
-2. 拥有类型（`AbiBuf`、`AbiError`、`AbiObject`、`AbiFuture`、`AbiWaker`）的释放由分配它的一侧提供的函数完成：`AbiBuf.free`，或对象虚表中的 `drop`。接收方用完后调用该函数，不调用自己的分配器。`AbiContext` 的拥有字段为 lease，接收方按对象规则释放它。
-3. 通过 `out` 参数写出的拥有类型，所有权转给调用方。函数返回 `AbiStatus` 非 0 时，`out` 不被写入，错误的所有权转给调用方。
-4. 一个拥有值恰好被释放一次。拥有输入从进入被调函数起由被调方接管；成功、失败与 panic 均由其清理。蹦床先为全部拥有输入建立 RAII，再解码内容。`AbiOption<T>` 的标志为 0 时载荷保持未初始化，为 1 时载荷是有效的 T；接管时依此结构契约处理所有权。
-5. 拥有值在创建时取得 `library` 的租约，跨边界转交移动该租约。释放函数仅释放资源，调用方等待其返回后再调用 `lease_release`。库 0 的租约操作直接成功。
-6. 普通 Vec 缓冲的 owner 为 null，free 按 ptr、len、cap 归还分配。携带资源的缓冲以 owner 指向源侧拥有记录；该记录保持字节和资源守卫，free 在源侧释放二者。ptr、len、cap 始终描述可读字节。`Buf::with_owner` 在最终拥有存储形成后取得指针。
-
-## 6 错误与 panic
-
-1. 每个跨边界函数的实现都在函数体外层捕获 panic，转换为 `AbiStatus = 2` 与 `code = 5` 的 `AbiError`。展开不得越过边界。
-2. 插件必须以 `panic = "unwind"` 编译（`DOC-11` `PR-8`），描述符字段 `panic_unwind` 为 `1`。
-3. 宿主把 panic 错误交回调用方或 UP/1 适配层。apply 错误由核心生命周期记录为 Failed；服务方法错误向调用方返回；清理错误被记录后继续其余清理。
-4. clone、drop、free、Waker、描述符 release 与 Host 函数都遵循本节。释放阶段的 panic 错误可使用空 message/detail 和 code 5。Rust Drop 与 Wake 经 Host `log(ctx=0)` 报告错误；显式释放返回 Result。
-
-## 7 对象与虚表
-
-### 7.1 对象
-
-接口实现与回调以 `AbiObject` 跨边界传递。`vtable` 指向以 `ObjectHeader` 开头的只读虚表，存储由实现方库或对象的共享实现持有。租约归属由对象的 `library` 字段给出：
-
-```c
-struct ObjectHeader {
-    uint64_t  size;          // 虚表总字节数，含首部
-    uint32_t  kind;          // 1 接口实现，2 同步回调，3 异步回调，4 状态导出器
-    uint32_t  flags;         // 位0：具备类型化方法表；位1（ABI 1.2）：reserved 存放布局摘要
-    uint32_t  reserved;      // flags 位1为1时为类型化方法表的布局摘要，否则为 0
-    AbiStr    interface;     // 接口标识 "kv@1.3"；回调为空串
-    AbiStatus (*clone)(void *data, AbiObject *out, AbiError *err);
-    AbiStatus (*drop)(void *data, AbiError *err);
-    const AbiStr *methods;   // 方法名按声明顺序排列
-    uint64_t method_count;
-    AbiStatus (*invoke)(void *data, AbiStr method, AbiBytes args, AbiBuf *out, AbiError *err);
-    AbiStatus (*invoke_async)(void *data, AbiStr method, AbiBytes args, struct AbiFuture *out, AbiError *err);
-};
-```
-
-`clone` 产生一份新的拥有引用，`drop` 释放一份。对象内部的引用计数由实现方维护。vtable 原始指针从完整虚表对象派生，其来源覆盖 size 声明的全部字节；克隆保留此原始指针。Rust 的 ObjectHeader 引用用于读取首部，方法槽沿完整虚表原始指针访问。方法名表及各 UTF-8 名称与虚表具有相同的有效期。
-
-kind 为 1 时，flags 位 0 决定接口的调用形式。值为 1 的对象同时提供类型化方法表和通用入口；值为 0 的对象提供通用入口，首部之后的布局由该形式的 size 界定。`generic_object` 生成后一种对象，其共享实现持有虚表与方法名存储。kind 为 2–4 的回调遵循 §7.4 的固定尾部布局。当前实现将其 flags 设为 0，methods 设为 null，method_count 设为 0。
-
-### 7.2 方法与追加
-
-接口的方法指针紧随 `ObjectHeader`，按方法在接口 trait 中的声明顺序排列。每个方法的签名形如：
-
-```c
-AbiStatus method(void *data, <参数...>, <返回值 out 指针>, AbiError *err);
-```
-
-次版本追加的方法排在末尾。调用方在调用第 `i` 个方法前检查 `size >= sizeof(ObjectHeader) + (i + 1) * 8`，不满足时返回 `code = 3`，不读取越界内存。
-
-接口调用方先读取 flags。位 0 为 0 时按方法名进入 invoke 或 invoke_async。位 0 为 1 时，调用方只在以下条件同时成立时按上述方法槽调用，其余情况按方法名调用（ADR-0056）：
-
-- flags 位 1 为 1；
-- reserved 中的布局摘要等于调用方按自身接口声明计算的摘要。
-
-摘要为按声明顺序排列的“方法名、该槽位的 C 函数类型”文本的 32 位 FNV-1a 值，由 `#[interface]` 宏在编译期计算。名称与版本相同而方法顺序、参数个数、原始类型或同步异步形式不同的两份声明得到不同摘要。槽位强制转换为调用方声明的函数类型，摘要不一致时按槽位调用属于未定义行为，所以调用方改走按名称的通用入口。ABI 1.1 及更早的对象位 1 为 0，新调用方对它们按名称调用。
-
-接口声明的方法按同一顺序出现在名称表与类型化表中，两个入口保持相同行为。
-
-Scoped 提供方在名称表末尾追加保留方法 `cordis.scope`，其通用入口接受一个元数据值并返回视图对象的资源引用。类型化表继续按接口 trait 的方法声明排布。基对象和视图对象都可以提供类型化表，视图在提供方所在宿主中创建。Rust 安全包装将可选作用域工厂保存在对象的源侧数据中，克隆对象同时保留工厂；保留方法的参数转换、工厂调用与结果编码处于 ABI panic 边界内。
-
-### 7.3 参数与返回值的编码
-
-| Rust 类型（接口 crate 中） | 跨边界形式 |
-|---|---|
-| `bool`、`i8`–`i64`、`u8`–`u64`、`f32`、`f64` | 原样，`bool` 按 §2 |
-| `&str` | `AbiStr` |
-| `String` | `AbiBuf`（UTF-8） |
-| `&[u8]` | `AbiBytes` |
-| `Vec<u8>` | `AbiBuf` |
-| `Service<dyn I>`（另一接口的对象） | `AbiObject` |
-| `Option<T>`，`T` 为以上类型 | `AbiOption<T>` |
-| 其他实现 `serde::Serialize + DeserializeOwned` 的类型 | `AbiBuf`，内容为 CBOR（RFC 8949）编码 |
-| `Result<T>` | 方法返回 `AbiStatus`，成功值写入 out 指针，错误写入 `AbiError` |
-| `()` | `AbiUnit` |
-
-选用 CBOR 的理由见 `ADR-0010`：它是公开标准，自描述，字段按名称编码，追加带默认值的字段不破坏旧读取方（`DOC-11` §3.2 第 2 条）。
-
-`AbiStr` 与 `AbiBytes` 用于借用输入；字符串和字节结果分别使用 `String` 与 `Vec<u8>` 的拥有形式。异步方法在入口返回前复制借用参数，Future 持有复制结果和接口实现。
-
-### 7.3.1 通用调用编码
-
-invoke 与 invoke_async 的 args 是一个完整的 CBOR 数组，元素按参数声明顺序排列；零参数方法使用空数组。结果是单个完整的 CBOR 值，单位结果编码为 null。载荷尾随额外字节、参数个数或类型错误返回 code 2；未知方法名返回 code 3。invoke 执行同步方法，异步方法经该入口调用时返回 code 2；invoke_async 支持同步与异步方法，其 Future 的 ABI 成功值为拥有的 AbiBuf。
-
-| Rust 值 | 通用 CBOR 值 |
-|---|---|
-| 布尔、整数、浮点 | 对应的 CBOR 基本值 |
-| String、&str | 文本字符串 |
-| Vec<u8>、&[u8] | 字节字符串 |
-| () | null |
-| Option<T> | None 为 null；Some 使用下述可空值规则 |
-| Service<dyn I> | Tag 60000 包裹宿主分配的 u64 对象编号 |
-| 其他 serde 数据类型 | 自描述值，结构体字段按名称编码 |
-
-Some 的内部编码值通常直接交出；内部值为 null 或 Tag 60001 时，外包一层 Tag 60001。解码时，null 为 None，Tag 60001(payload) 为 Some(payload)，其他值为 Some(value)。递归应用此规则可保留 Option<()> 和嵌套 Option 的所有状态。Tag 60000 与 Tag 60001 是本协议的应用语义标签。
-
-### 7.3.2 通用调用中的资源寿命
-
-每次 object_export 消费一个拥有 AbiObject，宿主分配新编号并让资源表持有它；object_import 克隆表中的对象，表引用继续保留；object_release 移出并释放表引用。克隆与释放在宿主资源表锁外执行。已释放编号的 import 或 release 返回 code 4。
-
-`CborEncoder` 为输入和结果建立资源守卫。同步调用结束、异步入口交回 Future 后，调用方释放输入载荷及其导出编号；被调用侧在入口内完成全部参数 import，异步 Future 持有独立对象引用。输出 Buf 保持导出编号至 free，接收方在释放 Buf 前完成结果 import。序列化、参数解码或调用失败时，各侧的拥有包装释放已取得的引用；取消时 Future 释放其参数引用。输出缓冲的源侧 owner 负责最终资源表回收。
-
-ADR-0039 将该机制扩展到 record、list、tuple、option 等复合值。`CborEncoder::value` 与 `encode` 在同步 Serde 作用域中导出资源，`decode_in` 与 `from_value_in` 在接收环境中导入独立引用；`Service<I>`、`BorrowedService<'a, I>` 参与递归编解码。普通状态编解码使用纯数据作用域。异步事件在 ABI 入口构造回调 Future 时接管输入资源，监听器主体随后由 Future 执行。公开 ABI 布局与 HostV1 槽位保持 v1.0。
-
-### 7.4 回调
-
-```c
-struct SyncCallbackVTable {
-    struct ObjectHeader header;
-    AbiStatus (*call)(void *data, uint64_t ctx, uint64_t scope, AbiBytes payload, AbiError *err);
-};
-struct AsyncCallbackVTable {
-    struct ObjectHeader header;
-    AbiStatus (*call)(void *data, uint64_t ctx, uint64_t scope, AbiBytes payload, struct AbiFuture *out, AbiError *err);
-};
-struct ExporterVTable {
-    struct ObjectHeader header;
-    AbiStatus (*export)(void *data, AbiBuf *out, AbiError *err);
-    AbiStatus (*thaw)(void *data, AbiError *err);
-};
-```
-
-同步与异步回调分别使用 kind 2、3，状态导出器使用 kind 4。效应体收到所属 ctx 和有效 scope；清理、事件、线程收到所属 ctx 及 scope 0。事件 payload 是本次派发的 CBOR 字节，其余回调使用空 payload。异步回调返回单位结果的 Future。状态导出器在 export 时冻结写入，导出失败或替换中止时宿主调用所有相关导出器的 thaw。回调克隆保持同一闭包状态；效应体与清理按一次调用契约执行，事件监听器可重复执行。
-
-## 8 异步
-
-```c
-struct AbiFuture {                 // 不使用 ObjectHeader，单独定义
-    void *data;
-    const struct FutureVTable *vtable;
-    LibraryId library;
-};
-struct FutureVTable {
-    uint64_t  size;
-    // 成功时 out_state 为 0（Pending）或 1（Ready）；Ready 时写出 out
-    AbiStatus (*poll)(void *data, const struct AbiWaker *waker, void *out, uint32_t *out_state, AbiError *err);
-    AbiStatus (*drop)(void *data, AbiError *err);
-};
-struct AbiWaker {
-    void *data;
-    const struct WakerVTable *vtable;
-    LibraryId library;             // 由宿主创建的唤醒器为 0
-};
-struct WakerVTable {
-    AbiStatus (*clone)(void *data, struct AbiWaker *out, AbiError *err);
-    AbiStatus (*wake)(void *data, AbiError *err);          // 消耗该引用
-    AbiStatus (*wake_by_ref)(void *data, AbiError *err);
-    AbiStatus (*drop)(void *data, AbiError *err);
-};
-```
-
-1. 异步方法与异步回调返回 `AbiFuture`。轮询方按 Rust `Future` 的规则轮询，返回 Ready 后不再轮询，随后调用 `drop`。
-2. 未完成即 `drop` 表示取消。实现方保证取消后不再访问 `waker`。
-3. `AbiWaker` 由轮询方提供。实现方保存唤醒器时必须 `clone`。
-4. 轮询 `AbiFuture` 的始终是宿主的执行器。插件不运行自己的执行器来轮询宿主交给它的 Future（ADR-0055 的库级 tokio 运行时只为插件内部的 tokio 接口提供上下文，不轮询宿主交给插件的 Future）。
-5. 同一 Future 的 poll 与 drop 串行执行，Future 具有 Send 语义；Waker 的各项操作支持跨线程。poll 失败时 Future 进入终结状态，结果槽保持原状；调用方随后释放 Future。
-6. out 的具体类型由产生 Future 的方法约定，与同步方法的成功返回映射相同。apply、spawn、sleep、异步回调及效应操作均返回 `AbiUnit`。组件 apply 与异步效应遵循 A-7，运行至完成或协作结束后进行生命周期清理。
-
-## 9 宿主虚表 `HostV1`
-
-宿主虚表以 `size: u64` 开头，其后为函数指针，按下表顺序排列。所有函数返回 `AbiStatus`，表中的 err 类型均为 `*mut AbiError`。ctx、scope、effect 为 u64。ctx 按加载纪元分配，保留至该纪元的 apply、任务、线程及效应清理结束；清理期间 get 继续读取 committed 依赖，config、日志、时钟、sleep 和事件调用继续有效。`is_current` 表达目标纪元是否有效。纪元结束后句柄退役，调用返回 code 4。scope 在效应体执行期间有效。effect 的外部句柄保留至 SDK 最后一份引用释放或所属 context 退役；核心内核独立持有实际效应，外部句柄释放后效应继续遵循原有生命周期。ctx 0 保留给 log 的库级诊断。
+### v1 的宿主操作
 
 | 序号 | 函数 | 作用 | 对应内核接口 |
 |---|---|---|---|
@@ -268,80 +90,17 @@ struct WakerVTable {
 | 26 | `context_derive(ctx, options: AbiBytes, out: *mut AbiContext, err)` | options 为包含 isolate/intercept 数组的 CBOR；返回派生编号与视图租约 | `isolate_named`、`intercept_named` |
 | 27 | `plugin(ctx, component: AbiStr, config: AbiBytes, out: *mut AbiFuture, err)` | 在给定视图中装入调用方插件自己的组件；Future 成功值为 u64 实例编号 | 组件装载 |
 
-`context_derive` 返回的租约由 SDK Context 的共享拥有引用持有，最后一份 Context 释放时按对象规则归还。已登记效应及其他注册资源分别保持其视图，父加载纪元结束后派生上下文一同退役。基础 Context 继续使用核心加载纪元的生命周期。给效应体和线程构造 Context 的 SDK 回调捕获登记时的 Context，保持同一视图编号及租约。`plugin` 的配置在入口返回前复制，子实例归属于调用方的效应，实例编号作为标识返回。
+### v1 方法参数的表示
 
-HostV1 在 M11 冻结时包含 28 个槽位，布局保存于 `docs/abi/v1-layout.txt`。后续追加位于表尾，并提升 HostV1 的次版本（size 增大）。
-
-### 9.1 ABI v1.1 的同步等待
-
-ADR-0051 定义 `HostV1_1`：首字段为原 HostV1，尾部追加槽 28 `block_in_place(data, callback, err)`。表长为 240 字节，原 232 字节前缀及函数位置保持。扩展布局见 `docs/abi/v1.1-layout.txt`。
-
-callback 的 C 签名为 `AbiStatus (*)(void *data, AbiError *err)`。data 由调用方借用给本次调用，宿主在当前线程调用一次 callback，并等待其返回后结束入口。回调和返回值留在调用方，宿主负责把原生工作线程交给执行器的替代线程。源侧 ABI 边界处理回调 panic，错误码沿 §6 返回。
-
-读取方保留握手原始指针所覆盖的完整表范围；访问尾部槽前检查 `size >= sizeof(HostV1_1)`。旧宿主返回 code 3，回调及其 Future 在此之前保持待执行状态。SDK 0.2.1 的 `Context::wait` 使用该槽，最低宿主为 cordis-host 0.1.1；既有 v1.0 能力继续按原表调用。
-
-## 10 插件描述符 `PluginV1`
-
-```c
-struct PluginV1 {
-    uint64_t size;
-    uint32_t abi_major;           // 1
-    uint32_t abi_minor;           // 插件编译时使用的 cordis-abi 次版本
-    uint8_t  panic_unwind;        // 必须为 1（PR-8）
-    uint8_t  format;              // 1 原生库，2 通用插口进程插件，3 WebAssembly保留值
-    uint8_t  reserved[6];
-    AbiStr   name;                // 插件名
-    AbiStr   version;             // 插件版本，semver
-    AbiStr   sdk_version;         // cordis-sdk 版本
-    AbiStr   build_info;          // 编译器版本、目标三元组，供诊断
-    const struct ComponentV1 *components;
-    uint64_t component_count;
-    AbiStatus (*release)(const struct PluginV1 *self, AbiError *err);
-};
-struct ComponentV1 {
-    uint64_t size;
-    AbiStr   name;
-    const struct DependencyV1 *inject;   uint64_t inject_count;
-    const AbiStr *provides;              uint64_t provides_count;   // 声明提供的接口，用于 SW-4
-    const AbiStr *listens;               uint64_t listens_count;    // 声明监听的事件，供诊断
-    AbiStr   state_schema;                // 空串表示不导出状态
-    uint32_t state_version_min, state_version_max;   // 接受继承的版本范围
-    // config 为 CBOR；返回的 AbiFuture 完成即 apply 完成
-    AbiStatus (*apply)(uint64_t ctx, struct AbiBytes config, struct AbiFuture *out, AbiError *err);
-    // 配置校验，失败时 err.detail 为带路径的问题列表（CBOR）
-    AbiStatus (*resolve)(struct AbiBytes config, AbiError *err);
-};
-struct DependencyV1 {
-    AbiStr  interface;            // "kv@1.2"
-    uint8_t required;             // 1 必需；0 可选
-    uint8_t reserved[7];
-};
-```
-
-`components` 指向 `component_count` 条连续组件记录。每条记录的 `size` 是该记录的完整字节数，至少为 v1.0 的 `sizeof(ComponentV1)`，并为 `alignof(ComponentV1)` 的整数倍。读取方先读取并验证 `size`，再把记录前缀解释为 `ComponentV1`；下一条记录位于当前地址加 `size` 字节处。组件表原始指针的来源覆盖整张记录表。Rust 绑定通过 `component_at` 共享此读取协议，追加字段的记录由原实现方保留至描述符释放。
-
-装载器的校验：
-
-1. `abi_major` 受支持，`size` 不小于 v1.0 的结构大小。
-2. `panic_unwind == 1`。配置项 `allow_panic_abort = true` 时降级为警告。
-3. `cordis-host` 的原生动态库入口采用 format 1；进程插件使用 format 2，WebAssembly 保留 format 3。
-4. `name` 与 `version` 非空且合法；组件名在库内唯一；接口标识符合 `DOC-11` §3.1。
-
-## 11 租约
-
-1. 装载器为每个装载的库分配 `LibraryId` 和一个原子计数。
-2. 任何持有某库代码指针或数据指针的拥有值（`AbiBuf`、`AbiObject`、`AbiFuture`、`AbiWaker`、回调与清理函数），创建时取得该库的一份租约。
-3. 接收方安全包装接管拥有值及其既有租约。clone 创建新资源引用并取得新租约；转交移动既有引用与租约。
-4. 释放时调用方在 free/drop/wake 返回后归还租约。调用方保持整个边界调用期间的库引用。lease_release 调整计数；装载器在相关调用返回后调度物理卸载。描述符与其组件函数由装载器持有的库租约覆盖。
-5. 库的组件全部停用且计数为 0 时，该库的代码进入静止状态。之后是否关闭库由 `ADR-0012` 规定。
-
-## 12 兼容规则与变更流程
-
-| 变更 | 允许的时机 | 要求 |
-|---|---|---|
-| 修改任何已有类型的布局或函数签名 | M11 冻结前 | 冻结后需要发布 ABI v2 |
-| 在 `HostV1`、`PluginV1`、`ComponentV1` 末尾追加字段或函数 | 冻结后 | ABI v1 次版本加一；读取方以 `size` 判断字段是否存在；写 ADR |
-| 新增 `AbiError.code` 取值 | 冻结后 | 旧插件把未知值视为 `1` |
-| 新的 ABI 主版本 | 核心年度升级 | 核心对旧主版本继续提供适配，支持期见 `ADR-0014` |
-
-冻结后，`docs/abi/v1-layout.txt` 的任何改动都必须伴随一份 ADR。
+| Rust 类型（接口 crate 中） | 跨边界形式 |
+|---|---|
+| `bool`、`i8`–`i64`、`u8`–`u64`、`f32`、`f64` | 原样，`bool` 按 §2 |
+| `&str` | `AbiStr` |
+| `String` | `AbiBuf`（UTF-8） |
+| `&[u8]` | `AbiBytes` |
+| `Vec<u8>` | `AbiBuf` |
+| `Service<dyn I>`（另一接口的对象） | `AbiObject` |
+| `Option<T>`，`T` 为以上类型 | `AbiOption<T>` |
+| 其他实现 `serde::Serialize + DeserializeOwned` 的类型 | `AbiBuf`，内容为 CBOR（RFC 8949）编码 |
+| `Result<T>` | 方法返回 `AbiStatus`，成功值写入 out 指针，错误写入 `AbiError` |
+| `()` | `AbiUnit` |

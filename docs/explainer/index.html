@@ -1,4 +1,4 @@
-<title>Cordis 核心图解</title>
+<title>Rust-cordis 的组件、宿主与替换</title>
 <link rel="icon" href="data:,">
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -244,20 +244,20 @@ footer { font-size: 13px; color: var(--muted); border-top: 1px solid var(--line)
 
   <header class="hero">
     <div class="eyebrow">Rust-Cordis</div>
-    <h1>Cordis 运行时核心</h1>
-    <p class="lead"><button class="term" data-term="core">核心</button>是一个长期运行的 Rust 程序。软件的功能全部以<button class="term" data-term="plugin">插件</button>形式提供：数据存储、业务逻辑、网页、AI 调用各自是单独编译的插件，在核心运行期间插入、拔出或更换。核心不包含业务功能，负责插件的启动与停止、插件之间的<button class="term" data-term="service">服务</button>连接，以及插件移除后的清理。</p>
+    <h1>共享宿主中的组件与替换</h1>
+    <p class="lead"><button class="term" data-term="core">核心</button>管理实例和依赖，一个原生宿主可以装载多个<button class="term" data-term="plugin">插件</button>。下面的例子从服务的使用方观察一次替换，展示资源由谁取得、何时释放。</p>
     <div class="promises">
-      <div class="promise"><b>插件拔出后不留残余</b><span>插件运行时打开的文件、提供的服务、注册的页面都作为<button class="term" data-term="effect">效应</button>记在核心里。插件停止时，核心按<button class="term" data-term="lifo">后进先出</button>顺序全部撤销。</span></div>
-      <div class="promise"><b>依赖变化时自动重连</b><span>插件声明自己需要的服务（<button class="term" data-term="inject">依赖</button>）。服务出现时插件启动，服务更换时插件重建，服务消失时插件进入等待。</span></div>
-      <div class="promise"><b>插件故障不影响核心</b><span>插件运行在核心之外的独立进程中。插件崩溃后，核心按记录收回它的全部效应，并重新启动它。</span></div>
+      <div class="promise"><b>清理归到实例</b><span>每次登记一个<button class="term" data-term="effect">效应</button>，就同时登记释放它的动作。</span></div>
+      <div class="promise"><b>服务随依赖接续</b><span>必需服务出现时激活，撤回时等待，新版本到来时重建绑定。</span></div>
+      <div class="promise"><b>同组共用进程</b><span>正常替换可以只重建受影响实例；宿主进程退出时，同组成员一起恢复。</span></div>
     </div>
   </header>
 
   <section aria-labelledby="sim-title">
     <div class="sec-head">
       <div class="eyebrow">模拟</div>
-      <h2 id="sim-title">三个插件的运行过程</h2>
-      <p class="lead">模拟中有三个插件。存储插件（Rust）把数字保存在文件里，提供服务 <button class="term code" data-term="service">kv@1</button>；计数插件（Python）每秒加一，把结果写入存储，提供服务 <button class="term code" data-term="service">counter@1</button>；前端插件（TypeScript）在浏览器页面中显示当前数字。每张卡片下方的按钮触发一次核心操作，日志按顺序记录核心的每一步处理。</p>
+      <h2 id="sim-title">存储、计数与页面</h2>
+      <p class="lead">数字由 Rust 存储服务保存，Python 计数器修改它，网页组件显示结果。可以先移除存储，观察计数器和页面怎样随依赖变化，再恢复提供方。</p>
     </div>
 
     <div class="sim" id="sim">
@@ -290,8 +290,8 @@ footer { font-size: 13px; color: var(--muted); border-top: 1px solid var(--line)
           <thead><tr><th>操作</th><th>核心的处理</th></tr></thead>
           <tbody>
             <tr><th scope="row">拔出</th><td>先停止使用该插件服务的实例，再按后进先出顺序撤销该插件的全部效应，实例进入“已释放”。</td></tr>
-            <tr><th scope="row">换成新版本</th><td><button class="term" data-term="hotswap">热替换</button>：旧版本导出状态，使用方先停止，旧版本卸下，新版本装入并继承状态，使用方重新连接。</td></tr>
-            <tr><th scope="row">模拟崩溃</th><td>插件进程退出。使用方先停止，核心按记录代为撤销该插件的效应，随后重启该插件。</td></tr>
+            <tr><th scope="row">换成新版本</th><td><button class="term" data-term="hotswap">热替换</button>：候选程序先准备，受影响实例导出状态。使用方清理后，内核激活新实现并重新绑定服务。</td></tr>
+            <tr><th scope="row">模拟崩溃</th><td>这个示例的存储宿主退出后，核心撤回其连接与绑定，依赖方等待。宿主恢复后依赖方重新激活。</td></tr>
             <tr><th scope="row">新版本带有启动错误</th><td><button class="term" data-term="rollback">回滚</button>：新版本启动失败，核心撤销它已登记的效应，换回旧版本并交回更换前的状态。</td></tr>
           </tbody>
         </table>
@@ -303,13 +303,13 @@ footer { font-size: 13px; color: var(--muted); border-top: 1px solid var(--line)
     <div class="sec-head">
       <div class="eyebrow">结构</div>
       <h2 id="arch-title">进程结构</h2>
-      <p class="lead">核心进程只运行核心自己的代码。插件全部运行在核心之外的进程中，与核心之间通过 <button class="term code" data-term="up1">UP/1</button> 消息通信。插件中的段错误、死循环、内存错误只影响它所在的进程。</p>
+      <p class="lead">原生库在 <button class="term code" data-term="host">cordis-host</button> 中执行。脚本和浏览器使用各自的语言环境，所有实例的启停由同一内核决定。跨进程交互使用 <button class="term code" data-term="up1">UP/1</button>。</p>
     </div>
     <div class="diagram">
       <svg class="arch" viewBox="0 0 960 410" role="img" aria-label="核心进程与插件进程的结构">
         <rect class="core" x="170" y="18" width="620" height="160" rx="12"/>
         <text class="title" x="192" y="48" font-size="17">cordis 核心进程</text>
-        <text class="muted" x="770" y="48" font-size="12" text-anchor="end">纯 Rust · 无 unsafe · 不运行插件代码</text>
+        <text class="muted" x="770" y="48" font-size="12" text-anchor="end">安全 Rust · 实例与依赖</text>
         <rect class="sub" x="192" y="68" width="136" height="88" rx="8"/>
         <text x="206" y="96" font-size="15" class="title">内核</text>
         <text class="muted" x="206" y="120" font-size="12">实例 · 依赖</text>
@@ -375,7 +375,7 @@ footer { font-size: 13px; color: var(--muted); border-top: 1px solid var(--line)
   <section aria-labelledby="mount-title">
     <div class="sec-head">
       <div class="eyebrow">挂载</div>
-      <h2 id="mount-title">插件的挂载过程</h2>
+      <h2 id="mount-title">从程序来源到活跃实例</h2>
     </div>
     <ol class="steps">
       <li><div><b>读取配置</b><p>核心读取 <button class="term code" data-term="toml">cordis.toml</button>，得到要运行的实例、各自使用的插件、配置和插件组。</p></div></li>
@@ -383,10 +383,10 @@ footer { font-size: 13px; color: var(--muted); border-top: 1px solid var(--line)
       <li><div><b>握手</b><p>插件报告名称、版本、包含的<button class="term" data-term="component">组件</button>、每个组件需要和提供的服务。版本不兼容的插件在此被拒绝。</p></div></li>
       <li><div><b>挂载为实例</b><p>核心为每个组件生成一个<button class="term" data-term="instance">实例</button>，交给内核管理。所需服务不全时，实例处于“等待中”。</p></div></li>
       <li><div><b>启动</b><p>所需服务齐全后，内核向插件进程发出 <code>apply</code>，插件执行自己的启动代码。</p></div></li>
-      <li><div><b>记录效应</b><p>插件每打开一项资源、提供一项服务、注册一个页面，都以一条消息报告核心，内核记入该实例的<button class="term" data-term="ledger">效应记录</button>。</p></div></li>
+      <li><div><b>记录效应</b><p>插件登记服务与清理动作。文件与连接由插件取得和释放，内核掌握该实例的<button class="term" data-term="ledger">效应记录</button>。</p></div></li>
       <li><div><b>停止与撤销</b><p>实例被拔出、更换或依赖消失时，内核按效应记录逆序撤销。插件一侧的清理动作由核心发消息通知插件执行。</p></div></li>
     </ol>
-    <p class="callout">插件代码在插件进程中执行，效应记录保存在核心中。插件进程崩溃后，核心依据记录完成回收。</p>
+    <p class="callout">插件拥有文件与连接，核心掌握绑定与效应归属。程序退出后核心撤回相应服务，持久数据归原插件管理。</p>
   </section>
 
   <section aria-labelledby="duty-title">
@@ -420,7 +420,7 @@ footer { font-size: 13px; color: var(--muted); border-top: 1px solid var(--line)
           <li>管理后台与插件更新（经授权的管理接口）</li>
           <li>文件变化后的自动热替换</li>
         </ul>
-        <p class="note">核心只包含插件管理所需的功能，规模小、变化少，约每年升级一次。脚手架、代码生成、打包等开发工具在独立程序 cordis-dev 中，与核心分别升级。</p>
+        <p class="note">核心管理实例与连接。项目模板、接口生成和应用装配由开发工具 cordis-dev 负责。</p>
       </div>
     </div>
   </section>
@@ -429,7 +429,7 @@ footer { font-size: 13px; color: var(--muted); border-top: 1px solid var(--line)
     <div class="sec-head">
       <div class="eyebrow">插件</div>
       <h2 id="code-title">插件的写法</h2>
-      <p class="lead">一个组件声明需要的服务，在 <code>apply</code> 中完成启动，并把需要撤销的内容登记为效应。插件编译后放入插件目录，在 cordis.toml 中增加一条实例配置。</p>
+      <p class="lead">下列语言示例演示服务依赖和资源释放。部署文件选择组件、实例及其执行位置。</p>
     </div>
     <div class="tabs" role="tablist" aria-label="示例">
       <button class="btn" role="tab" id="tab-rust" aria-selected="true" data-tab="rust">Rust 插件</button>
@@ -443,28 +443,16 @@ footer { font-size: 13px; color: var(--muted); border-top: 1px solid var(--line)
   <section aria-labelledby="prog-title">
     <div class="sec-head">
       <div class="eyebrow">进度</div>
-      <h2 id="prog-title">实现进度（2026-11-14）</h2>
-      <p class="lead">M23 已完成并通过设计方复核，macOS arm64 的 v0.2.0 已发布。四种提供方位置的动态调用、字节流资源、替换回滚和脚本入口验收通过；固定 Git SDK 构建在提交推送后验证通过，340 项用例齐备。发行组合包含 SDK 0.2.0 与核心 0.1.0，随包提供 secrets 插件。</p>
+      <h2 id="prog-title">发行版与目标设计</h2>
+      <p class="lead">v0.2.5 是已发布的运行时。下表区分该版本、随后主分支的源码以及下一版目标；新接口的运行性能以实现后的实测为准。</p>
     </div>
     <div class="progress">
       <table>
-        <thead><tr><th>部分</th><th>里程碑</th><th>状态</th><th>内容</th></tr></thead>
+        <thead><tr><th>版本</th><th>使用者能观察到的行为</th></tr></thead>
         <tbody>
-          <tr><td>内核：效应、依赖、生命周期、事件、替换</td><td class="mono">M0–M7</td><td><span class="st done">已完成</span></td><td>177 条上游用例的一致性矩阵通过；8 线程 1000 轮压力测试</td></tr>
-          <tr><td>原生插件 ABI 与 Rust SDK</td><td class="mono">M8–M9</td><td><span class="st done">已完成</span></td><td>类型化与通用调用；ABI v1.0 在 M11 冻结</td></tr>
-          <tr><td>UP/1 协议、进程监管、cordis-host</td><td class="mono">M10–M11</td><td><span class="st done">已完成</span></td><td>13 个原生场景通过；组内替换、Scoped、子组件与进程故障隔离</td></tr>
-          <tr><td>核心程序与开发工具</td><td class="mono">M12</td><td><span class="st done">已完成</span></td><td>检查点、配置组、管理授权、整批替换、watch 自身恢复与脚手架</td></tr>
-          <tr><td>契约验证</td><td class="mono">M13</td><td><span class="st done">已完成</span></td><td>真实套件通过验证；字节变化候选在装载前被拒绝</td></tr>
-          <tr><td>系统验收</td><td class="mono">M14</td><td><span class="st done">已完成</span></td><td>连续替换与状态保持通过；服务恢复修订后实测 1.038 秒</td></tr>
-          <tr><td>插件编写手册</td><td class="mono">M15</td><td><span class="st done">验收通过</span></td><td>共享模板编译通过；两个独立新会话完成状态迁移与 KV 契约验证</td></tr>
-          <tr><td>发布打包与窗口插件</td><td class="mono">M16</td><td><span class="st done">运行验证通过</span></td><td>独立发布包、签名与窗口恢复通过；截图、Cmd-Q、检查点与退出验收通过</td></tr>
-          <tr><td>WIT 接口描述语言</td><td class="mono">M17</td><td><span class="st done">运行验证通过</span></td><td>三语言绑定与 CBOR 互通通过；kv-api 由 WIT 生成，复合资源按调用期回收</td></tr>
-          <tr><td>Python SDK 与插件脚手架</td><td class="mono">M18</td><td><span class="st done">运行验证通过</span></td><td>双向调用、KV 契约、跨插口迁移、隔离域与资源转交通过；源码变化触发热替换</td></tr>
-          <tr><td>TypeScript SDK</td><td class="mono">M19</td><td><span class="st done">运行验证通过</span></td><td>Node 双向调用、KV 契约、资源与事件转交、迁移回退、脚手架热替换通过</td></tr>
-          <tr><td>前端与全栈插件</td><td class="mono">M20</td><td><span class="st done">功能与退出检查通过</span></td><td>八个真实浏览器场景通过；同名页面域隔离、三语言依赖恢复、批次替换回退与 HTTP 重连</td></tr>
-          <tr><td>第三阶段综合验收</td><td class="mono">M21</td><td><span class="st done">阶段验收完成</span></td><td>三语言调用、迁移与契约；完整解释器签名包；固定性能记录、插件编写手册及五轮 native 稳定性验收</td></tr>
-          <tr><td>外部接入</td><td class="mono">M22</td><td><span class="st done">v0.1.0 已发布</span></td><td>HTTP 路由与通用流；可信页面及后端身份、密钥授权、三语言处理方与自定义页面外壳</td></tr>
-          <tr><td>SDK 动态调用</td><td class="mono">M23</td><td><span class="st done">v0.2.0 已发布</span></td><td>命名调用沿现有依赖、替换与回滚执行；资源通过拥有型 Service 转交，固定 Git SDK 构建验收通过</td></tr>
+          <tr><td>v0.2.5 · 发行版</td><td>显式分组共用原生宿主，ABI 1.1；核心停机后能查询最后确认的程序绑定。</td></tr>
+          <tr><td>主分支 · 85860d8</td><td>ABI 1.2 对新使用方比较方法布局；原生 SDK 支持库级 Tokio 上下文。</td></tr>
+          <tr><td>下一版 · 设计阶段</td><td>原生插件默认共享宿主，用稳定方法身份调用，工具负责从源码工作区装配部署。</td></tr>
         </tbody>
       </table>
     </div>
@@ -490,7 +478,7 @@ footer { font-size: 13px; color: var(--muted); border-top: 1px solid var(--line)
     </div>
   </section>
 
-  <footer>依据：论文《一种面向时空可组合性的编程范式》；仓库文档 DOC-15（核心隔离与两种插口）、DOC-11（插件模型）、DOC-12（ABI v1）。代码示例的接口在实现中可能微调。</footer>
+  <footer><a href="../00-strategy.md">组件模型</a> · <a href="../15-universal-socket.md">宿主与部署</a> · <a href="../guide.md">发行版使用指南</a></footer>
 </div>
 
 <aside class="term-panel" id="term-panel" role="dialog" aria-modal="false" aria-labelledby="term-name" hidden>
@@ -509,96 +497,96 @@ footer { font-size: 13px; color: var(--muted); border-top: 1px solid var(--line)
   /* ---------- 术语 ---------- */
   var TERMS = {
     core: { name: "核心", alias: "cordis 可执行文件",
-      def: "长期运行的 Rust 程序，负责插件的启动与停止、插件之间的服务连接、插件移除后的清理。",
-      more: "核心由内核、进程监管、路由、配置与存档四部分组成。核心进程只运行核心自己的代码，不包含任何业务功能，约每年升级一次。",
+      def: "长期运行的 Rust 程序，持有内核、连接和已确认的部署。",
+      more: "核心决定应当运行哪些实例。原生库、解释器和网页分别在各自的执行环境运行。",
       see: ["kernel", "plugin", "up1"] },
     kernel: { name: "内核", alias: "crates/cordis",
-      def: "核心中的决策部分，记录每个实例的依赖与效应，决定实例何时启动、停止、重建。",
-      more: "系统中只有一个内核，位于核心进程。内核的语义来自论文《一种面向时空可组合性的编程范式》，行为与上游 cordis 的 177 条测试用例一致。",
+      def: "记录实例树、实际依赖绑定和效应归属的组件库。",
+      more: "一个部署使用一个内核。挂载、激活、清理和替换共用它掌握的实例关系。",
       see: ["instance", "effect", "epoch"] },
     plugin: { name: "插件", alias: "plugin",
-      def: "单独编译的功能单元，包含一个或多个组件，通过插口接入核心。",
-      more: "Rust 插件编译为动态库（.dylib/.so），经高速插口接入；其他语言的插件是普通程序，经通用插口接入。插件可在核心运行期间插入、拔出、更换。",
+      def: "可独立发布和更换的实现，可含多个组件。",
+      more: "原生库由宿主装载，脚本由解释器执行，网页模块在浏览器运行。",
       see: ["component", "fastsocket", "unisocket"] },
     component: { name: "组件", alias: "Component",
-      def: "插件中的一项功能定义：需要哪些服务、提供哪些服务、启动时执行的代码（apply）。",
-      more: "组件按一份配置挂载一次，得到一个实例。同一组件可以按不同配置挂载多次。",
+      def: "声明依赖并定义激活行为的一份组件定义。",
+      more: "同一组件可以用不同的配置挂载多次，每次挂载获得独立实例。",
       see: ["instance", "inject", "service"] },
     instance: { name: "实例", alias: "Fiber",
-      def: "组件按一份配置挂载后的运行单元。内核为每个实例保存状态、依赖与效应记录。",
-      more: "实例有六种状态：等待中（Pending）、启动中（Loading）、运行中（Active）、停止中（Unloading）、出错（Failed）、已释放（Disposed）。",
+      def: "一次挂载产生的运行身份，归属于一个上下文。",
+      more: "实例拥有本次激活建立的服务、监听器和清理动作。",
       see: ["state", "ledger", "epoch"] },
     state: { name: "实例状态", alias: "FiberState",
-      def: "等待中：所需服务不全；启动中：正在执行 apply；运行中：启动完成；停止中：正在撤销效应；出错：启动失败；已释放：实例已拔出。",
-      more: "状态由内核根据目标与现状计算。启动和停止一旦开始就执行到底，结束后直接转向最新的目标，期间的多次变化合并为一次。",
+      def: "实例当前所处的等待、加载、活跃、清理、失败或释放阶段。",
+      more: "内核比较目标与当前绑定，并在上一轮迁移收束后处理最新目标。",
       see: ["epoch", "instance"] },
     service: { name: "服务", alias: "名称@主版本，例如 kv@1",
-      def: "实例对外提供的功能，按“名称@主版本”标识。其他实例通过声明依赖取得服务。",
-      more: "同一主版本内只追加方法、不修改已有方法，不兼容的修改发布新主版本（例如 kv@2），新旧主版本可以同时存在。",
+      def: "插件提供给其他组件的一份带版本的能力。",
+      more: "调用方取得依赖视图中的服务。契约决定方法、参数、结果及业务错误。",
       see: ["inject", "component"] },
     inject: { name: "依赖", alias: "inject",
-      def: "实例声明需要的服务。服务齐全时实例启动，服务更换时实例重建，服务消失时实例进入等待。",
-      more: "提供方停止前，内核先停止全部使用方，使用方不会持有已失效的服务。",
+      def: "组件希望在自身上下文使用的服务声明。",
+      more: "必需服务撤回后使用方先清理再等待；提供方返回后重新激活。",
       see: ["service", "epoch"] },
     effect: { name: "效应", alias: "Effect",
-      def: "实例对外界做的一项修改，同时附带撤销方法，例如打开文件并登记关闭动作。",
-      more: "提供服务、注册监听器、挂载子实例、打开资源都是效应。效应属于登记它的实例，实例停止时由内核撤销，每项至多撤销一次。",
+      def: "在上下文取得的资源或登记，以及与它配对的释放动作。",
+      more: "实例卸载会触发清理；有持久作用的业务写入按插件自己的数据契约保留。",
       see: ["ledger", "lifo"] },
     ledger: { name: "效应记录", alias: "effects",
-      def: "内核为每个实例保存的效应列表，按登记顺序排列。",
-      more: "插件进程只执行代码，效应记录保存在核心中。插件进程崩溃时，核心依据效应记录代为撤销。",
+      def: "内核记录的实例登记与释放关系。",
+      more: "进程退出时核心撤回连接服务；文件和数据库内容由实际所有者处理。",
       see: ["effect", "lifo"] },
     lifo: { name: "后进先出", alias: "LIFO",
-      def: "撤销顺序与登记顺序相反：最后登记的效应最先撤销。",
-      more: "例如先打开文件、再基于文件提供服务，停止时先撤下服务、再关闭文件。",
+      def: "同一效应内按登记的逆序执行清理。",
+      more: "先打开文件再登记服务时，先撤下服务，再关闭文件。",
       see: ["effect", "ledger"] },
     epoch: { name: "纪元", alias: "Epoch",
-      def: "实例的目标版本，由配置版本和所用服务的身份组成。",
-      more: "配置更新或所用服务更换时纪元变化，内核随即比较目标与现状并执行加载或卸载，这一过程称为调和。",
+      def: "描述实例所使用依赖身份和修订的标识。",
+      more: "更换提供方会改变绑定身份；内核通过纪元决定是否重建实例。",
       see: ["state", "inject"] },
     hotswap: { name: "热替换", alias: "replace",
-      def: "核心运行期间更换插件版本：旧版本导出状态，使用方先停止，旧版本卸下，新版本装入并继承状态，使用方重新连接。",
-      more: "由获得授权的插件请求，例如在插件文件变化时触发的 watch 插件，或管理后台。更换前核心检查版本兼容性，并确认新版本提供的服务覆盖旧版本。",
+      def: "在运行中准备候选，交接状态并更新受影响的服务绑定。",
+      more: "日常替换按依赖重建实例；回收积累映像引起的宿主重启会影响整组。",
       see: ["rollback", "statex"] },
     rollback: { name: "回滚", alias: "rollback",
-      def: "新版本启动失败或在确认期内出错时，核心撤销新版本的效应，换回旧版本，并交回更换前导出的状态。",
-      more: "回滚使用更换开始时保存的状态，新版本产生的数据不参与回滚。",
+      def: "候选失败时，恢复这一事务开始时的部署及所保存的状态。",
+      more: "手动换回上一程序版本是一次新的部署操作。已提交的业务写入由数据所有者解释。",
       see: ["hotswap", "statex"] },
     statex: { name: "状态导出与继承", alias: "export_state / inherited_state",
-      def: "组件登记一个导出器，热替换或核心退出时交出内存中的数据；新版本在启动时继承这份数据。",
-      more: "导出时组件暂停写入，保证交出的数据完整。持久化数据保存在插件自己的数据目录中，不经过导出。",
+      def: "组件提供一份带模式和版本的快照，由后继实例解释。",
+      more: "运行时协调导出、短暂冻结和恢复；业务提交记录保存在拥有它的插件中。",
       see: ["hotswap", "checkpoint"] },
     checkpoint: { name: "检查点", alias: "checkpoint_ms",
-      def: "核心定期调用全部导出器保存的状态。",
-      more: "核心崩溃后由系统服务管理器重新拉起，实例从最近一次检查点继承状态。",
+      def: "实例最近成功导出的、可用于恢复的状态。",
+      more: "运行时在启用检查点时定期写入，各实例的成功结果可以独立保留。",
       see: ["statex", "core"] },
     fastsocket: { name: "高速插口", alias: "ABI v1",
-      def: "Rust 等语言编译的动态库接入核心的方式。动态库由 cordis-host 装载，同组插件之间直接调用。",
-      more: "动态库与 cordis-host 之间的接口是 ABI v1，一种固定的 C 语言二进制接口，插件可以用不同版本的编译器构建。",
+      def: "让原生动态库在同一宿主内执行的插件入口。",
+      more: "v0.2.5 使用 ABI 1.1；新版设计通过固定入口分派业务方法。",
       see: ["host", "group", "unisocket"] },
     unisocket: { name: "通用插口", alias: "进程插件",
-      def: "任何语言的程序接入核心的方式。程序作为独立进程运行，通过 UP/1 消息与核心通信。",
-      more: "首批支持 Python 与 TypeScript。核心不包含这些语言的运行环境，运行环境随插件或部署环境提供。浏览器中的前端插件也经通用插口接入，传输方式为 WebSocket。",
+      def: "进程或页面用 UP/1 接入核心的方式。",
+      more: "Python 和 Node 使用自己的解释器，浏览器经 HTTP 插件的转发通道接入。",
       see: ["up1", "fastsocket", "webhost"] },
     group: { name: "插件组", alias: "group",
-      def: "装入同一个 cordis-host 进程的一组 Rust 插件。组内插件之间直接调用。",
-      more: "分组在 cordis.toml 中配置，插件无需重新编译。同组插件共享一个进程，一个插件崩溃时整组重启；未配置分组的插件单独运行。",
+      def: "由同一原生宿主承载的一组库。",
+      more: "v0.2.5 可用相同 group 显式合组。目标部署默认共享，进程级故障影响同组成员。",
       see: ["host", "fastsocket", "toml"] },
     host: { name: "cordis-host", alias: "插件宿主程序",
-      def: "装载 Rust 插件动态库的宿主程序，一个进程对应一个插件组。",
-      more: "cordis-host 不含内核，只按核心的指令打开动态库、调用插件函数、转发插件的登记请求。",
+      def: "依照核心给出的部署装入和执行原生插件的进程。",
+      more: "一个宿主可持有多个动态库。具体实例仍由核心分别挂载、清理和替换。",
       see: ["group", "kernel", "up1"] },
     webhost: { name: "网页宿主", alias: "cordis-web",
-      def: "运行前端插件的浏览器页面。页面中的 cordis-web 脚本按核心的指令装载、启动、停止前端插件。",
-      more: "页面经 WebSocket 连接 http 插件，再以独立 UP/1 连接接入核心。核心为每个页面组件建立子实例，页面中的普通服务域与显式命名域按页面区分。必需依赖撤回时清理界面，依赖恢复后重新激活；版本替换时导出并继承每页状态，页面关闭时回收所属实例与效应。",
+      def: "在浏览器页面中执行前端组件的宿主。",
+      more: "不同页面具有各自的服务域与草稿；关闭一页会撤回该页实例及其登记。",
       see: ["unisocket", "host", "up1"] },
     up1: { name: "UP/1", alias: "插件协议第 1 版",
-      def: "核心与所有插件之间的消息协议：进程插件通过标准输入输出传送带长度前缀的 CBOR 消息，浏览器页面通过 WebSocket 传送同样的消息。",
-      more: "消息包括握手、启动（apply）、调用、清理回调、状态导出、释放与关闭。核心对每条消息设置长度、速率与超时上限。",
+      def: "通过有界消息交换调用、资源和生命周期事件的进程协议。",
+      more: "标准输入输出传送长度前缀和 CBOR 正文；网页连接由已授权的 HTTP 插件转发。",
       see: ["core", "unisocket", "host"] },
     toml: { name: "cordis.toml", alias: "部署配置",
-      def: "列出要运行的实例、每个实例使用的插件与配置、所属插件组，以及核心的运行参数。",
-      more: "配置文件变化时，核心计算新旧差异：新增实例则挂载，删除实例则拔出，配置变化则更新实例。",
+      def: "列出程序来源、实例配置、分组、授权及运行参数的部署文件。",
+      more: "部署目标可以独立于源码工作区；最后确认的程序绑定由公开离线查询取得。",
       see: ["instance", "group"] }
   };
   var panel = $("#term-panel"), lastTrigger = null;
@@ -657,7 +645,7 @@ footer { font-size: 13px; color: var(--muted); border-top: 1px solid var(--line)
     S.inst.counter.value = 41;
     [
       ["核心", "kernel", "读取 cordis.toml：3 个实例 store、counter、web"],
-      ["核心", "kernel", "启动 cordis-host（插件组 storage）装入存储插件；启动 python 与 node 进程"],
+      ["核心", "kernel", "存储组由原生宿主装入，Python 进程启动，浏览器页面经 HTTP 插件接入"],
       ["核心", "kernel", "三个插件握手完成，版本兼容。counter 需要 kv@1，web 需要 counter@1"],
       ["核心", "kernel", "存储插件启动完成，开始提供 kv@1"],
       ["核心", "kernel", "计数插件所需的 kv@1 已就绪，启动完成，开始提供 counter@1"],

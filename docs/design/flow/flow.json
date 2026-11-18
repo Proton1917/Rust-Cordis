@@ -1,82 +1,191 @@
 {
-  "project": "Cordis 网页插件",
-  "title": "网页插件状态与替换流程",
-  "note": "截图来自真实 Chrome 场景。全栈替换、动态装配、服务依赖与连接恢复保存 M20–M21 的实际画面；页面来源及应用外壳保存 M22 的实际画面。管理操作由 cordis.manage@1.1 发起，页面在同一文档内更新；桌面视口为 1100 × 850，移动视口为 390 × 844。",
-  "roots": ["rust", "generated", "http", "dependencies-active", "page-identity"],
+  "project": "Cordis 浏览器宿主",
+  "title": "页面组件的挂载、替换与恢复",
+  "note": "这些截图来自 M20 至 M22 的实际浏览器场景。桌面视口为 1100 × 850，移动视口为 390 × 844。连线说明触发状态变化的管理操作或页面请求。",
+  "roots": [
+    "rust",
+    "generated",
+    "http",
+    "dependencies-active",
+    "page-identity"
+  ],
   "nodes": [
     {
-      "id": "page-identity", "title": "页面调用来源", "group": "应用外壳",
-      "kind": "页面状态", "route": "/", "state": "默认中性页面挂载组件；后端根据可信页面键取得连接属性。正常连接时状态提示隐藏。",
-      "image": "screenshots/page-identity-image-0.png", "evidence": "observed"
+      "id": "page-identity",
+      "title": "识别页面调用方",
+      "group": "应用外壳",
+      "kind": "页面状态",
+      "route": "/",
+      "state": "默认外壳加载页面组件，后端按可信页面键查询连接属性。连接就绪后，页面收起状态提示。",
+      "image": "screenshots/page-identity-image-0.png",
+      "evidence": "observed"
     },
     {
-      "id": "application-shell", "title": "替换后的自定义外壳", "group": "应用外壳",
-      "kind": "页面状态", "route": "/", "state": "应用通过 assets 与 index 提供页面；组件更新后标题、页面时间起点和应用外壳保持，桌面及移动视口正常显示。",
+      "id": "application-shell",
+      "title": "更换组件后的应用外壳",
+      "group": "应用外壳",
+      "kind": "页面状态",
+      "route": "/",
+      "state": "应用声明静态资源与入口。替换组件后，桌面与移动页面的标题、文档时间起点和外壳仍是原值。",
       "image": "screenshots/application-shell-image-0.png",
-      "extra": ["screenshots/application-shell-extra-0.png"], "evidence": "observed"
+      "extra": [
+        "screenshots/application-shell-extra-0.png"
+      ],
+      "evidence": "observed"
     },
     {
-      "id": "missing-resource", "title": "资源缺席响应", "group": "应用外壳",
-      "kind": "错误页面", "route": "/missing-page", "state": "缺席资源返回 HTTP 404 与中性正文。",
-      "image": "screenshots/missing-resource-image-0.png", "evidence": "observed"
+      "id": "missing-resource",
+      "title": "请求缺失的静态资源",
+      "group": "应用外壳",
+      "kind": "错误页面",
+      "route": "/missing-page",
+      "state": "访问 /missing-page 时，HTTP 插件以简短正文返回 404。",
+      "image": "screenshots/missing-resource-image-0.png",
+      "evidence": "observed"
     },
     {
-      "id": "rust", "title": "Rust 数据便笺", "group": "全栈替换",
-      "kind": "页面状态", "route": "/", "state": "Rust 后端已保存跨语言共享内容；两页本地计数分别为 1 和 2。",
-      "image": "screenshots/rust-image-0.png", "evidence": "observed",
-      "evidenceNote": "target/test-evidence/web-fullstack-49453-0：真实写入操作及后端状态迁移场景。"
+      "id": "rust",
+      "title": "Rust 提供方保存笔记",
+      "group": "全栈替换",
+      "kind": "页面状态",
+      "route": "/",
+      "state": "Rust 提供方保存共享笔记，每个页面另外维护本地计数。图中页面的本地计数为 0。",
+      "image": "screenshots/rust-image-0.png",
+      "evidence": "observed",
+      "evidenceNote": "M20 全栈场景记录了写入结果及后端状态向新实现的交接。"
     },
     {
-      "id": "python", "title": "Python 数据便笺", "group": "全栈替换",
-      "kind": "页面状态", "route": "/", "state": "Python 0.2.0 后端接续存储内容，网页保留各页计数和文档时间起点。",
-      "image": "screenshots/python-image-0.png", "evidence": "observed"
+      "id": "python",
+      "title": "Python 接手笔记存储",
+      "group": "全栈替换",
+      "kind": "页面状态",
+      "route": "/",
+      "state": "换为 Python 0.2.0 后可读取同一份存储内容，两份页面保留各自计数和文档时间起点。",
+      "image": "screenshots/python-image-0.png",
+      "evidence": "observed"
     },
     {
-      "id": "restored", "title": "候选失败后的活动页面", "group": "全栈替换",
-      "kind": "恢复状态", "route": "/", "state": "0.3.0 候选的网页激活失败；后端恢复到 0.2.0，存储内容及两页计数保留。",
+      "id": "restored",
+      "title": "候选失败后恢复笔记",
+      "group": "全栈替换",
+      "kind": "恢复状态",
+      "route": "/",
+      "state": "0.3.0 候选在页面激活时失败。运行时恢复 0.2.0 后端，两页计数和共享笔记均可继续使用。",
       "image": "screenshots/restored-image-0.png",
-      "extra": ["screenshots/restored-extra-0.png"], "evidence": "observed"
+      "extra": [
+        "screenshots/restored-extra-0.png"
+      ],
+      "evidence": "observed"
     },
     {
-      "id": "generated", "title": "生成的页面计数插件", "group": "动态装配",
-      "kind": "页面状态", "route": "/", "state": "cordis-dev 生成的网页插件加入两页；模块替换后计数分别保留为 1 和 2。",
+      "id": "generated",
+      "title": "在两页挂载计数器",
+      "group": "动态装配",
+      "kind": "页面状态",
+      "route": "/",
+      "state": "开发工具生成的网页组件挂载到两个页面。更新模块后，两份页面的计数仍分别为 1 和 2。",
       "image": "screenshots/generated-image-0.png",
-      "extra": ["screenshots/generated-extra-0.png"], "evidence": "observed"
+      "extra": [
+        "screenshots/generated-extra-0.png"
+      ],
+      "evidence": "observed"
     },
     {
-      "id": "removed", "title": "撤回生成插件", "group": "动态装配",
-      "kind": "页面状态", "route": "/", "state": "管理接口移除计数插件后，其 DOM、页面子实例及资源清单条目完成回收。",
-      "image": "screenshots/removed-image-0.png", "evidence": "observed"
+      "id": "removed",
+      "title": "卸载页面计数器",
+      "group": "动态装配",
+      "kind": "页面状态",
+      "route": "/",
+      "state": "管理请求移除计数器后，页面节点、对应子实例和资源清单条目一起撤回。",
+      "image": "screenshots/removed-image-0.png",
+      "evidence": "observed"
     },
     {
-      "id": "http", "title": "HTTP 恢复后的页面", "group": "连接恢复",
-      "kind": "恢复状态", "route": "/", "state": "HTTP 进程重启后沿原入口恢复，session token 轮换，两页重建并完成按钮调用。",
-      "image": "screenshots/http-image-0.png", "evidence": "observed"
+      "id": "http",
+      "title": "网页连接重建",
+      "group": "连接恢复",
+      "kind": "恢复状态",
+      "route": "/",
+      "state": "HTTP 进程在原入口恢复并更换会话令牌。两个页面重新建立连接，按钮调用成功。",
+      "image": "screenshots/http-image-0.png",
+      "evidence": "observed"
     },
     {
-      "id": "dependencies-active", "title": "服务可用", "group": "服务依赖",
-      "kind": "页面状态", "route": "/", "state": "两页同时调用 Python 规范化、TypeScript 字符计数和 Rust 存储，读取 Cordis🌍 · 7 字符。",
-      "image": "screenshots/dependencies-active-image-0.png", "evidence": "observed"
+      "id": "dependencies-active",
+      "title": "三种语言的服务就绪",
+      "group": "服务依赖",
+      "kind": "页面状态",
+      "route": "/",
+      "state": "两页调用 Python 规范化文本、TypeScript 统计字符、Rust 保存内容，读取结果为 Cordis🌍 · 7 字符。",
+      "image": "screenshots/dependencies-active-image-0.png",
+      "evidence": "observed"
     },
     {
-      "id": "dependencies-pending", "title": "提供方撤回", "group": "服务依赖",
-      "kind": "挂起状态", "route": "/", "state": "Rust 提供方撤回后，两页依赖子实例进入 Pending，文本工作台完成效应清理，笔记组件继续显示。",
-      "image": "screenshots/dependencies-pending-image-0.png", "evidence": "observed"
+      "id": "dependencies-pending",
+      "title": "依赖方等待存储",
+      "group": "服务依赖",
+      "kind": "挂起状态",
+      "route": "/",
+      "state": "撤去 Rust 存储后，两页工作台进入 Pending 并清理界面。独立的笔记组件继续显示。",
+      "image": "screenshots/dependencies-pending-image-0.png",
+      "evidence": "observed"
     },
     {
-      "id": "dependencies-restored", "title": "依赖恢复", "group": "服务依赖",
-      "kind": "恢复状态", "route": "/", "state": "三个提供方分别撤回并插回后，两页自动恢复；关闭一页后，另一页继续处理文本并读取 AB🌍 · 3 字符。",
+      "id": "dependencies-restored",
+      "title": "重新绑定后的文本处理",
+      "group": "服务依赖",
+      "kind": "恢复状态",
+      "route": "/",
+      "state": "逐个撤回并恢复三个提供方后，两页重新激活。关闭其中一页，另一页仍可读到 AB🌍 · 3 字符。",
       "image": "screenshots/dependencies-restored-image-0.png",
-      "extra": ["screenshots/dependencies-restored-extra-0.png"], "evidence": "observed"
+      "extra": [
+        "screenshots/dependencies-restored-extra-0.png"
+      ],
+      "evidence": "observed"
     }
   ],
   "edges": [
-    {"from": "page-identity", "to": "application-shell", "action": "配置 assets/index，再替换页面组件", "evidence": "observed"},
-    {"from": "application-shell", "to": "missing-resource", "action": "访问 /missing-page", "evidence": "observed"},
-    {"from": "rust", "to": "python", "action": "管理接口 replace：Rust → Python 0.2.0", "evidence": "observed"},
-    {"from": "python", "to": "restored", "action": "替换为网页激活失败的 0.3.0 候选，事务恢复原版本", "evidence": "observed"},
-    {"from": "generated", "to": "removed", "action": "管理接口 remove：page-counter", "evidence": "observed"},
-    {"from": "dependencies-active", "to": "dependencies-pending", "action": "管理接口 remove：Rust 服务提供方", "evidence": "observed"},
-    {"from": "dependencies-pending", "to": "dependencies-restored", "action": "逐项插回提供方，关闭一页后处理文本", "evidence": "observed"}
+    {
+      "from": "page-identity",
+      "to": "application-shell",
+      "action": "设置应用页面入口并替换组件",
+      "evidence": "observed"
+    },
+    {
+      "from": "application-shell",
+      "to": "missing-resource",
+      "action": "请求 /missing-page",
+      "evidence": "observed"
+    },
+    {
+      "from": "rust",
+      "to": "python",
+      "action": "用 Python 0.2.0 接替 Rust 提供方",
+      "evidence": "observed"
+    },
+    {
+      "from": "python",
+      "to": "restored",
+      "action": "装入 0.3.0 候选，观察页面激活失败后的恢复",
+      "evidence": "observed"
+    },
+    {
+      "from": "generated",
+      "to": "removed",
+      "action": "移除 page-counter 实例",
+      "evidence": "observed"
+    },
+    {
+      "from": "dependencies-active",
+      "to": "dependencies-pending",
+      "action": "撤回 Rust 存储提供方",
+      "evidence": "observed"
+    },
+    {
+      "from": "dependencies-pending",
+      "to": "dependencies-restored",
+      "action": "恢复提供方，关闭一页并处理文本",
+      "evidence": "observed"
+    }
   ]
 }
