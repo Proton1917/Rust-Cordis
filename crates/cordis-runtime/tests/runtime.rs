@@ -15,6 +15,9 @@ mod gate;
 #[path = "runtime/migration.rs"]
 mod migration;
 
+#[path = "runtime/management.rs"]
+mod management;
+
 #[path = "runtime/isolation.rs"]
 mod isolation;
 

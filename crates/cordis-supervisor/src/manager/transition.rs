@@ -53,7 +53,7 @@ impl Manager {
     /// ADR-0052：候选新增服务会重建同域中的可选依赖方，已有 Binding 继续决定当前边。
     pub(super) fn include_incoming(
         &self,
-        mut roots: Vec<Arc<Instance>>,
+        roots: Vec<Arc<Instance>>,
         incoming: impl IntoIterator<Item = (Context, Arc<RemoteComponent>)>,
     ) -> Vec<Arc<Instance>> {
         let mut provided = HashSet::new();
@@ -62,22 +62,32 @@ impl Manager {
                 provided.insert((interface.key.clone(), view.realm_named(&interface.key)));
             }
         }
-        let catalog = self.0.catalog.lock().instances.clone();
-        for instance in catalog.values() {
+        self.include_unbound(roots, |view, key| {
+            provided.contains(&(key.to_owned(), view.realm_named(key)))
+        })
+    }
+
+    fn include_unbound(
+        &self,
+        mut roots: Vec<Arc<Instance>>,
+        may_provide: impl Fn(&Context, &str) -> bool,
+    ) -> Vec<Arc<Instance>> {
+        let mut candidates = self.0.catalog.lock().instances.clone();
+        for root in &roots {
+            candidates.remove(&root.data.name);
+        }
+        for instance in candidates.into_values() {
             let Some(current) = instance.data.current.lock().upgrade() else {
                 continue;
             };
             if current.component.inject.iter().any(|(interface, _)| {
-                provided.contains(&(
-                    interface.key.clone(),
-                    current.context.realm_named(&interface.key),
-                )) && current
-                    .context
-                    .lookup_named(interface.key.clone())
-                    .is_none()
-            }) && !roots.iter().any(|root| Arc::ptr_eq(root, instance))
-            {
-                roots.push(instance.clone());
+                may_provide(&current.context, &interface.key)
+                    && current
+                        .context
+                        .lookup_named(interface.key.clone())
+                        .is_none()
+            }) {
+                roots.push(instance);
             }
         }
         roots
@@ -253,7 +263,7 @@ impl Manager {
             })
     }
 
-    /// 管理服务在应答前判断本次变更是否会撤回调用方或其依赖。
+    /// 管理服务在应答前判断调用方或其依赖是否可能换代。
     pub fn change_affects(&self, caller: &str, target: &str, replace_library: bool) -> bool {
         if caller == target {
             return true;
@@ -261,14 +271,50 @@ impl Manager {
         let Ok(instance) = self.instance(target) else {
             return false;
         };
-        let roots = if replace_library {
-            self.group_instances(&instance.data.group)
-                .into_iter()
-                .filter(|item| item.data.plugin == instance.data.plugin)
-                .collect()
-        } else {
-            vec![instance]
+        if replace_library {
+            return self.candidate_change_affects(caller, Some(&instance.data.group));
+        }
+        self.may_rebind_caller(caller, vec![instance])
+    }
+
+    /// 候选握手前，其新接口可以满足缺失的依赖；原生宿主也可能整组重启。
+    pub fn candidate_change_affects(&self, caller: &str, group: Option<&str>) -> bool {
+        let roots = match group {
+            Some(name) => self.group_instances(name),
+            None => {
+                let groups = self.0.catalog.lock().groups.clone();
+                let native: HashSet<_> = groups
+                    .values()
+                    .filter(|g| {
+                        g.current
+                            .lock()
+                            .descriptor
+                            .plugins
+                            .iter()
+                            .any(|p| p.format == 1)
+                    })
+                    .map(|group| &group.name)
+                    .collect();
+                self.0
+                    .catalog
+                    .lock()
+                    .instances
+                    .values()
+                    .filter(|instance| native.contains(&instance.data.group))
+                    .cloned()
+                    .collect()
+            }
         };
+        self.may_rebind_caller(caller, roots)
+    }
+
+    fn may_rebind_caller(&self, caller: &str, roots: Vec<Arc<Instance>>) -> bool {
+        if roots.iter().any(|instance| instance.data.name == caller) {
+            return true;
+        }
+        // 连带激活的组件也能发布服务。应答前将缺席依赖视为可能绑定，
+        // 实际冻结时由 include_incoming 按候选声明及隔离域选择实例。
+        let roots = self.include_unbound(roots, |_, _| true);
         self.affected_instances(&roots)
             .iter()
             .any(|item| item.data.name == caller)

@@ -27,24 +27,8 @@ struct OfflineSource {
 
 /// ADR-0054：复用持久格式解码；公开字段独立映射，目录以配置真实位置展开。
 pub(crate) fn offline_sources(path: &Path, project: &Path) -> Result<OfflineSources> {
-    let live = read_confirmed(path);
-    let journal = path.with_file_name(".deployment-undo");
-    let previous = journal.join("sources.json");
-    let confirmed = match std::fs::File::open(&previous) {
-        Ok(file) => serde_json::from_slice(&crate::storage::read_file(file, &previous)?)
-            .map_err(parameter)?,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            if journal
-                .join("sources.json.absent")
-                .try_exists()
-                .map_err(crate::storage::io_error)?
-            {
-                return Err(WireError::new(4, "尚无已确认的代码来源记录"));
-            }
-            live?
-        }
-        Err(error) => return Err(crate::storage::io_error(error)),
-    };
+    let bytes = crate::storage::read_committed_sources(path)?;
+    let confirmed: BTreeMap<String, Source> = serde_json::from_slice(&bytes).map_err(parameter)?;
     let instances = confirmed
         .into_iter()
         .map(|(name, source)| {

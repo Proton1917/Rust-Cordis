@@ -62,7 +62,7 @@ pub fn read(path: &Path) -> Result<Vec<u8>> {
     read_file(File::open(path).map_err(io_error)?, path)
 }
 
-pub(crate) fn read_file(file: File, path: &Path) -> Result<Vec<u8>> {
+fn read_file(file: File, path: &Path) -> Result<Vec<u8>> {
     let mut bytes = Vec::new();
     file.take(Limits::DEFAULT.max_frame as u64 + 1)
         .read_to_end(&mut bytes)
@@ -112,9 +112,53 @@ pub struct Store {
     pub directory: PathBuf,
 }
 
+// consumed 是部署目录中位置固定的目录。进程全程持有的所有者锁位于其父目录。
+fn deployment_lock_file(directory: &Path) -> std::io::Result<File> {
+    File::open(directory.join("consumed"))
+}
+
+pub(crate) fn read_committed_sources(path: &Path) -> Result<Vec<u8>> {
+    let directory = path
+        .parent()
+        .ok_or_else(|| parameter("来源记录缺少状态目录"))?;
+    let lock = match deployment_lock_file(directory) {
+        Ok(lock) => lock,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            // 旧归档可单独保留来源文件；并发首次启动时改从受锁保护的部署读取。
+            let archived = File::open(path);
+            match deployment_lock_file(directory) {
+                Ok(lock) => lock,
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                    return read_file(archived.map_err(io_error)?, path);
+                }
+                Err(error) => return Err(io_error(error)),
+            }
+        }
+        Err(error) => return Err(io_error(error)),
+    };
+    lock.lock_shared().map_err(io_error)?;
+    let journal = directory.join(".deployment-undo");
+    if journal.try_exists().map_err(io_error)? {
+        read(&journal.join("sources.json"))
+    } else {
+        read(path)
+    }
+}
+
 impl Store {
+    fn lock_deployment(&self) -> Result<File> {
+        let lock = deployment_lock_file(&self.directory).map_err(io_error)?;
+        lock.lock().map_err(io_error)?;
+        Ok(lock)
+    }
+
     /// 持有运行目录写锁时，把中断部署触及的文件恢复到提交前的版本。
     pub(crate) fn recover_deployment(&self) -> Result<()> {
+        let _lock = self.lock_deployment()?;
+        self.restore_deployment_files()
+    }
+
+    fn restore_deployment_files(&self) -> Result<()> {
         let journal = self.directory.join(".deployment-undo");
         if journal.try_exists().map_err(io_error)? {
             for folder in ["", "consumed"] {
@@ -161,7 +205,7 @@ impl Store {
 
     /// 用原文件的硬链接保存回退点。覆盖层、代码来源和实例状态共享一次提交。
     fn prepare_deployment<'a>(&self, names: impl Iterator<Item = &'a String>) -> Result<()> {
-        self.recover_deployment()?;
+        self.restore_deployment_files()?;
         let staging = self.directory.join(".deployment-staging");
         fs::create_dir(&staging).map_err(io_error)?;
         fs::create_dir(staging.join("consumed")).map_err(io_error)?;
@@ -196,6 +240,7 @@ impl Store {
         states: &HashMap<String, Option<payload::State>>,
         sources: &[u8],
     ) -> Result<()> {
+        let _lock = self.lock_deployment()?;
         self.prepare_deployment(states.keys())?;
         let result = (|| {
             self.restore_states(states)?;
@@ -206,7 +251,7 @@ impl Store {
             self.finish_deployment()
         })();
         if let Err(problem) = result {
-            self.recover_deployment().map_err(|recovery| {
+            self.restore_deployment_files().map_err(|recovery| {
                 WireError::new(1, format!("{problem}；部署恢复失败：{recovery}"))
             })?;
             return Err(problem);
@@ -397,7 +442,32 @@ mod tests {
         );
         drop(store);
         let recovered = Store::create(dir).unwrap();
-        recovered.recover_deployment().unwrap();
+        // 查询在候选文件已发布时进入；写方恢复旧记录、移走日志后才释放锁。
+        std::thread::scope(|scope| {
+            let lock = recovered.lock_deployment().unwrap();
+            let (started, ready) = std::sync::mpsc::channel();
+            let (done, result) = std::sync::mpsc::channel();
+            let directory = &recovered.directory;
+            scope.spawn(move || {
+                started.send(()).unwrap();
+                let snapshot =
+                    crate::control::offline_sources(&directory.join("sources.json"), directory)
+                        .unwrap();
+                done.send(serde_json::to_value(snapshot).unwrap()).unwrap();
+            });
+            ready.recv().unwrap();
+            let waiting = result.recv_timeout(std::time::Duration::from_millis(100));
+            recovered.restore_deployment_files().unwrap();
+            drop(lock);
+            assert!(matches!(
+                waiting,
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout)
+            ));
+            assert_eq!(
+                result.recv().unwrap()["instances"]["store"]["installed_reference"],
+                "one"
+            );
+        });
         assert_eq!(recovered.overlay().unwrap().instance["store"].plugin, "one");
         assert_eq!(
             read(&recovered.directory.join("sources.json")).unwrap(),

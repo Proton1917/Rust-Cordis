@@ -6,7 +6,7 @@ Rust-cordis runs independently replaceable components. The kernel manages servic
 
 ## 快速开始
 
-macOS Apple Silicon 用户可从 [v0.2.9 发布页](https://github.com/Proton1917/Rust-Cordis/releases/tag/v0.2.9)取得运行时。将压缩包解开，在解包目录执行以下命令：
+macOS Apple Silicon 用户可从 [v0.2.10 发布页](https://github.com/Proton1917/Rust-Cordis/releases/tag/v0.2.10)取得运行时。将压缩包解开，在解包目录执行以下命令：
 
 ```sh
 export PATH="$PWD/bin:$PATH"
@@ -37,6 +37,7 @@ cordis run
 | v0.2.7 发行版 | Rust SDK 0.2.3 识别异步结果布局。核心 0.1.6 保留导出失败实例的检查点，开发工具 0.2.6 支持按清单短名称装配预编译动态库。 |
 | v0.2.8 发行版 | 内核等待旧效应完成清理后再加载组件。宿主上报卸载错误，并在拒绝候选后按阈值回收映像。Rust SDK 0.2.4 支持主动卸载前等待库级线程退出。[检查与测量](docs/measurements/v0.2.8-review.md) |
 | v0.2.9 发行版 | 部署中断后恢复同一次提交的程序和状态。同库实例可以发起相互替换。TypeScript SDK 跳过已超时的排队请求，网页 SDK 在握手中断后结束本轮连接。 |
+| v0.2.10 发行版 | 管理调用考虑即将建立的依赖和宿主整组重启。离线查询与部署提交、回滚共用文件锁，返回已提交的程序来源。 |
 | 下一版设计 | 新部署默认共用原生宿主，业务方法按稳定身份分派，官方工具负责从独立源码工作区装配应用。实施状态见[版本页](docs/PROGRESS.md)。 |
 
 ## 开发入口

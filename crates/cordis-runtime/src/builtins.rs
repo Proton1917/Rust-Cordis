@@ -109,19 +109,37 @@ impl Management {
         let affects = |target: &str, library| {
             target == self.owner || manager.change_affects(caller, target, library)
         };
+        let addition = |plugin: &str, group: Option<&str>| {
+            let resolved = group.map(str::to_owned).or_else(|| {
+                self.diagnostics
+                    .lock()
+                    .sources
+                    .iter()
+                    .find(|package| package.reference == plugin)
+                    .map(|package| package.name.clone())
+            });
+            manager.candidate_change_affects(caller, resolved.as_deref())
+        };
         Ok(match operation {
             Operation::Shutdown => true,
-            Operation::Replace { name, .. } | Operation::Rollback(name) => affects(name, true),
-            Operation::Remove(name) | Operation::Configure { name, .. } => affects(name, false),
+            Operation::Replace { name, .. }
+            | Operation::Rollback(name)
+            | Operation::Remove(name) => affects(name, true),
+            Operation::Configure { name, .. } => affects(name, false),
+            Operation::Add { plugin, group, .. } => addition(plugin, group.as_deref()),
             Operation::Reload(configuration) => {
                 let target = configuration.effective(&self.store.overlay()?)?;
                 let current = self.permissions.lock().clone();
                 current
                     .iter()
                     .any(|(name, old)| target.get(name) != Some(old) && affects(name, true))
+                    || target.iter().any(|(name, next)| {
+                        current.get(name) != Some(next)
+                            && addition(&next.plugin, next.group.as_deref())
+                    })
             }
             Operation::ReplaceBatch { .. } => true,
-            _ => false,
+            Operation::Install(_) => false,
         })
     }
 }

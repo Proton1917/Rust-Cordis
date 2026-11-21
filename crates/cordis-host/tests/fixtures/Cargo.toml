@@ -1,5 +1,5 @@
 [workspace]
-members = ["api", "provider", "consumer"]
+members = ["api", "provider", "consumer", "management"]
 resolver = "3"
 
 [workspace.package]

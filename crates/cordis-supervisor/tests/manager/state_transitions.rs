@@ -116,6 +116,7 @@ async fn failed_update_releases_optional_consumers_original_exporter() {
         .await
         .unwrap();
     let reader = control.ready_after("reader", 0).await;
+    assert!(manager.change_affects("reader", "provider", false));
     assert!(manager.change_affects("reader", "provider", true));
     assert!(
         manager
