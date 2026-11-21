@@ -31,7 +31,7 @@ class Runtime:
                 {
                     "name": self.name,
                     "version": self.version,
-                    "sdk_version": "0.1.1",
+                    "sdk_version": "0.1.2",
                     "build_info": "Python UP/1 SDK",
                     "format": 2,
                     "library": None,

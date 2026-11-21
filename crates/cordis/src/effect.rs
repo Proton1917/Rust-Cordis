@@ -283,8 +283,10 @@ impl Effect {
                 data.armed.store(false, Ordering::Release);
             }
             let owner = data.owner;
-            if data.parent.is_none() && !data.cleaning {
-                state.fibers[owner].effects.remove(&self.id);
+            if data.parent.is_none()
+                && !data.cleaning
+                && state.fibers[owner].effects.remove(&self.id)
+            {
                 state.fibers[owner].effects.insert(self.id, false);
             }
             std::mem::take(&mut state.effects[self.id].waiters)
@@ -384,10 +386,7 @@ impl Effect {
                 return;
             }
             data.cleaning = true;
-            let steps = std::mem::take(&mut data.steps);
-            let owner = data.owner;
-            state.fibers[owner].effects.remove(&self.id);
-            steps
+            std::mem::take(&mut data.steps)
         };
         self.clean_steps(steps, Ok(()));
     }
@@ -434,7 +433,10 @@ impl Effect {
             let data = &mut state.effects[self.id];
             data.outcome = Some(result.map_err(|e| e.at(data.location)));
             data.children.clear();
-            std::mem::take(&mut data.waiters)
+            let waiters = std::mem::take(&mut data.waiters);
+            let owner = data.owner;
+            state.fibers[owner].effects.remove(&self.id);
+            waiters
         };
         for waiter in waiters {
             waiter.wake();

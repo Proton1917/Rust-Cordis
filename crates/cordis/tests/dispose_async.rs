@@ -15,6 +15,53 @@ fn setup() -> (Arc<TestExecutor>, Context, Sequence) {
     (host, root, Arc::new(Mutex::new(Vec::new())))
 }
 
+#[test]
+fn restart_waits_for_an_explicit_cleanup_already_in_progress() {
+    let (host, root, order) = setup();
+    let clock = host.clone();
+    let observed = order.clone();
+    let effect = root
+        .effect("file", move |scope| {
+            scope.defer_async(move || async move {
+                clock.sleep(Duration::from_millis(10)).await;
+                observed.lock().unwrap().push(1);
+                Ok(())
+            })
+        })
+        .unwrap();
+    let releasing = effect.dispose();
+    let restart = root.fiber().restart();
+    host.run_until_stalled();
+    assert!(!root.fiber().is_settled());
+    advance(&host, 10);
+    host.finish(restart).unwrap();
+    host.finish(releasing).unwrap();
+    assert_eq!(*order.lock().unwrap(), [1]);
+}
+
+#[test]
+fn disposing_pending_instance_releases_registered_listener() {
+    let (host, root, calls) = setup();
+    let pending = root
+        .inject(cordis::Inject::new().with_named("storage"), |_| async {
+            Ok(())
+        })
+        .unwrap();
+    host.finish(pending.settled()).unwrap();
+    let observed = calls.clone();
+    pending
+        .context()
+        .on_named("change", move |_| {
+            observed.lock().unwrap().push(1);
+            Ok(None)
+        })
+        .unwrap();
+    host.finish(pending.dispose()).unwrap();
+    root.emit_named("change", &(Arc::new(()) as cordis::AnyArc))
+        .unwrap();
+    assert!(calls.lock().unwrap().is_empty());
+}
+
 fn advance(host: &TestExecutor, millis: u64) {
     host.advance(Duration::from_millis(millis));
     host.run_until_stalled();

@@ -157,7 +157,13 @@ pub unsafe fn entry_boundary<T>(
 // SAFETY: DOC-12 §6 的释放函数错误槽由调用者提供。
 pub(crate) unsafe fn release_boundary(err: *mut AbiError, operation: impl FnOnce()) -> AbiStatus {
     // ADR-0055：析构插件对象时也处于执行环境中，tokio 资源的 Drop 可以找到运行时。
-    match catch_unwind(AssertUnwindSafe(|| crate::ambient::within(operation))) {
+    // SAFETY: err 继承调用方错误槽。
+    unsafe { catch_release(err, || crate::ambient::within(operation)) }
+}
+
+// SAFETY: DOC-12 §6，调用方提供有效的错误槽。
+pub(crate) unsafe fn catch_release(err: *mut AbiError, operation: impl FnOnce()) -> AbiStatus {
+    match catch_unwind(AssertUnwindSafe(operation)) {
         Ok(()) => 0,
         Err(payload) => {
             dispose_payload(payload);

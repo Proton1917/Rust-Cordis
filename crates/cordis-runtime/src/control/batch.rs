@@ -199,10 +199,10 @@ impl Controller {
         configuration: Option<Configuration>,
         overlay: Overlay,
     ) -> Result<TargetDeployment> {
-        let candidates = self.batch_candidates(replacements).await?;
         if configuration.is_some() {
             self.discover().await?;
         }
+        let candidates = self.batch_candidates(replacements).await?;
         let mut configuration = configuration.unwrap_or_else(|| self.configuration.clone());
         if configuration.runtime != self.configuration.runtime {
             self.logs

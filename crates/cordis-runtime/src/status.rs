@@ -15,7 +15,7 @@ use cordis_types::{
 use parking_lot::Mutex;
 use serde::Serialize;
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, HashSet},
     path::Path,
     sync::{Arc, Weak},
 };
@@ -120,8 +120,7 @@ impl View {
             .ok_or_else(|| cordis_up::WireError::new(4, "核心已退出"))?;
         let mut libraries = manager.library_snapshots().await?;
         libraries.sort_by_key(|library| (library.connection, library.id));
-        let last_swap = self.map_library_ids(&manager, &mut libraries)?;
-        let mut snapshot = manager.snapshot();
+        let (mut snapshot, last_swap) = self.map_library_ids(&manager, &mut libraries)?;
         let diagnostics = self.diagnostics.lock().clone();
         if let Some(web) = diagnostics.web.as_ref().and_then(Weak::upgrade) {
             let projections: BTreeMap<_, _> = diagnostics
@@ -154,38 +153,53 @@ impl View {
     fn map_library_ids(
         &self,
         manager: &Manager,
-        libraries: &mut [LibraryInfo],
-    ) -> Result<Vec<SwapReport>> {
+        libraries: &mut Vec<LibraryInfo>,
+    ) -> Result<(Snapshot, Vec<SwapReport>)> {
         let mut last_swap = Vec::new();
-        {
-            let mut ids = self.ids.lock();
-            for library in libraries {
-                let connection = library
-                    .connection
-                    .ok_or_else(|| cordis_up::WireError::new(4, "宿主库报告缺少连接编号"))?;
-                library.id = ids.get(connection, library.id);
-            }
-            for (connection, mut report) in manager.library_swap_reports() {
-                report.previous_library = ids.get(connection, report.previous_library);
-                report.candidate_library = ids.get(connection, report.candidate_library);
-                last_swap.push(report);
-            }
+        let mut ids = self.ids.lock();
+        let snapshot = manager.snapshot();
+        let active: HashSet<_> = snapshot
+            .groups
+            .iter()
+            .filter_map(|group| group.connection)
+            .collect();
+        let reports = manager.library_swap_reports();
+        let reported: HashSet<_> = reports
+            .iter()
+            .flat_map(|(connection, report)| {
+                [
+                    (*connection, report.previous_library),
+                    (*connection, report.candidate_library),
+                ]
+            })
+            .collect();
+        ids.known
+            .retain(|key, _| active.contains(&key.0) || reported.contains(key));
+        libraries.retain(|library| library.connection.is_none_or(|id| active.contains(&id)));
+        for library in libraries {
+            let connection = library
+                .connection
+                .ok_or_else(|| cordis_up::WireError::new(4, "宿主库报告缺少连接编号"))?;
+            library.id = ids.get(connection, library.id);
         }
-        Ok(last_swap)
+        for (connection, mut report) in reports {
+            report.previous_library = ids.get(connection, report.previous_library);
+            report.candidate_library = ids.get(connection, report.candidate_library);
+            last_swap.push(report);
+        }
+        Ok((snapshot, last_swap))
     }
 }
 
 /// DOC-11 §10、ADR-0033：补充配置中保留的停用、等待和失败条目。
 fn complete_instances(snapshot: &mut Snapshot, diagnostics: &Diagnostics) {
-    for (name, settings) in &diagnostics.desired {
-        if let Some(instance) = snapshot
-            .instances
-            .iter_mut()
-            .find(|instance| instance.name == *name)
-        {
-            instance.reference = diagnostics.active_references.get(name).cloned();
-            continue;
+    let mut missing: BTreeMap<_, _> = diagnostics.desired.iter().collect();
+    for instance in &mut snapshot.instances {
+        if missing.remove(&instance.name).is_some() {
+            instance.reference = diagnostics.active_references.get(&instance.name).cloned();
         }
+    }
+    for (name, settings) in missing {
         let failure = diagnostics.instance_errors.get(name);
         snapshot
             .instances

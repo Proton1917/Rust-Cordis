@@ -22,6 +22,87 @@ pub(super) async fn manager() -> Result<Manager> {
     .await?)
 }
 
+pub(super) async fn rejected_candidates(artifacts: &Artifacts) -> Result<()> {
+    use cordis_supervisor::manager::BatchReplacement;
+    let manager = Manager::new(
+        Context::new(Arc::new(Executor(Instant::now()))),
+        ManagerOptions {
+            retired_image_limit: 0,
+            confirm: Duration::ZERO,
+            ..Default::default()
+        },
+    )
+    .await?;
+    let scenario: Result<()> = async {
+        let name = "rejected";
+        let initial = manager
+            .attach_group(group(
+                name,
+                &artifacts.work.join(name),
+                artifacts,
+                &[&artifacts.provider],
+            )?)
+            .await?;
+        mount(&manager, name).await?;
+        manager
+            .invoke_service("loader.counter@1.0", "add", vec![37u64.into()])
+            .await?;
+        let mut previous = initial.connection;
+        for batch in [false, true] {
+            let path = artifacts.consumer.clone();
+            let plugin = "loader-fixture".to_owned();
+            let failed = if batch {
+                manager
+                    .replace_batch(
+                        vec![BatchReplacement::Native {
+                            group: name.into(),
+                            plugin,
+                            path,
+                        }],
+                        Vec::new(),
+                        Vec::new(),
+                        Default::default(),
+                    )
+                    .await
+                    .err()
+            } else {
+                manager
+                    .replace_library(name.into(), plugin, path)
+                    .await
+                    .err()
+            };
+            check(
+                failed.is_some_and(|error| error.code == 3),
+                "候选插件名不匹配应返回原始错误",
+            )?;
+            let now = manager
+                .snapshot()
+                .groups
+                .into_iter()
+                .find(|g| g.name == name)
+                .unwrap()
+                .connection;
+            check(
+                now.is_some() && now != previous,
+                "拒绝候选超过阈值后恢复当前分组",
+            )?;
+            previous = now;
+            check(
+                manager
+                    .invoke_service("loader.counter@1.0", "value", Vec::new())
+                    .await?
+                    == Value::from(137u64),
+                "组重启应保留原服务状态",
+            )?;
+        }
+        Ok(())
+    }
+    .await;
+    let stopped = manager.shutdown().await;
+    scenario?;
+    Ok(stopped?)
+}
+
 pub(super) fn copies(directory: &Path) -> Result<Vec<PathBuf>> {
     Ok(fs::read_dir(directory)?
         .map(|item| item.map(|item| item.path()))

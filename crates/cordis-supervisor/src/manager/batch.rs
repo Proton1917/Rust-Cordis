@@ -97,16 +97,29 @@ impl Manager {
         let marker = decision.clone();
         let result = self
             .transaction(move |manager| async move {
-                manager
+                let groups: std::collections::BTreeSet<_> = replacements
+                    .iter()
+                    .filter_map(|item| match item {
+                        BatchReplacement::Native { group, .. } => Some(group.clone()),
+                        BatchReplacement::Process(_) => None,
+                    })
+                    .collect();
+                let result = manager
                     .execute_deployment_batch(
                         replacements,
                         before,
                         target,
                         states,
-                        marker,
+                        marker.clone(),
                         permit_pending,
                     )
-                    .await
+                    .await;
+                match result {
+                    Err(problem) if !marker.committed.load(Ordering::Acquire) => {
+                        Err(manager.after_rejected_libraries(problem, groups).await)
+                    }
+                    other => other,
+                }
             })
             .await
             .map_err(|problem| {
@@ -783,33 +796,34 @@ impl Manager {
         let mut failure = None;
         let mut retired_images = 0;
         for library in &group.libraries {
-            match self
+            let result = self
                 .library_command::<payload::LibraryRetired>(
                     &group.candidate.connection,
                     "library_retire",
                     library.previous,
                 )
                 .await
-            {
-                Ok(retired) if retired.leases == 0 => {
+                .and_then(|retired| {
                     retired_images = retired_images.max(retired.retired_images);
-                    if let Some((_, report)) = self
-                        .0
-                        .catalog
-                        .lock()
-                        .native_reports
-                        .get_mut(&(group.group.name.clone(), library.plugin.clone()))
-                    {
-                        report.succeeded = true;
-                        report.quiescence_ms = retired.quiescence_ms;
+                    if retired.leases == 0 {
+                        Ok(retired.quiescence_ms)
+                    } else {
+                        Err(error(6, "批次旧库仍有活动租约"))
                     }
-                }
-                Ok(_) => {
-                    failure.get_or_insert_with(|| error(6, "批次旧库仍有活动租约"));
-                }
-                Err(problem) => {
-                    failure.get_or_insert(problem);
-                }
+                });
+            if let Some((_, report)) = self
+                .0
+                .catalog
+                .lock()
+                .native_reports
+                .get_mut(&(group.group.name.clone(), library.plugin.clone()))
+            {
+                report.succeeded = result.is_ok();
+                report.quiescence_ms = result.as_ref().ok().copied().flatten();
+                report.failure = result.as_ref().err().map(|e| metadata::clipped(&e.message));
+            }
+            if let Err(problem) = result {
+                failure.get_or_insert(problem);
             }
         }
         let restarted = self

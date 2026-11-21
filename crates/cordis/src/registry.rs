@@ -566,6 +566,7 @@ impl Context {
         let fiber = Fiber::handle(&self.kernel, id, &self.kernel.state.lock());
         let child = fiber.clone();
         let effect = self.effect("ctx.use()", move |fx| {
+            child.kernel.state.lock().fibers[child.id].lifetime = Some(fx.effect_id());
             fx.defer_async(move || {
                 child.begin_dispose();
                 async move { child.wait_completion().await }
@@ -578,7 +579,7 @@ impl Context {
                 return Err(error);
             }
         };
-        self.kernel.state.lock().fibers[id].lifetime = Some(effect.id);
+        drop(effect);
         fiber.emit_plugin();
         crate::reflect::refresh(&self.kernel, id);
         Ok(fiber)

@@ -10,14 +10,7 @@ use cordis_up::{
     rpc::{Payload, RemoteObject},
 };
 use parking_lot::Mutex;
-use std::{
-    collections::HashMap,
-    sync::{
-        Arc,
-        atomic::{AtomicU64, Ordering},
-    },
-    time::Duration,
-};
+use std::{collections::HashMap, sync::Arc, time::Duration};
 
 struct Receiver {
     _context: u64,
@@ -26,7 +19,7 @@ struct Receiver {
 
 #[derive(Default)]
 pub(crate) struct Forwarders {
-    next: AtomicU64,
+    next: tokio::sync::Mutex<u64>,
     receivers: Mutex<HashMap<u64, Receiver>>,
 }
 
@@ -114,7 +107,12 @@ impl Forwarders {
         let peer = host.connection()?;
         match operation {
             Operation::Open(metadata, receiver) => {
-                let channel = self.next.fetch_add(1, Ordering::Relaxed) + 1;
+                // 核心按严格递增编号接受通道。登记应答完成后再交付下一个编号。
+                let mut next = self.next.lock().await;
+                *next = next
+                    .checked_add(1)
+                    .ok_or_else(|| Error::new(8, "通道编号已耗尽"))?;
+                let channel = *next;
                 self.receivers.lock().insert(
                     channel,
                     Receiver {

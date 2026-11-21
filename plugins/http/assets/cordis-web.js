@@ -2468,27 +2468,50 @@ var Connection = class {
   }
   /** CP-10：流结束释放资源；帧长度检查发生在等待完整消息之前。 */
   async serve() {
-    let buffered = new Uint8Array(0);
+    const header = new Uint8Array(4);
+    const view = new DataView(header.buffer);
+    let headerBytes = 0;
+    let length = 0;
+    let partial;
+    let received = 0;
     try {
       for await (const chunk of this.input) {
-        const joined = new Uint8Array(buffered.length + chunk.length);
-        joined.set(buffered);
-        joined.set(chunk, buffered.length);
-        buffered = joined;
-        while (buffered.length >= 4) {
-          const length = new DataView(buffered.buffer, buffered.byteOffset, 4).getUint32(
-            0
-          );
-          if (length > this.limits.maxFrame)
-            throw new CordisError(8, "\u8F93\u5165\u5E27\u8D85\u8FC7\u957F\u5EA6\u4E0A\u9650");
-          if (buffered.length < length + 4) break;
-          const message = this.decoder.decode(buffered.subarray(4, length + 4));
+        let offset = 0;
+        while (offset < chunk.length) {
+          if (headerBytes < 4) {
+            const count2 = Math.min(4 - headerBytes, chunk.length - offset);
+            header.set(chunk.subarray(offset, offset + count2), headerBytes);
+            offset += count2;
+            headerBytes += count2;
+            if (headerBytes < 4) continue;
+            length = view.getUint32(0);
+            if (length > this.limits.maxFrame)
+              throw new CordisError(8, "\u8F93\u5165\u5E27\u8D85\u8FC7\u957F\u5EA6\u4E0A\u9650");
+          }
+          const count = Math.min(length - received, chunk.length - offset);
+          let bytes = chunk.subarray(offset, offset + count);
+          offset += count;
+          if (received || count < length) {
+            if (!count) continue;
+            const needed = received + count;
+            if (!partial || partial.length < needed) {
+              const grown = new Uint8Array(Math.min(length, Math.max(needed, received * 2)));
+              if (partial) grown.set(partial.subarray(0, received));
+              partial = grown;
+            }
+            partial.set(bytes, received);
+            received = needed;
+            if (received < length) continue;
+            bytes = partial;
+          }
+          const message = this.decoder.decode(bytes);
           checkValue(message, this.limits);
-          buffered = buffered.subarray(length + 4);
+          headerBytes = received = 0;
+          partial = void 0;
           this.receive(message);
         }
       }
-      if (buffered.length) throw new CordisError(2, "\u8F93\u5165\u5E27\u88AB\u622A\u65AD");
+      if (headerBytes) throw new CordisError(2, "\u8F93\u5165\u5E27\u88AB\u622A\u65AD");
     } finally {
       this.fail(new CordisError(4, "\u6838\u5FC3\u8F93\u5165\u5DF2\u7ED3\u675F"), false);
     }
@@ -3067,7 +3090,7 @@ var Runtime = class {
         {
           name: this.name,
           version: this.version,
-          sdk_version: "0.2.0",
+          sdk_version: "0.2.1",
           build_info: "TypeScript UP/1 SDK",
           format: 2,
           library: null,
@@ -3242,7 +3265,7 @@ var WebRuntime = class extends Runtime {
   pendingCleanups = /* @__PURE__ */ new Map();
   cleanupComplete = Promise.resolve();
   constructor(socket, limits = {}) {
-    super("cordis-web", "0.1.0", [], socket, socket, limits);
+    super("cordis-web", "0.1.1", [], socket, socket, limits);
   }
   async load(entry) {
     const url = new URL(entry.url, location.href);
@@ -3265,7 +3288,7 @@ var WebRuntime = class extends Runtime {
     return {
       name: module.entry.name,
       version: module.entry.version,
-      sdk_version: "0.1.0",
+      sdk_version: "0.1.1",
       build_info: new URL(module.entry.url, location.href).pathname,
       format: 2,
       library: module.id,

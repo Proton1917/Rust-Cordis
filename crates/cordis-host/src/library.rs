@@ -252,7 +252,18 @@ impl LibraryStore {
                 .get::<Entry>(b"cordis_plugin_v1\0")
                 .map_err(|error| Error::new(2, error.to_string()))?
         };
-        let lease = Lease::register(library, self.options.unload, copy);
+        // SAFETY: 可选 ABI 入口接受一个 u8，在该映像首次握手前调用一次。
+        let effective_unload = match unsafe {
+            library.get::<unsafe extern "C" fn(u8)>(b"cordis_plugin_set_unload_v1\0")
+        } {
+            Ok(set_unload) => {
+                // SAFETY: 库句柄覆盖调用；0 表示保留映像，1 表示等待线程退出。
+                unsafe { set_unload(u8::from(self.options.unload == UnloadPolicy::WhenUnleased)) };
+                self.options.unload
+            }
+            Err(_) => UnloadPolicy::Never,
+        };
+        let lease = Lease::register(library, effective_unload, copy);
         match Self::descriptor(entry, lease.clone(), environment) {
             Ok(descriptor) => Ok(descriptor),
             Err(error) => {

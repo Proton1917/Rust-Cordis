@@ -24,7 +24,9 @@ pub enum UnloadPolicy {
 }
 
 static NEXT: AtomicU64 = AtomicU64::new(1);
+static RETIRED: AtomicU64 = AtomicU64::new(0);
 static LIBRARIES: OnceLock<Mutex<HashMap<u64, Arc<Lease>>>> = OnceLock::new();
+static READY: Mutex<Vec<Arc<Lease>>> = Mutex::new(Vec::new());
 
 fn libraries() -> &'static Mutex<HashMap<u64, Arc<Lease>>> {
     LIBRARIES.get_or_init(Mutex::default)
@@ -34,6 +36,7 @@ struct Image {
     library: Option<Library>,
     copy: Option<CacheCopy>,
     waiters: Vec<Waker>,
+    descriptor_result: Option<Result<()>>,
 }
 
 pub struct Lease {
@@ -55,6 +58,7 @@ impl Lease {
                 library: Some(library),
                 copy: Some(copy),
                 waiters: Vec::new(),
+                descriptor_result: None,
             }),
         });
         libraries().lock().insert(lease.id, lease.clone());
@@ -71,7 +75,9 @@ impl Lease {
         self.image.lock().library.is_none()
     }
     pub fn retire(&self) {
-        self.retired.store(true, Ordering::Release);
+        if !self.retired.swap(true, Ordering::AcqRel) {
+            RETIRED.fetch_add(1, Ordering::Relaxed);
+        }
     }
 
     /// DOC-12 §4、ADR-0012：异步等待所有拥有引用释放，归零时唤醒等待者。
@@ -98,13 +104,25 @@ impl Lease {
         if self.retired() && self.count() == 0 {
             let (library, copy) = {
                 let mut image = self.image.lock();
-                let library =
-                    (self.policy == UnloadPolicy::WhenUnleased).then(|| image.library.take());
+                let library = (self.policy == UnloadPolicy::WhenUnleased
+                    && matches!(image.descriptor_result, Some(Ok(()))))
+                .then(|| image.library.take());
                 (library, image.copy.take())
             };
-            drop(library);
+            if library.is_some() {
+                libraries().lock().remove(&self.id);
+                drop(library);
+            }
             drop(copy);
         }
+    }
+
+    pub(crate) fn descriptor_result(&self) -> Result<()> {
+        self.image
+            .lock()
+            .descriptor_result
+            .clone()
+            .unwrap_or_else(|| Err(Error::new(4, "插件描述符尚未释放")))
     }
 
     /// SW-1：描述符握手完成后发布唯一副本，保持同一文件租约。
@@ -159,6 +177,9 @@ pub fn release(id: u64) -> Result<()> {
         })
         .map_err(|_| Error::new(2, "插件库租约已经归零"))?;
     if previous == 1 {
+        if lease.retired() {
+            READY.lock().push(lease.clone());
+        }
         let waiters = std::mem::take(&mut lease.image.lock().waiters);
         for waiter in waiters {
             waiter.wake();
@@ -168,12 +189,11 @@ pub fn release(id: u64) -> Result<()> {
 }
 
 pub fn retired_images() -> u64 {
-    let values: Vec<_> = libraries().lock().values().cloned().collect();
-    values.iter().filter(|lease| lease.retired()).count() as u64
+    RETIRED.load(Ordering::Relaxed)
 }
 
 pub fn reap_ready() {
-    let values: Vec<_> = libraries().lock().values().cloned().collect();
+    let values = std::mem::take(&mut *READY.lock());
     for lease in values {
         lease.reap();
     }
@@ -195,10 +215,20 @@ impl Drop for Descriptor {
         // SAFETY: DOC-12 §10，在描述符释放前复制源侧release函数指针。
         let release_descriptor = unsafe { (*self.raw).release };
         // SAFETY: DOC-12 §3、§10，唯一描述符所有权在库租约归还前交给源侧。
-        let result = unsafe {
+        let finish = || unsafe {
             self.environment
                 .call_unit(|err| release_descriptor(self.raw, err))
         };
+        // 同步收束插件工作时交还宿主调度线程，同组其他实例和清理回调仍可执行。
+        let result = if self.lease.policy == UnloadPolicy::WhenUnleased
+            && tokio::runtime::Handle::try_current().is_ok_and(|handle| {
+                handle.runtime_flavor() == tokio::runtime::RuntimeFlavor::MultiThread
+            }) {
+            tokio::task::block_in_place(finish)
+        } else {
+            finish()
+        };
+        self.lease.image.lock().descriptor_result = Some(result.clone());
         let released = release(self.lease.id);
         if let Err(error) = result.and(released) {
             self.environment.report(error);

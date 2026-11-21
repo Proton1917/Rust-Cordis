@@ -416,7 +416,7 @@ dependencies = [
 
 [[package]]
 name = "cordis"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "cordis-testkit",
  "futures-util",
@@ -428,7 +428,7 @@ dependencies = [
 
 [[package]]
 name = "cordis-abi"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "ciborium",
  "proc-macro2",
@@ -455,7 +455,7 @@ dependencies = [
 
 [[package]]
 name = "cordis-dev"
-version = "0.2.6"
+version = "0.2.7"
 dependencies = [
  "clap",
  "cordis-idl",
@@ -468,6 +468,7 @@ dependencies = [
  "object 0.41.0",
  "pathdiff",
  "plist",
+ "rustix",
  "semver",
  "serde",
  "serde_json",
@@ -480,7 +481,7 @@ dependencies = [
 
 [[package]]
 name = "cordis-host"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "clap",
  "cordis-abi",
@@ -499,7 +500,7 @@ dependencies = [
 
 [[package]]
 name = "cordis-http"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "axum",
  "cordis-sdk",
@@ -555,7 +556,7 @@ dependencies = [
 
 [[package]]
 name = "cordis-runtime"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "clap",
  "cordis",
@@ -574,7 +575,7 @@ dependencies = [
 
 [[package]]
 name = "cordis-sdk"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "cordis-abi",
  "cordis-sdk-macros",
@@ -590,7 +591,7 @@ dependencies = [
 
 [[package]]
 name = "cordis-sdk-macros"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -610,7 +611,7 @@ dependencies = [
 
 [[package]]
 name = "cordis-supervisor"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "cordis",
  "cordis-process",

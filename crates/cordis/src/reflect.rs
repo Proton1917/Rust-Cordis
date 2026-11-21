@@ -93,6 +93,7 @@ impl Event for InternalSet {
 
 pub(crate) struct ImplData {
     pub uid: u64,
+    pub notification_revision: u64,
     pub key: Arc<str>,
     pub realm: Realm,
     pub scope: Arc<Scope>,
@@ -196,6 +197,7 @@ impl Context {
                 let uid = state.impl_counter;
                 let id = state.impls.insert(ImplData {
                     uid,
+                    notification_revision: 0,
                     key: key.clone(),
                     realm,
                     scope,
@@ -557,7 +559,10 @@ pub(crate) fn notify_binding(kernel: &Arc<Kernel>, id: ImplId) {
 /// T-COE-4、T-COE-5、S-SVC-5：只刷新同域内声明了变化键的纤程。
 fn notify(kernel: &Arc<Kernel>, key: &Arc<str>, realm: Realm) {
     let fibers = {
-        let state = kernel.state.lock();
+        let mut state = kernel.state.lock();
+        if let Some(id) = state.store.get(&(key.clone(), realm)).copied() {
+            state.impls[id].notification_revision += 1;
+        }
         state
             .fibers
             .iter()
@@ -627,6 +632,7 @@ fn refresh_keys(kernel: &Arc<Kernel>, id: FiberId, key: Option<&Arc<str>>) {
             .map(|(index, entry)| {
                 let pair = (entry.key.clone(), scope_realm(scope, &entry.key));
                 let binding = state.store.get(&pair).copied();
+                let revision = binding.map(|id| state.impls[id].notification_revision);
                 let active = binding.is_some_and(|binding| {
                     state.fibers[state.impls[binding].scope.fiber].state == FiberState::Active
                 });
@@ -637,7 +643,7 @@ fn refresh_keys(kernel: &Arc<Kernel>, id: FiberId, key: Option<&Arc<str>>) {
                     .as_ref()
                     .and_then(|_| binding.map(|id| state.impls[id].value.clone()));
                 (
-                    index, pair, binding, active, check, provider, predicate, value,
+                    index, pair, binding, revision, active, check, provider, predicate, value,
                 )
             })
             .collect::<Vec<_>>()
@@ -645,7 +651,7 @@ fn refresh_keys(kernel: &Arc<Kernel>, id: FiberId, key: Option<&Arc<str>>) {
     let checked = candidates
         .into_iter()
         .map(
-            |(index, pair, binding, active, check, provider, predicate, value)| {
+            |(index, pair, binding, revision, active, check, provider, predicate, value)| {
                 let available = active
                     && check.is_none_or(|check| match catch_unwind(AssertUnwindSafe(|| check())) {
                         Ok(value) => value,
@@ -668,7 +674,9 @@ fn refresh_keys(kernel: &Arc<Kernel>, id: FiberId, key: Option<&Arc<str>>) {
                             }
                         }
                     });
-                (index, pair, binding, active, available, predicate, value)
+                (
+                    index, pair, binding, revision, active, available, predicate, value,
+                )
             },
         )
         .collect::<Vec<_>>();
@@ -679,7 +687,7 @@ fn refresh_keys(kernel: &Arc<Kernel>, id: FiberId, key: Option<&Arc<str>>) {
         }
         let length = state.fibers[id].inject.entries.len();
         state.fibers[id].bindings.resize(length, None);
-        for (index, pair, binding, active, available, predicate, value) in &checked {
+        for (index, pair, binding, revision, active, available, predicate, value) in &checked {
             if state.fibers[id]
                 .inject
                 .entries
@@ -701,7 +709,12 @@ fn refresh_keys(kernel: &Arc<Kernel>, id: FiberId, key: Option<&Arc<str>>) {
             let same_value = value.as_ref().is_none_or(|previous| {
                 current.is_some_and(|id| Arc::ptr_eq(previous, &state.impls[id].value))
             });
-            if current == *binding && current_active == *active && same_predicate && same_value {
+            if current == *binding
+                && current.map(|id| state.impls[id].notification_revision) == *revision
+                && current_active == *active
+                && same_predicate
+                && same_value
+            {
                 state.fibers[id].bindings[*index] = binding.filter(|_| *available);
             }
         }

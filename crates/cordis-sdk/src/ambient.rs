@@ -13,8 +13,9 @@ mod runtime {
     };
     use tokio::runtime::{Builder, Handle, Runtime};
 
-    /// 运行时本体，释放时取出并在后台关闭。
+    /// 描述符拥有库级运行时；释放时按宿主映像策略结束线程。
     static RUNTIME: Mutex<Option<Runtime>> = Mutex::new(None);
+    static WAIT_FOR_THREADS: OnceLock<bool> = OnceLock::new();
     /// 进入上下文用的句柄；创建失败时为 None。
     static HANDLE: OnceLock<Option<Handle>> = OnceLock::new();
     static RELEASED: AtomicBool = AtomicBool::new(false);
@@ -27,6 +28,10 @@ mod runtime {
     }
 
     fn create() -> Option<Handle> {
+        let mut owner = RUNTIME.lock().unwrap_or_else(|poison| poison.into_inner());
+        if RELEASED.load(Ordering::Acquire) {
+            return None;
+        }
         let built = Builder::new_multi_thread()
             .worker_threads(1)
             .thread_name("cordis-plugin-tokio")
@@ -35,7 +40,7 @@ mod runtime {
         match built {
             Ok(runtime) => {
                 let handle = runtime.handle().clone();
-                *RUNTIME.lock().unwrap_or_else(|poison| poison.into_inner()) = Some(runtime);
+                *owner = Some(runtime);
                 Some(handle)
             }
             Err(error) => {
@@ -62,11 +67,25 @@ mod runtime {
             .unwrap_or_else(|poison| poison.into_inner())
             .take();
         if let Some(runtime) = runtime {
-            runtime.shutdown_background();
+            if !*WAIT_FOR_THREADS.get_or_init(|| true) {
+                runtime.shutdown_background();
+            } else if Handle::try_current().is_ok() {
+                // 嵌入式调用方可能正在 Tokio 内执行；在普通线程析构并等待全部工作线程退出。
+                std::thread::scope(|scope| {
+                    scope.spawn(move || drop(runtime));
+                });
+            } else {
+                drop(runtime);
+            }
         }
     }
 
+    pub(super) fn set_unload(wait: bool) {
+        let _ = WAIT_FOR_THREADS.set(wait);
+    }
+
     pub(super) fn install() {
+        WAIT_FOR_THREADS.get_or_init(|| true);
         cordis_abi::ambient::install(cordis_abi::ambient::Ambient { enter, release });
     }
 
@@ -77,6 +96,12 @@ mod runtime {
             .unwrap_or_else(|poison| poison.into_inner())
             .is_some()
     }
+}
+
+/// 宿主在握手前声明是否可能关闭映像；旧宿主沿用同步结束线程的缺省值。
+pub fn set_unload(_wait: bool) {
+    #[cfg(feature = "tokio")]
+    runtime::set_unload(_wait);
 }
 
 /// 登记插件库的执行环境；关闭 `tokio` feature 时为空操作。由 `export_plugin!` 的入口调用。

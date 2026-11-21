@@ -12,6 +12,9 @@ use std::{
 pub fn copy_tree(source: &Path, destination: &Path, excluded: &BTreeSet<PathBuf>) -> Result<()> {
     let root = source.canonicalize()?;
     fs::create_dir_all(destination)?;
+    if destination.canonicalize()?.starts_with(&root) {
+        return Err(format!("装配目录位于复制来源内：{}", root.display()).into());
+    }
     copy_entries(&root, destination, &root, destination, excluded)
 }
 
@@ -55,16 +58,48 @@ fn copy_entries(
 pub fn archive(source: &Path, out: &Path) -> Result<PathBuf> {
     let name = source.file_name().ok_or("发布目录需要名称")?;
     let archive = out.join(name).with_added_extension("tar.gz");
+    let staged = archive.with_added_extension(format!("{}.partial", std::process::id()));
     let output = fs::OpenOptions::new()
         .write(true)
         .create_new(true)
-        .open(&archive)?;
-    let encoder = GzEncoder::new(output, Compression::default());
-    let mut builder = tar::Builder::new(encoder);
-    builder.follow_symlinks(false);
-    builder.append_dir_all(name, source)?;
-    let encoder = builder.into_inner()?;
-    encoder.finish()?.sync_all()?;
+        .open(&staged)?;
+    let publish = || -> Result<()> {
+        let mut builder = tar::Builder::new(GzEncoder::new(output, Compression::default()));
+        builder.follow_symlinks(false);
+        builder.append_dir_all(name, source)?;
+        builder.into_inner()?.finish()?.sync_all()?;
+        use rustix::fs::{CWD, RenameFlags, renameat_with};
+        renameat_with(CWD, &staged, CWD, &archive, RenameFlags::NOREPLACE)?;
+        Ok(())
+    };
+    if let Err(problem) = publish() {
+        fs::remove_file(staged)?;
+        return Err(problem);
+    }
     fs::remove_dir_all(source)?;
     Ok(archive)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use cordis_testkit::cleanup::TestGuard;
+
+    #[test]
+    fn packaging_rejects_nested_outputs_and_publishes_only_complete_archives() {
+        let case =
+            TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "pack-publication");
+        let work = case.directory("pack-publication");
+        let source = work.join("application");
+        fs::create_dir_all(&source).unwrap();
+        assert!(copy_tree(&source, &source.join("out"), &BTreeSet::new()).is_err());
+        let missing = work.join("missing");
+        assert!(archive(&missing, &work).is_err());
+        assert!(!work.join("missing.tar.gz").exists());
+        let previous = work.join("application.tar.gz");
+        fs::write(&previous, b"published").unwrap();
+        assert!(archive(&source, &work).is_err());
+        assert_eq!(fs::read(previous).unwrap(), b"published");
+        case.success();
+    }
 }

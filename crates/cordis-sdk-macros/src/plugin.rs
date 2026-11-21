@@ -36,6 +36,12 @@ pub fn expand(plugin: Plugin) -> syn::Result<TokenStream> {
         #export
         pub static CORDIS_PLUGIN_ABI: u32 = ::cordis_sdk::__private::abi::ABI_MAJOR;
 
+        #[doc = "宿主在调用插件入口前声明卸载策略。非零表示描述符释放成功时库级执行器的线程均已退出。"]
+        #export
+        pub extern "C" fn cordis_plugin_set_unload_v1(wait: u8) {
+            ::cordis_sdk::__private::set_unload(wait != 0);
+        }
+
         #entry
 
         mod __cordis_plugin {

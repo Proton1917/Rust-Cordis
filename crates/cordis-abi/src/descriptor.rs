@@ -180,6 +180,6 @@ unsafe extern "C" fn release_descriptor(raw: *const PluginV1, err: *mut AbiError
         })
     };
     // ADR-0055：描述符是插件库的最后一个握手对象，释放后关闭库级执行环境。
-    crate::ambient::release();
-    status
+    // SAFETY: 两次析构共享调用方的错误槽，panic 仅写入自足的错误码。
+    status.max(unsafe { crate::error::catch_release(err, crate::ambient::release) })
 }

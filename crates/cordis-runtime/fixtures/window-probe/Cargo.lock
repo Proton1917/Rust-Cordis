@@ -37,7 +37,7 @@ dependencies = [
 
 [[package]]
 name = "cordis-abi"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "ciborium",
  "scoped-tls",
@@ -46,7 +46,7 @@ dependencies = [
 
 [[package]]
 name = "cordis-sdk"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "cordis-abi",
  "cordis-sdk-macros",
@@ -58,7 +58,7 @@ dependencies = [
 
 [[package]]
 name = "cordis-sdk-macros"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "proc-macro2",
  "quote",

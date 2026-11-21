@@ -576,7 +576,9 @@ pub(crate) fn drain(kernel: &Arc<Kernel>) {
                 let old_state = data.state;
                 let transition = if data.inertia || data.suspended.is_some() {
                     None
-                } else if data.target == old_target {
+                } else if data.target == old_target
+                    && (data.alive || data.effects.iter().next().is_none())
+                {
                     data.state = data.idle_state();
                     None
                 } else {
@@ -720,6 +722,8 @@ fn finish_transition(fiber: &Fiber, loading: bool) -> Option<bool> {
             let data = &mut state.fibers[fiber.id];
             let next = if loading {
                 (data.target != data.running_epoch).then_some(false)
+            } else if data.state == FiberState::Unloading && data.effects.iter().next().is_some() {
+                Some(false)
             } else {
                 (data.target != Epoch::Inactive).then_some(true)
             };

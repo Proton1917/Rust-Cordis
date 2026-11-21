@@ -128,9 +128,15 @@ impl Manager {
         let reported_plugin = plugin.clone();
         self.transaction(move |manager| async move {
             let started = std::time::Instant::now();
-            manager
-                .swap_library(&group, &plugin, &path, marker, started)
-                .await
+            let result = manager
+                .swap_library(&group, &plugin, &path, marker.clone(), started)
+                .await;
+            match result {
+                Err(problem) if !marker.load(Ordering::Acquire) => {
+                    Err(manager.after_rejected_libraries(problem, [group]).await)
+                }
+                other => other,
+            }
         })
         .await
         .map_err(|problem| {
@@ -603,6 +609,49 @@ impl Manager {
                 .map(Some);
         }
         Ok(None)
+    }
+
+    /// 候选全部退役、原部署恢复后才检查阈值。重启使用当前已确认的程序绑定。
+    pub(super) async fn after_rejected_libraries(
+        &self,
+        mut problem: WireError,
+        groups: impl IntoIterator<Item = String>,
+    ) -> WireError {
+        for name in groups {
+            let Ok(group) = self.group(&name) else {
+                continue;
+            };
+            let Some(plan) = group.specification.lock().clone() else {
+                continue;
+            };
+            let current = group.current.lock().clone();
+            if !current.connection.is_alive()
+                || !current
+                    .descriptor
+                    .plugins
+                    .iter()
+                    .any(|plugin| plugin.format == 1)
+            {
+                continue;
+            }
+            let recovery = async {
+                let status = self.library_status(&current.connection).await?;
+                self.enforce_image_limit(
+                    Some(plan),
+                    status.retired_images,
+                    std::time::Instant::now(),
+                )
+                .await
+            }
+            .await;
+            if let Err(error) = recovery {
+                problem.message = format!(
+                    "{}；分组 {name} 的退役映像回收失败：{error}",
+                    problem.message
+                );
+            }
+        }
+        problem
     }
 
     /// DOC-10 RM-3/RM-4：阈值重启完成后保存整次事务的实际影响数和 Active 时间。

@@ -1168,6 +1168,7 @@ async fn main() -> Result<()> {
             "allocation" => allocation::run(&artifacts).await?,
             "cache-bounded" => native_cache::bounded(&artifacts).await?,
             "cache-recovery" => native_cache::recovery(&artifacts).await?,
+            "rejected-images" => native_cache::rejected_candidates(&artifacts).await?,
             "cache-orphan" => native_cache::orphan(&artifacts).await?,
             "cache-lock" => native_cache::bounded_lock(&artifacts).await?,
             "cache-cleanup-error" => native_cache::cleanup_error(&artifacts).await?,

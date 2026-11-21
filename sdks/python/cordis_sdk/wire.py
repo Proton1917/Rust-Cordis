@@ -69,7 +69,7 @@ class Connection:
                     return await future
         except (TimeoutError, asyncio.CancelledError) as problem:
             if delivered:
-                await self.notify("cancel", {"id": request_id})
+                self.notify_soon("cancel", {"id": request_id})
             if isinstance(problem, TimeoutError):
                 raise CordisError(6, "请求超过截止时间") from problem
             raise

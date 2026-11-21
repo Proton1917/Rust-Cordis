@@ -366,27 +366,36 @@ impl Controller {
 
     /// DOC-15 §3.2：重读插件目录并刷新来源诊断，已有安装副本继续可用。
     async fn discover(&mut self) -> Result<()> {
-        self.installed.clear();
-        let mut errors = self
-            .catalog
+        let mut catalog = Catalog::default();
+        let mut errors = catalog
             .discover(
                 &self.locations.sources,
                 &self.configuration.runtime,
                 &self.locations,
+                &self.catalog,
             )
             .await?;
         if self.locations.sources != self.plugins {
             errors.extend(
-                self.catalog
-                    .discover(&self.plugins, &self.configuration.runtime, &self.locations)
+                catalog
+                    .discover(
+                        &self.plugins,
+                        &self.configuration.runtime,
+                        &self.locations,
+                        &self.catalog,
+                    )
                     .await?,
             );
         }
         for source_dir in &self.configuration.runtime.source_dirs {
             let directory = config::resolve_path(&self.project, source_dir);
-            match self
-                .catalog
-                .discover(&directory, &self.configuration.runtime, &self.locations)
+            match catalog
+                .discover(
+                    &directory,
+                    &self.configuration.runtime,
+                    &self.locations,
+                    &self.catalog,
+                )
                 .await
             {
                 Ok(found) => errors.extend(found),
@@ -395,7 +404,11 @@ impl Controller {
                 }
             }
         }
-        self.diagnostics.lock().plugin_errors = errors;
+        self.catalog = catalog;
+        self.installed.clear();
+        let mut diagnostics = self.diagnostics.lock();
+        diagnostics.sources = self.catalog.packages.values().cloned().collect();
+        diagnostics.plugin_errors = errors;
         Ok(())
     }
 

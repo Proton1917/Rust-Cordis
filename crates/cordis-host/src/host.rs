@@ -307,7 +307,15 @@ impl Host {
         let lease = library.retire();
         lease.quiet().await;
         lease.reap();
+        lease::reap_ready();
         self.prune_cache().await;
+        lease.descriptor_result().map_err(|problem| {
+            Error::new(
+                problem.code(),
+                format!("库 {id} 的描述符释放失败：{problem}"),
+            )
+            .with_detail(problem.detail().to_vec())
+        })?;
         Ok(payload::LibraryRetired {
             leases: lease.count() as u64,
             closed: lease.closed(),
@@ -725,18 +733,23 @@ impl Host {
             .iter()
             .map(|(id, record)| (*id, record.clone()))
             .collect();
+        let mut failure = None;
         for (id, record) in records {
-            self.close_context(id, record).await?;
+            if let Err(error) = self.close_context(id, record).await {
+                failure.get_or_insert(error);
+            }
         }
         self.objects().clear();
         let libraries = self.0.libraries.lock().keys().copied().collect::<Vec<_>>();
         for library in libraries {
-            self.retire(library).await?;
+            if let Err(error) = self.retire(library).await {
+                failure.get_or_insert(error);
+            }
         }
         self.0.store.release_sources();
         self.prune_cache().await;
         self.0.stopped.store(true, Ordering::Release);
-        Ok(())
+        failure.map_or(Ok(()), Err)
     }
 
     /// ADR-0053：租约归还后的目录回收独立执行，回收错误保留诊断。

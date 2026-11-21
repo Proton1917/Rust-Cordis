@@ -45,6 +45,7 @@ impl Catalog {
         directory: &Path,
         options: &RuntimeSettings,
         locations: &Locations,
+        previous: &Catalog,
     ) -> Result<BTreeMap<String, String>> {
         let mut errors = BTreeMap::new();
         let mut paths = fs::read_dir(directory)
@@ -61,6 +62,18 @@ impl Catalog {
                 continue;
             };
             if reference.starts_with('.') || self.packages.contains_key(&reference) {
+                continue;
+            }
+            // 安装副本按不可变序号发布；当前扫描实际见到同一路径时复用其描述符。
+            if directory == locations.installed
+                && reference
+                    .strip_prefix("installed-")
+                    .and_then(|suffix| suffix.split('.').next())
+                    .is_some_and(|number| number.parse::<u64>().is_ok())
+                && let Some(package) = previous.packages.get(&reference)
+                && package.source == path
+            {
+                self.packages.insert(reference, package.clone());
                 continue;
             }
             if path.join("cordis-plugin.toml").is_file() || native(&path) {

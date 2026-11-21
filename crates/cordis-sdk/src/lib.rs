@@ -58,7 +58,7 @@ pub mod prelude {
 
 #[doc(hidden)]
 pub mod __private {
-    pub use crate::ambient::{install as install_ambient, running as ambient_running};
+    pub use crate::ambient::{install as install_ambient, running as ambient_running, set_unload};
     pub use cordis_abi as abi;
 
     pub fn decode_bool(value: u8) -> crate::Result<bool> {

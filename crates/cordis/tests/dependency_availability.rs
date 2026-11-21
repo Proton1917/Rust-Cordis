@@ -20,6 +20,50 @@ fn dependency(required: bool, minimum: u32) -> Inject {
     )
 }
 
+#[test]
+fn late_availability_check_preserves_newer_notification() {
+    use std::sync::{
+        Barrier,
+        atomic::{AtomicBool, Ordering::SeqCst},
+    };
+    let host = TestExecutor::new();
+    let root = Context::new(host.clone());
+    let service = root.provide_named("storage", Arc::new(())).unwrap();
+    let ready = Arc::new(AtomicBool::new(false));
+    let pause = Arc::new(AtomicBool::new(false));
+    let oldest = Arc::new(Barrier::new(2));
+    let resume = Arc::new(Barrier::new(2));
+    let predicate = {
+        let (ready, pause, oldest, resume) =
+            (ready.clone(), pause.clone(), oldest.clone(), resume.clone());
+        Arc::new(move |_: &AnyArc| {
+            let value = ready.load(SeqCst);
+            if pause.swap(false, SeqCst) {
+                oldest.wait();
+                resume.wait();
+            }
+            value
+        })
+    };
+    let instance = root
+        .inject(
+            Inject::new().with_named_options("storage", true, Some(predicate)),
+            |_| async { Ok(()) },
+        )
+        .unwrap();
+    pause.store(true, SeqCst);
+    std::thread::scope(|threads| {
+        threads.spawn(|| service.notify());
+        oldest.wait();
+        ready.store(true, SeqCst);
+        service.notify();
+        resume.wait();
+    });
+    host.finish(instance.settled()).unwrap();
+    assert_eq!(instance.state(), FiberState::Active);
+    host.finish(root.fiber().dispose()).unwrap();
+}
+
 // ADR-0016：可选项缺席、出现和撤回均经过真实纪元与加载路径。
 #[test]
 fn optional_dependency_tracks_present_and_absent_epochs() {

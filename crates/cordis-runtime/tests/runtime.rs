@@ -705,6 +705,50 @@ fn batch_tickets_report_results_and_resubmit_after_core_restart() {
     case.success();
 }
 
+#[test]
+fn reload_rediscovers_moved_source_and_keeps_the_running_copy() {
+    let case = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "moved-source");
+    let _fixture = fixture().for_case(&case);
+    let project = managed_project(&case, "moved-source", "v1");
+    let mut core = Process::start(&project, "rename");
+    active(&project, "admin");
+    let first = active(&project, "store");
+    let installed = instance(&first, "store").unwrap()["reference"].clone();
+    let moved = project.join("plugins/moved-store");
+    fs::rename(project.join("plugins/store"), &moved).unwrap();
+    plugin(&moved, "store", "v2");
+    assert_eq!(manage(&project, 1, "reload", json!([]))["ok"], true);
+    let snapshot = until("renamed source visible", || {
+        let snapshot = status(&project)?;
+        snapshot["available_plugins"]
+            .as_array()?
+            .iter()
+            .any(|item| item["reference"] == "moved-store")
+            .then_some(snapshot)
+    });
+    assert!(
+        !snapshot["available_plugins"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|item| item["reference"] == "store")
+    );
+    assert_eq!(
+        instance(&snapshot, "store").unwrap()["reference"],
+        installed
+    );
+    assert_eq!(group_version(&snapshot, "fixture-store"), "0.1.0");
+    let path = project.join("cordis.toml");
+    let mut declared: toml::Table = fs::read_to_string(&path).unwrap().parse().unwrap();
+    declared["instance"]["store"]["plugin"] = "fixture-store".into();
+    fs::write(path, toml::to_string(&declared).unwrap()).unwrap();
+    assert_eq!(manage(&project, 2, "reload", json!([]))["ok"], true);
+    version(&project, "0.2.0");
+    assert_eq!(manage(&project, 3, "shutdown", json!([]))["ok"], true);
+    core.finish();
+    case.success();
+}
+
 /// DOC-11 §10：相同基础来源的实例各自恢复确认版本，来源记录保持配置重读能力。
 #[test]
 fn confirmed_sources_preserve_group_versions_without_shadowing_configuration() {

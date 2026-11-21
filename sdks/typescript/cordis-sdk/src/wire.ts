@@ -172,27 +172,50 @@ export class Connection {
 
     /** CP-10：流结束释放资源；帧长度检查发生在等待完整消息之前。 */
     async serve(): Promise<void> {
-        let buffered: Uint8Array<ArrayBufferLike> = new Uint8Array(0);
+        const header = new Uint8Array(4);
+        const view = new DataView(header.buffer);
+        let headerBytes = 0;
+        let length = 0;
+        let partial: Uint8Array | undefined;
+        let received = 0;
         try {
             for await (const chunk of this.input) {
-                const joined = new Uint8Array(buffered.length + chunk.length);
-                joined.set(buffered);
-                joined.set(chunk, buffered.length);
-                buffered = joined;
-                while (buffered.length >= 4) {
-                    const length = new DataView(buffered.buffer, buffered.byteOffset, 4).getUint32(
-                        0,
-                    );
-                    if (length > this.limits.maxFrame)
-                        throw new CordisError(8, "输入帧超过长度上限");
-                    if (buffered.length < length + 4) break;
-                    const message = this.decoder.decode(buffered.subarray(4, length + 4));
+                let offset = 0;
+                while (offset < chunk.length) {
+                    if (headerBytes < 4) {
+                        const count = Math.min(4 - headerBytes, chunk.length - offset);
+                        header.set(chunk.subarray(offset, offset + count), headerBytes);
+                        offset += count;
+                        headerBytes += count;
+                        if (headerBytes < 4) continue;
+                        length = view.getUint32(0);
+                        if (length > this.limits.maxFrame)
+                            throw new CordisError(8, "输入帧超过长度上限");
+                    }
+                    const count = Math.min(length - received, chunk.length - offset);
+                    let bytes = chunk.subarray(offset, offset + count);
+                    offset += count;
+                    if (received || count < length) {
+                        if (!count) continue;
+                        const needed = received + count;
+                        if (!partial || partial.length < needed) {
+                            const grown = new Uint8Array(Math.min(length, Math.max(needed, received * 2)));
+                            if (partial) grown.set(partial.subarray(0, received));
+                            partial = grown;
+                        }
+                        partial.set(bytes, received);
+                        received = needed;
+                        if (received < length) continue;
+                        bytes = partial;
+                    }
+                    const message = this.decoder.decode(bytes);
                     checkValue(message, this.limits);
-                    buffered = buffered.subarray(length + 4);
+                    headerBytes = received = 0;
+                    partial = undefined;
                     this.receive(message);
                 }
             }
-            if (buffered.length) throw new CordisError(2, "输入帧被截断");
+            if (headerBytes) throw new CordisError(2, "输入帧被截断");
         } finally {
             this.fail(new CordisError(4, "核心输入已结束"), false);
         }
