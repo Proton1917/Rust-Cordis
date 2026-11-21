@@ -1,7 +1,7 @@
 {
   "version": 1,
   "created_at": "2026-11-19T12:29:42Z",
-  "updated_at": "2026-11-21T17:23:38Z",
+  "updated_at": "2026-11-21T17:26:56Z",
   "files": {
     ".gitattributes": {
       "role": "index",
@@ -53,9 +53,9 @@
     },
     "aoci.code.txt": {
       "role": "index",
-      "sha256": "d45022d5f948af1c644bba664e73f8c20167a6b76b9f108376ea5681a56b2fb9",
-      "size": 118190,
-      "normalized_sha256": "d45022d5f948af1c644bba664e73f8c20167a6b76b9f108376ea5681a56b2fb9"
+      "sha256": "a64d16d9a8307d6a1be4a73ce0af7b687099d0395a3b6dd6d527993e63b64667",
+      "size": 118292,
+      "normalized_sha256": "a64d16d9a8307d6a1be4a73ce0af7b687099d0395a3b6dd6d527993e63b64667"
     },
     "aoci.meta.txt": {
       "role": "index",
@@ -965,9 +965,9 @@
     },
     "crates/cordis-runtime/src/control.rs": {
       "role": "index",
-      "sha256": "902cdb534a24fb6def3e9b3adb5f8fa74d9fe6b87c33ee186197ae4ac6bfd9c8",
-      "size": 31217,
-      "normalized_sha256": "902cdb534a24fb6def3e9b3adb5f8fa74d9fe6b87c33ee186197ae4ac6bfd9c8"
+      "sha256": "652c6a1dba3d2e92894c28c06e9a325a0caf5da8cd6baf70cbc46dd45a60d44b",
+      "size": 31312,
+      "normalized_sha256": "652c6a1dba3d2e92894c28c06e9a325a0caf5da8cd6baf70cbc46dd45a60d44b"
     },
     "crates/cordis-runtime/src/control/batch.rs": {
       "role": "index",
@@ -1043,9 +1043,9 @@
     },
     "crates/cordis-runtime/src/runtime.rs": {
       "role": "index",
-      "sha256": "0d4d26d05ff31d6c3ce3b32a39814b11dcfa938559461fc3e903f97187819b7d",
-      "size": 16082,
-      "normalized_sha256": "0d4d26d05ff31d6c3ce3b32a39814b11dcfa938559461fc3e903f97187819b7d"
+      "sha256": "054c39e86f63163569b5b3f4120cd6c9f1e22f71473d32ab2a9d48a4c8d33da2",
+      "size": 16243,
+      "normalized_sha256": "054c39e86f63163569b5b3f4120cd6c9f1e22f71473d32ab2a9d48a4c8d33da2"
     },
     "crates/cordis-runtime/src/status.rs": {
       "role": "index",
@@ -1919,9 +1919,9 @@
     },
     "docs/PROGRESS.md": {
       "role": "index",
-      "sha256": "116b1dda1604d0f9ab5de4b5cbfab1691ca914ef31757cd371d6979d9dd973e7",
-      "size": 3079,
-      "normalized_sha256": "116b1dda1604d0f9ab5de4b5cbfab1691ca914ef31757cd371d6979d9dd973e7"
+      "sha256": "c01df0d7b61c7ff594faf02bdbcdec80c5b8fb1aa05b3646e116e6acaaebbecb",
+      "size": 3130,
+      "normalized_sha256": "c01df0d7b61c7ff594faf02bdbcdec80c5b8fb1aa05b3646e116e6acaaebbecb"
     },
     "docs/abi/v1-layout.txt": {
       "role": "index",

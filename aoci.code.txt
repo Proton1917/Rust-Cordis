@@ -200,7 +200,7 @@ catalog.rs[AE7M]: F:从插件目录发现原生和进程来源，解析引用并
 cli.rs[EG6S]: F:分派运行、状态、系统服务和开发命令，读取在线快照或已确认程序绑定 | R:code:crates/cordis-runtime/src/storage.rs,code:crates/cordis-runtime/src/control/sources.rs | A:Cli,status,offline_status | S:非终态快照需匹配持锁核心的 PID，正常停机和关闭失败的终态可在退出后读取
 config.rs[FC8M]: F:解析部署与覆盖层，展开实例权限、来源目录、分组及目标配置 | R:code:crates/cordis-runtime/src/config/scopes.rs,code:crates/cordis-runtime/src/control.rs | A:Configuration,RuntimeSettings,Overlay,MANAGE | S:source_dirs 默认为空，旧部署继续沿用 plugin_dir，逻辑作用域的继承与宿主分组分别处理
 contract.rs[TQ7M]: F:协调独立契约会话的断言、状态迁移和最终报告 | R:code:crates/cordis-runtime/src/builtins.rs,code:crates/cordis-contract/src/lib.rs | A:Plan | S:验证会话记录不同阶段的断言并覆盖状态继承阶段
-control.rs[AW8L]: F:发现并固定插件来源，建立宿主与实例，执行管理请求 | R:code:crates/cordis-runtime/src/control/batch.rs,code:crates/cordis-runtime/src/catalog.rs | A:Controller,ControlServices | S:扫描成功后替换库存，运行实例保留既有来源。启动挂载先解析网页资源，后续收尾失败撤回已建实例和管理授权
+control.rs[AW8L]: F:发现与固定插件来源，管理宿主、实例与部署变更，按运行快照确认来源 | R:code:crates/cordis-runtime/src/control/batch.rs,code:crates/cordis-runtime/src/control/sources.rs,code:crates/cordis-runtime/src/catalog.rs | A:Controller,ControlServices | S:扫描成功后才切换库存，运行实例持有自己的副本；挂载收尾失败时撤回后端实例和授权
 deployment.rs[OV6S]: F:解析命令行或应用包部署位置，把状态、安装副本和缓存定向到可写目录 | R:code:crates/cordis-runtime/src/cli.rs,code:crates/cordis-runtime/src/config.rs | A:Locations,default_configuration,load | S:-
 executor.rs[RP4T]: F:用运行时 Tokio 句柄和单调时钟实现内核的执行接口 | R:code:crates/cordis/src/lib.rs | A:Executor,Spawn,Clock | S:-
 install.rs[PE6M]: F:比较授权来源与既有副本，分配不可变安装引用并发布副本和旁置凭据 | R:code:crates/cordis-runtime/src/control.rs | A:install,equal | S:按安装目录持有跨进程文件锁，覆盖序号分配、暂存复制与凭据发布
@@ -208,7 +208,7 @@ lib.rs[RG4T]: F:公开独立核心的运行入口、配置、契约、清单和�
 main.rs[EG5T]: F:分派运行、状态、版本、服务与开发命令，并以退出状态报告结果 | R:code:crates/cordis-runtime/src/cli.rs | A:cordis | S:-
 manifest.rs[FE6S]: F:把 UTF-8 TOML 插件清单转换为插口、版本、重启和网页声明 | R:code:crates/cordis-runtime/src/catalog.rs | A:Manifest,Entry,Web,parse | S:-
 request.rs[MW7M]: F:解码管理请求并维护有界队列、应答票据与提交责任 | R:code:crates/cordis-runtime/src/control.rs,code:crates/cordis-runtime/src/control/outcomes.rs | A:Operation,Request,Handle,Reserved | S:自变更在应答写出后提交；调用者停止等待后已提交事务由队列执行
-runtime.rs[RW8L]: F:协调核心的独占启动、管理队列、周期检查点和退出 | R:code:crates/cordis-runtime/src/storage.rs,code:crates/cordis-runtime/src/status.rs | A:run,run_with_contract | S:取得状态目录写锁后先恢复中断的部署，再读取覆盖层并挂载；退出时发布最终状态
+runtime.rs[RW8L]: F:协调核心独占启动、管理队列、检查点、来源记录及停机 | R:code:crates/cordis-runtime/src/control.rs,code:crates/cordis-runtime/src/storage.rs | A:run,run_with_contract | S:持有状态目录锁后先恢复中断部署。停机导出检查点后、撤回实例前确认最后的活动程序来源；保存错误进入退出结果
 status.rs[OO6M]: F:将内核、宿主动态库与部署声明合成为在线状态并原子写入快照 | R:code:crates/cordis-runtime/src/runtime.rs,code:crates/cordis-runtime/src/control/sources.rs | A:View,Status,write | S:运行时库编号按连接分配，保留活动连接及最近报告仍引用的编号；按实例名合并配置与实况
 storage.rs[PD8L]: F:持有运行目录，提交与恢复检查点和部署文件，读取一致的程序来源 | R:code:crates/cordis-runtime/src/runtime.rs,code:crates/cordis-runtime/src/control/sources.rs | A:Store,claim,owner_pid,parse_state,read_committed_sources | S:状态目录本身的锁用于独占运行；consumed 目录上的跨进程锁协调离线读与整次提交或回滚。核心退出遗留的回退日志仍指向旧提交
 
@@ -362,7 +362,7 @@ service.rs[LB7M]: F:定义服务键、提供和读取句柄及调用方元数据
 15-universal-socket.md[SE7T]: F:说明核心、原生宿主与独立插件的职责、调用路径及分组演进 | R:code:docs/12-abi-v1.md,code:docs/16-up1-protocol.md | A:- | S:共享默认组属于新格式的设计，现行清单沿用原有分组语义
 16-up1-protocol.md[SN8S]: F:规定 UP/1 传输、消息身份、资源、错误与容量契约 | R:code:crates/cordis-up/src/codec.rs,code:crates/cordis-up/src/rpc.rs | A:- | S:双向连接默认帧限 16 MiB；集合和节点计数可先于帧额度触发
 17-upstream-ecosystem-compat.md[SE4T]: F:说明原版 JavaScript 包兼容所需宿主语义和 C0 至 C4 专项状态 | R:code:docs/adr/0050-upstream-compat-host.md | A:- | S:-
-PROGRESS.md[SV6T]: F:列出 v0.2.10 核心与监管器版本、发行行为及下一阶段的宿主设计 | R:code:docs/guide.md,code:docs/15-universal-socket.md | A:- | S:默认共享宿主与固定原生入口仍属设计阶段
+PROGRESS.md[SV6T]: F:列出 v0.2.10 管理调用、离线查询与停机来源保存的发布行为及组件版本 | R:code:docs/guide.md,code:docs/15-universal-socket.md | A:- | S:默认共享宿主和固定原生入口仍属后续设计
 guide.md[SE6T]: F:说明 v0.2.10 的工程创建、部署、管理调用、状态查询与升级 | R:code:README.md,code:docs/PROGRESS.md | A:- | S:早期应答表示受理；需要最终结果使用带请求编号的批次。部署目录需支持硬链接与原子改名
 
 ===/<repository>/docs/abi/===

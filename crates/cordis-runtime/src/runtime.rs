@@ -275,12 +275,14 @@ async fn finish(
         .export_shutdown()
         .await
         .and_then(|states| controller.store.checkpoint(&states));
+    // 此时实例仍在目录中，停机后的离线查询可取得最后一次 Active 绑定。
+    let sources = controller.confirm_sources();
     let shutdown = controller.manager.shutdown().await;
     let (outcome, request) = match outcome {
         Ok(request) => (Ok(()), request),
         Err(problem) => (Err(problem), None),
     };
-    let stopped = outcome.and(exported).and(shutdown);
+    let stopped = outcome.and(exported).and(sources).and(shutdown);
     if let Some(request) = request {
         controller.audit(&request, &stopped.clone().map(|_| cordis_up::Value::Null));
     }

@@ -237,7 +237,7 @@ impl Controller {
 
     /// DOC-15 §3.2：已授权请求由单一队列按方法分派，具体事务负责持久化。
     pub async fn execute(&mut self, request: &Request) -> Result<Value> {
-        if let Err(problem) = self.sources.lock().confirm(&self.manager.snapshot()) {
+        if let Err(problem) = self.confirm_sources() {
             self.logs
                 .emit(0, "runtime", &format!("代码来源保存失败：{problem}"));
         }
@@ -245,6 +245,10 @@ impl Controller {
             return self.execute_recorded_batch(request, request_id).await;
         }
         self.execute_operation(request).await
+    }
+
+    pub(crate) fn confirm_sources(&self) -> Result<()> {
+        self.sources.lock().confirm(&self.manager.snapshot())
     }
 
     /// DOC-15 §3.2：实际执行发生在管理队列，批次结果由外层记录后提供给调用方。
