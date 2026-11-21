@@ -382,6 +382,19 @@ impl Controller {
                     .await?,
             );
         }
+        for source_dir in &self.configuration.runtime.source_dirs {
+            let directory = config::resolve_path(&self.project, source_dir);
+            match self
+                .catalog
+                .discover(&directory, &self.configuration.runtime, &self.locations)
+                .await
+            {
+                Ok(found) => errors.extend(found),
+                Err(problem) => {
+                    errors.insert(directory.display().to_string(), problem.to_string());
+                }
+            }
+        }
         self.diagnostics.lock().plugin_errors = errors;
         Ok(())
     }

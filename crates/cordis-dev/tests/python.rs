@@ -56,6 +56,11 @@ fn python_project(tools: &Tools) -> PathBuf {
             .args(["new-plugin", "hello", "--python", "--project"])
             .arg(&project),
     );
+    checked(
+        Command::new(env!("CARGO"))
+            .current_dir(&project)
+            .args(["clean", "--target-dir", "target"]),
+    );
     python_dependencies(tools, &project.join("plugins/hello"));
     checked(
         Command::new(env!("CARGO"))

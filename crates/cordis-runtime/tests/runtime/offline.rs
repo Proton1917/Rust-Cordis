@@ -3,6 +3,78 @@
 use super::*;
 use std::collections::BTreeMap;
 
+#[test]
+fn one_core_owns_the_state_directory_and_only_its_snapshot_is_live() {
+    let case = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "core-owner");
+    let project = case.directory("runtime-owner");
+    fs::create_dir_all(&project).unwrap();
+    let config = project.join("cordis.toml");
+    fs::write(&config, "").unwrap();
+    let mut first = Process::start(&project, "owner");
+    let mut second = Process(Some(
+        Command::new(env!("CARGO_BIN_EXE_cordis"))
+            .args(["run", "--config"])
+            .arg(&config)
+            .spawn()
+            .unwrap(),
+    ));
+    let exit = until("second core refused", || {
+        second.0.as_mut().unwrap().try_wait().unwrap()
+    });
+    assert_eq!(exit.code(), Some(1));
+    second.0.take();
+    let status = || {
+        Command::new(env!("CARGO_BIN_EXE_cordis"))
+            .args(["status", "--config"])
+            .arg(&config)
+            .output()
+            .unwrap()
+    };
+    let live = status();
+    assert!(live.status.success());
+    let view: Value = serde_json::from_slice(&live.stdout).unwrap();
+    assert_eq!(view["pid"], first.0.as_ref().unwrap().id());
+    first.kill();
+    let stale = status();
+    assert_eq!(stale.status.code(), Some(1));
+    assert!(stale.stdout.is_empty());
+    let mut next = Process::start(&project, "restart");
+    assert!(
+        Command::new("/bin/kill")
+            .args(["-TERM", &next.0.as_ref().unwrap().id().to_string()])
+            .status()
+            .unwrap()
+            .success()
+    );
+    next.finish();
+    let stopped = status();
+    assert!(stopped.status.success());
+    assert_eq!(
+        serde_json::from_slice::<Value>(&stopped.stdout).unwrap()["phase"],
+        "stopped"
+    );
+    case.success();
+}
+
+#[test]
+fn a_fresh_empty_deployment_publishes_empty_confirmed_bindings() {
+    let case = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "fresh-offline");
+    let project = case.directory("fresh-offline");
+    fs::create_dir_all(&project).unwrap();
+    fs::write(project.join("cordis.toml"), "").unwrap();
+    let mut core = Process::start(&project, "empty");
+    assert!(
+        Command::new("/bin/kill")
+            .args(["-TERM", &core.0.as_ref().unwrap().id().to_string()])
+            .status()
+            .unwrap()
+            .success()
+    );
+    core.finish();
+    assert_eq!(query(&project), json!({"schema_version":1,"instances":{}}));
+    case.success();
+}
+
 fn output(project: &Path) -> std::process::Output {
     Command::new(env!("CARGO_BIN_EXE_cordis"))
         .args(["status", "--offline", "--config"])

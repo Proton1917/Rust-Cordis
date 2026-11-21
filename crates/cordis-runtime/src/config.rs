@@ -46,6 +46,7 @@ fn any_version() -> semver::VersionReq {
 #[serde(default, deny_unknown_fields)]
 pub struct RuntimeSettings {
     pub plugin_dir: PathBuf,
+    pub source_dirs: Vec<PathBuf>,
     pub state_dir: PathBuf,
     pub require_verified: bool,
     /// 生命周期操作（实例装入、效应清理、状态导出、替换等待）各自的时限。
@@ -71,6 +72,7 @@ impl Default for RuntimeSettings {
     fn default() -> Self {
         Self {
             plugin_dir: "plugins".into(),
+            source_dirs: Vec::new(),
             state_dir: "state".into(),
             require_verified: false,
             lifecycle_timeout_ms: 30_000,

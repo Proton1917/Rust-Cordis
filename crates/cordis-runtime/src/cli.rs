@@ -150,6 +150,12 @@ pub fn status(configuration: &Path) -> Result<String> {
     let value: serde_json::Value =
         serde_json::from_slice(&storage::read(&directory.join("status.json"))?)
             .map_err(parameter)?;
+    match storage::owner_pid(&directory)? {
+        Some(pid) if value["pid"].as_u64() == Some(u64::from(pid)) => {}
+        Some(_) => return Err(parameter("核心正在启动，请稍后查询当前快照")),
+        None if matches!(value["phase"].as_str(), Some("stopped" | "shutdown-failed")) => {}
+        None => return Err(parameter("快照属于先前的核心，当前运行状态无法确认")),
+    }
     serde_json::to_string_pretty(&value).map_err(parameter)
 }
 

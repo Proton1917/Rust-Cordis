@@ -35,6 +35,11 @@ pub async fn run_with_contract(path: PathBuf, plan: Option<Plan>) -> Result<()> 
     let configuration = crate::deployment::load(&path)?;
     configuration
         .check_version(&semver::Version::parse(env!("CARGO_PKG_VERSION")).map_err(parameter)?)?;
+    let directory = config::resolve_path(
+        path.parent().expect("configuration parent"),
+        &configuration.runtime.state_dir,
+    );
+    let _owner = crate::storage::claim(&directory)?;
     let mut terminate = signal(SignalKind::terminate()).map_err(io_error)?;
     let mut interrupt = signal(SignalKind::interrupt()).map_err(io_error)?;
     let root = Context::new(Arc::new(Executor::new()));
@@ -321,14 +326,18 @@ impl StatusWriter {
                     if let Some(sources) = sources
                         && let Err(problem) = sources.lock().confirm(&manager.snapshot())
                     {
+                        if finishing {
+                            return Err(problem);
+                        }
                         logs.emit(0, "runtime", &format!("代码来源保存失败：{problem}"));
                     }
                 }
-                if let Err(problem) = status::write(&path, &view, &mut previous).await {
-                    logs.emit(0, "runtime", &format!("状态快照发布失败：{problem}"));
-                }
+                let published = status::write(&path, &view, &mut previous).await;
                 if finishing {
-                    return Ok(());
+                    return published;
+                }
+                if let Err(problem) = published {
+                    logs.emit(0, "runtime", &format!("状态快照发布失败：{problem}"));
                 }
                 tokio::select! {
                     _ = interval.tick() => {},

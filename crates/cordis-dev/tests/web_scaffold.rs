@@ -56,10 +56,12 @@ fn web_variants_share_deployment_directory_and_native_build_output() {
         toml::from_str(&fs::read_to_string(project.join("cordis.toml")).unwrap()).unwrap();
     for name in ["page", "native-page", "python-page", "node-page"] {
         let reference = configuration["instance"][name]["plugin"].as_str().unwrap();
-        let deployed = project
-            .join("target/debug")
-            .join(reference)
-            .canonicalize()
+        let deployed = configuration["runtime"]["source_dirs"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|dir| project.join(dir.as_str().unwrap()).join(reference))
+            .find(|dir| dir.join("cordis-plugin.toml").is_file())
             .unwrap();
         let manifest: toml::Table =
             toml::from_str(&fs::read_to_string(deployed.join("cordis-plugin.toml")).unwrap())

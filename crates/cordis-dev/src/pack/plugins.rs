@@ -28,19 +28,10 @@ pub async fn assemble(
     app_binaries: Option<&Path>,
 ) -> Result<Vec<Native>> {
     let requested = requested(&plan.configuration)?;
-    let plugin_dir = plan
-        .configuration
-        .get("runtime")
-        .and_then(Value::as_table)
-        .map(|runtime| string(runtime, "plugin_dir"))
-        .transpose()?
-        .flatten()
-        .unwrap_or("plugins");
-    let plugin_dir = absolute(&plan.project, Path::new(plugin_dir));
     let mut mapping = BTreeMap::new();
     let mut native = Vec::new();
     for (index, (reference, instances)) in requested.into_iter().enumerate() {
-        let original = absolute(&plugin_dir, Path::new(&reference));
+        let original = source(plan, &reference)?;
         let target = format!("plugin-{}", index + 1);
         let root = deployment.join("plugins").join(&target);
         fs::create_dir(&root)?;
@@ -76,6 +67,16 @@ pub async fn assemble(
     }
     references(&mut plan.configuration, &mapping);
     Ok(native)
+}
+
+/// 与运行时共用目录优先级，发布准备和装配解析同一个插件。
+pub(super) fn source(plan: &Plan, reference: &str) -> Result<PathBuf> {
+    let paths = crate::tooling::plugin_paths(&plan.project, &plan.configuration, reference)?;
+    Ok(paths
+        .iter()
+        .find(|path| path.join("cordis-plugin.toml").is_file() || path.is_file())
+        .unwrap_or(&paths[0])
+        .clone())
 }
 
 /// DOC-15 §12.2：按部署引用合并同一个库的组件配置。

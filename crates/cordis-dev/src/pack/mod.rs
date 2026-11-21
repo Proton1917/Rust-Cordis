@@ -202,6 +202,7 @@ fn configuration(plan: &mut Plan, deployment: &Path, app: bool) -> Result<()> {
         .as_table_mut()
         .ok_or("runtime 需要 TOML 表")?;
     runtime.insert("plugin_dir".into(), Value::String("plugins".into()));
+    runtime.remove("source_dirs");
     let state = if app {
         string(&plan.settings, "state_dir")?
             .unwrap_or("state")

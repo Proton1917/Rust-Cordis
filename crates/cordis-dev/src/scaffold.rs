@@ -209,10 +209,11 @@ fn write_new(path: &Path, content: &str) -> Result<()> {
     Ok(())
 }
 
-const CONFIGURATION: &str = r#"requires_core = ">=0.1.1,<0.2.0"
+const CONFIGURATION: &str = r#"requires_core = ">=0.1.5,<0.2.0"
 
 [runtime]
-plugin_dir = "target/debug"
+plugin_dir = ".cordis/plugins"
+source_dirs = ["plugins", "target/debug"]
 
 [instance.watch]
 plugin = "watch"

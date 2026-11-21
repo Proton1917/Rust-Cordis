@@ -4,10 +4,53 @@ use crate::config::{self, Overlay, Result, parameter};
 use cordis_up::{Limits, Value, WireError, payload};
 use std::{
     collections::HashMap,
-    fs::{self, File},
+    fs::{self, File, TryLockError},
     io::{Read, Write},
     path::{Path, PathBuf},
 };
+
+const OWNER: &str = "runtime.pid";
+
+/// 核心持有状态目录的写入权，进程退出时操作系统释放文件锁。
+pub(crate) fn claim(directory: &Path) -> Result<(File, File)> {
+    fs::create_dir_all(directory).map_err(io_error)?;
+    let writer = File::open(directory).map_err(io_error)?;
+    match writer.try_lock() {
+        Ok(()) => {}
+        Err(TryLockError::WouldBlock) => {
+            return Err(parameter(format!(
+                "状态目录已有运行中的核心：{}",
+                directory.display()
+            )));
+        }
+        Err(TryLockError::Error(error)) => return Err(io_error(error)),
+    }
+    // 先锁住本次启动的 PID 文件再原子发布，查询使用独立的文件描述符。
+    let staged = directory.join("runtime.pid.next");
+    let mut owner = File::create(&staged).map_err(io_error)?;
+    owner.try_lock().map_err(|error| io_error(error.into()))?;
+    write!(owner, "{}", std::process::id()).map_err(io_error)?;
+    remove_file(&directory.join("status.json"))?;
+    fs::rename(staged, directory.join(OWNER)).map_err(io_error)?;
+    Ok((writer, owner))
+}
+
+pub(crate) fn owner_pid(directory: &Path) -> Result<Option<u32>> {
+    let mut file = match File::open(directory.join(OWNER)) {
+        Ok(file) => file,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(io_error(error)),
+    };
+    match file.try_lock_shared() {
+        Ok(()) => Ok(None),
+        Err(TryLockError::WouldBlock) => {
+            let mut pid = String::new();
+            file.read_to_string(&mut pid).map_err(io_error)?;
+            Ok(Some(pid.parse().map_err(parameter)?))
+        }
+        Err(TryLockError::Error(error)) => Err(io_error(error)),
+    }
+}
 
 /// DOC-16 §5：文件系统失败保留原始说明并作为通用协议错误交回调用方。
 pub fn io_error(problem: std::io::Error) -> WireError {

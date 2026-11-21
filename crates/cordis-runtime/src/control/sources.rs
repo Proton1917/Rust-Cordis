@@ -75,7 +75,7 @@ impl SourceBindings {
     pub(super) fn load(&mut self) -> Result<()> {
         match std::fs::metadata(&self.path) {
             Ok(_) => self.confirmed = read_confirmed(&self.path)?,
-            Err(problem) if problem.kind() == std::io::ErrorKind::NotFound => {}
+            Err(problem) if problem.kind() == std::io::ErrorKind::NotFound => self.dirty = true,
             Err(problem) => return Err(crate::storage::io_error(problem)),
         }
         Ok(())

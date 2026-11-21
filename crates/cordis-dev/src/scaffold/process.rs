@@ -59,7 +59,7 @@ fn create(project: &Path, name: &str, write: fn(&Path, &str) -> Result<()>) -> R
     create_deployment(project, name, false, write)
 }
 
-/// DOC-15 §12.1：目录插件共用部署链接和 watch 登记，Rust crate 保留 Cargo 成员身份。
+/// DOC-15 §12.1：插件在声明的来源目录中被发现，watch 观察实际源码。
 pub(super) fn create_deployment(
     project: &Path,
     name: &str,
@@ -74,22 +74,12 @@ pub(super) fn create_deployment(
         exclude(&mut workspace, name)?;
     }
     let directory = project.join("plugins").join(name);
-    let sources = settings
-        .get("runtime")
-        .and_then(|runtime| runtime.get("plugin_dir"))
-        .and_then(toml::Value::as_str)
-        .unwrap_or("plugins");
-    let discoverable = project.join(sources).join(name);
-    if discoverable != directory && fs::symlink_metadata(&discoverable).is_ok() {
-        return Err(format!("部署入口已存在：{}", discoverable.display()).into());
+    for entry in crate::tooling::plugin_paths(&project, &settings, name)? {
+        if entry != directory && fs::symlink_metadata(&entry).is_ok() {
+            return Err(format!("部署入口已存在：{}", entry.display()).into());
+        }
     }
     write(&directory, name)?;
-    if discoverable != directory {
-        fs::create_dir_all(discoverable.parent().expect("部署入口父目录"))?;
-        let relative = pathdiff::diff_paths(&directory, discoverable.parent().unwrap())
-            .ok_or("插件目录与部署目录需要共用路径根")?;
-        std::os::unix::fs::symlink(relative, &discoverable)?;
-    }
     fs::write(cargo, workspace.to_string())?;
     register_watch(&configuration, name, &addition)
 }
@@ -120,6 +110,26 @@ pub(super) fn python_sources(directory: &Path, name: &str, main: &str) -> Result
 /// ADR-0040：watch 直接观察源目录，配置文件保持原有注释与独立实例内容。
 fn register_watch(path: &Path, name: &str, addition: &str) -> Result<()> {
     let mut configuration: DocumentMut = fs::read_to_string(path)?.parse()?;
+    if configuration
+        .get("runtime")
+        .and_then(|runtime| runtime.get("plugin_dir"))
+        .and_then(Item::as_str)
+        .is_some_and(|dir| Path::new(dir) != Path::new("plugins"))
+    {
+        let sources = configuration["runtime"]
+            .as_table_like_mut()
+            .ok_or("runtime 需要 TOML 表")?
+            .entry("source_dirs")
+            .or_insert_with(|| value(Array::new()))
+            .as_array_mut()
+            .ok_or("runtime.source_dirs 需要数组")?;
+        if !sources
+            .iter()
+            .any(|source| source.as_str() == Some("plugins"))
+        {
+            sources.push("plugins");
+        }
+    }
     if let Some(paths) = configuration
         .get_mut("instance")
         .and_then(|item| item.get_mut("watch"))

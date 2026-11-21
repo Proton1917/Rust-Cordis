@@ -7,6 +7,27 @@ use std::{
     time::Duration,
 };
 
+/// 主目录优先，附加来源按部署声明顺序参与工具的查找和重名检查。
+pub fn plugin_paths(project: &Path, config: &toml::Table, reference: &str) -> Result<Vec<PathBuf>> {
+    let runtime = config.get("runtime");
+    let primary: PathBuf = runtime
+        .and_then(|table| table.get("plugin_dir"))
+        .cloned()
+        .map(toml::Value::try_into)
+        .transpose()?
+        .unwrap_or_else(|| "plugins".into());
+    let sources: Vec<PathBuf> = runtime
+        .and_then(|table| table.get("source_dirs"))
+        .cloned()
+        .map(toml::Value::try_into)
+        .transpose()?
+        .unwrap_or_default();
+    Ok(std::iter::once(primary)
+        .chain(sources)
+        .map(|dir| project.join(dir).join(reference))
+        .collect())
+}
+
 pub fn executable(name: &str, directory: Option<&Path>) -> Result<PathBuf> {
     if let Some(directory) = directory {
         return Ok(directory.join(name).canonicalize()?);

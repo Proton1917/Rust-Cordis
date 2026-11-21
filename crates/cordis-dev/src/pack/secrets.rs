@@ -10,17 +10,8 @@ use toml::{Table, Value};
 
 /// 发布前读取原生描述符，装配共用本轮结果；文件内容始终由密钥提供方读取。
 pub(super) async fn sources(plan: &mut Plan, artifacts: &Artifacts) -> Result<()> {
-    let directory = plan
-        .configuration
-        .get("runtime")
-        .and_then(Value::as_table)
-        .map(|runtime| string(runtime, "plugin_dir"))
-        .transpose()?
-        .flatten()
-        .unwrap_or("plugins");
-    let directory = absolute(&plan.project, Path::new(directory));
     for (reference, instances) in plugins::requested(&plan.configuration)? {
-        let original = absolute(&directory, Path::new(&reference));
+        let original = plugins::source(plan, &reference)?;
         let Some(source) = native_source(plan, artifacts, &original)? else {
             continue;
         };

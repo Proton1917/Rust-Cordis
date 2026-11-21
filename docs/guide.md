@@ -1,6 +1,6 @@
 # Rust-cordis 应用开发指南
 
-本指南的命令适用于已发布的 v0.2.5。新架构中的共享默认分组、固定原生入口和跨目录构建契约见[运行时设计](15-universal-socket.md)。v0.2.5 使用宿主 ABI 1.1 和 Rust SDK 0.2.1；工具、核心与 SDK 各有自己的组件版本。
+本指南的命令适用于v0.2.6。新架构中的共享默认分组、固定原生入口和跨目录构建契约见[运行时设计](15-universal-socket.md)。v0.2.6 使用宿主 ABI 1.2 和 Rust SDK 0.2.2；工具、核心与 SDK 各有自己的组件版本。
 
 ## 启动第一个插件
 
@@ -37,7 +37,7 @@ plugin = "counter"
 group = "editor"
 ```
 
-提供方和使用方仍要通过接口声明依赖。该设置只改变执行位置。正常替换按依赖图处理；组进程退出时两者共同重建。v0.2.5 对省略 `group` 的原生库分别成组。
+提供方和使用方仍要通过接口声明依赖。该设置只改变执行位置。正常替换按依赖图处理；组进程退出时两者共同重建。v0.2.6 对省略 `group` 的原生库分别成组。
 
 ## 契约与语言
 
@@ -47,7 +47,7 @@ group = "editor"
 cargo run -p cordis-dev -- idl gen --lang ts --output target/kv.ts plugins/kv-api/kv.wit
 ```
 
-Rust 服务由 `#[interface]` 或生成接口表达。同步方法中的异步等待可交给 `Context::wait`；异步方法直接 `.await`。v0.2.5 中依赖 Tokio 网络驱动的插件需要自己的执行上下文；库级自动上下文属于随后主分支的 SDK 0.2.2。[Rust 接口](../skills/cordis-first-principles/references/rust-api.md) · [等待与任务](adr/0051-native-synchronous-wait.md)
+Rust 服务由 `#[interface]` 或生成接口表达。同步方法中的异步等待可交给 `Context::wait`；异步方法直接 `.await`。Rust SDK 0.2.2 的默认 Tokio 特性为插件库提供执行上下文，支持需要 Tokio 网络驱动的第三方库。[Rust 接口](../skills/cordis-first-principles/references/rust-api.md) · [等待与任务](adr/0051-native-synchronous-wait.md)
 
 生成 Python 插件后安装该项目的实际依赖：
 
@@ -81,7 +81,7 @@ cordis verify --plugin target/release/libkv_mem.dylib --suite target/release/lib
 cordis pack --project . --target aarch64-apple-darwin --out dist
 ```
 
-`pack` 使用项目根的 Cargo 配置及产物记录，也可装配已有插件清单。源码和部署文件分开的 v0.2.5 项目需先从真正的源码工作区构建，再把原生库、描述和网页资源交给部署目录。下一版把这一步并入工具的公开输入。与发布包一起装入的 Python、Node、网页资产及签名约束见[打包规则](adr/0036-release-packaging.md)与[脚本解释器布局](adr/0043-bundled-script-runtimes.md)。
+`pack` 使用项目根的 Cargo 配置及产物记录，也可装配已有插件清单。v0.2.6 的 `runtime.source_dirs` 可列出插件来源目录。源码工作区与部署工程分开时，先从源码工作区编译原生库，再由部署工程装配产物与资源。下一版把这一步并入工具的公开输入。与发布包一起装入的 Python、Node、网页资产及签名约束见[打包规则](adr/0036-release-packaging.md)与[脚本解释器布局](adr/0043-bundled-script-runtimes.md)。
 
 ## 停机后的程序绑定查询
 
