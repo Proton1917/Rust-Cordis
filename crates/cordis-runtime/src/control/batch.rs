@@ -120,7 +120,7 @@ impl Controller {
             }
         };
         let finalized = match self.finish_web_changes(&pages).await {
-            Ok(()) => self.persist_batch(&target).await,
+            Ok(()) => self.persist_batch(&target, &before, &desired).await,
             Err(problem) => Err(problem),
         };
         if let Err(problem) = finalized {
@@ -422,21 +422,31 @@ impl Controller {
     }
 
     /// DOC-15 §3.2、CP-11：原快照和当前导出状态成功写入后一次发布最终叠加层。
-    async fn persist_batch(&self, target: &TargetDeployment) -> Result<()> {
-        let exported = self.manager.checkpoint().await?;
-        let states = target
-            .instances
-            .keys()
-            .map(|name| (name.clone(), exported.get(name).cloned()))
+    async fn persist_batch(
+        &self,
+        target: &TargetDeployment,
+        before: &[BatchInstance],
+        desired: &[BatchInstance],
+    ) -> Result<()> {
+        let mut states = self
+            .manager
+            .deployment_checkpoint(target.instances.keys().cloned().collect())
+            .await?;
+        // 导出失败或依赖暂缺时保留最近的检查点；移除或更换组件身份时才清除旧状态。
+        let identities: HashMap<_, _> = desired
+            .iter()
+            .map(|item| {
+                let spec = &item.specification;
+                (&spec.name, (&spec.plugin, &spec.component))
+            })
             .collect();
-        self.store.restore_states(&states)?;
-        for name in self
-            .mounted
-            .keys()
-            .filter(|name| !target.instances.contains_key(*name))
-        {
-            self.store.forget(name)?;
+        for previous in before {
+            let spec = &previous.specification;
+            if identities.get(&spec.name) != Some(&(&spec.plugin, &spec.component)) {
+                states.entry(spec.name.clone()).or_insert(None);
+            }
         }
+        self.store.restore_states(&states)?;
         self.store.save_overlay(&target.overlay)
     }
 

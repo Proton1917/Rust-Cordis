@@ -35,6 +35,8 @@ ABI 规定两个独立编译的程序怎样交换数据和执行调用，包括�
 
 ## ABI v1 与兼容期
 
+v0.2.7 使用宿主 ABI 1.2。Rust SDK 0.2.3 对含异步方法的接口发布单独的能力标记，布局摘要同时覆盖方法入口和 Future 交付结果的机器类型。新代理匹配标记和摘要后直接调用。与旧 SDK 0.2.2 混用时，含异步方法的接口通过通用入口按名称分派。已编译的插件随 SDK 重建后采用此规则。
+
 v0.2.5 使用宿主 ABI 1.1；v0.2.6 使用 ABI 1.2。v1 读取 `CORDIS_PLUGIN_ABI` 和 `cordis_plugin_v1`，使用 `HostV1`、`PluginV1`、`AbiObject`、`AbiBuf`、`AbiFuture` 及库租约。组内服务提供类型化方法表和按名称调用的入口。1.2 的新消费方比较布局标记与摘要，旧消费方沿其编译版本的逻辑执行。
 
 兼容期内，旧库经匹配 v1 的宿主运行，新旧宿主经 UP/1 暴露公开契约。已安装应用可逐组升级；兼容支持期见 [ADR-0014](adr/0014-versioning.md)。[原始类型](../crates/cordis-abi/src/raw.rs) · [v1.0 布局基准](abi/v1-layout.txt) · [v1.1 布局基准](abi/v1.1-layout.txt) · [v1 全部槽位与字段](https://github.com/Proton1917/Rust-Cordis/blob/85860d8b1fd784f6935084c611b07e12755cd7b8/docs/12-abi-v1.md)

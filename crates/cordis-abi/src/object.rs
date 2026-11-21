@@ -75,6 +75,12 @@ impl ObjectHeader {
         self.reserved = digest;
         self
     }
+
+    pub const fn with_async_result_digest(mut self, digest: u32) -> Self {
+        self.flags = (self.flags & !OBJECT_TYPED_METHODS) | crate::OBJECT_TYPED_ASYNC_RESULTS;
+        self.reserved = digest;
+        self
+    }
 }
 
 impl Object {
@@ -157,7 +163,7 @@ impl Object {
         unsafe { self.header().interface.as_str() }
     }
     pub fn has_typed_methods(&self) -> bool {
-        self.header().flags & OBJECT_TYPED_METHODS != 0
+        self.header().flags & (OBJECT_TYPED_METHODS | crate::OBJECT_TYPED_ASYNC_RESULTS) != 0
     }
 
     /// ADR-0056：提供方带有布局摘要且等于使用方声明的摘要时，类型化槽位的签名才与
@@ -167,6 +173,11 @@ impl Object {
         header.flags & OBJECT_TYPED_METHODS != 0
             && header.flags & OBJECT_TYPED_DIGEST != 0
             && header.reserved == digest
+    }
+
+    pub fn async_result_layout_matches(&self, digest: u32) -> bool {
+        let header = self.header();
+        header.flags & crate::OBJECT_TYPED_ASYNC_RESULTS != 0 && header.reserved == digest
     }
     pub fn method_names(&self) -> Result<Vec<String>> {
         let header = self.header();

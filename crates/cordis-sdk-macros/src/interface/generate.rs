@@ -58,7 +58,10 @@ impl Definition<'_> {
     fn digest(&self) -> u32 {
         let mut hash: u32 = 0x811c_9dc5;
         for method in self.methods {
-            let entry = format!("{}\n{}\n", method.signature.ident, method.function_type());
+            let mut entry = format!("{}\n{}\n", method.signature.ident, method.function_type());
+            if method.asynchronous {
+                entry.push_str(&format!("poll -> {}\n", method.output.wire()));
+            }
             for byte in entry.bytes() {
                 hash ^= u32::from(byte);
                 hash = hash.wrapping_mul(0x0100_0193);
@@ -71,11 +74,17 @@ impl Definition<'_> {
         let name = &self.item.ident;
         let visibility = &self.item.vis;
         let proxy = &self.proxy;
+        let digest = self.digest();
+        let check = if self.methods.iter().any(|method| method.asynchronous) {
+            format_ident!("async_result_layout_matches")
+        } else {
+            format_ident!("typed_layout_matches")
+        };
         let methods = self
             .methods
             .iter()
             .enumerate()
-            .map(|(index, method)| method.proxy(index, self.digest()));
+            .map(|(index, method)| method.proxy(index, digest, &check));
         quote! {
             #[doc(hidden)]
             #[doc = "DOC-12 §7、§11：对象所有者保持服务实现、虚表及其库租约，直到最后一份代理引用释放。"]
@@ -151,6 +160,11 @@ impl Definition<'_> {
         let name = &self.item.ident;
         let full_name = self.identity.full_name();
         let digest = self.digest();
+        let set_digest = if self.methods.iter().any(|method| method.asynchronous) {
+            format_ident!("with_async_result_digest")
+        } else {
+            format_ident!("with_typed_digest")
+        };
         let method_count = self.methods.len();
         let fields: Vec<_> = (0..method_count)
             .map(|index| format_ident!("method_{index}"))
@@ -171,13 +185,13 @@ impl Definition<'_> {
             pub(super) static VTABLE: VTable = VTable {
                 header: ::cordis_sdk::__private::abi::ObjectHeader::for_type::<dyn #name>(
                     ::std::mem::size_of::<VTable>(), 1, #full_name,
-                ).with_dispatch(&METHODS, invoke, invoke_async).with_typed_digest(#digest),
+                ).with_dispatch(&METHODS, invoke, invoke_async).#set_digest(#digest),
                 #(#fields,)*
             };
             pub(super) static SCOPED_VTABLE: VTable = VTable {
                 header: ::cordis_sdk::__private::abi::ObjectHeader::for_type::<dyn #name>(
                     ::std::mem::size_of::<VTable>(), 1, #full_name,
-                ).with_dispatch(&SCOPED_METHODS, invoke, invoke_async).with_typed_digest(#digest),
+                ).with_dispatch(&SCOPED_METHODS, invoke, invoke_async).#set_digest(#digest),
                 #(#fields,)*
             };
             static METHODS: [::cordis_sdk::__private::abi::AbiStr; #method_count] = [

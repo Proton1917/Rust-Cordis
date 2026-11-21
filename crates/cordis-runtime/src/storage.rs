@@ -84,7 +84,7 @@ pub fn write_snapshot(path: &Path, bytes: &[u8]) -> Result<()> {
 }
 
 fn publish(path: &Path, bytes: &[u8], durable: bool) -> Result<()> {
-    let staged = path.with_extension("next");
+    let staged = path.with_added_extension("next");
     let mut file = File::create(&staged).map_err(io_error)?;
     file.write_all(bytes).map_err(io_error)?;
     if durable {
@@ -255,6 +255,27 @@ mod tests {
     use cordis_testkit::cleanup::TestGuard;
 
     #[test]
+    fn status_snapshot_and_status_instance_use_independent_staging() {
+        let case = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "status-instance");
+        let store = Store::create(case.directory("status-instance")).unwrap();
+        fs::create_dir(store.directory.join("status.json.next")).unwrap();
+        assert!(write_snapshot(&store.directory.join("status.json"), b"{}").is_err());
+        let state = payload::State {
+            schema: "counter".into(),
+            version: 1,
+            data: 43u64.into(),
+        };
+        store
+            .checkpoint(&HashMap::from([("status".into(), state)]))
+            .unwrap();
+        assert_eq!(
+            store.load("status").unwrap().unwrap().data,
+            Value::from(43u64)
+        );
+        case.success();
+    }
+
+    #[test]
     fn checkpoint_preserves_other_instances_after_file_error() {
         let case =
             TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "checkpoint-files");
@@ -275,7 +296,7 @@ mod tests {
         let mut names = states.keys();
         let blocked = names.next().unwrap();
         let healthy = names.next().unwrap();
-        fs::create_dir(store.directory.join(format!("{blocked}.next"))).unwrap();
+        fs::create_dir(store.directory.join(format!("{blocked}.state.next"))).unwrap();
         assert!(store.checkpoint(&states).is_err());
         assert_eq!(
             store.load(healthy).unwrap().unwrap().data,

@@ -1,6 +1,6 @@
 //! ADR-0046 §3.10：按插件实际服务声明识别密钥路径，复制阶段跳过这些文件。
 
-use super::{Artifacts, Plan, Result, absolute, artifacts, plugins, string, tooling};
+use super::{Artifacts, Plan, Result, absolute, plugins, string, tooling};
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -67,17 +67,5 @@ fn native_source(plan: &Plan, artifacts: &Artifacts, original: &Path) -> Result<
     } else {
         original.to_owned()
     };
-    let name = artifacts::filename(&original)?;
-    let filename = if original.extension().is_some() {
-        name
-    } else {
-        plan.platform.library(&name)
-    };
-    Ok(Some(
-        artifacts
-            .libraries
-            .get(&filename)
-            .cloned()
-            .unwrap_or(original),
-    ))
+    plugins::native_library(plan, artifacts, &original).map(Some)
 }

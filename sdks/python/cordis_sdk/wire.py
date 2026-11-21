@@ -187,45 +187,37 @@ class Connection:
             raise CordisError(2, "请求编号重复或无效")
         if len(self.running) >= self.max_inflight:
             raise CordisError(8, "入站请求额度耗尽")
-        task = asyncio.create_task(self._execute(body))
+        payload = self.runtime.payload(body["params"])
+        task = asyncio.create_task(self._execute(body, payload))
         self.running[request_id] = (body["method"], task)
-        task.add_done_callback(self._request_done)
+        task.add_done_callback(lambda finished: self._request_done(request_id, payload, finished))
 
-    def _request_done(self, task):
-        if not task.cancelled() and task.exception() is not None:
+    def _request_done(self, request_id, payload, task):
+        payload.close()
+        self.running.pop(request_id, None)
+        if task.cancelled() and not self.closed:
+            response = {"id": request_id, "result": {"error": CordisError(7, "调用已取消").wire()}}
+            sender = asyncio.create_task(self.send({"response": response}))
+            self.notifications.add(sender)
+            sender.add_done_callback(self._notification_done)
+        elif not task.cancelled() and task.exception() is not None:
             self.closed = True
             self.writer.close()
 
-    async def _execute(self, body):
-        payload = self.runtime.payload(body["params"])
+    async def _execute(self, body, payload):
         offers = []
         try:
-            try:
-                value, offers = await self.runtime.request(body["method"], payload)
-                result = {"ok": value}
-            except CordisError as problem:
-                result = {"error": problem.wire()}
-            except asyncio.CancelledError:
-                result = {"error": CordisError(7, "调用已取消").wire()}
-            except (ValueError, TypeError, KeyError) as problem:
-                result = {"error": CordisError(2, str(problem)).wire()}
-            except Exception as problem:
-                result = {"error": CordisError(1, str(problem)).wire()}
-            try:
-                await self.send(
-                    {"response": {"id": body["id"], "result": result}}, offers
-                )
-            except CordisError as problem:
-                if problem.code != 8:
-                    raise
-                await self.send(
-                    {
-                        "response": {
-                            "id": body["id"],
-                            "result": {"error": problem.wire()},
-                        }
-                    }
-                )
-        finally:
-            payload.close()
-            self.running.pop(body["id"], None)
+            value, offers = await self.runtime.request(body["method"], payload)
+            result = {"ok": value}
+        except CordisError as problem:
+            result = {"error": problem.wire()}
+        except (ValueError, TypeError, KeyError) as problem:
+            result = {"error": CordisError(2, str(problem)).wire()}
+        except Exception as problem:
+            result = {"error": CordisError(1, str(problem)).wire()}
+        try:
+            await self.send({"response": {"id": body["id"], "result": result}}, offers)
+        except CordisError as problem:
+            if problem.code != 8:
+                raise
+            await self.send({"response": {"id": body["id"], "result": {"error": problem.wire()}}})

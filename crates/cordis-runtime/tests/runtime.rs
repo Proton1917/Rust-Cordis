@@ -824,6 +824,48 @@ fn group_version<'a>(snapshot: &'a Value, group: &str) -> &'a str {
 }
 
 /// M12：为管理恢复场景建立真实进程插件与有授权的调用方。
+#[test]
+fn unrelated_batch_preserves_last_checkpoint_on_export_error() {
+    let case = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "partial-export");
+    let _fixture = fixture().for_case(&case);
+    let project = managed_project(&case, "partial-export", "v1");
+    let source = project.join("saved-counter");
+    fs::write(&source, "137").unwrap();
+    let config_path = project.join("cordis.toml");
+    let mut config: toml::Table = fs::read_to_string(&config_path).unwrap().parse().unwrap();
+    config["instance"]["store"]["config"]
+        .as_table_mut()
+        .unwrap()
+        .insert(
+            "checkpoint_source".into(),
+            toml::Value::String(source.display().to_string()),
+        );
+    fs::write(config_path, toml::to_string(&config).unwrap()).unwrap();
+    let mut core = Process::start(&project, "partial-export");
+    active(&project, "admin");
+    checkpoint(&project, 137);
+    fs::remove_file(&source).unwrap();
+    let change = manage(
+        &project,
+        1,
+        "configure",
+        json!(["client", {
+            "commands": project.join("client-commands"), "results": project.join("client-results"), "initial": 8
+        }]),
+    );
+    assert_eq!(change["ok"], true, "{change}");
+    let saved =
+        fs::read(project.join("state/store.state")).expect("其他实例导出失败时保留已发布状态");
+    assert_eq!(
+        storage::parse_state(&saved).unwrap().data,
+        cordis_up::Value::from(137u64)
+    );
+    fs::write(source, "137").unwrap();
+    assert_eq!(manage(&project, 2, "shutdown", json!([]))["ok"], true);
+    core.finish();
+    case.success();
+}
+
 fn managed_project(case: &TestGuard, name: &str, mode: &str) -> PathBuf {
     let project = project(case, name);
     plugin(&project.join("plugins/store"), "store", mode);

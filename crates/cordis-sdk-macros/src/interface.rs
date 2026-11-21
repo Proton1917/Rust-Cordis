@@ -88,7 +88,7 @@ impl Method {
         ) -> ::cordis_sdk::__private::abi::AbiStatus)
     }
 
-    fn proxy(&self, index: usize, digest: u32) -> TokenStream {
+    fn proxy(&self, index: usize, digest: u32, check: &syn::Ident) -> TokenStream {
         let mut signature = self.signature.clone();
         lower_signature(&mut signature);
         let function_type = self.function_type();
@@ -138,7 +138,7 @@ impl Method {
         let body = quote! {
             let __cordis_environment = self.object.environment();
             // ADR-0056：只有提供方的方法表布局与本声明一致时才按槽位调用，否则按方法名调用。
-            if !self.object.typed_layout_matches(#digest) {
+            if !self.object.#check(#digest) {
                 return { #generic };
             }
             let __cordis_raw = { #response };

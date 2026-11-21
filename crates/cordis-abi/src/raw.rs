@@ -10,6 +10,8 @@ pub const FORMAT_WASM: u8 = 3;
 pub const OBJECT_TYPED_METHODS: u32 = 1;
 /// ADR-0056：对象首部的 reserved 存放类型化方法表的布局摘要。
 pub const OBJECT_TYPED_DIGEST: u32 = 1 << 1;
+/// 类型化表包含异步结果布局；旧代理通过通用入口访问这种表。
+pub const OBJECT_TYPED_ASYNC_RESULTS: u32 = 1 << 2;
 
 #[repr(C)]
 #[derive(Clone, Copy)]

@@ -46,17 +46,7 @@ pub async fn assemble(
             )
             .await?
         } else {
-            let name = artifacts::filename(&original)?;
-            let filename = if original.extension().is_some() {
-                name
-            } else {
-                plan.platform.library(&name)
-            };
-            let source = artifacts
-                .libraries
-                .get(&filename)
-                .cloned()
-                .unwrap_or(original);
+            let source = native_library(plan, artifacts, &original)?;
             native_package(plan, source, &root, None).await?
         };
         if let Some(mut package) = package {
@@ -72,11 +62,43 @@ pub async fn assemble(
 /// 与运行时共用目录优先级，发布准备和装配解析同一个插件。
 pub(super) fn source(plan: &Plan, reference: &str) -> Result<PathBuf> {
     let paths = crate::tooling::plugin_paths(&plan.project, &plan.configuration, reference)?;
-    Ok(paths
+    if let Some(path) = paths
         .iter()
         .find(|path| path.join("cordis-plugin.toml").is_file() || path.is_file())
-        .unwrap_or(&paths[0])
-        .clone())
+    {
+        return Ok(path.clone());
+    }
+    if Path::new(reference).extension().is_none() {
+        let filename = plan
+            .platform
+            .library(&artifacts::filename(Path::new(reference))?);
+        if let Some(library) = paths
+            .iter()
+            .map(|path| path.with_file_name(&filename))
+            .find(|path| path.is_file())
+        {
+            return Ok(library);
+        }
+    }
+    Ok(paths[0].clone())
+}
+
+pub(super) fn native_library(
+    plan: &Plan,
+    artifacts: &Artifacts,
+    declared: &Path,
+) -> Result<PathBuf> {
+    let name = artifacts::filename(declared)?;
+    let filename = if declared.extension().is_some() {
+        name
+    } else {
+        plan.platform.library(&name)
+    };
+    Ok(artifacts
+        .libraries
+        .get(&filename)
+        .cloned()
+        .unwrap_or_else(|| declared.with_file_name(filename)))
 }
 
 /// DOC-15 §12.2：按部署引用合并同一个库的组件配置。
@@ -127,16 +149,7 @@ async fn directory(
         "native" => {
             let declared = string(&manifest, "library")?.ok_or("原生清单需要 library")?;
             let original = absolute(source, Path::new(declared));
-            let filename = if original.extension().is_some() {
-                artifacts::filename(&original)?
-            } else {
-                plan.platform.library(&artifacts::filename(&original)?)
-            };
-            let library = artifacts
-                .libraries
-                .get(&filename)
-                .cloned()
-                .unwrap_or(original);
+            let library = native_library(plan, artifacts, &original)?;
             assets(plan, source, destination, &manifest)?;
             native_package(plan, library, destination, Some(manifest)).await
         }

@@ -390,7 +390,7 @@ mod tests {
     async fn status_writer_recovers_from_file_error() {
         let case = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "status-writer");
         let directory = case.directory("status-writer");
-        fs::create_dir_all(directory.join("status.next")).unwrap();
+        fs::create_dir_all(directory.join("status.json.next")).unwrap();
         let root = Context::new(Arc::new(Executor::new()));
         let manager = Arc::new(
             Manager::new(root.clone(), ManagerOptions::default())
@@ -406,7 +406,7 @@ mod tests {
         );
         tokio::task::yield_now().await;
         assert!(!writer.task.is_finished(), "状态写入失败后继续运行发布任务");
-        fs::remove_dir(directory.join("status.next")).unwrap();
+        fs::remove_dir(directory.join("status.json.next")).unwrap();
         writer.refresh.notify_one();
         tokio::time::timeout(Duration::from_secs(2), async {
             while !directory.join("status.json").is_file() {

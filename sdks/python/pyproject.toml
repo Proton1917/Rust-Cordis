@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cordis-sdk"
-version = "0.1.0"
+version = "0.1.1"
 requires-python = ">=3.11"
 dependencies = ["cbor2==5.6.5"]
 description = "Cordis UP/1 Python plugin SDK"

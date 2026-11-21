@@ -22,6 +22,15 @@ pub fn install(source: &Path, project: &Path, data: &Path, plugins: &Path) -> Re
     if source.is_dir() && plugins.starts_with(&source) {
         return Err(parameter("安装目录需要与插件存储目录分离"));
     }
+    // 不同状态目录可以共用插件目录。锁覆盖编号分配、复制及验证凭据发布。
+    let ownership = File::options()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(plugins.join(".install.lock"))
+        .map_err(io_error)?;
+    ownership.lock().map_err(io_error)?;
     let (existing, sequence) = installed_reference(&source, plugins)?;
     if let Some(reference) = existing {
         copy_receipt(&source, &plugins.join(&reference))?;
@@ -188,4 +197,42 @@ pub fn equal(left: &Path, right: &Path) -> Result<bool> {
         return Err(parameter("插件安装来源应由普通文件与目录组成"));
     }
     Ok(false)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use cordis_testkit::cleanup::TestGuard;
+    use std::sync::Barrier;
+
+    #[test]
+    fn shared_install_directory_keeps_each_source() {
+        let case = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "shared-install");
+        let root = case.directory("shared-install");
+        fs::create_dir_all(&root).unwrap();
+        let root = root.canonicalize().unwrap();
+        let plugins = root.join("plugins");
+        fs::create_dir(&plugins).unwrap();
+        let sources = [root.join("first.so"), root.join("second.so")];
+        for path in &sources {
+            fs::write(path, path.file_name().unwrap().as_encoded_bytes()).unwrap();
+        }
+        let start = Barrier::new(sources.len());
+        std::thread::scope(|scope| {
+            let jobs: Vec<_> = sources
+                .iter()
+                .map(|path| {
+                    scope.spawn(|| {
+                        start.wait();
+                        install(path, &root, &root, &plugins).unwrap()
+                    })
+                })
+                .collect();
+            for (job, source) in jobs.into_iter().zip(&sources) {
+                let installed = plugins.join(job.join().unwrap());
+                assert_eq!(fs::read(installed).unwrap(), fs::read(source).unwrap());
+            }
+        });
+        case.success();
+    }
 }

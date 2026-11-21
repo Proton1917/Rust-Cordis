@@ -35,6 +35,12 @@ trait Asynchronous: Send + Sync {
     async fn double(&self, value: u64) -> Result<u64>;
 }
 
+#[cordis_sdk::interface(name = "test.layout", version = "1.0")]
+trait AsyncNarrowResult: Send + Sync {
+    fn label(&self, text: String) -> Result<String>;
+    async fn double(&self, value: u64) -> Result<u32>;
+}
+
 /// 与 Provided 完全相同的声明，模拟使用方用同一份接口编译。
 #[cordis_sdk::interface(name = "test.layout", version = "1.0")]
 trait Same: Send + Sync {
@@ -43,6 +49,15 @@ trait Same: Send + Sync {
 }
 
 struct Implementation;
+#[cordis_sdk::interface]
+impl Asynchronous for Implementation {
+    fn label(&self, text: String) -> Result<String> {
+        Ok(text)
+    }
+    async fn double(&self, value: u64) -> Result<u64> {
+        Ok(value * 2)
+    }
+}
 impl Provided for Implementation {
     fn label(&self, text: String) -> Result<String> {
         Ok(format!("{text}!"))
@@ -95,5 +110,20 @@ async fn mismatched_layout_uses_named_invocation() -> Result<()> {
     // 同步改异步：按方法名进入通用异步入口。
     let asynchronous = Service::<dyn Asynchronous>::from_object(provide()?)?;
     assert_eq!(asynchronous.double(21).await?, 42);
+
+    let async_object = <dyn Asynchronous as Interface>::object(
+        std::sync::Arc::new(Implementation),
+        environment(3),
+    )?;
+    let layout = <dyn Asynchronous as Interface>::LAYOUT_DIGEST;
+    assert!(async_object.async_result_layout_matches(layout));
+    assert!(!async_object.typed_layout_matches(layout));
+    assert!(
+        !async_object
+            .async_result_layout_matches(<dyn AsyncNarrowResult as Interface>::LAYOUT_DIGEST)
+    );
+    let different_result = Service::<dyn AsyncNarrowResult>::from_object(async_object)?;
+    assert_eq!(different_result.double(21).await?, 42);
+    assert!(different_result.double(u64::from(u32::MAX)).await.is_err());
     Ok(())
 }

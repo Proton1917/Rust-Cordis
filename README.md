@@ -6,7 +6,7 @@ Rust-cordis runs independently replaceable components. The kernel manages servic
 
 ## 快速开始
 
-macOS Apple Silicon 用户可从 [v0.2.6 发布页](https://github.com/Proton1917/Rust-Cordis/releases/tag/v0.2.6)取得运行时。将压缩包解开，在解包目录执行以下命令：
+macOS Apple Silicon 用户可从 [v0.2.7 发布页](https://github.com/Proton1917/Rust-Cordis/releases/tag/v0.2.7)取得运行时。将压缩包解开，在解包目录执行以下命令：
 
 ```sh
 export PATH="$PWD/bin:$PATH"
@@ -28,12 +28,13 @@ cordis run
 
 ## 插件的执行位置与版本
 
-`cordis` 是核心进程，负责实例、依赖和生命周期。一个 `cordis-host` 可以同时装载多个 Rust 插件库。**v0.2.6 默认按原生插件分别成组**，将多个实例配置为相同的 `group` 即可共用宿主。日常替换按实际依赖重建；如果宿主进程退出，同组成员一起恢复。Python 与 TypeScript 使用各自的解释器，浏览器页面经 HTTP 插件连接核心。插件之间使用版本化的服务契约。[部署与分组](docs/guide.md#让两个原生插件共享宿主) · [UP/1 协议](docs/16-up1-protocol.md)
+`cordis` 是核心进程，负责实例、依赖和生命周期。一个 `cordis-host` 可以同时装载多个 Rust 插件库。默认按原生插件分别成组，将多个实例配置为相同的 `group` 即可共用宿主。日常替换按实际依赖重建。如果宿主进程退出，同组成员一起恢复。Python 与 TypeScript 使用各自的解释器，浏览器页面经 HTTP 插件连接核心。插件之间使用版本化的服务契约。[部署与分组](docs/guide.md#让两个原生插件共享宿主) · [UP/1 协议](docs/16-up1-protocol.md)
 
 | 版本 | 插件作者需要知道的区别 |
 |---|---|
 | v0.2.5 发行版 | 宿主 ABI 1.1、Rust SDK 0.2.1。部署者可在核心停机后查询各实例最后确认的程序版本。 |
 | v0.2.6 发行版 | 核心 0.1.5 核对在线快照的进程归属。开发工具 0.2.5 分开管理源码和安装副本。ABI 1.2 增加原生方法布局识别，Rust SDK 0.2.2 提供库级 Tokio 上下文。 |
+| v0.2.7 发行版 | Rust SDK 0.2.3 识别异步结果布局。核心 0.1.6 保留导出失败实例的检查点，开发工具 0.2.6 支持按清单短名称装配预编译动态库。 |
 | 下一版设计 | 新部署默认共用原生宿主，业务方法按稳定身份分派，官方工具负责从独立源码工作区装配应用。实施状态见[版本页](docs/PROGRESS.md)。 |
 
 ## 开发入口

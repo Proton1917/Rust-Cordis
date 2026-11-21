@@ -36,6 +36,7 @@ struct Config {
     commands: PathBuf,
     results: PathBuf,
     observed: Option<PathBuf>,
+    checkpoint_source: Option<PathBuf>,
     meta_observed: Option<PathBuf>,
     scoped: bool,
     invalid: bool,
@@ -514,8 +515,16 @@ impl Handler for Program {
                     };
                     let mut counter = session.counter.lock();
                     counter.frozen = true;
+                    let saved = match &session.config.checkpoint_source {
+                        Some(path) => fs::read_to_string(path)
+                            .map_err(error)?
+                            .trim()
+                            .parse::<u64>()
+                            .map_err(error)?,
+                        None => counter.value,
+                    };
                     value(&payload::ValueResult {
-                        value: counter.value.into(),
+                        value: saved.into(),
                     })?
                 }
                 "thaw" => {

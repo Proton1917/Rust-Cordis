@@ -10,6 +10,7 @@ use std::task::{Poll, Waker};
 #[derive(Default)]
 pub(super) struct Frozen {
     pub(super) states: HashMap<String, payload::State>,
+    pub(super) stateless: HashSet<String>,
     pub(super) held: Vec<(Arc<Generation>, Arc<Exporter>)>,
     pub(super) failure: Option<WireError>,
 }
@@ -696,7 +697,7 @@ impl Manager {
             for name in &names {
                 manager.instance(name)?;
             }
-            manager.checkpoint_selected(&names).await
+            Ok(manager.checkpoint_selected(&names).await.states)
         })
         .await
     }
@@ -737,15 +738,30 @@ impl Manager {
                 .keys()
                 .cloned()
                 .collect::<Vec<_>>();
-            manager.checkpoint_selected(&names).await
+            Ok(manager.checkpoint_selected(&names).await.states)
         })
         .await
     }
 
-    async fn checkpoint_selected(
+    /// 部署提交区分已导出的值、已确认无状态的实例和本次缺席的结果。
+    pub async fn deployment_checkpoint(
         &self,
-        names: &[String],
-    ) -> Result<HashMap<String, payload::State>> {
+        names: Vec<String>,
+    ) -> Result<HashMap<String, Option<payload::State>>> {
+        self.transaction(move |manager| async move {
+            manager.running()?;
+            let frozen = manager.checkpoint_selected(&names).await;
+            Ok(frozen
+                .states
+                .into_iter()
+                .map(|(name, state)| (name, Some(state)))
+                .chain(frozen.stateless.into_iter().map(|name| (name, None)))
+                .collect())
+        })
+        .await
+    }
+
+    async fn checkpoint_selected(&self, names: &[String]) -> Frozen {
         let frozen = self.export(names, false).await;
         self.0
             .catalog
@@ -758,7 +774,7 @@ impl Manager {
                 .logger()
                 .error(format!("检查点解冻失败：{problem}"));
         }
-        Ok(frozen.states)
+        frozen
     }
 
     /// DOC-11 §5、SW-5：对选定活跃实例执行有截止时间的导出，并保留源侧持有关系。
@@ -770,11 +786,7 @@ impl Manager {
                 .filter_map(|name| catalog.instances.get(name).cloned())
                 .collect::<Vec<_>>()
         };
-        let mut frozen = Frozen {
-            states: HashMap::new(),
-            held: Vec::new(),
-            failure: None,
-        };
+        let mut frozen = Frozen::default();
         for instance in instances {
             let generation = instance.data.current.lock().upgrade();
             let Some(generation) = generation else {
@@ -789,6 +801,7 @@ impl Manager {
             }
             let exporter = generation.exporter.lock().clone();
             let Some(exporter) = exporter else {
+                frozen.stateless.insert(instance.data.name.clone());
                 continue;
             };
             frozen.held.push((generation.clone(), exporter.clone()));
@@ -1390,18 +1403,7 @@ impl Manager {
         version: Arc<GroupGeneration>,
         reason: String,
     ) -> Result<()> {
-        let registered = self
-            .0
-            .catalog
-            .lock()
-            .groups
-            .get(&group.name)
-            .is_some_and(|current| Arc::ptr_eq(current, &group));
-        if !registered
-            || group.current.lock().connection.id() != version.connection.id()
-            || self.0.stopping.load(Ordering::Acquire)
-            || self.0.exported.load(Ordering::Acquire)
-        {
+        if !self.recovery_current(&group, version.connection.id()) {
             return Ok(());
         }
         let problem = error(4, metadata::clipped(&reason));
@@ -1410,62 +1412,93 @@ impl Manager {
             .await?;
         self.inherit(&transition.inherited);
         self.withdraw(&group, &version, problem).await;
-        let cohort = transition.names;
+        let cohort = transition
+            .names
+            .iter()
+            .filter_map(|name| self.find_instance(name))
+            .map(|instance| Arc::downgrade(&instance))
+            .collect();
         self.thaw_current(&transition.frozen).await?;
-        let specification = group.specification.lock().clone();
-        let Some(specification) = specification else {
-            return Ok(());
-        };
-        self.restart_group(group, specification, &cohort).await
+        self.schedule_restart(group, cohort);
+        Ok(())
     }
 
-    /// CP-6：退避与重启共用五次以内的尝试预算，关闭信号结束等待，失败保留诊断。
-    async fn restart_group(
+    fn recovery_current(&self, group: &Arc<Group>, connection: u64) -> bool {
+        self.running().is_ok()
+            && self
+                .0
+                .catalog
+                .lock()
+                .groups
+                .get(&group.name)
+                .is_some_and(|current| Arc::ptr_eq(current, group))
+            && group.current.lock().connection.id() == connection
+    }
+
+    /// 退避计时在管理队列外；轮到实际恢复时重新核对分组和连接。
+    fn schedule_restart(&self, group: Arc<Group>, cohort: Vec<Weak<Instance>>) {
+        let Some(specification) = group.specification.lock().clone() else {
+            return;
+        };
+        let attempt = group.restarts.load(Ordering::Acquire);
+        if attempt >= specification.restart.max {
+            group.health.lock().state = "failed".into();
+            return;
+        }
+        group.health.lock().state = "backoff".into();
+        let delay = specification
+            .restart
+            .backoff
+            .saturating_mul(1u32 << attempt);
+        let connection = group.current.lock().connection.id();
+        let mut shutdown = self.0.stop.subscribe();
+        let sender = self.0.commands.lock().sender.clone();
+        let (reply, _result) = oneshot::channel();
+        let work: Command = Box::new(Action {
+            callback: move |manager: Manager| async move {
+                if manager.recovery_current(&group, connection) {
+                    manager.restart_once(group, specification, cohort).await?;
+                }
+                Ok(())
+            },
+            reply,
+        });
+        tokio::spawn(async move {
+            if *shutdown.borrow() {
+                return;
+            }
+            tokio::select! {
+                _ = shutdown.changed() => {},
+                _ = tokio::time::sleep(delay) => { let _ = sender.send(work).await; },
+            }
+        });
+    }
+
+    async fn restart_once(
         &self,
         group: Arc<Group>,
         specification: LaunchPlan,
-        cohort: &[String],
+        cohort: Vec<Weak<Instance>>,
     ) -> Result<()> {
-        let mut shutdown = self.0.stop.subscribe();
-        while group.restarts.load(Ordering::Acquire) < specification.restart.max {
-            if !self.0.context.is_current() || *shutdown.borrow() {
-                return Ok(());
-            }
-            let attempt = group.restarts.load(Ordering::Acquire);
-            group.health.lock().state = "backoff".into();
-            tokio::select! {
-                _ = tokio::time::sleep(specification.restart.backoff.saturating_mul(1u32 << attempt)) => {},
-                _ = shutdown.changed() => return Ok(()),
-            }
-            if *shutdown.borrow() {
-                return Ok(());
-            }
-            group.restarts.fetch_add(1, Ordering::AcqRel);
-            group.health.lock().state = "restarting".into();
-            let (candidate, plan) = match self
-                .prepare_launch(specification.specification.clone())
-                .await
-            {
-                Ok(candidate) => candidate,
-                Err(problem) => {
+        group.restarts.fetch_add(1, Ordering::AcqRel);
+        group.health.lock().state = "restarting".into();
+        match self
+            .prepare_launch(specification.specification.clone())
+            .await
+        {
+            Err(problem) => group.health.lock().error = Some(saved_error(&problem)),
+            Ok((candidate, plan)) => {
+                if let Err(problem) = self.preflight(&group, &candidate).await {
                     group.health.lock().error = Some(saved_error(&problem));
-                    continue;
+                    self.retire(&candidate).await?;
+                } else if self.restore_candidate(&group, &candidate, &cohort).await? {
+                    self.replace_plan(&group, Some(plan)).await;
+                    group.health.lock().state = "running".into();
+                    return self.monitor(group, candidate);
                 }
-            };
-            if let Err(problem) = self.preflight(&group, &candidate).await {
-                group.health.lock().error = Some(saved_error(&problem));
-                self.retire(&candidate).await?;
-                continue;
             }
-            if !self.restore_candidate(&group, &candidate, cohort).await? {
-                continue;
-            }
-            self.replace_plan(&group, Some(plan)).await;
-            group.health.lock().state = "running".into();
-            self.monitor(group, candidate)?;
-            return Ok(());
         }
-        group.health.lock().state = "failed".into();
+        self.schedule_restart(group, cohort);
         Ok(())
     }
 
@@ -1474,12 +1507,20 @@ impl Manager {
         &self,
         group: &Group,
         candidate: &Arc<GroupGeneration>,
-        cohort: &[String],
+        cohort: &[Weak<Instance>],
     ) -> Result<bool> {
-        let instances: Vec<_> = cohort
-            .iter()
-            .filter_map(|name| self.instance(name).ok())
-            .collect();
+        let mut instances = self.group_instances(&group.name);
+        for instance in cohort.iter().filter_map(Weak::upgrade) {
+            if self
+                .find_instance(&instance.data.name)
+                .is_some_and(|current| Arc::ptr_eq(&current, &instance))
+                && !instances
+                    .iter()
+                    .any(|member| Arc::ptr_eq(member, &instance))
+            {
+                instances.push(instance);
+            }
+        }
         let transition = self.prepare_transition(&instances, false).await?;
         self.inherit(&transition.inherited);
         self.activate(group, candidate.clone(), None)?;

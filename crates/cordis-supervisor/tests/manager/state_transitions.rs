@@ -211,6 +211,14 @@ async fn optional_dependent_keeps_writes_during_provider_restart() {
     )
     .unwrap();
     let waiting = control.ready_after("optional", old.context).await;
+    // 同一管理队列中的检查点应在上游两秒退避期间完成。
+    tokio::time::timeout(
+        Duration::from_secs(1),
+        manager.checkpoint_instances(&["optional".into()]),
+    )
+    .await
+    .expect("其他实例可以在宿主退避期间保存检查点")
+    .unwrap();
     let accepted = integer(&invoke(&waiting, "add", vec![5u64.into()]).await);
     control.ready_after("upstream", provider.context).await;
     let next = control.ready_after("optional", waiting.context).await;
