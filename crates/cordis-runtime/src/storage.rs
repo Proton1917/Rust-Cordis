@@ -59,10 +59,12 @@ pub fn io_error(problem: std::io::Error) -> WireError {
 
 /// CP-2：读取配置或状态时以帧上限约束分配，超限在文件输入边界返回错误。
 pub fn read(path: &Path) -> Result<Vec<u8>> {
+    read_file(File::open(path).map_err(io_error)?, path)
+}
+
+pub(crate) fn read_file(file: File, path: &Path) -> Result<Vec<u8>> {
     let mut bytes = Vec::new();
-    File::open(path)
-        .map_err(io_error)?
-        .take(Limits::DEFAULT.max_frame as u64 + 1)
+    file.take(Limits::DEFAULT.max_frame as u64 + 1)
         .read_to_end(&mut bytes)
         .map_err(io_error)?;
     if bytes.len() > Limits::DEFAULT.max_frame {
@@ -93,6 +95,12 @@ fn publish(path: &Path, bytes: &[u8], durable: bool) -> Result<()> {
     fs::rename(staged, path).map_err(io_error)
 }
 
+fn sync_directory(path: &Path) -> Result<()> {
+    File::open(path)
+        .and_then(|directory| directory.sync_all())
+        .map_err(io_error)
+}
+
 /// CP-8、CP-9：状态块使用 UP/1 受限 CBOR 解码器和共享 State 数据定义。
 pub fn parse_state(bytes: &[u8]) -> Result<payload::State> {
     let value = cordis_up::decode_value(bytes, &Limits::DEFAULT).map_err(parameter)?;
@@ -105,6 +113,107 @@ pub struct Store {
 }
 
 impl Store {
+    /// 持有运行目录写锁时，把中断部署触及的文件恢复到提交前的版本。
+    pub(crate) fn recover_deployment(&self) -> Result<()> {
+        let journal = self.directory.join(".deployment-undo");
+        if journal.try_exists().map_err(io_error)? {
+            for folder in ["", "consumed"] {
+                let destination = self.directory.join(folder);
+                for file in fs::read_dir(journal.join(folder)).map_err(io_error)? {
+                    let file = file.map_err(io_error)?;
+                    if file.file_type().map_err(io_error)?.is_dir() {
+                        continue;
+                    }
+                    let name = file
+                        .file_name()
+                        .into_string()
+                        .map_err(|_| parameter("部署记录文件名无效"))?;
+                    if let Some(absent) = name.strip_suffix(".absent") {
+                        remove_file(&destination.join(absent))?;
+                    } else {
+                        let target = destination.join(name);
+                        let link = target.with_added_extension("recovering");
+                        remove_file(&link)?;
+                        fs::hard_link(file.path(), &link).map_err(io_error)?;
+                        fs::rename(&link, target).map_err(io_error)?;
+                        remove_file(&link)?;
+                    }
+                }
+                sync_directory(&destination)?;
+            }
+            self.finish_deployment()?;
+        }
+        let staging = self.directory.join(".deployment-staging");
+        if staging.try_exists().map_err(io_error)? {
+            fs::remove_dir_all(staging).map_err(io_error)?;
+        }
+        Ok(())
+    }
+
+    fn finish_deployment(&self) -> Result<()> {
+        fs::rename(
+            self.directory.join(".deployment-undo"),
+            self.directory.join(".deployment-staging"),
+        )
+        .map_err(io_error)?;
+        sync_directory(&self.directory)
+    }
+
+    /// 用原文件的硬链接保存回退点。覆盖层、代码来源和实例状态共享一次提交。
+    fn prepare_deployment<'a>(&self, names: impl Iterator<Item = &'a String>) -> Result<()> {
+        self.recover_deployment()?;
+        let staging = self.directory.join(".deployment-staging");
+        fs::create_dir(&staging).map_err(io_error)?;
+        fs::create_dir(staging.join("consumed")).map_err(io_error)?;
+        let preserve = |relative: &Path| -> Result<()> {
+            let saved = staging.join(relative);
+            match fs::hard_link(self.directory.join(relative), &saved) {
+                Ok(()) => Ok(()),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                    File::create(saved.with_added_extension("absent")).map_err(io_error)?;
+                    Ok(())
+                }
+                Err(error) => Err(io_error(error)),
+            }
+        };
+        preserve(Path::new("instances.toml"))?;
+        preserve(Path::new("sources.json"))?;
+        for name in names {
+            config::instance_name(name)?;
+            let file = format!("{name}.state");
+            preserve(Path::new(&file))?;
+            preserve(&Path::new("consumed").join(file))?;
+        }
+        sync_directory(&staging.join("consumed"))?;
+        sync_directory(&staging)?;
+        fs::rename(&staging, self.directory.join(".deployment-undo")).map_err(io_error)?;
+        sync_directory(&self.directory)
+    }
+
+    pub(crate) fn commit_deployment(
+        &self,
+        overlay: &Overlay,
+        states: &HashMap<String, Option<payload::State>>,
+        sources: &[u8],
+    ) -> Result<()> {
+        self.prepare_deployment(states.keys())?;
+        let result = (|| {
+            self.restore_states(states)?;
+            self.save_overlay(overlay)?;
+            write(&self.directory.join("sources.json"), sources)?;
+            sync_directory(&self.directory.join("consumed"))?;
+            sync_directory(&self.directory)?;
+            self.finish_deployment()
+        })();
+        if let Err(problem) = result {
+            self.recover_deployment().map_err(|recovery| {
+                WireError::new(1, format!("{problem}；部署恢复失败：{recovery}"))
+            })?;
+            return Err(problem);
+        }
+        fs::remove_dir_all(self.directory.join(".deployment-staging")).map_err(io_error)
+    }
+
     /// CP-11、PR-7：准备检查点消费目录和插件数据目录，并固定存储根路径。
     pub fn create(directory: PathBuf) -> Result<Self> {
         fs::create_dir_all(directory.join("consumed")).map_err(io_error)?;
@@ -253,6 +362,62 @@ fn remove_file(path: &Path) -> Result<()> {
 mod tests {
     use super::*;
     use cordis_testkit::cleanup::TestGuard;
+
+    #[test]
+    fn interrupted_deployment_restores_code_and_consumed_state_together() {
+        let case =
+            TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "deployment-recovery");
+        let dir = case.directory("deployment-recovery");
+        let store = Store::create(dir.clone()).unwrap();
+        let state = |version| payload::State {
+            schema: "counter".into(),
+            version,
+            data: Value::from(37u64),
+        };
+        let before = HashMap::from([("store".into(), Some(state(1)))]);
+        let after = HashMap::from([
+            ("store".into(), Some(state(2))),
+            ("second".into(), Some(state(2))),
+        ]);
+        let old = config::parse_overlay(b"[instance.store]\nplugin='one'\n").unwrap();
+        let new = config::parse_overlay(b"[instance.store]\nplugin='two'\n").unwrap();
+        let sources_v1 = br#"{"store":{"declared_source":"counter","installed_reference":"one","plugin_directory":"plugins"}}"#;
+        let sources_v2 = br#"{"store":{"declared_source":"counter","installed_reference":"two","plugin_directory":"plugins"}}"#;
+        store.commit_deployment(&old, &before, sources_v1).unwrap();
+        store.consume("store").unwrap();
+        store.prepare_deployment(after.keys()).unwrap();
+        store.restore_states(&after).unwrap();
+        store.save_overlay(&new).unwrap();
+        write(&store.directory.join("sources.json"), sources_v2).unwrap();
+        let offline =
+            crate::control::offline_sources(&store.directory.join("sources.json"), &dir).unwrap();
+        assert_eq!(
+            serde_json::to_value(offline).unwrap()["instances"]["store"]["installed_reference"],
+            "one"
+        );
+        drop(store);
+        let recovered = Store::create(dir).unwrap();
+        recovered.recover_deployment().unwrap();
+        assert_eq!(recovered.overlay().unwrap().instance["store"].plugin, "one");
+        assert_eq!(
+            read(&recovered.directory.join("sources.json")).unwrap(),
+            sources_v1
+        );
+        assert!(recovered.directory.join("consumed/store.state").is_file());
+        assert_eq!(recovered.load("store").unwrap().unwrap().version, 1);
+        assert!(recovered.load("second").unwrap().is_none());
+        recovered
+            .commit_deployment(&new, &after, sources_v2)
+            .unwrap();
+        recovered.recover_deployment().unwrap();
+        assert_eq!(recovered.overlay().unwrap().instance["store"].plugin, "two");
+        assert_eq!(
+            read(&recovered.directory.join("sources.json")).unwrap(),
+            sources_v2
+        );
+        assert_eq!(recovered.load("second").unwrap().unwrap().version, 2);
+        case.success();
+    }
 
     #[test]
     fn status_snapshot_and_status_instance_use_independent_staging() {

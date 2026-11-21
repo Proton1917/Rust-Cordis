@@ -446,8 +446,20 @@ impl Controller {
                 states.entry(spec.name.clone()).or_insert(None);
             }
         }
-        self.store.restore_states(&states)?;
-        self.store.save_overlay(&target.overlay)
+        let mut bindings = self.sources.lock();
+        let mut next = bindings.clone();
+        next.track(
+            &target.configuration,
+            &target.overlay,
+            target
+                .instances
+                .iter()
+                .map(|(name, item)| (name, &item.settings, &item.package)),
+        );
+        next.observe(&self.manager.snapshot());
+        next.commit(&self.store, &target.overlay, &states)?;
+        *bindings = next;
+        Ok(())
     }
 
     /// DOC-11 §7：提交后清理或持久化失败时重新准备原来源，恢复整个窗口的配置和状态。
@@ -465,21 +477,23 @@ impl Controller {
         let sources = self.batch_sources(&target.groups, &self.groups)?;
         let restored = self
             .manager
-            .reconfigure_batch(sources, desired, before, original.clone())
+            .reconfigure_batch(sources, desired.clone(), before.clone(), original.clone())
             .await;
         let original_active =
             restored.is_ok() || restored.as_ref().is_err_and(replacement_committed);
         if original_active {
             let page_recovery = self.rollback_web_changes(&pages).await;
             self.refresh_batch_fibers()?;
-            self.store.restore_states(&original)?;
+            self.sources
+                .lock()
+                .commit(&self.store, &self.overlay, &original)?;
             release_target(target).await?;
             if let Err(recovery) = page_configuration.and(page_recovery) {
                 return Err(web::recovery_error("批次", problem, recovery));
             }
         } else {
+            self.persist_batch(&target, &before, &desired).await?;
             self.accept_batch_target(target).await?;
-            self.store.save_overlay(&self.overlay)?;
         }
         let mut failure = match restored {
             Ok(_) => problem,

@@ -488,9 +488,13 @@ impl Controller {
 
     /// DOC-15 §3.2：将已采用部署及来源库存提供给只读状态接口。
     fn refresh(&self) -> Result<()> {
-        self.sources
-            .lock()
-            .track(&self.configuration, &self.overlay, &self.mounted);
+        self.sources.lock().track(
+            &self.configuration,
+            &self.overlay,
+            self.mounted
+                .iter()
+                .map(|(name, mounted)| (name, &mounted.settings, &mounted.package)),
+        );
         let mut diagnostics = self.diagnostics.lock();
         diagnostics.desired = self.configuration.effective(&self.overlay)?;
         diagnostics.overrides = self
@@ -555,6 +559,11 @@ impl Controller {
         self.ensure_group(&group, &package).await?;
         let component = self.mount_component(name, &group, &package, &settings)?;
         let view = self.mount_view(&settings)?;
+        let web = package
+            .web
+            .as_ref()
+            .map(|_| Self::web_spec(name, &settings, &package, &view))
+            .transpose()?;
         let manage = self.provide_management(name, &settings, &view)?;
         self.diagnostics
             .lock()
@@ -574,21 +583,36 @@ impl Controller {
                 inherited,
             )
             .await;
+        let result = match result {
+            Ok(fiber) => {
+                let finish = self.store.consume(name).and_then(|()| {
+                    if let Some(spec) = web {
+                        self.web.mount(spec)?;
+                    }
+                    Ok(())
+                });
+                match finish {
+                    Ok(()) => Ok(fiber),
+                    Err(problem) => match self.manager.dispose(name).await {
+                        Ok(()) => Err(problem),
+                        Err(cleanup) => Err(web::recovery_error("实例挂载", problem, cleanup)),
+                    },
+                }
+            }
+            Err(problem) => Err(problem),
+        };
         let fiber = match result {
             Ok(fiber) => fiber,
             Err(problem) => {
                 self.diagnostics.lock().active_references.remove(name);
-                if let Some(manage) = manage {
-                    manage.dispose().await.map_err(kernel)?;
+                if let Some(manage) = manage
+                    && let Err(cleanup) = manage.dispose().await
+                {
+                    return Err(web::recovery_error("挂载授权", problem, kernel(cleanup)));
                 }
                 return Err(problem);
             }
         };
-        self.store.consume(name)?;
-        if package.web.is_some() {
-            self.web
-                .mount(Self::web_spec(name, &settings, &package, &view)?)?;
-        }
         self.mounted.insert(
             name.into(),
             Mounted {
@@ -721,6 +745,7 @@ impl Controller {
                         .collect(),
                     Arc::new(Management {
                         owner: name.into(),
+                        manager: Arc::downgrade(&self.manager),
                         permissions: self.permissions.clone(),
                         control: self.handle.clone(),
                         configuration: self.path.clone(),

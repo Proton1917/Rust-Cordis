@@ -2368,7 +2368,7 @@ var Connection = class {
   writes = 0;
   tail = Promise.resolve();
   /** DOC-16 §6：队列容量和编码失败归还本轮出口，写入失败终止连接。 */
-  async send(message, offers = []) {
+  async send(message, offers = [], beginWrite) {
     let committed = false;
     try {
       if (this.closed) throw new CordisError(4, "\u6838\u5FC3\u8FDE\u63A5\u5DF2\u5173\u95ED");
@@ -2383,6 +2383,7 @@ var Connection = class {
       this.writes++;
       const write = this.tail.then(async () => {
         if (this.closed) throw new CordisError(4, "\u6838\u5FC3\u8FDE\u63A5\u5DF2\u5173\u95ED");
+        if (beginWrite && !beginWrite()) return;
         await new Promise((resolve, reject) => {
           this.output.write(framed, (error) => error ? reject(error) : resolve());
         });
@@ -2408,27 +2409,31 @@ var Connection = class {
       throw new CordisError(8, "\u5728\u9014\u8BF7\u6C42\u989D\u5EA6\u8017\u5C3D");
     }
     const id = this.next++;
-    let delivered = false;
+    const deadline = performance.now() + this.limits.timeoutMs;
+    let writing = false;
     let cancelled = false;
     let rejectResponse;
     let timer;
     let cancel;
+    let expire;
     const result = new Promise((resolve, reject) => {
       rejectResponse = reject;
       this.pending.set(id, { resolve, reject });
       cancel = () => {
         cancelled = true;
         reject(new CordisError(7, "\u8C03\u7528\u5DF2\u53D6\u6D88"));
-        if (delivered) this.notifySoon("cancel", { id });
+        if (writing) this.notifySoon("cancel", { id });
       };
       signal?.addEventListener("abort", cancel, { once: true });
-      timer = setTimeout(() => {
+      expire = () => {
+        if (cancelled) return;
         cancelled = true;
         reject(new CordisError(6, "\u8BF7\u6C42\u8D85\u8FC7\u622A\u6B62\u65F6\u95F4"));
-        if (delivered) this.notifySoon("cancel", { id });
+        if (writing) this.notifySoon("cancel", { id });
         if (++this.timeouts >= this.limits.consecutiveTimeouts)
           this.fail(new CordisError(6, "\u8FDE\u7EED\u8BF7\u6C42\u8D85\u65F6"));
-      }, this.limits.timeoutMs);
+      };
+      timer = setTimeout(expire, this.limits.timeoutMs);
     });
     const completed = result.finally(() => {
       clearTimeout(timer);
@@ -2436,9 +2441,10 @@ var Connection = class {
       signal?.removeEventListener("abort", cancel);
     });
     try {
-      const sent = this.send({ request: { id, method, params } }, offers).then(() => {
-        delivered = true;
-        if (cancelled) this.notifySoon("cancel", { id });
+      const sent = this.send({ request: { id, method, params } }, offers, () => {
+        if (performance.now() >= deadline) expire();
+        writing = !cancelled;
+        return writing;
       });
       const [, payload] = await Promise.all([sent, completed]);
       this.timeouts = 0;
@@ -3030,14 +3036,19 @@ var Context = class _Context {
   async task(function_, label = "typescript-task") {
     return this.effect(async (scope) => {
       const abort = new AbortController();
-      const pending = function_(abort.signal);
+      let pending;
       await scope.defer(async () => {
         abort.abort();
-        try {
-          await pending;
-        } catch (error) {
-          if (!(error instanceof Error) || error.name !== "AbortError") throw error;
-        }
+        await pending;
+      });
+      if (abort.signal.aborted) return;
+      pending = Promise.resolve().then(() => function_(abort.signal)).catch((error) => {
+        if (abort.signal.aborted && error instanceof Error && error.name === "AbortError") return;
+        this.runtime.connection.notifySoon("log", {
+          context: this.number,
+          level: 0,
+          message: `${label}: ${String(error)}`
+        });
       });
     }, label);
   }
@@ -3090,7 +3101,7 @@ var Runtime = class {
         {
           name: this.name,
           version: this.version,
-          sdk_version: "0.2.1",
+          sdk_version: "0.2.2",
           build_info: "TypeScript UP/1 SDK",
           format: 2,
           library: null,
@@ -3265,7 +3276,7 @@ var WebRuntime = class extends Runtime {
   pendingCleanups = /* @__PURE__ */ new Map();
   cleanupComplete = Promise.resolve();
   constructor(socket, limits = {}) {
-    super("cordis-web", "0.1.1", [], socket, socket, limits);
+    super("cordis-web", "0.1.2", [], socket, socket, limits);
   }
   async load(entry) {
     const url = new URL(entry.url, location.href);
@@ -3288,7 +3299,7 @@ var WebRuntime = class extends Runtime {
     return {
       name: module.entry.name,
       version: module.entry.version,
-      sdk_version: "0.1.1",
+      sdk_version: "0.1.2",
       build_info: new URL(module.entry.url, location.href).pathname,
       format: 2,
       library: module.id,
@@ -3465,11 +3476,11 @@ function caller(metadata) {
 
 // cordis-web/src/index.ts
 function connect(options) {
-  let stopped = false;
+  const stop = new AbortController();
   let current;
   let wake;
   const close2 = () => {
-    stopped = true;
+    stop.abort();
     current?.destroy();
     wake?.();
   };
@@ -3478,16 +3489,16 @@ function connect(options) {
   const completed = (async () => {
     const attempts = options.reconnectAttempts ?? 20;
     let token = options.token;
-    for (let attempt = 0; !stopped && attempt <= attempts; attempt++) {
+    for (let attempt = 0; !stop.signal.aborted && attempt <= attempts; attempt++) {
       options.status?.("connecting");
       let runtime;
       try {
         if (attempt > 0) {
-          const session = await fetch("/_cordis/session.json", { cache: "no-store" });
+          const session = await fetch("/_cordis/session.json", { cache: "no-store", signal: stop.signal });
           if (!session.ok) throw new CordisError(session.status, "\u8BFB\u53D6\u5F53\u524D\u4F1A\u8BDD\u5931\u8D25");
           token = (await session.json()).token;
         }
-        const response = await fetch(options.manifest ?? "/_cordis/manifest.json", { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
+        const response = await fetch(options.manifest ?? "/_cordis/manifest.json", { headers: { Authorization: `Bearer ${token}` }, cache: "no-store", signal: stop.signal });
         if (!response.ok) throw new CordisError(response.status, "\u8BFB\u53D6\u7F51\u9875\u63D2\u4EF6\u6E05\u5355\u5931\u8D25");
         const entries = await response.json();
         const url = new URL(options.endpoint ?? "/_cordis/socket", location.href);
@@ -3495,15 +3506,8 @@ function connect(options) {
         const websocket = new WebSocket(url, ["cordis-up1", `cordis-token.${token}`]);
         current = new Socket(websocket, DEFAULT_LIMITS.maxFrame, DEFAULT_LIMITS.queueCapacity);
         runtime = new WebRuntime(current);
-        await runtime.initialize(entries);
-        await new Promise((resolve, reject) => {
-          if (websocket.readyState === WebSocket.OPEN) {
-            resolve();
-            return;
-          }
-          websocket.addEventListener("open", () => resolve(), { once: true });
-          websocket.addEventListener("error", () => reject(new CordisError(4, "WebSocket \u8FDE\u63A5\u5931\u8D25")), { once: true });
-        });
+        await initializeSocket(websocket, runtime, entries, stop.signal);
+        if (stop.signal.aborted) break;
         options.status?.("active");
         await runtime.connection.serve();
       } catch (error) {
@@ -3512,7 +3516,7 @@ function connect(options) {
       } finally {
         await runtime?.cleanupComplete;
       }
-      if (!stopped && attempt < attempts) await new Promise((resolve) => {
+      if (!stop.signal.aborted && attempt < attempts) await new Promise((resolve) => {
         const timer = setTimeout(resolve, options.reconnectDelayMs ?? 500);
         wake = () => {
           clearTimeout(timer);
@@ -3524,6 +3528,29 @@ function connect(options) {
     options.status?.("closed");
   })();
   return { close: close2, completed };
+}
+async function initializeSocket(socket, runtime, entries, stop) {
+  const listeners = new AbortController();
+  const options = { signal: listeners.signal };
+  let timer;
+  try {
+    const ended = new Promise((_, reject) => {
+      const disconnected = () => reject(new CordisError(4, "\u7F51\u9875\u8FDE\u63A5\u5728\u521D\u59CB\u5316\u671F\u95F4\u5173\u95ED"));
+      socket.addEventListener("close", disconnected, options);
+      socket.addEventListener("error", disconnected, options);
+      stop.addEventListener("abort", disconnected, options);
+      if (stop.aborted || socket.readyState >= WebSocket.CLOSING) disconnected();
+      timer = setTimeout(() => reject(new CordisError(6, "\u7F51\u9875\u8FDE\u63A5\u521D\u59CB\u5316\u8D85\u65F6")), DEFAULT_LIMITS.timeoutMs);
+    });
+    const opened = new Promise((resolve) => {
+      if (socket.readyState === WebSocket.OPEN) resolve();
+      else socket.addEventListener("open", () => resolve(), options);
+    });
+    await Promise.race([ended, Promise.all([opened, runtime.initialize(entries)])]);
+  } finally {
+    clearTimeout(timer);
+    listeners.abort();
+  }
 }
 export {
   BindingTransport,

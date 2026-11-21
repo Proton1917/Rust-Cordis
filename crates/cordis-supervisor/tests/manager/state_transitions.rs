@@ -76,6 +76,60 @@ async fn upstream_configuration_update_preserves_downstream_state() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn failed_update_releases_optional_consumers_original_exporter() {
+    let case = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "optional-update");
+    let _fixture = plugin().for_case(&case);
+    let (manager, control) = setup(options()).await;
+    manager
+        .attach_group(group("pair", "v1", "pair", no_restart()))
+        .await
+        .unwrap();
+    let file = case.directory("optional-update").join("service");
+    std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+    std::fs::write(&file, "off").unwrap();
+    let config =
+        |path: &Path| Value::Map(vec![("service_file".into(), path.to_str().unwrap().into())]);
+    manager
+        .mount(
+            instance("provider", "pair", "pair", "b", config(&file)),
+            None,
+        )
+        .await
+        .unwrap()
+        .settled()
+        .await
+        .unwrap();
+    manager
+        .mount(
+            instance(
+                "reader",
+                "pair",
+                "pair",
+                "optional-stateful",
+                configuration(100),
+            ),
+            None,
+        )
+        .await
+        .unwrap()
+        .settled()
+        .await
+        .unwrap();
+    let reader = control.ready_after("reader", 0).await;
+    assert!(manager.change_affects("reader", "provider", true));
+    assert!(
+        manager
+            .update("provider", config(&file.with_extension("missing")))
+            .await
+            .is_err()
+    );
+    let written = integer(&invoke(&reader, "add", vec![7u64.into()]).await);
+    manager.shutdown().await.unwrap();
+    assert_eq!(written, 107);
+    case.success();
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn batch_replacement_preserves_implicit_downstream_state() {
     use cordis_supervisor::manager::{BatchInstance, BatchReplacement};
     let case = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "dependent-batch");

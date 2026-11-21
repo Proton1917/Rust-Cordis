@@ -249,6 +249,34 @@ fn checkpoint(project: &Path, expected: u64) {
 
 // M12：真实管理调用验证权限、覆盖层、替换回滚、核心崩溃恢复与有序退出。
 #[test]
+fn checkpoint_consumption_failure_retracts_started_instance() {
+    let case = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "mount-cleanup");
+    let _fixture = fixture().for_case(&case);
+    let project = managed_project(&case, "mount-cleanup", "v1");
+    let store = storage::Store::create(project.join("state")).unwrap();
+    store
+        .checkpoint(&std::collections::HashMap::from([(
+            "store".into(),
+            cordis_up::payload::State {
+                schema: "fixture.snapshot".into(),
+                version: 1,
+                data: 37u64.into(),
+            },
+        )]))
+        .unwrap();
+    fs::create_dir(store.directory.join("consumed/store.state")).unwrap();
+    let mut core = Process::start(&project, "mount-cleanup");
+    let snapshot = active(&project, "admin");
+    let failed = instance(&snapshot, "store").unwrap();
+    assert_eq!(failed["state"], "failed", "{failed}");
+    assert!(failed["context"].is_null());
+    assert_eq!(instance(&snapshot, "client").unwrap()["state"], "pending");
+    assert_eq!(manage(&project, 1, "shutdown", json!([]))["ok"], true);
+    core.finish();
+    case.success();
+}
+
+#[test]
 fn management_and_checkpoints_survive_core_restart() {
     let case = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "management");
     let _fixture = fixture().for_case(&case);

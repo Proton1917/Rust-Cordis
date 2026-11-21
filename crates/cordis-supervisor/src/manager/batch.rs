@@ -116,7 +116,7 @@ impl Manager {
                     .await;
                 match result {
                     Err(problem) if !marker.committed.load(Ordering::Acquire) => {
-                        Err(manager.after_rejected_libraries(problem, groups).await)
+                        Err(manager.after_failed_libraries(problem, groups).await)
                     }
                     other => other,
                 }
@@ -826,6 +826,11 @@ impl Manager {
                 failure.get_or_insert(problem);
             }
         }
+        if let Some(problem) = failure {
+            return Err(self
+                .after_failed_libraries(problem, [group.group.name.clone()])
+                .await);
+        }
         let restarted = self
             .enforce_image_limit(
                 group.specification.clone(),
@@ -834,10 +839,7 @@ impl Manager {
             )
             .await;
         self.record_image_restart(group, &restarted);
-        if let Err(problem) = restarted {
-            failure.get_or_insert(problem);
-        }
-        failure.map_or(Ok(()), Err)
+        restarted.map(|_| ())
     }
 
     /// RM-3/RM-4：阈值重启属于本次换库，换库报告计入重启的暂停与受影响实例。

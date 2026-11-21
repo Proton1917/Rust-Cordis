@@ -63,7 +63,7 @@ export class Runtime {
                 {
                     name: this.name,
                     version: this.version,
-                    sdk_version: "0.2.1",
+                    sdk_version: "0.2.2",
                     build_info: "TypeScript UP/1 SDK",
                     format: 2,
                     library: null,

@@ -27,7 +27,25 @@ struct OfflineSource {
 
 /// ADR-0054：复用持久格式解码；公开字段独立映射，目录以配置真实位置展开。
 pub(crate) fn offline_sources(path: &Path, project: &Path) -> Result<OfflineSources> {
-    let instances = read_confirmed(path)?
+    let live = read_confirmed(path);
+    let journal = path.with_file_name(".deployment-undo");
+    let previous = journal.join("sources.json");
+    let confirmed = match std::fs::File::open(&previous) {
+        Ok(file) => serde_json::from_slice(&crate::storage::read_file(file, &previous)?)
+            .map_err(parameter)?,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            if journal
+                .join("sources.json.absent")
+                .try_exists()
+                .map_err(crate::storage::io_error)?
+            {
+                return Err(WireError::new(4, "尚无已确认的代码来源记录"));
+            }
+            live?
+        }
+        Err(error) => return Err(crate::storage::io_error(error)),
+    };
+    let instances = confirmed
         .into_iter()
         .map(|(name, source)| {
             (
@@ -51,6 +69,7 @@ fn read_confirmed(path: &Path) -> Result<BTreeMap<String, Source>> {
     serde_json::from_slice(&crate::storage::read(path)?).map_err(parameter)
 }
 
+#[derive(Clone)]
 pub(crate) struct SourceBindings {
     path: PathBuf,
     directory: PathBuf,
@@ -116,16 +135,15 @@ impl SourceBindings {
     }
 
     /// ADR-0031：跟踪目录只在部署确认后更新，候选确认期继续保留窗口前的代码来源。
-    pub(super) fn track(
+    pub(super) fn track<'a>(
         &mut self,
         configuration: &Configuration,
         overlay: &Overlay,
-        mounted: &BTreeMap<String, Mounted>,
+        mounted: impl Iterator<Item = (&'a String, &'a InstanceSettings, &'a Package)>,
     ) {
         let entries = configuration.entries(overlay);
         self.tracked = mounted
-            .iter()
-            .map(|(name, mounted)| {
+            .map(|(name, settings, package)| {
                 (
                     name.clone(),
                     Source {
@@ -133,9 +151,9 @@ impl SourceBindings {
                             .instance
                             .get(name)
                             .map(|base| &base.plugin)
-                            .unwrap_or(&mounted.settings.plugin)
+                            .unwrap_or(&settings.plugin)
                             .clone(),
-                        installed_reference: mounted.package.reference.clone(),
+                        installed_reference: package.reference.clone(),
                         plugin_directory: self.directory.clone(),
                     },
                 )
@@ -147,7 +165,7 @@ impl SourceBindings {
     }
 
     /// DOC-11 §10、CP-11：真实 Active 状态确认代码引用，多项变化共用一次原子写入。
-    pub(crate) fn confirm(&mut self, snapshot: &Snapshot) -> Result<()> {
+    pub(super) fn observe(&mut self, snapshot: &Snapshot) {
         for instance in &snapshot.instances {
             if instance.state != "active" {
                 continue;
@@ -160,12 +178,31 @@ impl SourceBindings {
                 self.dirty = true;
             }
         }
+    }
+
+    fn encoded(&self) -> Result<Vec<u8>> {
+        let bytes = serde_json::to_vec_pretty(&self.confirmed).map_err(parameter)?;
+        if bytes.len() > cordis_up::Limits::DEFAULT.max_frame {
+            return Err(WireError::new(8, "代码来源记录超过状态文件容量"));
+        }
+        Ok(bytes)
+    }
+
+    pub(super) fn commit(
+        &mut self,
+        store: &Store,
+        overlay: &Overlay,
+        states: &HashMap<String, Option<payload::State>>,
+    ) -> Result<()> {
+        store.commit_deployment(overlay, states, &self.encoded()?)?;
+        self.dirty = false;
+        Ok(())
+    }
+
+    pub(crate) fn confirm(&mut self, snapshot: &Snapshot) -> Result<()> {
+        self.observe(snapshot);
         if self.dirty {
-            let bytes = serde_json::to_vec_pretty(&self.confirmed).map_err(parameter)?;
-            if bytes.len() > cordis_up::Limits::DEFAULT.max_frame {
-                return Err(WireError::new(8, "代码来源记录超过状态文件容量"));
-            }
-            crate::storage::write(&self.path, &bytes)?;
+            crate::storage::write(&self.path, &self.encoded()?)?;
             self.dirty = false;
         }
         Ok(())

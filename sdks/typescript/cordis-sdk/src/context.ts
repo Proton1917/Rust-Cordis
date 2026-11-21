@@ -314,14 +314,17 @@ export class Context {
     ): Promise<Effect> {
         return this.effect(async (scope) => {
             const abort = new AbortController();
-            const pending = function_(abort.signal);
+            let pending: Promise<void> | undefined;
             await scope.defer(async () => {
                 abort.abort();
-                try {
-                    await pending;
-                } catch (error) {
-                    if (!(error instanceof Error) || error.name !== "AbortError") throw error;
-                }
+                await pending;
+            });
+            if (abort.signal.aborted) return;
+            pending = Promise.resolve().then(() => function_(abort.signal)).catch((error) => {
+                if (abort.signal.aborted && error instanceof Error && error.name === "AbortError") return;
+                this.runtime.connection.notifySoon("log", {
+                    context: this.number, level: 0, message: `${label}: ${String(error)}`,
+                });
             });
         }, label);
     }

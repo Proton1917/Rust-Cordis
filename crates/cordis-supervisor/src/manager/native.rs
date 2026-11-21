@@ -133,7 +133,7 @@ impl Manager {
                 .await;
             match result {
                 Err(problem) if !marker.load(Ordering::Acquire) => {
-                    Err(manager.after_rejected_libraries(problem, [group]).await)
+                    Err(manager.after_failed_libraries(problem, [group]).await)
                 }
                 other => other,
             }
@@ -523,7 +523,14 @@ impl Manager {
         }
         self.record_native(&swap, &report);
         drop(std::mem::take(&mut swap.transition.frozen));
-        let retired_images = self.retire_native(&swap, &mut report).await?;
+        let retired_images = match self.retire_native(&swap, &mut report).await {
+            Ok(count) => count,
+            Err(problem) => {
+                return Err(self
+                    .after_failed_libraries(problem, [swap.group.name.clone()])
+                    .await);
+            }
+        };
         self.finish_native(swap, report, retired_images, started)
             .await
     }
@@ -611,8 +618,8 @@ impl Manager {
         Ok(None)
     }
 
-    /// 候选全部退役、原部署恢复后才检查阈值。重启使用当前已确认的程序绑定。
-    pub(super) async fn after_rejected_libraries(
+    /// 退役返回错误时从存活宿主读取累计数，按当前程序绑定重启。
+    pub(super) async fn after_failed_libraries(
         &self,
         mut problem: WireError,
         groups: impl IntoIterator<Item = String>,

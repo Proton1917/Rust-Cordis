@@ -209,17 +209,25 @@ impl Manager {
                     .await
             }
             .await;
+            let mut failure = problem;
             if let Err(restored) = restored {
-                return Err(error(
+                failure = error(
                     1,
                     format!(
                         "配置更新失败：{}；恢复失败：{}",
-                        metadata::clipped(&problem.message),
+                        metadata::clipped(&failure.message),
                         metadata::clipped(&restored.message)
                     ),
-                ));
+                );
             }
-            return Err(problem);
+            if let Err(thaw) = self.thaw_current(&transition.frozen).await {
+                failure.message = format!(
+                    "{}；解冻失败：{}",
+                    metadata::clipped(&failure.message),
+                    metadata::clipped(&thaw.message)
+                );
+            }
+            return Err(failure);
         }
         self.thaw_current(&transition.frozen).await?;
         Ok(())
@@ -243,6 +251,27 @@ impl Manager {
                     .map(|problem| problem.value.clone())
                     .unwrap_or_else(|| kernel_error(problem))
             })
+    }
+
+    /// 管理服务在应答前判断本次变更是否会撤回调用方或其依赖。
+    pub fn change_affects(&self, caller: &str, target: &str, replace_library: bool) -> bool {
+        if caller == target {
+            return true;
+        }
+        let Ok(instance) = self.instance(target) else {
+            return false;
+        };
+        let roots = if replace_library {
+            self.group_instances(&instance.data.group)
+                .into_iter()
+                .filter(|item| item.data.plugin == instance.data.plugin)
+                .collect()
+        } else {
+            vec![instance]
+        };
+        self.affected_instances(&roots)
+            .iter()
+            .any(|item| item.data.name == caller)
     }
 
     /// 当前 Binding 指明真实提供方，闭包沿反向边扩展；目录锁在读取绑定前释放。

@@ -23,6 +23,7 @@ pub type Permissions = Arc<Mutex<BTreeMap<String, InstanceSettings>>>;
 
 pub struct Management {
     pub owner: String,
+    pub manager: Weak<Manager>,
     pub permissions: Permissions,
     pub control: Handle,
     pub configuration: PathBuf,
@@ -62,7 +63,7 @@ impl LocalService for Management {
             if matches!(&operation, Operation::ReplaceBatch { .. }) {
                 return self.batch_reply(context, operation);
             }
-            if self.deferred(&operation)? {
+            if self.deferred(&context.instance, &operation)? {
                 let action = self.control.reserve(context.clone(), operation)?;
                 Ok(LocalReply::with_after_write(Value::Null, move || {
                     action.commit()
@@ -100,16 +101,24 @@ impl Management {
     }
 
     /// DOC-15 §3.2：自移除、同库替换或授权配置变化在调用方收取响应后提交。
-    fn deferred(&self, operation: &Operation) -> Result<bool> {
+    fn deferred(&self, caller: &str, operation: &Operation) -> Result<bool> {
+        let manager = self
+            .manager
+            .upgrade()
+            .ok_or_else(|| WireError::new(4, "管理器已关闭"))?;
+        let affects = |target: &str, library| {
+            target == self.owner || manager.change_affects(caller, target, library)
+        };
         Ok(match operation {
             Operation::Shutdown => true,
-            Operation::Remove(name)
-            | Operation::Replace { name, .. }
-            | Operation::Rollback(name)
-            | Operation::Configure { name, .. } => name == &self.owner,
+            Operation::Replace { name, .. } | Operation::Rollback(name) => affects(name, true),
+            Operation::Remove(name) | Operation::Configure { name, .. } => affects(name, false),
             Operation::Reload(configuration) => {
                 let target = configuration.effective(&self.store.overlay()?)?;
-                target.get(&self.owner) != self.permissions.lock().get(&self.owner)
+                let current = self.permissions.lock().clone();
+                current
+                    .iter()
+                    .any(|(name, old)| target.get(name) != Some(old) && affects(name, true))
             }
             Operation::ReplaceBatch { .. } => true,
             _ => false,

@@ -79,6 +79,7 @@ async fn create_controller(
         project,
         &configuration.runtime.state_dir,
     ))?;
+    store.recover_deployment()?;
     let overlay = store.overlay()?;
     let settings = &configuration.runtime;
     let lifecycle = Duration::from_millis(settings.lifecycle_timeout_ms);

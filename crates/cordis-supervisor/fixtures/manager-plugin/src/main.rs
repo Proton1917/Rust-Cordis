@@ -44,6 +44,7 @@ struct Config {
     cleanup_ms: u64,
     apply_ms: u64,
     invalid: bool,
+    service_file: Option<std::path::PathBuf>,
     metadata_size: usize,
     scoped: bool,
     refs: Vec<u64>,
@@ -55,6 +56,7 @@ impl Default for Config {
             cleanup_ms: 25,
             apply_ms: 0,
             invalid: false,
+            service_file: None,
             metadata_size: 0,
             scoped: false,
             refs: Vec::new(),
@@ -526,6 +528,13 @@ impl Shared {
                 Duration::from_secs(5),
             )
             .await?;
+        }
+        if let Some(path) = &session.config.service_file {
+            let enabled = std::fs::read_to_string(path)
+                .map_err(|problem| WireError::new(1, problem.to_string()))?;
+            if enabled.trim() == "off" {
+                return Ok(());
+            }
         }
         let (object, offer) = self.offer(Resource::Service {
             session: Arc::downgrade(&session),

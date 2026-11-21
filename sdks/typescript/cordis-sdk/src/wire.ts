@@ -64,7 +64,7 @@ export class Connection {
     }
 
     /** DOC-16 §6：队列容量和编码失败归还本轮出口，写入失败终止连接。 */
-    async send(message: object, offers: Identifier[] = []): Promise<void> {
+    async send(message: object, offers: Identifier[] = [], beginWrite?: () => boolean): Promise<void> {
         let committed = false;
         try {
             if (this.closed) throw new CordisError(4, "核心连接已关闭");
@@ -80,6 +80,7 @@ export class Connection {
             const write = this.tail
                 .then(async () => {
                     if (this.closed) throw new CordisError(4, "核心连接已关闭");
+                    if (beginWrite && !beginWrite()) return;
                     await new Promise<void>((resolve, reject) => {
                         this.output.write(framed, (error) => (error ? reject(error) : resolve()));
                     });
@@ -107,27 +108,31 @@ export class Connection {
             throw new CordisError(8, "在途请求额度耗尽");
         }
         const id = this.next++;
-        let delivered = false;
+        const deadline = performance.now() + this.limits.timeoutMs;
+        let writing = false;
         let cancelled = false;
         let rejectResponse: (error: unknown) => void;
         let timer: ReturnType<typeof setTimeout>;
         let cancel: () => void;
+        let expire: () => void;
         const result = new Promise<Payload>((resolve, reject) => {
             rejectResponse = reject;
             this.pending.set(id, { resolve, reject });
             cancel = () => {
                 cancelled = true;
                 reject(new CordisError(7, "调用已取消"));
-                if (delivered) this.notifySoon("cancel", { id });
+                if (writing) this.notifySoon("cancel", { id });
             };
             signal?.addEventListener("abort", cancel, { once: true });
-            timer = setTimeout(() => {
+            expire = () => {
+                if (cancelled) return;
                 cancelled = true;
                 reject(new CordisError(6, "请求超过截止时间"));
-                if (delivered) this.notifySoon("cancel", { id });
+                if (writing) this.notifySoon("cancel", { id });
                 if (++this.timeouts >= this.limits.consecutiveTimeouts)
                     this.fail(new CordisError(6, "连续请求超时"));
-            }, this.limits.timeoutMs);
+            };
+            timer = setTimeout(expire, this.limits.timeoutMs);
         });
         // 截止时间同时覆盖写入等待，结果 Promise 从创建起即具有失败接收方。
         const completed = result.finally(() => {
@@ -136,9 +141,10 @@ export class Connection {
             signal?.removeEventListener("abort", cancel);
         });
         try {
-            const sent = this.send({ request: { id, method, params } }, offers).then(() => {
-                delivered = true;
-                if (cancelled) this.notifySoon("cancel", { id });
+            const sent = this.send({ request: { id, method, params } }, offers, () => {
+                if (performance.now() >= deadline) expire();
+                writing = !cancelled;
+                return writing;
             });
             const [, payload] = await Promise.all([sent, completed]);
             this.timeouts = 0;
