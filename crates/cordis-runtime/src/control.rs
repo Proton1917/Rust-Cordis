@@ -6,7 +6,8 @@ mod outcomes;
 mod sources;
 mod web;
 pub(crate) use outcomes::{BatchOutcomes, PendingBatch};
-pub(crate) use sources::{SourceBindings, offline_sources};
+use sources::SourceBindings;
+pub(crate) use sources::offline_sources;
 
 use crate::{
     builtins::{Logs, Management, Permissions},
@@ -19,7 +20,7 @@ use crate::{
     status::Diagnostics,
     storage::Store,
 };
-use cordis::{Context, Effect, Fiber, Realm};
+use cordis::{Context, Effect, Realm};
 use cordis_supervisor::manager::{InstanceSpec, Manager};
 use cordis_up::{Value, WireError, payload};
 use parking_lot::Mutex;
@@ -34,7 +35,6 @@ struct Mounted {
     settings: InstanceSettings,
     package: Package,
     group: String,
-    fiber: Fiber,
     _view: Context,
     manage: Option<Effect>,
 }
@@ -59,7 +59,7 @@ pub struct Controller {
     installed: HashMap<String, Package>,
     outcomes: Arc<Mutex<BatchOutcomes>>,
     batch_discarded: Option<cordis_types::ConfirmationDiscard>,
-    sources: Arc<Mutex<SourceBindings>>,
+    sources: SourceBindings,
 }
 
 /// DOC-15 §3.2：管理器与运行循环共享的诊断、授权、队列和日志入口。
@@ -90,14 +90,13 @@ impl Controller {
         let project = path.parent().expect("configuration parent").to_owned();
         let plugins = locations.installed.clone();
         let outcomes = Arc::new(Mutex::new(BatchOutcomes::new(diagnostics.clone())));
-        let sources = Arc::new(Mutex::new(SourceBindings::new(
+        let sources = SourceBindings::new(
             store.directory.join("sources.json"),
             plugins
                 .strip_prefix(&project)
                 .unwrap_or(&plugins)
                 .to_owned(),
-        )));
-        diagnostics.lock().source_bindings = Some(sources.clone());
+        );
         let allowed = permissions.clone();
         let web = cordis_web_deployment::Deployment::new(
             manager.clone(),
@@ -135,10 +134,9 @@ impl Controller {
 
     /// DOC-15 §3.2：发现来源、建立进程分组，再按检查点挂载实例；局部错误记入诊断。
     pub async fn start(&mut self) -> Result<()> {
-        self.sources.lock().load()?;
+        self.sources.load()?;
         if self
             .sources
-            .lock()
             .apply_declarations(&self.configuration, &mut self.overlay)
         {
             self.store.save_overlay(&self.overlay)?;
@@ -247,8 +245,8 @@ impl Controller {
         self.execute_operation(request).await
     }
 
-    pub(crate) fn confirm_sources(&self) -> Result<()> {
-        self.sources.lock().confirm(&self.manager.snapshot())
+    pub(crate) fn confirm_sources(&mut self) -> Result<()> {
+        self.sources.confirm(&self.manager)
     }
 
     /// DOC-15 §3.2：实际执行发生在管理队列，批次结果由外层记录后提供给调用方。
@@ -459,7 +457,7 @@ impl Controller {
             .get(name)
             .map(|item| item.plugin.as_str())
             .unwrap_or(&settings.plugin);
-        let reference = self.sources.lock().select(name, declared, &settings.plugin);
+        let reference = self.sources.select(name, declared, &settings.plugin);
         self.installed_package(&reference).await
     }
 
@@ -491,8 +489,8 @@ impl Controller {
     }
 
     /// DOC-15 §3.2：将已采用部署及来源库存提供给只读状态接口。
-    fn refresh(&self) -> Result<()> {
-        self.sources.lock().track(
+    fn refresh(&mut self) -> Result<()> {
+        self.sources.track(
             &self.configuration,
             &self.overlay,
             self.mounted
@@ -573,57 +571,46 @@ impl Controller {
             .lock()
             .active_references
             .insert(name.into(), package.reference.clone());
-        let result = self
-            .manager
-            .mount_in(
-                view.clone(),
-                InstanceSpec {
-                    name: name.into(),
-                    group: group.clone(),
-                    plugin: package.name.clone(),
-                    component: component.clone(),
-                    config: Value::serialized(&settings.config).map_err(parameter)?,
-                },
-                inherited,
-            )
-            .await;
-        let result = match result {
-            Ok(fiber) => {
-                let finish = self.store.consume(name).and_then(|()| {
-                    if let Some(spec) = web {
-                        self.web.mount(spec)?;
-                    }
-                    Ok(())
-                });
-                match finish {
-                    Ok(()) => Ok(fiber),
-                    Err(problem) => match self.manager.dispose(name).await {
-                        Ok(()) => Err(problem),
-                        Err(cleanup) => Err(web::recovery_error("实例挂载", problem, cleanup)),
+        let result = async {
+            self.manager
+                .mount_in(
+                    view.clone(),
+                    InstanceSpec {
+                        name: name.into(),
+                        group: group.clone(),
+                        plugin: package.name.clone(),
+                        component: component.clone(),
+                        config: Value::serialized(&settings.config).map_err(parameter)?,
                     },
-                }
+                    inherited,
+                )
+                .await?;
+            if let Some(spec) = web
+                && let Err(problem) = self.web.mount(spec)
+            {
+                return match self.manager.dispose(name).await {
+                    Ok(()) => Err(problem),
+                    Err(cleanup) => Err(web::recovery_error("实例挂载", problem, cleanup)),
+                };
             }
-            Err(problem) => Err(problem),
-        };
-        let fiber = match result {
-            Ok(fiber) => fiber,
-            Err(problem) => {
-                self.diagnostics.lock().active_references.remove(name);
-                if let Some(manage) = manage
-                    && let Err(cleanup) = manage.dispose().await
-                {
-                    return Err(web::recovery_error("挂载授权", problem, kernel(cleanup)));
-                }
-                return Err(problem);
+            Ok(())
+        }
+        .await;
+        if let Err(problem) = result {
+            self.diagnostics.lock().active_references.remove(name);
+            if let Some(manage) = manage
+                && let Err(cleanup) = manage.dispose().await
+            {
+                return Err(web::recovery_error("挂载授权", problem, kernel(cleanup)));
             }
-        };
+            return Err(problem);
+        }
         self.mounted.insert(
             name.into(),
             Mounted {
                 settings,
                 package,
                 group,
-                fiber,
                 _view: view,
                 manage,
             },
@@ -803,18 +790,6 @@ impl Controller {
         Ok(())
     }
 
-    /// CP-4：实例稳定等待受 apply 截止时间限制，保留内核返回的加载错误。
-    async fn settle(&self, name: &str) -> Result<()> {
-        let mounted = self.mounted.get(name).expect("mounted instance retained");
-        tokio::time::timeout(
-            Duration::from_millis(self.configuration.runtime.lifecycle_timeout_ms),
-            mounted.fiber.settled(),
-        )
-        .await
-        .map_err(|_| WireError::new(6, "实例加载截止时间到达"))?
-        .map_err(kernel)
-    }
-
     /// DOC-15 §3.2、§11.4：配置与插件批次共用状态保存、页面协调及持久提交。
     async fn commit_configuration(
         &mut self,
@@ -845,14 +820,6 @@ impl Controller {
         self.replace_batch(&[(name.to_owned(), previous.plugin)], None)
             .await
     }
-}
-
-/// DOC-11 SW-9：提交标记来自监管器错误外层，插件自身 detail 保留在 cause 内。
-fn replacement_committed(problem: &WireError) -> bool {
-    problem
-        .detail
-        .deserialized::<payload::ReplacementFailure>()
-        .is_ok_and(|failure| failure.committed)
 }
 
 /// DOC-16 §5：内核错误保留说明并转换为协议通用失败。

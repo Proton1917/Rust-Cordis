@@ -259,7 +259,6 @@ fn native_checkpoints_recover_after_core_sigkill() {
         send(&project, 2, "kv@1.0", "get", json!(["crash"]))["value"],
         json!([1, 3, 7])
     );
-    assert!(project.join("state/consumed/store.state").is_file());
     assert_eq!(manage(&project, 3, "shutdown", json!([]))["ok"], true);
     restarted.finish();
     let remaining = fs::read_dir(project.join(".cordis/lib/kv"))

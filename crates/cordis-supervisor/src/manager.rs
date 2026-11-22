@@ -130,7 +130,7 @@ pub(super) struct Instance {
 pub(super) struct Catalog {
     groups: HashMap<String, Arc<Group>>,
     instances: HashMap<String, Arc<Instance>>,
-    checkpoints: HashMap<String, payload::State>,
+    checkpoints: HashMap<String, Arc<payload::State>>,
     reports: BTreeMap<String, ReplaceReport>,
     native_reports: BTreeMap<(String, String), (u64, cordis_types::SwapReport)>,
 }

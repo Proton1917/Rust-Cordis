@@ -15,12 +15,21 @@ impl Controller {
                 .unwrap_or_else(|| format!("验证实例 {name} 缺席"));
             WireError::new(4, problem)
         })?;
-        self.settle(name).await?;
-        if mounted.fiber.state() != cordis::FiberState::Active {
-            return Err(WireError::new(
-                4,
-                format!("验证实例 {name} 状态 {:?}", mounted.fiber.state()),
-            ));
+        let fiber = if matches!(mounted.package.entry, Entry::Web) {
+            self.web.instance_fiber(name)?
+        } else {
+            self.manager.instance_fiber(name)?
+        };
+        tokio::time::timeout(
+            Duration::from_millis(self.configuration.runtime.lifecycle_timeout_ms),
+            fiber.settled(),
+        )
+        .await
+        .map_err(|_| WireError::new(6, "实例加载截止时间到达"))?
+        .map_err(kernel)?;
+        let state = fiber.state();
+        if state != cordis::FiberState::Active {
+            return Err(WireError::new(4, format!("验证实例 {name} 状态 {state:?}")));
         }
         Ok(())
     }

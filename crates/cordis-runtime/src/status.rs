@@ -34,8 +34,6 @@ pub struct Diagnostics {
     pub desired: BTreeMap<String, InstanceSettings>,
     #[serde(skip)]
     pub active_references: BTreeMap<String, String>,
-    #[serde(skip)]
-    pub source_bindings: Option<Arc<Mutex<crate::control::SourceBindings>>>,
     pub last_batch: Vec<BatchOutcome>,
 }
 

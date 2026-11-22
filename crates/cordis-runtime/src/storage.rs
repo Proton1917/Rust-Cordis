@@ -155,7 +155,37 @@ impl Store {
     /// 持有运行目录写锁时，把中断部署触及的文件恢复到提交前的版本。
     pub(crate) fn recover_deployment(&self) -> Result<()> {
         let _lock = self.lock_deployment()?;
-        self.restore_deployment_files()
+        self.restore_deployment_files()?;
+        // 旧版可能同时留下两个版本，根目录里的检查点较新。
+        let legacy = self.directory.join("consumed");
+        let mut migrated = Vec::new();
+        for entry in fs::read_dir(&legacy).map_err(io_error)? {
+            let entry = entry.map_err(io_error)?;
+            let path = entry.path();
+            if path.extension().is_some_and(|ext| ext == "state")
+                && entry.file_type().map_err(io_error)?.is_file()
+            {
+                let target = self.directory.join(entry.file_name());
+                match fs::hard_link(&path, &target) {
+                    Ok(()) => {}
+                    Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+                        if !fs::symlink_metadata(target).map_err(io_error)?.is_file() {
+                            continue;
+                        }
+                    }
+                    Err(e) => return Err(io_error(e)),
+                }
+                migrated.push(path);
+            }
+        }
+        if !migrated.is_empty() {
+            sync_directory(&self.directory)?;
+            for path in migrated {
+                fs::remove_file(path).map_err(io_error)?;
+            }
+            sync_directory(&legacy)?;
+        }
+        Ok(())
     }
 
     fn restore_deployment_files(&self) -> Result<()> {
@@ -163,7 +193,14 @@ impl Store {
         if journal.try_exists().map_err(io_error)? {
             for folder in ["", "consumed"] {
                 let destination = self.directory.join(folder);
-                for file in fs::read_dir(journal.join(folder)).map_err(io_error)? {
+                let entries = match fs::read_dir(journal.join(folder)) {
+                    Ok(entries) => entries,
+                    Err(e) if folder == "consumed" && e.kind() == std::io::ErrorKind::NotFound => {
+                        continue;
+                    }
+                    Err(e) => return Err(io_error(e)),
+                };
+                for file in entries {
                     let file = file.map_err(io_error)?;
                     if file.file_type().map_err(io_error)?.is_dir() {
                         continue;
@@ -208,7 +245,6 @@ impl Store {
         self.restore_deployment_files()?;
         let staging = self.directory.join(".deployment-staging");
         fs::create_dir(&staging).map_err(io_error)?;
-        fs::create_dir(staging.join("consumed")).map_err(io_error)?;
         let preserve = |relative: &Path| -> Result<()> {
             let saved = staging.join(relative);
             match fs::hard_link(self.directory.join(relative), &saved) {
@@ -224,11 +260,8 @@ impl Store {
         preserve(Path::new("sources.json"))?;
         for name in names {
             config::instance_name(name)?;
-            let file = format!("{name}.state");
-            preserve(Path::new(&file))?;
-            preserve(&Path::new("consumed").join(file))?;
+            preserve(Path::new(&format!("{name}.state")))?;
         }
-        sync_directory(&staging.join("consumed"))?;
         sync_directory(&staging)?;
         fs::rename(&staging, self.directory.join(".deployment-undo")).map_err(io_error)?;
         sync_directory(&self.directory)
@@ -246,7 +279,6 @@ impl Store {
             self.restore_states(states)?;
             self.save_overlay(overlay)?;
             write(&self.directory.join("sources.json"), sources)?;
-            sync_directory(&self.directory.join("consumed"))?;
             sync_directory(&self.directory)?;
             self.finish_deployment()
         })();
@@ -259,7 +291,7 @@ impl Store {
         fs::remove_dir_all(self.directory.join(".deployment-staging")).map_err(io_error)
     }
 
-    /// CP-11、PR-7：准备检查点消费目录和插件数据目录，并固定存储根路径。
+    /// CP-11、PR-7：准备部署锁目录和插件数据目录，并固定存储根路径。
     pub fn create(directory: PathBuf) -> Result<Self> {
         fs::create_dir_all(directory.join("consumed")).map_err(io_error)?;
         fs::create_dir_all(directory.join("data")).map_err(io_error)?;
@@ -285,35 +317,13 @@ impl Store {
         write(&self.directory.join("instances.toml"), bytes.as_bytes())
     }
 
-    /// CP-11：优先使用最新检查点，其次使用上次启动消费的状态。
+    /// CP-11：实例重启时读取最近一次保存的检查点。
     pub fn load(&self, name: &str) -> Result<Option<payload::State>> {
         config::instance_name(name)?;
-        for path in [
-            self.directory.join(format!("{name}.state")),
-            self.directory
-                .join("consumed")
-                .join(format!("{name}.state")),
-        ] {
-            match fs::metadata(&path) {
-                Ok(_) => return parse_state(&read(&path)?).map(Some),
-                Err(problem) if problem.kind() == std::io::ErrorKind::NotFound => {}
-                Err(problem) => return Err(io_error(problem)),
-            }
-        }
-        Ok(None)
-    }
-
-    /// DOC-11 §9：挂载接受状态后将文件转入 consumed，保留再次启动所需内容。
-    pub fn consume(&self, name: &str) -> Result<()> {
         let path = self.directory.join(format!("{name}.state"));
-        match fs::rename(
-            &path,
-            self.directory
-                .join("consumed")
-                .join(format!("{name}.state")),
-        ) {
-            Ok(()) => Ok(()),
-            Err(problem) if problem.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        match File::open(&path) {
+            Ok(file) => parse_state(&read_file(file, &path)?).map(Some),
+            Err(problem) if problem.kind() == std::io::ErrorKind::NotFound => Ok(None),
             Err(problem) => Err(io_error(problem)),
         }
     }
@@ -347,7 +357,7 @@ impl Store {
         failure.map_or(Ok(()), Err)
     }
 
-    /// DOC-11 §7、CP-11：发布替换继承状态，并移除旧消费记录以保持重启后的相同语义。
+    /// DOC-11 §7、CP-11：发布替换继承状态，清除已移除实例或失效身份的检查点。
     pub fn restore_states(&self, states: &HashMap<String, Option<payload::State>>) -> Result<()> {
         for (name, state) in states {
             config::instance_name(name)?;
@@ -355,31 +365,8 @@ impl Store {
                 let value = Value::serialized(state).map_err(parameter)?;
                 let bytes = cordis_up::encode_value(&value, &Limits::DEFAULT).map_err(parameter)?;
                 write(&self.directory.join(format!("{name}.state")), &bytes)?;
-                remove_file(
-                    &self
-                        .directory
-                        .join("consumed")
-                        .join(format!("{name}.state")),
-                )?;
             } else {
-                self.forget(name)?;
-            }
-        }
-        Ok(())
-    }
-
-    /// DOC-11 §5：删除已移除实例或失效组件身份的活动及消费检查点。
-    pub fn forget(&self, name: &str) -> Result<()> {
-        for path in [
-            self.directory.join(format!("{name}.state")),
-            self.directory
-                .join("consumed")
-                .join(format!("{name}.state")),
-        ] {
-            match fs::remove_file(path) {
-                Ok(()) => {}
-                Err(problem) if problem.kind() == std::io::ErrorKind::NotFound => {}
-                Err(problem) => return Err(io_error(problem)),
+                remove_file(&self.directory.join(format!("{name}.state")))?;
             }
         }
         Ok(())
@@ -429,8 +416,16 @@ mod tests {
         let sources_v1 = br#"{"store":{"declared_source":"counter","installed_reference":"one","plugin_directory":"plugins"}}"#;
         let sources_v2 = br#"{"store":{"declared_source":"counter","installed_reference":"two","plugin_directory":"plugins"}}"#;
         store.commit_deployment(&old, &before, sources_v1).unwrap();
-        store.consume("store").unwrap();
         store.prepare_deployment(after.keys()).unwrap();
+        // v0.2.10 的回退日志可以只在 consumed 中保存原值。
+        let journal = store.directory.join(".deployment-undo");
+        fs::create_dir(journal.join("consumed")).unwrap();
+        fs::rename(
+            journal.join("store.state"),
+            journal.join("consumed/store.state"),
+        )
+        .unwrap();
+        File::create(journal.join("store.state.absent")).unwrap();
         store.restore_states(&after).unwrap();
         store.save_overlay(&new).unwrap();
         write(&store.directory.join("sources.json"), sources_v2).unwrap();
@@ -474,7 +469,9 @@ mod tests {
             sources_v1
         );
         assert!(recovered.directory.join("consumed/store.state").is_file());
+        recovered.recover_deployment().unwrap();
         assert_eq!(recovered.load("store").unwrap().unwrap().version, 1);
+        assert!(!recovered.directory.join("consumed/store.state").exists());
         assert!(recovered.load("second").unwrap().is_none());
         recovered
             .commit_deployment(&new, &after, sources_v2)

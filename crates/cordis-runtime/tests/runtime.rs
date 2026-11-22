@@ -252,34 +252,6 @@ fn checkpoint(project: &Path, expected: u64) {
 
 // M12：真实管理调用验证权限、覆盖层、替换回滚、核心崩溃恢复与有序退出。
 #[test]
-fn checkpoint_consumption_failure_retracts_started_instance() {
-    let case = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "mount-cleanup");
-    let _fixture = fixture().for_case(&case);
-    let project = managed_project(&case, "mount-cleanup", "v1");
-    let store = storage::Store::create(project.join("state")).unwrap();
-    store
-        .checkpoint(&std::collections::HashMap::from([(
-            "store".into(),
-            cordis_up::payload::State {
-                schema: "fixture.snapshot".into(),
-                version: 1,
-                data: 37u64.into(),
-            },
-        )]))
-        .unwrap();
-    fs::create_dir(store.directory.join("consumed/store.state")).unwrap();
-    let mut core = Process::start(&project, "mount-cleanup");
-    let snapshot = active(&project, "admin");
-    let failed = instance(&snapshot, "store").unwrap();
-    assert_eq!(failed["state"], "failed", "{failed}");
-    assert!(failed["context"].is_null());
-    assert_eq!(instance(&snapshot, "client").unwrap()["state"], "pending");
-    assert_eq!(manage(&project, 1, "shutdown", json!([]))["ok"], true);
-    core.finish();
-    case.success();
-}
-
-#[test]
 fn management_and_checkpoints_survive_core_restart() {
     let case = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "management");
     let _fixture = fixture().for_case(&case);
@@ -387,6 +359,7 @@ fn management_and_checkpoints_survive_core_restart() {
         true
     );
     checkpoint(&project, 91);
+    let older_checkpoint = fs::read(project.join("state/store.state")).unwrap();
     plugin(&project.join("plugins/store"), "store", "fail");
     assert_eq!(
         manage(&project, 8, "rollback", json!(["store"]))["ok"],
@@ -425,10 +398,17 @@ fn management_and_checkpoints_survive_core_restart() {
             (!alive).then_some(())
         });
     }
+    // 升级时根目录保存了 137，旧版挂载留下的副本仍是 91。
+    let legacy = project.join("state/consumed/store.state");
+    fs::write(&legacy, older_checkpoint).unwrap();
     let mut core = Process::start(&project, "restarted");
     active(&project, "admin");
     version(&project, "0.2.0");
-    checkpoint(&project, 137);
+    assert_eq!(
+        send(&project, 73, "fixture.counter@1.0", "get", json!([]))["value"],
+        137
+    );
+    assert!(!legacy.exists());
     let status_output = Command::new(env!("CARGO_BIN_EXE_cordis"))
         .args(["status", "--config"])
         .arg(project.join("cordis.toml"))

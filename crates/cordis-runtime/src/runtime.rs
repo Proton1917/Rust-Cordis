@@ -191,7 +191,7 @@ async fn serve(
             _ = interrupt.recv() => Err(WireError::new(7, "契约会话收到中断信号")),
             result = &mut writer.task => writer.observed(result).and(Err(WireError::new(7, "契约会话状态发布任务已结束"))),
         };
-        return finish(&controller, &mut requests, writer, result.map(|_| None)).await;
+        return finish(&mut controller, &mut requests, writer, result.map(|_| None)).await;
     }
     let outcome = match controller.start().await {
         Ok(()) => {
@@ -208,7 +208,7 @@ async fn serve(
         }
         Err(problem) => Err(problem),
     };
-    finish(&controller, &mut requests, writer, outcome).await
+    finish(&mut controller, &mut requests, writer, outcome).await
 }
 
 /// DOC-15 §3.2、CP-11：管理事务串行执行，检查点失败记录后继续服务。
@@ -223,13 +223,44 @@ async fn dispatch_loop(
     let period = Duration::from_millis(interval_ms.max(1));
     let mut checkpoint = tokio::time::interval_at(Instant::now() + period, period);
     checkpoint.set_missed_tick_behavior(MissedTickBehavior::Skip);
+    let mut pending = Vec::new();
+    let activated = Arc::new(Notify::new());
+    let signal = activated.clone();
+    controller
+        .manager
+        .context()
+        .on::<cordis::InternalStatus>(move |(fiber, _)| {
+            if fiber.state() == cordis::FiberState::Active {
+                signal.notify_one();
+            }
+            None
+        })
+        .map_err(kernel)?;
+    // 监听登记前已激活的实例也在首次确认范围内。
+    activated.notify_one();
+    let mut source_retry = None;
     loop {
         tokio::select! {
             _ = terminate.recv() => return Ok(None),
             _ = interrupt.recv() => return Ok(None),
             result = &mut writer.task => return writer.observed(result).map(|_| None),
-            _ = checkpoint.tick(), if interval_ms > 0 => {
-                let result = controller.manager.checkpoint().await.and_then(|states| controller.store.checkpoint(&states));
+            _ = async {
+                match source_retry {
+                    Some(deadline) => tokio::time::sleep_until(deadline).await,
+                    None => activated.notified().await,
+                }
+            } => {
+                source_retry = controller.confirm_sources().err().map(|problem| {
+                    controller.logs.emit(0, "runtime", &format!("代码来源保存失败：{problem}"));
+                    Instant::now() + Duration::from_secs(1)
+                });
+            }
+            _ = checkpoint.tick(), if interval_ms > 0 && pending.is_empty() => {
+                pending = controller.manager.instance_names();
+            }
+            _ = std::future::ready(()), if !pending.is_empty() => {
+                let name = pending.pop().expect("检查点队列有待保存的实例");
+                let result = controller.manager.checkpoint_instance(name).await.and_then(|states| controller.store.checkpoint(&states));
                 if let Err(problem) = result { controller.logs.emit(0, "runtime", &format!("检查点写入失败：{problem}")); }
             }
             request = requests.recv() => {
@@ -257,7 +288,7 @@ async fn dispatch(controller: &mut Controller, request: Request) -> Option<Reque
 
 /// DOC-11 §9、CP-7、CP-11：停止排队、导出最终状态、结束所有分组，再发布最终阶段。
 async fn finish(
-    controller: &Controller,
+    controller: &mut Controller,
     requests: &mut mpsc::Receiver<Request>,
     writer: StatusWriter,
     outcome: Result<Option<Request>>,
@@ -324,17 +355,6 @@ impl StatusWriter {
             interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
             loop {
                 let finishing = *stopped.borrow_and_update();
-                if let Some(manager) = view.manager.upgrade() {
-                    let sources = view.diagnostics.lock().source_bindings.clone();
-                    if let Some(sources) = sources
-                        && let Err(problem) = sources.lock().confirm(&manager.snapshot())
-                    {
-                        if finishing {
-                            return Err(problem);
-                        }
-                        logs.emit(0, "runtime", &format!("代码来源保存失败：{problem}"));
-                    }
-                }
                 let published = status::write(&path, &view, &mut previous).await;
                 if finishing {
                     return published;

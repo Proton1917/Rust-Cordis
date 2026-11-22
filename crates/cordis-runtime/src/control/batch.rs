@@ -86,7 +86,7 @@ impl Controller {
         self.batch_discarded = completion.discarded_confirmation;
         let original_states = completion.original_states;
         let result = completion.result;
-        if result.is_ok() || result.as_ref().is_err_and(replacement_committed) {
+        if result.is_ok() || original_states.is_some() {
             let snapshot = self.manager.snapshot();
             for item in &mut desired {
                 if let Some(actual) = snapshot
@@ -98,20 +98,17 @@ impl Controller {
                 }
             }
         }
-        let states = match result {
-            Ok(states) => self.deployment_states(states),
-            Err(problem) if replacement_committed(&problem) => {
-                let original = self.deployment_states(
-                    original_states.ok_or_else(|| WireError::new(1, "已提交批次缺少原状态记录"))?,
-                );
+        let states = match (result, original_states) {
+            (Ok(states), _) => self.deployment_states(states),
+            (Err(problem), Some(original)) => {
+                let original = self.deployment_states(original);
                 return self
                     .restore_batch(target, before, desired, original, pages, problem)
                     .await;
             }
-            Err(problem) => {
+            (Err(problem), None) => {
                 *self.permissions.lock() = self.configuration.effective(&self.overlay)?;
                 let recovery = self.rollback_web_changes(&pages).await;
-                self.refresh_batch_fibers()?;
                 release_target(target).await?;
                 return match recovery {
                     Ok(()) => Err(problem),
@@ -217,7 +214,6 @@ impl Controller {
             sources: Vec::new(),
         };
         self.sources
-            .lock()
             .apply_declarations(&target.configuration, &mut target.overlay);
         let settings = target.configuration.effective(&target.overlay)?;
         let result = async {
@@ -296,7 +292,7 @@ impl Controller {
             .get(name)
             .map(|item| item.plugin.as_str())
             .unwrap_or(&settings.plugin);
-        let reference = self.sources.lock().select(name, declared, &settings.plugin);
+        let reference = self.sources.select(name, declared, &settings.plugin);
         let original = self.installed_package(&reference).await?;
         let group = settings
             .group
@@ -423,7 +419,7 @@ impl Controller {
 
     /// DOC-15 §3.2、CP-11：原快照和当前导出状态成功写入后一次发布最终叠加层。
     async fn persist_batch(
-        &self,
+        &mut self,
         target: &TargetDeployment,
         before: &[BatchInstance],
         desired: &[BatchInstance],
@@ -446,8 +442,7 @@ impl Controller {
                 states.entry(spec.name.clone()).or_insert(None);
             }
         }
-        let mut bindings = self.sources.lock();
-        let mut next = bindings.clone();
+        let mut next = self.sources.clone();
         next.track(
             &target.configuration,
             &target.overlay,
@@ -456,9 +451,9 @@ impl Controller {
                 .iter()
                 .map(|(name, item)| (name, &item.settings, &item.package)),
         );
-        next.observe(&self.manager.snapshot());
+        next.observe(&self.manager);
         next.commit(&self.store, &target.overlay, &states)?;
-        *bindings = next;
+        self.sources = next;
         Ok(())
     }
 
@@ -477,16 +472,19 @@ impl Controller {
         let sources = self.batch_sources(&target.groups, &self.groups)?;
         let restored = self
             .manager
-            .reconfigure_batch(sources, desired.clone(), before.clone(), original.clone())
+            .replace_batch_reported(
+                sources,
+                desired.clone(),
+                before.clone(),
+                original.clone(),
+                true,
+            )
             .await;
-        let original_active =
-            restored.is_ok() || restored.as_ref().is_err_and(replacement_committed);
+        let original_active = restored.result.is_ok() || restored.original_states.is_some();
+        let restored = restored.result;
         if original_active {
             let page_recovery = self.rollback_web_changes(&pages).await;
-            self.refresh_batch_fibers()?;
-            self.sources
-                .lock()
-                .commit(&self.store, &self.overlay, &original)?;
+            self.sources.commit(&self.store, &self.overlay, &original)?;
             release_target(target).await?;
             if let Err(recovery) = page_configuration.and(page_recovery) {
                 return Err(web::recovery_error("批次", problem, recovery));
@@ -511,27 +509,10 @@ impl Controller {
         Err(failure)
     }
 
-    /// ADR-0031：恢复后的纤程句柄来自监管器当前目录，配置和授权仍为窗口前值。
-    pub(super) fn refresh_batch_fibers(&mut self) -> Result<()> {
-        for (name, item) in &mut self.mounted {
-            item.fiber = if matches!(item.package.entry, Entry::Web) {
-                self.web.instance_fiber(name)?
-            } else {
-                self.manager.instance_fiber(name)?
-            };
-        }
-        Ok(())
-    }
-
     /// DOC-15 §3.2：确认后替换挂载记录并释放被取代授权，保留相同视图的已有授权对象。
     async fn accept_batch_target(&mut self, target: TargetDeployment) -> Result<()> {
         let mut prior = std::mem::take(&mut self.mounted);
         for (name, item) in target.instances {
-            let fiber = if matches!(item.package.entry, Entry::Web) {
-                self.web.instance_fiber(&name)?
-            } else {
-                self.manager.instance_fiber(&name)?
-            };
             let old = prior.remove(&name);
             let manage = if item.remount {
                 if let Some(old) = old
@@ -549,7 +530,6 @@ impl Controller {
                     settings: item.settings,
                     package: item.package,
                     group: item.group,
-                    fiber,
                     _view: item.view,
                     manage,
                 },

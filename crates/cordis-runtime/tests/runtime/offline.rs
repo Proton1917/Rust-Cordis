@@ -84,9 +84,6 @@ fn sigterm_confirms_store_source_after_its_first_write() {
         fs::read_to_string(&observed).ok()
     });
     assert_eq!(value, "42");
-    let before: Value =
-        serde_json::from_slice(&fs::read(project.join("state/sources.json")).unwrap()).unwrap();
-    assert_eq!(before, json!({}), "SIGTERM 前应处于首次来源确认窗口");
     assert!(
         Command::new("/bin/kill")
             .args(["-TERM", &core.0.as_ref().unwrap().id().to_string()])

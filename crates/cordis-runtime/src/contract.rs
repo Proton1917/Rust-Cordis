@@ -144,7 +144,8 @@ impl Session {
     }
 
     /// ADR-0017、CP-6：检查阶段观察真实纤程，阶段迁移期间由监管事务判断成败。
-    fn observe(&self, controller: &Controller) -> Result<()> {
+    fn observe(&self, controller: &mut Controller) -> Result<()> {
+        controller.confirm_sources()?;
         let watched = [&self.0.plan.subject, &self.0.plan.suite]
             .into_iter()
             .map(|name| controller.manager.instance_fiber(name))

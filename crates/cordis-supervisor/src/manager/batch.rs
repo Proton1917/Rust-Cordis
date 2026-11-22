@@ -2,8 +2,8 @@
 
 use super::*;
 use futures_util::future::join_all;
-use generation::{Binding, Configuration, RemoteComponent};
-use std::path::PathBuf;
+use generation::{Binding, RemoteComponent};
+use std::{borrow::Cow, path::PathBuf};
 
 /// ADR-0031：原生候选按逻辑插件准备，进程候选携带完整启动计划。
 pub enum BatchReplacement {
@@ -31,11 +31,22 @@ pub struct BatchCompletion {
     pub original_states: Option<HashMap<String, Option<payload::State>>>,
 }
 
-#[derive(Default)]
-struct BatchDecision {
-    committed: AtomicBool,
-    discarded: Mutex<Option<cordis_types::ConfirmationDiscard>>,
-    original: Mutex<Option<HashMap<String, Option<payload::State>>>>,
+struct ActivatedBatch {
+    original: HashMap<String, Option<payload::State>>,
+    retirement: Result<()>,
+}
+
+impl BatchCompletion {
+    fn rejected(
+        problem: WireError,
+        discarded_confirmation: Option<cordis_types::ConfirmationDiscard>,
+    ) -> Self {
+        Self {
+            result: Err(replacement_failure("batch", None, false, problem)),
+            original_states: None,
+            discarded_confirmation,
+        }
+    }
 }
 
 struct LibraryChange {
@@ -93,50 +104,49 @@ impl Manager {
         states: HashMap<String, Option<payload::State>>,
         permit_pending: bool,
     ) -> BatchCompletion {
-        let decision = Arc::new(BatchDecision::default());
-        let marker = decision.clone();
-        let result = self
-            .transaction(move |manager| async move {
-                let groups: std::collections::BTreeSet<_> = replacements
-                    .iter()
-                    .filter_map(|item| match item {
-                        BatchReplacement::Native { group, .. } => Some(group.clone()),
-                        BatchReplacement::Process(_) => None,
-                    })
-                    .collect();
-                let result = manager
-                    .execute_deployment_batch(
-                        replacements,
-                        before,
-                        target,
-                        states,
-                        marker.clone(),
-                        permit_pending,
-                    )
-                    .await;
-                match result {
-                    Err(problem) if !marker.committed.load(Ordering::Acquire) => {
-                        Err(manager.after_failed_libraries(problem, groups).await)
-                    }
-                    other => other,
-                }
-            })
-            .await
-            .map_err(|problem| {
-                replacement_failure(
-                    "batch",
-                    None,
-                    decision.committed.load(Ordering::Acquire),
-                    problem,
+        self.transaction(move |manager| async move {
+            let groups: std::collections::BTreeSet<_> = replacements
+                .iter()
+                .filter_map(|item| match item {
+                    BatchReplacement::Native { group, .. } => Some(group.clone()),
+                    BatchReplacement::Process(_) => None,
+                })
+                .collect();
+            let mut discarded = None;
+            let activated = manager
+                .execute_deployment_batch(
+                    replacements,
+                    before,
+                    target,
+                    states,
+                    &mut discarded,
+                    permit_pending,
                 )
-            });
-        let discarded_confirmation = decision.discarded.lock().clone();
-        let original_states = decision.original.lock().take();
-        BatchCompletion {
-            result,
-            discarded_confirmation,
-            original_states,
-        }
+                .await;
+            let activated = match activated {
+                Ok(batch) => batch,
+                Err(problem) => {
+                    return Ok(BatchCompletion::rejected(
+                        manager.after_failed_libraries(problem, groups).await,
+                        discarded,
+                    ));
+                }
+            };
+            let (result, original_states) = match activated.retirement {
+                Ok(()) => (Ok(activated.original), None),
+                Err(problem) => (
+                    Err(replacement_failure("batch", None, true, problem)),
+                    Some(activated.original),
+                ),
+            };
+            Ok(BatchCompletion {
+                result,
+                original_states,
+                discarded_confirmation: None,
+            })
+        })
+        .await
+        .unwrap_or_else(|problem| BatchCompletion::rejected(problem, None))
     }
 
     /// SW-1–SW-5：候选和最终配置全部通过预检后才冻结旧实例。
@@ -146,28 +156,27 @@ impl Manager {
         before: Vec<BatchInstance>,
         mut target: Vec<BatchInstance>,
         states: HashMap<String, Option<payload::State>>,
-        decision: Arc<BatchDecision>,
+        discarded_confirmation: &mut Option<cordis_types::ConfirmationDiscard>,
         permit_pending: bool,
-    ) -> Result<HashMap<String, Option<payload::State>>> {
+    ) -> Result<ActivatedBatch> {
         let started = std::time::Instant::now();
         self.running()?;
-        let prepared = self
+        let (prepared, names) = self
             .prepare_batch_sources(replacements, &before, &mut target, permit_pending)
             .await?;
-        let (mut transition, names) = match self.freeze_batch(&prepared, &before, &target).await {
+        let mut transition = match self.freeze_batch(&prepared, &before, &target, &names).await {
             Ok(frozen) => frozen,
             Err(problem) => return Err(self.discard_batch(&prepared, problem).await),
         };
         transition.permit_pending = permit_pending;
-        let original = transition.inherited.clone();
-        let mut inherited = batch_inherited(&transition, &before, &target);
-        inherited.extend(states);
-        let accepted = match self
-            .apply_batch(&prepared, &before, &target, &inherited, false)
-            .await
-        {
+        let applied = {
+            let inherited = batch_inherited(&transition, &before, &target, states);
+            self.apply_batch(&prepared, &before, &target, &inherited, false)
+                .await
+        };
+        let accepted = match applied {
             Ok(()) => {
-                self.accept_batch(&prepared, &transition, &names, &target, started)
+                self.accept_batch(&prepared, &mut transition, &names, &target, started)
                     .await
             }
             Err(problem) => Err(problem),
@@ -185,23 +194,22 @@ impl Manager {
                         problem,
                     )
                     .await;
-                *decision.discarded.lock() = discarded;
+                *discarded_confirmation = discarded;
                 return Err(problem);
             }
         };
-        decision.committed.store(true, Ordering::Release);
         self.record_batch_reports(&prepared, affected, paused, None, None, None);
         let committed = self.commit_batch(&prepared).await;
+        let original = std::mem::take(&mut transition.inherited);
         drop(transition);
         let finished = match committed {
             Ok(()) => self.retire_batch(&prepared, &before, &target).await,
             Err(problem) => Err(problem),
         };
-        if let Err(problem) = finished {
-            *decision.original.lock() = Some(original);
-            return Err(problem);
-        }
-        Ok(original)
+        Ok(ActivatedBatch {
+            original,
+            retirement: finished,
+        })
     }
 
     /// SW-1–SW-4：完整准备全部来源和重启计划，再按最终部署整体预检。
@@ -211,7 +219,7 @@ impl Manager {
         before: &[BatchInstance],
         target: &mut [BatchInstance],
         permit_pending: bool,
-    ) -> Result<BTreeMap<String, PreparedGroup>> {
+    ) -> Result<(BTreeMap<String, PreparedGroup>, HashSet<String>)> {
         let mut prepared = BTreeMap::new();
         let preparation = async {
             for replacement in replacements {
@@ -230,10 +238,10 @@ impl Manager {
                 .await
         }
         .await;
-        if let Err(problem) = preparation {
-            return Err(self.discard_batch(&prepared, problem).await);
+        match preparation {
+            Ok(affected) => Ok((prepared, affected)),
+            Err(problem) => Err(self.discard_batch(&prepared, problem).await),
         }
-        Ok(prepared)
     }
 
     /// SW-5：联合候选和配置差异确定一次冻结集合，原快照属于整个窗口。
@@ -242,8 +250,8 @@ impl Manager {
         prepared: &BTreeMap<String, PreparedGroup>,
         before: &[BatchInstance],
         target: &[BatchInstance],
-    ) -> Result<(lifecycle::Transition, HashSet<String>)> {
-        let names = batch_affected(prepared, before, target);
+        names: &HashSet<String>,
+    ) -> Result<lifecycle::Transition> {
         let instances = before
             .iter()
             .filter(|item| names.contains(&item.specification.name))
@@ -266,7 +274,7 @@ impl Manager {
             })
             .collect::<Result<Vec<_>>>()?;
         let instances = self.include_incoming(instances, incoming);
-        Ok((self.prepare_transition(&instances, true).await?, names))
+        self.prepare_transition(&instances, true).await
     }
 
     /// DOC-11 §7：恢复窗口前全部定义和状态后释放候选，并保留实际回滚报告。
@@ -280,9 +288,8 @@ impl Manager {
         problem: WireError,
     ) -> (WireError, Option<cordis_types::ConfirmationDiscard>) {
         let discarded = self.confirmation_discard(&transition);
-        let original = transition.inherited.clone();
         let restored = match self
-            .apply_batch(prepared, target, before, &original, true)
+            .apply_batch(prepared, target, before, &transition.inherited, true)
             .await
         {
             Ok(()) => self
@@ -435,7 +442,7 @@ impl Manager {
         before: &[BatchInstance],
         target: &mut [BatchInstance],
         permit_pending: bool,
-    ) -> Result<()> {
+    ) -> Result<HashSet<String>> {
         let mut components = HashMap::new();
         for item in target.iter_mut() {
             self.check_view(&item.view)?;
@@ -480,7 +487,7 @@ impl Manager {
             .await?;
         }
         if permit_pending {
-            return Ok(());
+            return Ok(affected);
         }
         let mut provided = HashMap::new();
         for item in target.iter() {
@@ -506,7 +513,7 @@ impl Manager {
                 )?;
             }
         }
-        Ok(())
+        Ok(affected)
     }
 
     /// ADR-0016、ADR-0025：合并候选提供声明后检查依赖，保留相同隔离域中的内置服务。
@@ -628,12 +635,9 @@ impl Manager {
             let specification = &item.specification;
             let existing = self.find_instance(&specification.name);
             if let Some(instance) = existing {
-                if *instance.data.config.lock() != specification.config {
-                    *instance.data.config.lock() = specification.config.clone();
-                    updated.push(instance.fiber.update(Configuration {
-                        instance: instance.data.clone(),
-                        config: specification.config.clone(),
-                    }));
+                if instance.configuration()?.config.as_ref() != &specification.config {
+                    updated
+                        .push(instance.set_configuration(Arc::new(specification.config.clone())));
                 }
             } else {
                 let generation = if rollback {
@@ -658,7 +662,7 @@ impl Manager {
             }
         }
         for outcome in join_all(updated).await {
-            outcome.map_err(kernel_error)?;
+            outcome?;
         }
         Ok(())
     }
@@ -702,7 +706,7 @@ impl Manager {
     async fn accept_batch(
         &self,
         prepared: &BTreeMap<String, PreparedGroup>,
-        transition: &lifecycle::Transition,
+        transition: &mut lifecycle::Transition,
         names: &HashSet<String>,
         target: &[BatchInstance],
         started: std::time::Instant,
@@ -716,17 +720,12 @@ impl Manager {
             .stabilize_with(&transition.before, &names, transition.permit_pending)
             .await?;
         let paused = started.elapsed();
-        self.thaw_current(&transition.frozen).await?;
-        self.begin_confirmation(transition);
-        for result in join_all(
-            prepared
-                .values()
-                .map(|group| self.confirm(&changed, &group.candidate.connection)),
-        )
-        .await
-        {
-            result?;
-        }
+        let connections = prepared
+            .values()
+            .map(|group| group.candidate.connection.clone())
+            .collect::<Vec<_>>();
+        self.confirm_transition(transition, &changed, &connections)
+            .await?;
         Ok((paused, changed.len()))
     }
 
@@ -1055,40 +1054,39 @@ fn batch_affected(
     before: &[BatchInstance],
     target: &[BatchInstance],
 ) -> HashSet<String> {
-    before
+    let mut previous: HashMap<_, _> = before
         .iter()
-        .chain(target)
-        .filter(|item| {
-            let spec = &item.specification;
-            let candidate = prepared.get(&spec.group).is_some_and(|group| {
-                group.libraries.is_empty()
-                    || group
-                        .libraries
-                        .iter()
-                        .any(|library| library.plugin == spec.plugin)
-            });
-            let old = before
-                .iter()
-                .find(|entry| entry.specification.name == spec.name);
-            let next = target
-                .iter()
-                .find(|entry| entry.specification.name == spec.name);
-            candidate
-                || old.zip(next).is_none_or(|(old, next)| {
-                    remount(old, next) || old.specification.config != next.specification.config
-                })
-        })
-        .map(|item| item.specification.name.clone())
-        .collect()
+        .map(|item| (&item.specification.name, item))
+        .collect();
+    let mut affected = HashSet::new();
+    for item in target {
+        let spec = &item.specification;
+        let old = previous.remove(&spec.name);
+        let candidate = prepared.get(&spec.group).is_some_and(|group| {
+            group.libraries.is_empty()
+                || group
+                    .libraries
+                    .iter()
+                    .any(|library| library.plugin == spec.plugin)
+        });
+        if candidate
+            || old.is_none_or(|old| remount(old, item) || old.specification.config != spec.config)
+        {
+            affected.insert(spec.name.clone());
+        }
+    }
+    affected.extend(previous.into_keys().cloned());
+    affected
 }
 
 /// DOC-11 §5：同逻辑组件沿原状态继承，配置更换组件时使用目标组件初值。
-fn batch_inherited(
-    transition: &lifecycle::Transition,
+fn batch_inherited<'a>(
+    transition: &'a lifecycle::Transition,
     before: &[BatchInstance],
     target: &[BatchInstance],
-) -> HashMap<String, Option<payload::State>> {
-    let mut inherited = transition.inherited.clone();
+    overrides: HashMap<String, Option<payload::State>>,
+) -> Cow<'a, HashMap<String, Option<payload::State>>> {
+    let mut inherited = Cow::Borrowed(&transition.inherited);
     for item in target {
         if before
             .iter()
@@ -1098,8 +1096,13 @@ fn batch_inherited(
                     || old.specification.component != item.specification.component
             })
         {
-            inherited.insert(item.specification.name.clone(), None);
+            inherited
+                .to_mut()
+                .insert(item.specification.name.clone(), None);
         }
+    }
+    if !overrides.is_empty() {
+        inherited.to_mut().extend(overrides);
     }
     inherited
 }

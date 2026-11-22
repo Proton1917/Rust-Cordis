@@ -310,7 +310,6 @@ fn continuous_counter_migrates_rolls_back_rejects_and_restores_across_compilers(
     active(&project, "client");
     let restored = count(&project, &mut id);
     assert!(restored >= persisted && persisted >= old_compiler_value);
-    assert!(project.join("state/consumed/counter.state").is_file());
     assert_eq!(
         manage(&project, next(&mut id), "shutdown", json!([]))["ok"],
         true

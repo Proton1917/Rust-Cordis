@@ -1,7 +1,6 @@
 //! DOC-11 §10、ADR-0031：代码来源确认记录与实例配置分开持久化。
 
 use super::*;
-use cordis_supervisor::manager::Snapshot;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
@@ -15,33 +14,17 @@ struct Source {
 #[derive(Serialize)]
 pub(crate) struct OfflineSources {
     schema_version: u32,
-    instances: BTreeMap<String, OfflineSource>,
+    instances: BTreeMap<String, Source>,
 }
 
-#[derive(Serialize)]
-struct OfflineSource {
-    declared_source: String,
-    installed_reference: String,
-    plugin_directory: PathBuf,
-}
-
-/// ADR-0054：复用持久格式解码；公开字段独立映射，目录以配置真实位置展开。
+/// ADR-0054：读取已确认的程序来源，按项目位置展开安装目录。
 pub(crate) fn offline_sources(path: &Path, project: &Path) -> Result<OfflineSources> {
     let bytes = crate::storage::read_committed_sources(path)?;
-    let confirmed: BTreeMap<String, Source> = serde_json::from_slice(&bytes).map_err(parameter)?;
-    let instances = confirmed
-        .into_iter()
-        .map(|(name, source)| {
-            (
-                name,
-                OfflineSource {
-                    declared_source: source.declared_source,
-                    installed_reference: source.installed_reference,
-                    plugin_directory: config::resolve_path(project, &source.plugin_directory),
-                },
-            )
-        })
-        .collect();
+    let mut instances: BTreeMap<String, Source> =
+        serde_json::from_slice(&bytes).map_err(parameter)?;
+    for source in instances.values_mut() {
+        source.plugin_directory = config::resolve_path(project, &source.plugin_directory);
+    }
     Ok(OfflineSources {
         schema_version: 1,
         instances,
@@ -58,7 +41,7 @@ pub(crate) struct SourceBindings {
     path: PathBuf,
     directory: PathBuf,
     confirmed: BTreeMap<String, Source>,
-    tracked: BTreeMap<String, Source>,
+    pending: BTreeMap<String, Source>,
     dirty: bool,
 }
 
@@ -69,7 +52,7 @@ impl SourceBindings {
             path,
             directory,
             confirmed: BTreeMap::new(),
-            tracked: BTreeMap::new(),
+            pending: BTreeMap::new(),
             dirty: false,
         }
     }
@@ -126,7 +109,7 @@ impl SourceBindings {
         mounted: impl Iterator<Item = (&'a String, &'a InstanceSettings, &'a Package)>,
     ) {
         let entries = configuration.entries(overlay);
-        self.tracked = mounted
+        self.pending = mounted
             .map(|(name, settings, package)| {
                 (
                     name.clone(),
@@ -142,6 +125,7 @@ impl SourceBindings {
                     },
                 )
             })
+            .filter(|(name, source)| self.confirmed.get(name) != Some(source))
             .collect();
         let previous = self.confirmed.len();
         self.confirmed.retain(|name, _| entries.contains_key(name));
@@ -149,19 +133,18 @@ impl SourceBindings {
     }
 
     /// DOC-11 §10、CP-11：真实 Active 状态确认代码引用，多项变化共用一次原子写入。
-    pub(super) fn observe(&mut self, snapshot: &Snapshot) {
-        for instance in &snapshot.instances {
-            if instance.state != "active" {
-                continue;
-            }
-            let Some(source) = self.tracked.get(&instance.name) else {
-                continue;
-            };
-            if self.confirmed.get(&instance.name) != Some(source) {
-                self.confirmed.insert(instance.name.clone(), source.clone());
+    pub(super) fn observe(&mut self, manager: &Manager) {
+        self.pending.retain(|name, source| {
+            if manager
+                .instance_fiber(name)
+                .is_ok_and(|fiber| fiber.state() == cordis::FiberState::Active)
+            {
+                self.confirmed.insert(name.clone(), source.clone());
                 self.dirty = true;
+                return false;
             }
-        }
+            true
+        });
     }
 
     fn encoded(&self) -> Result<Vec<u8>> {
@@ -183,8 +166,8 @@ impl SourceBindings {
         Ok(())
     }
 
-    pub(crate) fn confirm(&mut self, snapshot: &Snapshot) -> Result<()> {
-        self.observe(snapshot);
+    pub(super) fn confirm(&mut self, manager: &Manager) -> Result<()> {
+        self.observe(manager);
         if self.dirty {
             crate::storage::write(&self.path, &self.encoded()?)?;
             self.dirty = false;

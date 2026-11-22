@@ -51,9 +51,14 @@ struct ContextData {
 struct ContextRecord {
     data: Arc<ContextData>,
     notifications: Mutex<HashMap<u64, NotificationTask>>,
-    closing: AtomicBool,
-    close_started: AtomicBool,
-    closed: watch::Sender<Option<Result<()>>>,
+    phase: watch::Sender<ClosePhase>,
+}
+
+enum ClosePhase {
+    Open,
+    Closing,
+    Draining,
+    Closed(Result<()>),
 }
 
 impl ContextRecord {
@@ -61,10 +66,18 @@ impl ContextRecord {
         Self {
             data,
             notifications: Mutex::new(HashMap::new()),
-            closing: AtomicBool::new(false),
-            close_started: AtomicBool::new(false),
-            closed: watch::channel(None).0,
+            phase: watch::channel(ClosePhase::Open).0,
         }
+    }
+
+    fn schedule_close(&self) -> bool {
+        self.phase.send_if_modified(|phase| {
+            if matches!(phase, ClosePhase::Open) {
+                *phase = ClosePhase::Closing;
+                return true;
+            }
+            false
+        })
     }
 }
 
@@ -416,7 +429,7 @@ impl Host {
         )?;
         {
             let mut contexts = self.0.contexts.lock();
-            if parent.closing.load(Ordering::Acquire)
+            if !matches!(*parent.phase.borrow(), ClosePhase::Open)
                 || parent.data.retiring.load(Ordering::Acquire)
             {
                 return Err(Error::new(4, "父上下文正在释放"));
@@ -692,14 +705,20 @@ impl Host {
 
     /// DOC-15 §6.4：等待通知任务结束后移除本地视图，并共享同一关闭结果。
     async fn close_context(&self, id: u64, record: Arc<ContextRecord>) -> Result<()> {
-        record.closing.store(true, Ordering::Release);
-        if record.close_started.swap(true, Ordering::AcqRel) {
-            let mut closed = record.closed.subscribe();
+        let drain = record.phase.send_if_modified(|phase| {
+            if matches!(phase, ClosePhase::Open | ClosePhase::Closing) {
+                *phase = ClosePhase::Draining;
+                return true;
+            }
+            false
+        });
+        if !drain {
+            let mut phase = record.phase.subscribe();
             loop {
-                if let Some(result) = closed.borrow_and_update().clone() {
-                    return result;
+                if let ClosePhase::Closed(result) = &*phase.borrow_and_update() {
+                    return result.clone();
                 }
-                closed
+                phase
                     .changed()
                     .await
                     .map_err(|error| Error::new(4, error.to_string()))?;
@@ -720,7 +739,9 @@ impl Host {
         let removed = self.0.contexts.lock().remove(&id);
         drop(removed);
         let result = failure.map_or(Ok(()), Err);
-        record.closed.send_replace(Some(result.clone()));
+        record
+            .phase
+            .send_replace(ClosePhase::Closed(result.clone()));
         result
     }
 
@@ -918,7 +939,9 @@ impl Host {
         };
         let (id, task, done) = {
             let mut notifications = record.notifications.lock();
-            if record.closing.load(Ordering::Acquire) || self.0.stopping.load(Ordering::Acquire) {
+            if !matches!(*record.phase.borrow(), ClosePhase::Open)
+                || self.0.stopping.load(Ordering::Acquire)
+            {
                 return Ok(());
             }
             let object = self.objects().borrow(request.object)?;
@@ -963,22 +986,17 @@ impl Host {
                     record.data.retiring.store(true, Ordering::Release);
                     contexts
                         .iter()
-                        .filter(|(_, candidate)| candidate.data.base == context)
-                        .map(|(id, record)| {
-                            record.closing.store(true, Ordering::Release);
-                            (*id, record.clone())
+                        .filter(|(_, candidate)| {
+                            candidate.data.base == context && candidate.schedule_close()
                         })
+                        .map(|(id, record)| (*id, record.clone()))
                         .collect::<Vec<_>>()
                 }
-                Some(record) => {
-                    record.closing.store(true, Ordering::Release);
-                    vec![(context, record.clone())]
-                }
-                None => Vec::new(),
+                Some(record) if record.schedule_close() => vec![(context, record.clone())],
+                _ => Vec::new(),
             }
         };
         for (id, record) in records {
-            record.closing.store(true, Ordering::Release);
             let host = self.clone();
             let task = self
                 .0

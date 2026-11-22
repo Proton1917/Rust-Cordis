@@ -2,9 +2,11 @@
 //! 事务在有界工作队列中执行，等待者取消后仍完成提交或回滚；失败清理覆盖候选资源。
 use super::*;
 use cordis_routing::description::{self, validate_name};
-use futures_util::future::{join_all, poll_fn};
+use futures_util::{
+    future::join_all,
+    stream::{FuturesUnordered, StreamExt},
+};
 use generation::{Binding, Configuration, Exporter};
-use std::task::{Poll, Waker};
 
 /// SW-5：原状态与导出器持有关系；提交或解冻完成后统一释放。
 #[derive(Default)]
@@ -32,7 +34,7 @@ pub(super) struct Transition {
     pub names: Vec<String>,
     pub before: HashMap<String, cordis::Epoch>,
     pub permit_pending: bool,
-    pub confirming: Mutex<Option<(std::time::Instant, Vec<String>)>>,
+    pub confirming: Option<(std::time::Instant, Vec<String>)>,
 }
 
 impl Manager {
@@ -85,7 +87,7 @@ impl Manager {
             .iter()
             .map(|instance| instance.data.name.clone())
             .collect();
-        let frozen = self.export(&names, stop_on_error).await;
+        let mut frozen = self.export(&names, stop_on_error).await;
         if let Some(problem) = &frozen.failure
             && stop_on_error
         {
@@ -95,7 +97,12 @@ impl Manager {
         }
         let inherited = {
             let mut catalog = self.0.catalog.lock();
-            catalog.checkpoints.extend(frozen.states.clone());
+            catalog.checkpoints.extend(
+                frozen
+                    .states
+                    .drain()
+                    .map(|(name, state)| (name, Arc::new(state))),
+            );
             instances
                 .iter()
                 .map(|instance| {
@@ -105,7 +112,9 @@ impl Manager {
                             .checkpoints
                             .get(&instance.data.name)
                             .cloned()
-                            .or_else(|| instance.data.inherited.lock().clone()),
+                            .or_else(|| instance.data.inherited.lock().clone())
+                            .as_deref()
+                            .cloned(),
                     )
                 })
                 .collect()
@@ -116,7 +125,7 @@ impl Manager {
             names,
             before: self.epochs(),
             permit_pending: false,
-            confirming: Mutex::new(None),
+            confirming: None,
         })
     }
     /// CP-1、CP-6：准备独立进程并握手，接受其描述符后建立核心分组。
@@ -566,13 +575,14 @@ impl Manager {
         definition: ComponentDef,
         inherited: Option<payload::State>,
     ) -> Result<Fiber> {
+        let config = Arc::new(specification.config);
+        let inherited = inherited.map(Arc::new);
         let data = Arc::new(InstanceData {
             name: specification.name.clone(),
             group: specification.group,
             plugin: specification.plugin,
             component: specification.component,
             current: Mutex::new(Weak::new()),
-            config: Mutex::new(specification.config.clone()),
             inherited: Mutex::new(inherited.clone()),
             error: Mutex::new(None),
         });
@@ -581,7 +591,7 @@ impl Manager {
                 &definition,
                 Configuration {
                     instance: data.clone(),
-                    config: specification.config,
+                    config,
                 },
             )
             .map_err(kernel_error)?;
@@ -642,7 +652,11 @@ impl Manager {
     }
 
     pub fn saved_states(&self) -> HashMap<String, payload::State> {
-        self.0.catalog.lock().checkpoints.clone()
+        let snapshots = self.0.catalog.lock().checkpoints.clone();
+        snapshots
+            .into_iter()
+            .map(|(name, state)| (name, Arc::unwrap_or_clone(state)))
+            .collect()
     }
 
     /// CP-7：先释放该组实例与定义，再退役进程；独立清理失败分别保留。
@@ -710,17 +724,14 @@ impl Manager {
             }
             manager.running()?;
             manager.0.exported.store(true, Ordering::Release);
-            let names = manager
-                .0
-                .catalog
-                .lock()
-                .instances
-                .keys()
-                .cloned()
-                .collect::<Vec<_>>();
+            let names = manager.instance_names();
             let frozen = manager.export(&names, false).await;
             let states = frozen.states.clone();
-            manager.0.catalog.lock().checkpoints.extend(states.clone());
+            manager.0.catalog.lock().checkpoints.extend(
+                states
+                    .iter()
+                    .map(|(name, state)| (name.clone(), Arc::new(state.clone()))),
+            );
             *manager.0.shutdown_export.lock() = Some(frozen);
             Ok(states)
         })
@@ -730,14 +741,7 @@ impl Manager {
     pub async fn checkpoint(&self) -> Result<HashMap<String, payload::State>> {
         self.transaction(|manager| async move {
             manager.running()?;
-            let names = manager
-                .0
-                .catalog
-                .lock()
-                .instances
-                .keys()
-                .cloned()
-                .collect::<Vec<_>>();
+            let names = manager.instance_names();
             Ok(manager.checkpoint_selected(&names).await.states)
         })
         .await
@@ -761,13 +765,30 @@ impl Manager {
         .await
     }
 
+    pub fn instance_names(&self) -> Vec<String> {
+        self.0.catalog.lock().instances.keys().cloned().collect()
+    }
+
+    /// 周期任务每次只预约一个实例。轮到该实例时，它可能已被管理事务移除。
+    pub async fn checkpoint_instance(
+        &self,
+        name: String,
+    ) -> Result<HashMap<String, payload::State>> {
+        self.transaction(move |manager| async move {
+            manager.running()?;
+            Ok(manager.checkpoint_selected(&[name]).await.states)
+        })
+        .await
+    }
+
     async fn checkpoint_selected(&self, names: &[String]) -> Frozen {
         let frozen = self.export(names, false).await;
-        self.0
-            .catalog
-            .lock()
-            .checkpoints
-            .extend(frozen.states.clone());
+        self.0.catalog.lock().checkpoints.extend(
+            frozen
+                .states
+                .iter()
+                .map(|(name, state)| (name.clone(), Arc::new(state.clone()))),
+        );
         if let Err(problem) = self.thaw(&frozen).await {
             self.0
                 .context
@@ -915,7 +936,7 @@ impl Manager {
             self.retire(&candidate).await?;
             return Err(problem);
         }
-        let transition = match self
+        let mut transition = match self
             .prepare_replacement_transition(&group.name, None, &candidate)
             .await
         {
@@ -941,7 +962,7 @@ impl Manager {
             discarded_confirmation: None,
         };
         if let Err(problem) = self
-            .accept_group(&candidate, &transition, &mut report, started)
+            .accept_group(&candidate, &mut transition, &mut report, started)
             .await
         {
             return self
@@ -966,7 +987,7 @@ impl Manager {
     async fn accept_group(
         &self,
         candidate: &GroupGeneration,
-        transition: &Transition,
+        transition: &mut Transition,
         report: &mut ReplaceReport,
         started: std::time::Instant,
     ) -> Result<()> {
@@ -975,9 +996,13 @@ impl Manager {
             .await?;
         report.affected_instances = changed.len();
         report.pause_ms = started.elapsed().as_millis().min(u64::MAX as u128) as u64;
-        self.thaw_current(&transition.frozen).await?;
-        self.begin_confirmation(transition);
-        self.confirm(&changed, &candidate.connection).await
+        self.confirm_transition(
+            transition,
+            &changed,
+            std::slice::from_ref(&candidate.connection),
+        )
+        .await
+        .map(|_| ())
     }
 
     /// SW-9：确认成功后保存回滚快照并退役旧进程，回收失败交给事务调用方。
@@ -1082,8 +1107,8 @@ impl Manager {
             {
                 continue;
             }
-            let config = instance.data.config.lock().clone();
-            self.resolve(component, &config).await?;
+            self.resolve(component, &instance.configuration()?.config)
+                .await?;
         }
         self.preflight_interfaces(group, candidate)
     }
@@ -1189,8 +1214,10 @@ impl Manager {
     pub(super) fn inherit(&self, states: &HashMap<String, Option<payload::State>>) {
         let instances = {
             let mut catalog = self.0.catalog.lock();
+            let mut instances = Vec::new();
             for (name, state) in states {
-                match state {
+                let shared = state.as_ref().map(|state| Arc::new(state.clone()));
+                match &shared {
                     Some(state) => {
                         catalog.checkpoints.insert(name.clone(), state.clone());
                     }
@@ -1198,16 +1225,11 @@ impl Manager {
                         catalog.checkpoints.remove(name);
                     }
                 }
+                if let Some(instance) = catalog.instances.get(name) {
+                    instances.push((instance.clone(), shared));
+                }
             }
-            states
-                .iter()
-                .filter_map(|(name, state)| {
-                    catalog
-                        .instances
-                        .get(name)
-                        .map(|instance| (instance.clone(), state.clone()))
-                })
-                .collect::<Vec<_>>()
+            instances
         };
         for (instance, state) in instances {
             *instance.data.inherited.lock() = state;
@@ -1286,19 +1308,12 @@ impl Manager {
     }
 
     /// SW-8：在确认期观察受影响纤程及连接，故障交回替换事务执行回滚。
-    pub(super) async fn confirm(&self, fibers: &[Fiber], connection: &Connection) -> Result<()> {
-        if fibers.is_empty() || self.0.options.confirm.is_zero() {
+    pub(super) async fn confirm(&self, fibers: &[Fiber], connections: &[Connection]) -> Result<()> {
+        if connections.is_empty() || fibers.is_empty() || self.0.options.confirm.is_zero() {
             return Ok(());
         }
-        struct Changed {
-            failed: bool,
-            waker: Option<Waker>,
-        }
-        let changed = Arc::new(Mutex::new(Changed {
-            failed: false,
-            waker: None,
-        }));
-        let observed = changed.clone();
+        let failed = Arc::new(tokio::sync::Notify::new());
+        let observed = failed.clone();
         let fibers = fibers.to_vec();
         let listener = self
             .0
@@ -1310,31 +1325,16 @@ impl Manager {
                         || !fiber.is_alive()
                         || fiber.epoch() != cordis::Epoch::Inactive)
                 {
-                    let waker = {
-                        let mut changed = observed.lock();
-                        changed.failed = true;
-                        changed.waker.take()
-                    };
-                    if let Some(waker) = waker {
-                        waker.wake();
-                    }
+                    observed.notify_one();
                 }
                 None
             })
             .map_err(kernel_error)?;
-        let failed = poll_fn(|context| {
-            let mut changed = changed.lock();
-            if changed.failed {
-                Poll::Ready(())
-            } else {
-                changed.waker = Some(context.waker().clone());
-                Poll::Pending
-            }
-        });
+        let mut closed: FuturesUnordered<_> = connections.iter().map(Connection::closed).collect();
         let result = tokio::select! {
             _ = tokio::time::sleep(self.0.options.confirm) => Ok(()),
-            _ = failed => Err(error(4, "确认期内实例离开Active")),
-            reason = connection.closed() => Err(error(4, reason)),
+            _ = failed.notified() => Err(error(4, "确认期内实例离开Active")),
+            Some(reason) = closed.next() => Err(error(4, reason)),
         };
         listener.dispose().await.map_err(kernel_error)?;
         result
@@ -1670,24 +1670,20 @@ impl Manager {
     pub(super) async fn close_all(&self) -> Result<()> {
         self.0.stopping.store(true, Ordering::Release);
         self.0.stop.send_replace(true);
-        let names = self
-            .0
-            .catalog
-            .lock()
-            .instances
-            .keys()
-            .cloned()
-            .collect::<Vec<_>>();
         let exported = self.0.shutdown_export.lock().take();
         let frozen = match exported {
             Some(frozen) => frozen,
-            None => self.export(&names, false).await,
+            None => {
+                let mut frozen = self.export(&self.instance_names(), false).await;
+                self.0.catalog.lock().checkpoints.extend(
+                    frozen
+                        .states
+                        .drain()
+                        .map(|(name, state)| (name, Arc::new(state))),
+                );
+                frozen
+            }
         };
-        self.0
-            .catalog
-            .lock()
-            .checkpoints
-            .extend(frozen.states.clone());
         let (instances, groups) = {
             let catalog = self.0.catalog.lock();
             (

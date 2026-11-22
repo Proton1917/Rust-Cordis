@@ -147,8 +147,7 @@ impl Controller {
         package: Package,
     ) -> Result<()> {
         let view = self.mount_view(&settings)?;
-        let fiber = self
-            .web
+        self.web
             .mount(Self::web_spec(name, &settings, &package, &view)?)?;
         let group = settings
             .group
@@ -164,7 +163,6 @@ impl Controller {
                 settings,
                 package,
                 group,
-                fiber,
                 _view: view,
                 manage: None,
             },

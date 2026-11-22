@@ -13,15 +13,14 @@ pub(super) struct InstanceData {
     pub plugin: String,
     pub component: String,
     pub current: Mutex<Weak<Generation>>,
-    pub config: Mutex<Value>,
-    pub inherited: Mutex<Option<payload::State>>,
+    pub inherited: Mutex<Option<Arc<payload::State>>>,
     pub error: Mutex<Option<RetainedError>>,
 }
 
 #[derive(Clone)]
 pub(super) struct Configuration {
     pub instance: Arc<InstanceData>,
-    pub config: Value,
+    pub config: Arc<Value>,
 }
 
 pub(super) struct RemoteComponent {
@@ -64,8 +63,8 @@ pub(super) struct Generation {
     pub instance: Arc<InstanceData>,
     pub component: Arc<RemoteComponent>,
     pub exporter: Mutex<Option<Arc<Exporter>>>,
-    pub config: Value,
-    pub inherited: Option<payload::State>,
+    pub config: Arc<Value>,
+    pub inherited: Option<Arc<payload::State>>,
     pub epoch: cordis::Epoch,
     pub retirement: cordis_routing::Retirement,
     pub effects: Mutex<HashMap<u64, Arc<RemoteEffect>>>,
@@ -332,8 +331,8 @@ impl Manager {
             component: generation.component.info.name.clone(),
             library: generation.component.library,
             context: generation.id,
-            config: generation.config.clone(),
-            inherited: generation.inherited.clone(),
+            config: generation.config.as_ref().clone(),
+            inherited: generation.inherited.as_deref().cloned(),
         };
         let output = self
             .lifecycle_request(

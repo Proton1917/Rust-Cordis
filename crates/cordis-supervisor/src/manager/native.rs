@@ -379,7 +379,7 @@ impl Manager {
         committed: Arc<AtomicBool>,
         started: std::time::Instant,
     ) -> Result<SwapReport> {
-        let swap = self.prepare_native(group_name, plugin_name, path).await?;
+        let mut swap = self.prepare_native(group_name, plugin_name, path).await?;
         self.activate_native(&swap).await?;
         let mut report = SwapReport {
             plugin: plugin_name.into(),
@@ -394,26 +394,31 @@ impl Manager {
             failure: None,
             discarded_confirmation: None,
         };
-        let mut confirmation = Duration::ZERO;
         let accepted = match self
             .stabilize(&swap.transition.before, &swap.transition.names)
             .await
         {
             Ok(changed) => {
-                self.thaw_current(&swap.transition.frozen).await?;
                 report.affected_instances = changed.len();
                 report.pause_ms = started.elapsed().as_millis().min(u64::MAX as u128) as u64;
-                let confirming = std::time::Instant::now();
-                self.begin_confirmation(&swap.transition);
-                let result = self.confirm(&changed, &swap.previous.connection).await;
-                confirmation = confirming.elapsed();
-                result
+                self.confirm_transition(
+                    &mut swap.transition,
+                    &changed,
+                    std::slice::from_ref(&swap.previous.connection),
+                )
+                .await
             }
             Err(problem) => Err(problem),
         };
-        if let Err(problem) = accepted {
-            return self.rollback_native(swap, report, problem).await;
-        }
+        let confirmation = match accepted {
+            Ok(duration) => duration,
+            Err(problem) => return self.rollback_native(swap, report, problem).await,
+        };
+        report.pause_ms = started
+            .elapsed()
+            .saturating_sub(confirmation)
+            .as_millis()
+            .min(u64::MAX as u128) as u64;
         committed.store(true, Ordering::Release);
         self.commit_native(swap, report, started + confirmation)
             .await

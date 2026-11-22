@@ -29,8 +29,15 @@ impl Manager {
         self.prepare_transition(&instances, true).await
     }
 
-    /// SW-8：记录实际进入候选纪元的实例，包含批次新增实例。
-    pub(super) fn begin_confirmation(&self, transition: &lifecycle::Transition) {
+    /// SW-8：归还继续运行的原实例写权，记录候选纪元，再观察本次变更的所有连接。
+    pub(super) async fn confirm_transition(
+        &self,
+        transition: &mut lifecycle::Transition,
+        changed: &[Fiber],
+        connections: &[Connection],
+    ) -> Result<Duration> {
+        self.thaw_current(&transition.frozen).await?;
+        let confirming = std::time::Instant::now();
         let mut instances: Vec<_> = self
             .0
             .catalog
@@ -47,7 +54,9 @@ impl Manager {
             .map(|(name, _)| name.clone())
             .collect();
         instances.sort();
-        *transition.confirming.lock() = Some((std::time::Instant::now(), instances));
+        transition.confirming = Some((std::time::Instant::now(), instances));
+        self.confirm(changed, connections).await?;
+        Ok(confirming.elapsed())
     }
 
     /// ADR-0052：候选新增服务会重建同域中的可选依赖方，已有 Binding 继续决定当前边。
@@ -156,9 +165,9 @@ impl Manager {
         &self,
         transition: &lifecycle::Transition,
     ) -> Option<cordis_types::ConfirmationDiscard> {
-        let (started, instances) = transition.confirming.lock().clone()?;
+        let (started, instances) = transition.confirming.as_ref()?;
         let loss = cordis_types::ConfirmationDiscard {
-            instances,
+            instances: instances.clone(),
             configured_ms: self.0.options.confirm.as_millis().min(u64::MAX as u128) as u64,
             elapsed_ms: started.elapsed().as_millis().min(u64::MAX as u128) as u64,
         };
@@ -201,10 +210,10 @@ impl Manager {
             vec![instance.clone()],
             [(instance.fiber.context(), component)],
         );
+        let previous = instance.configuration()?.config.clone();
         let transition = self.prepare_transition(&roots, true).await?;
-        let previous = instance.data.config.lock().clone();
         self.inherit(&transition.inherited);
-        let outcome = match self.set_configuration(&instance, config).await {
+        let outcome = match instance.clone().set_configuration(Arc::new(config)).await {
             Ok(()) => self
                 .stabilize_with(&transition.before, &transition.names, true)
                 .await
@@ -214,7 +223,7 @@ impl Manager {
         if let Err(problem) = outcome {
             self.inherit(&transition.inherited);
             let restored = async {
-                self.set_configuration(&instance, previous).await?;
+                instance.set_configuration(previous).await?;
                 self.stabilize_with(&transition.before, &transition.names, true)
                     .await
             }
@@ -241,26 +250,6 @@ impl Manager {
         }
         self.thaw_current(&transition.frozen).await?;
         Ok(())
-    }
-
-    async fn set_configuration(&self, instance: &Instance, config: Value) -> Result<()> {
-        *instance.data.config.lock() = config.clone();
-        instance
-            .fiber
-            .update(Configuration {
-                instance: instance.data.clone(),
-                config,
-            })
-            .await
-            .map_err(|problem| {
-                instance
-                    .data
-                    .error
-                    .lock()
-                    .as_ref()
-                    .map(|problem| problem.value.clone())
-                    .unwrap_or_else(|| kernel_error(problem))
-            })
     }
 
     /// 管理服务在应答前判断调用方或其依赖是否可能换代。
@@ -360,5 +349,34 @@ impl Manager {
             .into_iter()
             .filter_map(|name| instances.get(&name).cloned())
             .collect()
+    }
+}
+
+impl Instance {
+    pub(super) fn configuration(&self) -> Result<Arc<Configuration>> {
+        self.fiber
+            .config()
+            .ok_or_else(|| error(4, "实例配置已随纤程释放"))
+    }
+
+    /// 立即向纤程提交目标配置，返回的任务等待该实例调和结束。
+    pub(super) fn set_configuration(
+        self: Arc<Self>,
+        config: Arc<Value>,
+    ) -> impl Future<Output = Result<()>> {
+        let updated = self.fiber.update(Configuration {
+            instance: self.data.clone(),
+            config,
+        });
+        async move {
+            updated.await.map_err(|problem| {
+                self.data
+                    .error
+                    .lock()
+                    .as_ref()
+                    .map(|error| error.value.clone())
+                    .unwrap_or_else(|| kernel_error(problem))
+            })
+        }
     }
 }

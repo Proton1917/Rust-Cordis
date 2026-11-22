@@ -297,13 +297,13 @@ impl Manager {
         self.resolve(&component, &config).await?;
         parent.active()?;
         let id = self.id();
+        let config = Arc::new(config);
         let data = Arc::new(InstanceData {
             name: format!("{}/{}:{id}", parent.instance.name, name),
             group: source.group.clone(),
             plugin: source.plugin.clone(),
             component: name,
             current: Mutex::new(Weak::new()),
-            config: Mutex::new(config.clone()),
             inherited: Mutex::new(None),
             error: Mutex::new(None),
         });

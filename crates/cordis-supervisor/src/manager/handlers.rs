@@ -262,9 +262,9 @@ impl Manager {
                 match method {
                     "is_current" => value(&generation.is_current())?,
                     "config" => value(&payload::ValueResult {
-                        value: generation.config.clone(),
+                        value: generation.config.as_ref().clone(),
                     })?,
-                    _ => value(&generation.inherited)?,
+                    _ => value(&generation.inherited.as_deref())?,
                 }
             }
             "context_derive" => {
