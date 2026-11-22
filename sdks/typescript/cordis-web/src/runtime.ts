@@ -18,7 +18,7 @@ export class WebRuntime extends Runtime {
     private readonly pendingCleanups = new Map<Callback, Promise<{value: unknown; offers: Identifier[]}>>();
     cleanupComplete: Promise<void> = Promise.resolve();
 
-    constructor(socket: Socket, limits: Partial<Limits> = {}) { super("cordis-web", "0.1.2", [], socket, socket, limits); }
+    constructor(socket: Socket, limits: Partial<Limits> = {}) { super("cordis-web", "0.1.3", [], socket, socket, limits); }
 
     async load(entry: Entry): Promise<Module> {
         const url = new URL(entry.url, location.href);
@@ -37,7 +37,7 @@ export class WebRuntime extends Runtime {
 
     private descriptor(module: Module): object {
         const component = module.component;
-        return {name: module.entry.name, version: module.entry.version, sdk_version: "0.1.2", build_info: new URL(module.entry.url, location.href).pathname,
+        return {name: module.entry.name, version: module.entry.version, sdk_version: "0.1.3", build_info: new URL(module.entry.url, location.href).pathname,
             format: 2, library: module.id, components: [{
                 name: component.name, inject: Object.entries(component.inject ?? {}).map(([interfaceName, required]) => ({interface: interfaceName, required})),
                 provides: component.provides ?? [], listens: component.listens ?? [], state_schema: component.stateSchema ?? "",

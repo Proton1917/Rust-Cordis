@@ -10,7 +10,7 @@ use sources::SourceBindings;
 pub(crate) use sources::offline_sources;
 
 use crate::{
-    builtins::{Logs, Management, Permissions},
+    builtins::{Logs, Management},
     catalog::{self, Catalog, Package},
     config::{self, Configuration, InstanceSettings, Overlay, OverlayEntry, Result, parameter},
     deployment::Locations,
@@ -35,7 +35,11 @@ struct Mounted {
     settings: InstanceSettings,
     package: Package,
     group: String,
-    _view: Context,
+    scope: Arc<MountScope>,
+}
+
+struct MountScope {
+    view: Context,
     manage: Option<Effect>,
 }
 
@@ -43,6 +47,7 @@ pub struct Controller {
     web: Arc<cordis_web_deployment::Deployment>,
     pub manager: Arc<Manager>,
     pub configuration: Configuration,
+    runtime: config::RuntimeSettings,
     pub path: PathBuf,
     pub project: PathBuf,
     pub plugins: PathBuf,
@@ -50,7 +55,6 @@ pub struct Controller {
     pub store: Store,
     pub overlay: Overlay,
     pub diagnostics: Arc<Mutex<Diagnostics>>,
-    pub permissions: Permissions,
     pub handle: Handle,
     pub logs: Logs,
     catalog: Catalog,
@@ -58,14 +62,16 @@ pub struct Controller {
     groups: BTreeMap<String, Vec<Package>>,
     installed: HashMap<String, Package>,
     outcomes: Arc<Mutex<BatchOutcomes>>,
-    batch_discarded: Option<cordis_types::ConfirmationDiscard>,
+    pub(crate) batch_restored: Option<Option<cordis_types::ConfirmationDiscard>>,
     sources: SourceBindings,
+    pub(crate) recovery_required: Option<WireError>,
+    pub(crate) last_cleanup_error: Option<WireError>,
+    held_target: Option<batch::PendingTarget>,
 }
 
 /// DOC-15 §3.2：管理器与运行循环共享的诊断、授权、队列和日志入口。
 pub struct ControlServices {
     pub diagnostics: Arc<Mutex<Diagnostics>>,
-    pub permissions: Permissions,
     pub handle: Handle,
     pub logs: Logs,
 }
@@ -83,13 +89,12 @@ impl Controller {
     ) -> Result<Self> {
         let ControlServices {
             diagnostics,
-            permissions,
             handle,
             logs,
         } = services;
         let project = path.parent().expect("configuration parent").to_owned();
         let plugins = locations.installed.clone();
-        let outcomes = Arc::new(Mutex::new(BatchOutcomes::new(diagnostics.clone())));
+        let outcomes = diagnostics.lock().outcomes.clone();
         let sources = SourceBindings::new(
             store.directory.join("sources.json"),
             plugins
@@ -97,20 +102,27 @@ impl Controller {
                 .unwrap_or(&plugins)
                 .to_owned(),
         );
-        let allowed = permissions.clone();
+        let allowed = diagnostics.clone();
         let web = cordis_web_deployment::Deployment::new(
             manager.clone(),
             Arc::new(move |name| {
-                allowed
-                    .lock()
-                    .get(name)
-                    .is_some_and(|settings| settings.forwarder)
+                let deployment = allowed.lock();
+                deployment.candidate_forwarders.as_ref().map_or_else(
+                    || {
+                        deployment
+                            .desired
+                            .get(name)
+                            .is_some_and(|settings| settings.forwarder)
+                    },
+                    |names| names.contains(name),
+                )
             }),
         )?;
         diagnostics.lock().web = Some(Arc::downgrade(&web));
         Ok(Self {
             web,
             manager,
+            runtime: configuration.runtime.clone(),
             configuration,
             path,
             project,
@@ -119,7 +131,6 @@ impl Controller {
             store,
             overlay,
             diagnostics,
-            permissions,
             handle,
             logs,
             catalog: Catalog::default(),
@@ -127,126 +138,81 @@ impl Controller {
             groups: BTreeMap::new(),
             installed: HashMap::new(),
             outcomes,
-            batch_discarded: None,
+            batch_restored: None,
             sources,
+            recovery_required: None,
+            last_cleanup_error: None,
+            held_target: None,
         })
     }
 
     /// DOC-15 §3.2：发现来源、建立进程分组，再按检查点挂载实例；局部错误记入诊断。
     pub async fn start(&mut self) -> Result<()> {
         self.sources.load()?;
-        if self
-            .sources
-            .apply_declarations(&self.configuration, &mut self.overlay)
-        {
-            self.store.save_overlay(&self.overlay)?;
-        }
         self.discover().await?;
-        let target = self.configuration.effective(&self.overlay)?;
-        *self.permissions.lock() = target.clone();
-        self.diagnostics.lock().desired = target.clone();
-        let groups = self.startup_packages(&target).await?;
-        self.start_groups(&target, groups).await;
-        for (name, settings) in target {
-            if self.diagnostics.lock().instance_errors.contains_key(&name) {
-                continue;
-            }
-            let result = match self.store.load(&name) {
-                Ok(inherited) => self.mount(&name, settings, inherited).await,
-                Err(problem) => Err(problem),
-            };
-            if let Err(problem) = result {
-                self.instance_error(&name, &problem);
-            }
-        }
-        self.refresh()?;
-        Ok(())
-    }
-
-    /// DOC-15 §4：相同分组中的相同插件引用共用一个来源，各来源在启动前固定。
-    async fn startup_packages(
-        &mut self,
-        target: &BTreeMap<String, InstanceSettings>,
-    ) -> Result<BTreeMap<String, Vec<Package>>> {
-        let mut groups: BTreeMap<String, Vec<Package>> = BTreeMap::new();
-        for (name, settings) in target {
-            match self.instance_package(name, settings).await {
-                Ok(package) => {
-                    if matches!(package.entry, Entry::Web) {
-                        continue;
-                    }
-                    let group = settings
-                        .group
-                        .clone()
-                        .unwrap_or_else(|| package.name.clone());
-                    config::instance_name(&group)?;
-                    let packages = groups.entry(group).or_default();
-                    if !packages
-                        .iter()
-                        .any(|item| item.reference == package.reference)
-                    {
-                        packages.push(package);
-                    }
-                }
-                Err(problem) => self.instance_error(name, &problem),
-            }
-        }
-        Ok(groups)
-    }
-
-    /// DOC-15 CP-6：分组启动失败归属该组实例，其余组继续启动。
-    async fn start_groups(
-        &mut self,
-        target: &BTreeMap<String, InstanceSettings>,
-        groups: BTreeMap<String, Vec<Package>>,
-    ) {
-        for (group, packages) in groups {
-            let plan = catalog::plan(
-                &group,
-                &packages,
-                &self.project,
-                &self.configuration.runtime,
-                &self.locations,
-            );
-            let result = match plan {
-                Ok(plan) => self.manager.attach_group(plan).await.map(|_| ()),
-                Err(problem) => Err(problem),
-            };
-            match result {
-                Ok(()) => {
-                    self.groups.insert(group, packages);
-                }
-                Err(problem) => {
-                    for (name, settings) in target {
-                        let desired_group = settings.group.clone().or_else(|| {
-                            self.catalog
-                                .get(&settings.plugin)
-                                .ok()
-                                .map(|package| package.name)
-                        });
-                        if desired_group.as_deref() == Some(group.as_str()) {
-                            self.instance_error(name, &problem);
-                        }
-                    }
-                }
-            }
-        }
+        self.start_target().await
     }
 
     /// DOC-15 §3.2：已授权请求由单一队列按方法分派，具体事务负责持久化。
     pub async fn execute(&mut self, request: &Request) -> Result<Value> {
+        self.last_cleanup_error = None;
+        self.batch_restored = None;
+        if let Some(error) = &self.recovery_required
+            && !matches!(request.operation, Operation::Shutdown)
+        {
+            return Err(error.clone());
+        }
         if let Err(problem) = self.confirm_sources() {
             self.logs
                 .emit(0, "runtime", &format!("代码来源保存失败：{problem}"));
-        }
-        if let Operation::ReplaceBatch { request_id, .. } = &request.operation {
-            return self.execute_recorded_batch(request, request_id).await;
         }
         self.execute_operation(request).await
     }
 
     pub(crate) fn confirm_sources(&mut self) -> Result<()> {
+        if let Some(problem) = &self.recovery_required {
+            return Err(problem.clone());
+        }
         self.sources.confirm(&self.manager)
+    }
+
+    fn record_decision(
+        &mut self,
+        result: std::result::Result<crate::storage::Committed, crate::storage::CommitError>,
+    ) -> Result<()> {
+        use crate::storage::CommitError;
+        match result {
+            Ok(decision) => {
+                if let Some(problem) = decision.cleanup_error {
+                    self.report_cleanup("暂存目录", problem);
+                }
+                Ok(())
+            }
+            Err(CommitError::NotCommitted(problem)) => Err(problem),
+            Err(CommitError::RecoveryRequired(problem)) => {
+                let error = WireError::new(1, format!("部署决定需要从磁盘恢复：{problem}"));
+                self.require_recovery(error)
+            }
+        }
+    }
+
+    fn report_cleanup(&mut self, resource: &str, problem: WireError) {
+        self.logs.emit(
+            1,
+            "runtime",
+            &format!("部署已提交，{resource}清理失败：{problem}"),
+        );
+        self.last_cleanup_error.get_or_insert(problem);
+    }
+
+    fn require_recovery(&mut self, problem: WireError) -> Result<()> {
+        {
+            let mut diagnostics = self.diagnostics.lock();
+            diagnostics.phase = "recovery-required".into();
+            diagnostics.recovery_error = Some(problem.to_string());
+        }
+        self.recovery_required = Some(problem.clone());
+        Err(problem)
     }
 
     /// DOC-15 §3.2：实际执行发生在管理队列，批次结果由外层记录后提供给调用方。
@@ -295,9 +261,16 @@ impl Controller {
             }
             Operation::Rollback(name) => self.rollback(name).await?,
             Operation::Reload(configuration) => {
-                self.commit_configuration(configuration.clone(), self.overlay.clone())
-                    .await?;
-                self.diagnostics.lock().configuration_error = None;
+                let result = match configuration {
+                    Ok(configuration) => {
+                        self.commit_configuration(configuration.clone(), self.overlay.clone())
+                            .await
+                    }
+                    Err(problem) => Err(problem.clone()),
+                };
+                self.diagnostics.lock().configuration_error =
+                    result.as_ref().err().map(ToString::to_string);
+                result?;
             }
             Operation::Shutdown => {}
         }
@@ -312,7 +285,7 @@ impl Controller {
         let package = catalog::inspect(
             reference.clone(),
             self.plugins.join(&reference),
-            &self.configuration.runtime,
+            &self.runtime,
             &self.locations,
         )
         .await?;
@@ -372,7 +345,7 @@ impl Controller {
         let mut errors = catalog
             .discover(
                 &self.locations.sources,
-                &self.configuration.runtime,
+                &self.runtime,
                 &self.locations,
                 &self.catalog,
             )
@@ -380,24 +353,14 @@ impl Controller {
         if self.locations.sources != self.plugins {
             errors.extend(
                 catalog
-                    .discover(
-                        &self.plugins,
-                        &self.configuration.runtime,
-                        &self.locations,
-                        &self.catalog,
-                    )
+                    .discover(&self.plugins, &self.runtime, &self.locations, &self.catalog)
                     .await?,
             );
         }
-        for source_dir in &self.configuration.runtime.source_dirs {
+        for source_dir in &self.runtime.source_dirs {
             let directory = config::resolve_path(&self.project, source_dir);
             match catalog
-                .discover(
-                    &directory,
-                    &self.configuration.runtime,
-                    &self.locations,
-                    &self.catalog,
-                )
+                .discover(&directory, &self.runtime, &self.locations, &self.catalog)
                 .await
             {
                 Ok(found) => errors.extend(found),
@@ -435,7 +398,7 @@ impl Controller {
             catalog::inspect(
                 installed.clone(),
                 self.plugins.join(&installed),
-                &self.configuration.runtime,
+                &self.runtime,
                 &self.locations,
             )
             .await?
@@ -443,22 +406,6 @@ impl Controller {
         self.catalog.packages.insert(installed, package.clone());
         self.installed.insert(reference.into(), package.clone());
         Ok(package)
-    }
-
-    /// DOC-11 §10：声明保持时恢复该实例最后确认的副本，管理覆盖引用保持其提交优先级。
-    async fn instance_package(
-        &mut self,
-        name: &str,
-        settings: &InstanceSettings,
-    ) -> Result<Package> {
-        let declared = self
-            .configuration
-            .instance
-            .get(name)
-            .map(|item| item.plugin.as_str())
-            .unwrap_or(&settings.plugin);
-        let reference = self.sources.select(name, declared, &settings.plugin);
-        self.installed_package(&reference).await
     }
 
     /// DOC-15 §3.2：审计记录保留真实调用方、目标和操作结果。
@@ -497,8 +444,24 @@ impl Controller {
                 .iter()
                 .map(|(name, mounted)| (name, &mounted.settings, &mounted.package)),
         );
+        let snapshot = self.manager.snapshot();
+        for mounted in self.mounted.values() {
+            if let Some(descriptor) = snapshot
+                .groups
+                .iter()
+                .find(|group| group.name == mounted.group)
+                .and_then(|group| {
+                    group
+                        .plugins
+                        .iter()
+                        .find(|plugin| plugin.name == mounted.package.name)
+                })
+                && let Some(package) = self.catalog.packages.get_mut(&mounted.package.reference)
+            {
+                package.descriptor = Some(descriptor.clone());
+            }
+        }
         let mut diagnostics = self.diagnostics.lock();
-        diagnostics.desired = self.configuration.effective(&self.overlay)?;
         diagnostics.overrides = self
             .overlay
             .instance
@@ -516,165 +479,18 @@ impl Controller {
         Ok(())
     }
 
-    /// DOC-15 §4：复用相同来源的分组成员，新增成员通过监管器替换完整分组。
-    async fn ensure_group(&mut self, group: &str, package: &Package) -> Result<()> {
-        let mut packages = self.groups.get(group).cloned().unwrap_or_default();
-        if let Some(existing) = packages.iter().find(|item| item.name == package.name) {
-            if existing.reference == package.reference {
-                return Ok(());
-            }
-            return Err(parameter("同组同逻辑插件需要一致的安装引用"));
-        }
-        packages.push(package.clone());
-        let plan = catalog::plan(
-            group,
-            &packages,
+    fn group_plan(
+        &self,
+        name: &str,
+        packages: &[Package],
+    ) -> Result<cordis_supervisor::manager::GroupSpec> {
+        catalog::plan(
+            name,
+            packages,
             &self.project,
-            &self.configuration.runtime,
+            &self.runtime,
             &self.locations,
-        )?;
-        if self.groups.contains_key(group) {
-            self.manager.replace_group(plan).await?;
-        } else {
-            self.manager.attach_group(plan).await?;
-        }
-        self.groups.insert(group.into(), packages);
-        Ok(())
-    }
-
-    /// DOC-15 §3.2、ADR-0025：按实例视图挂载远端组件，失败时回收本次管理授权。
-    async fn mount(
-        &mut self,
-        name: &str,
-        settings: InstanceSettings,
-        inherited: Option<payload::State>,
-    ) -> Result<()> {
-        let package = self.instance_package(name, &settings).await?;
-        if matches!(package.entry, Entry::Web) {
-            return self.mount_web(name, settings, package);
-        }
-        let group = settings
-            .group
-            .clone()
-            .unwrap_or_else(|| package.name.clone());
-        config::instance_name(&group)?;
-        self.ensure_group(&group, &package).await?;
-        let component = self.mount_component(name, &group, &package, &settings)?;
-        let view = self.mount_view(&settings)?;
-        let web = package
-            .web
-            .as_ref()
-            .map(|_| Self::web_spec(name, &settings, &package, &view))
-            .transpose()?;
-        let manage = self.provide_management(name, &settings, &view)?;
-        self.diagnostics
-            .lock()
-            .active_references
-            .insert(name.into(), package.reference.clone());
-        let result = async {
-            self.manager
-                .mount_in(
-                    view.clone(),
-                    InstanceSpec {
-                        name: name.into(),
-                        group: group.clone(),
-                        plugin: package.name.clone(),
-                        component: component.clone(),
-                        config: Value::serialized(&settings.config).map_err(parameter)?,
-                    },
-                    inherited,
-                )
-                .await?;
-            if let Some(spec) = web
-                && let Err(problem) = self.web.mount(spec)
-            {
-                return match self.manager.dispose(name).await {
-                    Ok(()) => Err(problem),
-                    Err(cleanup) => Err(web::recovery_error("实例挂载", problem, cleanup)),
-                };
-            }
-            Ok(())
-        }
-        .await;
-        if let Err(problem) = result {
-            self.diagnostics.lock().active_references.remove(name);
-            if let Some(manage) = manage
-                && let Err(cleanup) = manage.dispose().await
-            {
-                return Err(web::recovery_error("挂载授权", problem, kernel(cleanup)));
-            }
-            return Err(problem);
-        }
-        self.mounted.insert(
-            name.into(),
-            Mounted {
-                settings,
-                package,
-                group,
-                _view: view,
-                manage,
-            },
-        );
-        self.diagnostics.lock().instance_errors.remove(name);
-        Ok(())
-    }
-
-    /// DOC-15 §8：握手描述符确定组件和版本，缺少管理授权的声明依赖进入等待。
-    fn mount_component(
-        &mut self,
-        name: &str,
-        group: &str,
-        package: &Package,
-        settings: &InstanceSettings,
-    ) -> Result<String> {
-        let snapshot = self.manager.snapshot();
-        let descriptor = snapshot
-            .groups
-            .iter()
-            .find(|item| item.name == group)
-            .and_then(|group| {
-                group
-                    .plugins
-                    .iter()
-                    .find(|plugin| plugin.name == package.name)
-            })
-            .ok_or_else(|| WireError::new(4, "分组握手中缺少目标插件"))?;
-        if descriptor.version != package.version {
-            return Err(parameter("插件清单与进程描述符版本冲突"));
-        }
-        self.catalog
-            .packages
-            .get_mut(&package.reference)
-            .expect("selected source retained")
-            .descriptor = Some(descriptor.clone());
-        let component = match &settings.component {
-            Some(component) => component.clone(),
-            None if descriptor.components.len() == 1 => descriptor.components[0].name.clone(),
-            None => descriptor
-                .components
-                .iter()
-                .find(|component| component.name == package.name)
-                .map(|component| component.name.clone())
-                .ok_or_else(|| parameter("插件包含多个组件，请在配置中指定component"))?,
-        };
-        if settings
-            .grants
-            .get(config::MANAGE)
-            .is_none_or(Vec::is_empty)
-            && descriptor
-                .components
-                .iter()
-                .find(|item| item.name == component)
-                .is_some_and(|item| {
-                    item.inject
-                        .iter()
-                        .any(|dependency| dependency.interface.starts_with("cordis.manage@1"))
-                })
-        {
-            self.logs
-                .emit(1, name, "实例需要cordis.manage@1授权，管理依赖等待配置授权");
-        }
-        Ok(component)
+        )
     }
 
     /// ADR-0025：部署隔离域与拦截进入派生视图，管理能力使用实例私有域。
@@ -707,13 +523,13 @@ impl Controller {
                 &payload::ContextOptions { isolate, intercept },
             )?
             .isolate_named(config::MANAGE, Realm::new())
+            .isolate_named(config::MANAGE_V2, Realm::new())
             .isolate_named("cordis.forward@1", Realm::new()))
     }
 
     /// DOC-15 §3.2：按配置授权提供实例专有管理对象，调用时继续逐方法鉴权。
     fn provide_management(
         &self,
-        name: &str,
         settings: &InstanceSettings,
         view: &Context,
     ) -> Result<Option<Effect>> {
@@ -721,32 +537,35 @@ impl Controller {
         if settings.forwarder {
             provisions.push(self.web.forwarder(view)?);
         }
-        if !settings
-            .grants
-            .get(config::MANAGE)
-            .is_none_or(Vec::is_empty)
-        {
-            provisions.push(
-                self.manager.provide_builtin_in(
-                    view,
-                    "cordis.manage@1.1",
-                    config::METHODS
-                        .iter()
-                        .map(|method| (*method).into())
-                        .collect(),
-                    Arc::new(Management {
-                        owner: name.into(),
-                        manager: Arc::downgrade(&self.manager),
-                        permissions: self.permissions.clone(),
-                        control: self.handle.clone(),
-                        configuration: self.path.clone(),
-                        store: self.store.clone(),
-                        diagnostics: self.diagnostics.clone(),
-                        outcomes: self.outcomes.clone(),
-                        logs: self.logs.clone(),
-                    }),
-                )?,
-            );
+        for (interface, legacy, methods) in [
+            (
+                "cordis.manage@1.1",
+                true,
+                &["install", "replace_batch", "shutdown"][..],
+            ),
+            ("cordis.manage@2.0", false, config::METHODS),
+        ] {
+            let grants = settings.management_grants(legacy);
+            if grants.is_empty() {
+                continue;
+            }
+            let mut methods: Vec<String> = methods.iter().map(|method| (*method).into()).collect();
+            if !legacy {
+                methods.push("result".into());
+            }
+            provisions.push(self.manager.provide_builtin_in(
+                view,
+                interface,
+                methods,
+                Arc::new(Management {
+                    legacy,
+                    grants: grants.to_vec(),
+                    control: self.handle.clone(),
+                    configuration: self.path.clone(),
+                    outcomes: self.outcomes.clone(),
+                    logs: self.logs.clone(),
+                }),
+            )?);
         }
         if provisions.is_empty() {
             return Ok(None);
@@ -763,50 +582,14 @@ impl Controller {
         .map_err(kernel)
     }
 
-    /// T-EFF-2、CP-7：释放实例与授权，最后一个成员退出后释放其分组进程。
-    async fn remove(&mut self, name: &str) -> Result<()> {
-        let Some(mounted) = self.mounted.remove(name) else {
-            return Ok(());
-        };
-        if matches!(mounted.package.entry, Entry::Web) {
-            self.web.remove(name).await?;
-            return Ok(());
-        }
-        self.web.remove(name).await?;
-        let result = self.manager.dispose(name).await;
-        let grant = match mounted.manage {
-            Some(grant) => grant.dispose().await.map_err(kernel),
-            None => Ok(()),
-        };
-        result.and(grant)?;
-        if !self
-            .mounted
-            .values()
-            .any(|item| item.group == mounted.group)
-        {
-            self.manager.detach_group(&mounted.group).await?;
-            self.groups.remove(&mounted.group);
-        }
-        Ok(())
-    }
-
     /// DOC-15 §3.2、§11.4：配置与插件批次共用状态保存、页面协调及持久提交。
     async fn commit_configuration(
         &mut self,
         configuration: Configuration,
         overlay: Overlay,
     ) -> Result<()> {
-        self.apply_deployment_batch(&[], Some(configuration), overlay)
+        self.apply_deployment_batch(&[], Some(configuration), overlay, true)
             .await
-    }
-
-    /// ADR-0041/0052：部署实例按运行时目录恢复，页面快照由网页事务持有。
-    fn deployment_states(
-        &self,
-        mut states: HashMap<String, Option<payload::State>>,
-    ) -> HashMap<String, Option<payload::State>> {
-        states.retain(|name, _| self.mounted.contains_key(name));
-        states
     }
 
     /// DOC-11 §7：回滚是把实例换回上一版本引用的单项批次，状态继承当前导出值。

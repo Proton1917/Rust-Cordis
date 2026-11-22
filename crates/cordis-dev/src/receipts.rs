@@ -149,14 +149,14 @@ fn copy_version(root: &Path, source: &Path, plugin: &str) -> Result<PathBuf> {
     Ok(path)
 }
 
-fn stamp_path(source: &Path) -> PathBuf {
+pub(super) fn stamp_path(source: &Path) -> PathBuf {
     let mut path = source.as_os_str().to_owned();
     path.push(".verified.json");
     PathBuf::from(path)
 }
 
 /// SW-2：分块读取完整字节；文件大小和每个字节都参与相等判定。
-fn files_equal(first: &Path, second: &Path) -> Result<bool> {
+pub(super) fn files_equal(first: &Path, second: &Path) -> Result<bool> {
     let mut first = File::open(first)?;
     let mut second = File::open(second)?;
     let size = first.metadata()?.len();

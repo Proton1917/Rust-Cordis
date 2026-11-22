@@ -1,0 +1,266 @@
+{
+  "by_package": {
+    "benchmarks": {
+      "documentation": 69,
+      "test_and_benchmark": 2170
+    },
+    "crates/cordis": {
+      "documentation": 108,
+      "examples": 233,
+      "production": 4909,
+      "test_and_benchmark": 7986
+    },
+    "crates/cordis-abi": {
+      "production": 2770,
+      "test_and_benchmark": 1966
+    },
+    "crates/cordis-channels": {
+      "production": 277
+    },
+    "crates/cordis-contract": {
+      "production": 47
+    },
+    "crates/cordis-dev": {
+      "build_and_tools": 50,
+      "documentation": 5,
+      "production": 3279,
+      "shipped_templates": 95,
+      "test_and_benchmark": 3404
+    },
+    "crates/cordis-host": {
+      "production": 3145,
+      "test_and_benchmark": 3418
+    },
+    "crates/cordis-idl": {
+      "production": 2484,
+      "shipped_templates": 196
+    },
+    "crates/cordis-process": {
+      "production": 708
+    },
+    "crates/cordis-routing": {
+      "production": 914
+    },
+    "crates/cordis-runtime": {
+      "production": 5947,
+      "test_and_benchmark": 7117
+    },
+    "crates/cordis-sdk": {
+      "build_and_tools": 17,
+      "production": 1294,
+      "test_and_benchmark": 1920
+    },
+    "crates/cordis-sdk-macros": {
+      "production": 1607
+    },
+    "crates/cordis-supervisor": {
+      "production": 6253,
+      "test_and_benchmark": 3648
+    },
+    "crates/cordis-testkit": {
+      "test_and_benchmark": 744
+    },
+    "crates/cordis-types": {
+      "production": 261
+    },
+    "crates/cordis-up": {
+      "examples": 119,
+      "production": 1973,
+      "test_and_benchmark": 619
+    },
+    "crates/cordis-web-deployment": {
+      "production": 942,
+      "test_and_benchmark": 58
+    },
+    "docs": {
+      "documentation": 3669,
+      "generated": 1095
+    },
+    "examples": {
+      "documentation": 43,
+      "examples": 229,
+      "generated": 397
+    },
+    "plugins/console-log": {
+      "production": 365,
+      "test_and_benchmark": 151
+    },
+    "plugins/counter": {
+      "production": 10
+    },
+    "plugins/counter-component": {
+      "production": 85
+    },
+    "plugins/counter-py": {
+      "generated": 43,
+      "production": 57
+    },
+    "plugins/forward-api": {
+      "production": 21
+    },
+    "plugins/http": {
+      "generated": 3597,
+      "production": 1728,
+      "test_and_benchmark": 181
+    },
+    "plugins/http-api": {
+      "production": 215
+    },
+    "plugins/http-echo": {
+      "production": 176
+    },
+    "plugins/http-echo-py": {
+      "generated": 111,
+      "production": 70
+    },
+    "plugins/http-echo-ts": {
+      "generated": 772,
+      "production": 64
+    },
+    "plugins/kv-api": {
+      "production": 67
+    },
+    "plugins/kv-contract": {
+      "production": 66
+    },
+    "plugins/kv-file": {
+      "production": 149
+    },
+    "plugins/kv-mem": {
+      "production": 10
+    },
+    "plugins/kv-mem-component": {
+      "production": 86
+    },
+    "plugins/kv-py": {
+      "generated": 43,
+      "production": 76
+    },
+    "plugins/kv-ts": {
+      "generated": 401,
+      "production": 40
+    },
+    "plugins/secrets": {
+      "production": 97
+    },
+    "plugins/secrets-api": {
+      "production": 17
+    },
+    "plugins/stream-api": {
+      "production": 138
+    },
+    "plugins/watch": {
+      "documentation": 17,
+      "production": 617,
+      "test_and_benchmark": 23
+    },
+    "plugins/web-api": {
+      "production": 32
+    },
+    "plugins/window": {
+      "documentation": 33,
+      "production": 1020
+    },
+    "plugins/window-api": {
+      "production": 17
+    },
+    "repository": {
+      "documentation": 167
+    },
+    "sdks/python": {
+      "documentation": 47,
+      "production": 1383
+    },
+    "sdks/typescript": {
+      "build_and_tools": 40
+    },
+    "sdks/typescript/cordis-sdk": {
+      "build_and_tools": 23,
+      "documentation": 41,
+      "production": 1478
+    },
+    "sdks/typescript/cordis-web": {
+      "documentation": 188,
+      "production": 252
+    },
+    "skills": {
+      "documentation": 1198,
+      "examples": 247
+    },
+    "tests": {
+      "documentation": 30,
+      "generated": 802,
+      "test_and_benchmark": 9242
+    },
+    "tools": {
+      "build_and_tools": 863,
+      "documentation": 31
+    }
+  },
+  "by_responsibility": {
+    "code_generation": {
+      "production": 4091,
+      "shipped_templates": 196
+    },
+    "deployment": {
+      "production": 13142,
+      "test_and_benchmark": 10823
+    },
+    "developer_tools": {
+      "build_and_tools": 913,
+      "documentation": 36,
+      "production": 3279,
+      "shipped_templates": 95,
+      "test_and_benchmark": 3404
+    },
+    "kernel": {
+      "documentation": 108,
+      "examples": 233,
+      "production": 4909,
+      "test_and_benchmark": 7986
+    },
+    "native_execution": {
+      "production": 5915,
+      "test_and_benchmark": 5384
+    },
+    "plugins": {
+      "documentation": 50,
+      "generated": 4967,
+      "production": 5223,
+      "test_and_benchmark": 355
+    },
+    "process_and_protocol": {
+      "examples": 119,
+      "production": 3872,
+      "test_and_benchmark": 619
+    },
+    "project_material": {
+      "documentation": 5077,
+      "examples": 476,
+      "generated": 1492
+    },
+    "sdk_and_contracts": {
+      "build_and_tools": 80,
+      "documentation": 276,
+      "production": 4715,
+      "test_and_benchmark": 1920
+    },
+    "test_infrastructure": {
+      "documentation": 99,
+      "generated": 802,
+      "test_and_benchmark": 12156
+    }
+  },
+  "implementation_including_tools_templates_generated": 53691,
+  "revision": "worktree",
+  "scope": "source-physical-lines/v2",
+  "total": {
+    "build_and_tools": 993,
+    "documentation": 5646,
+    "examples": 828,
+    "generated": 7261,
+    "production": 45146,
+    "shipped_templates": 291,
+    "test_and_benchmark": 42647
+  }
+}

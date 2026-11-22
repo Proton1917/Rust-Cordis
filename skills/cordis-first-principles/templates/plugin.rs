@@ -22,5 +22,6 @@ impl Component for Plugin {
 cordis_sdk::export_plugin!(
     name = "{{name}}",
     version = env!("CARGO_PKG_VERSION"),
-    components = [Plugin]
+    components = [Plugin],
+    tokio = false
 );

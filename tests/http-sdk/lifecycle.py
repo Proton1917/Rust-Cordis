@@ -59,7 +59,7 @@ def replacement(case):
             assert version(case) == f"0.1.{index}"
             replies.append(reply)
         installed = case.manage("install", [str(candidates[3])])
-        rejected, _ = case.current.request("admin", "cordis.manage@1.1", "replace", ["rust", installed["value"]], expect_success=False)
+        rejected = case.manage("replace", ["rust", installed["value"]], expect_success=False)
         assert rejected["ok"] is False
         assert version(case) == "0.1.3"
         def rolled_back():

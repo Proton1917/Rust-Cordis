@@ -6,7 +6,7 @@ Rust-cordis runs independently replaceable components. The kernel manages servic
 
 ## 快速开始
 
-macOS Apple Silicon 用户可从 [v0.2.10 发布页](https://github.com/Proton1917/Rust-Cordis/releases/tag/v0.2.10)取得运行时。将压缩包解开，在解包目录执行以下命令：
+下载并解开 v0.3.0 的 macOS Apple Silicon 压缩包，在解包目录执行以下命令。[macOS arm64 下载](https://github.com/Proton1917/Rust-Cordis/releases/download/v0.3.0/cordis-v0.3.0-aarch64-apple-darwin.tar.gz) · [发布页](https://github.com/Proton1917/Rust-Cordis/releases/tag/v0.3.0)
 
 ```sh
 export PATH="$PWD/bin:$PATH"
@@ -28,7 +28,7 @@ cordis run
 
 ## 插件的执行位置与版本
 
-`cordis` 是核心进程，负责实例、依赖和生命周期。一个 `cordis-host` 可以同时装载多个 Rust 插件库。默认按原生插件分别成组，将多个实例配置为相同的 `group` 即可共用宿主。日常替换按实际依赖重建。如果宿主进程退出，同组成员一起恢复。Python 与 TypeScript 使用各自的解释器，浏览器页面经 HTTP 插件连接核心。插件之间使用版本化的服务契约。[部署与分组](docs/guide.md#让两个原生插件共享宿主) · [UP/1 协议](docs/16-up1-protocol.md)
+`cordis` 是核心进程，负责实例、依赖和生命周期。部署格式 1 默认按原生插件名分组，格式 2 默认将省略 `group` 的原生插件装入同一宿主。显式 `group` 可在两种格式中指定执行位置。如果宿主进程退出，同组成员一起恢复。Python 与 TypeScript 使用各自的解释器，浏览器页面经 HTTP 插件连接核心。[部署与分组](docs/guide.md#让两个原生插件共享宿主) · [UP/1 协议](docs/16-up1-protocol.md)
 
 | 版本 | 插件作者需要知道的区别 |
 |---|---|
@@ -37,8 +37,10 @@ cordis run
 | v0.2.7 发行版 | Rust SDK 0.2.3 识别异步结果布局。核心 0.1.6 保留导出失败实例的检查点，开发工具 0.2.6 支持按清单短名称装配预编译动态库。 |
 | v0.2.8 发行版 | 内核等待旧效应完成清理后再加载组件。宿主上报卸载错误，并在拒绝候选后按阈值回收映像。Rust SDK 0.2.4 支持主动卸载前等待库级线程退出。[检查与测量](docs/measurements/v0.2.8-review.md) |
 | v0.2.9 发行版 | 部署中断后恢复同一次提交的程序和状态。同库实例可以发起相互替换。TypeScript SDK 跳过已超时的排队请求，网页 SDK 在握手中断后结束本轮连接。 |
-| v0.2.10 发行版 | 管理调用考虑即将建立的依赖和宿主整组重启。离线查询与部署提交、回滚共用文件锁，返回已提交的程序来源。 |
-| 下一版设计 | 新部署默认共用原生宿主，业务方法按稳定身份分派，官方工具负责从独立源码工作区装配应用。实施状态见[版本页](docs/PROGRESS.md)。 |
+| v0.2.10 发行版 | 离线查询与部署提交、恢复共用文件锁，返回已确认的程序来源。 |
+| v0.3.0 发行版 | 核心 0.1.10、宿主 0.1.4、开发工具 0.3.0、Rust SDK 0.3.0。管理接口 `cordis.manage@2.0` 通过票据报告部署结果。格式 2 支持共享默认宿主和跨目录构建。原生插件沿用 ABI 1.2。[版本页](docs/PROGRESS.md) |
+
+本次发行资产和运行验收面向 macOS arm64。开发工具提供 Linux x86_64 的本机打包入口，该平台的 PSS 与时延测量待取得。[测量条件与统计口径](docs/measurements/deployment-revision.md)
 
 ## 开发入口
 

@@ -4,8 +4,13 @@ use crate::{Document, MethodInfo, Result, ValueType, names, schema};
 use std::fmt::Write;
 use wit_parser::{Type, TypeDefKind, TypeId};
 
-pub fn python(document: &Document) -> Result<String> {
-    let mut output = String::from(include_str!("templates/runtime.py"));
+pub fn python(document: &Document, shared: bool) -> Result<String> {
+    let mut output = String::from(if shared {
+        "from __future__ import annotations\n\nfrom dataclasses import dataclass\nfrom typing import Any, Protocol\n\nfrom cordis_sdk.wit import Err, Ok, Some, Tagged, Transport, bind_runtime\n"
+    } else {
+        include_str!("../../../sdks/python/cordis_sdk/wit.py")
+    });
+    output.push_str("\nimport json\nfrom enum import Enum\nfrom typing import ClassVar\n");
     writeln!(
         output,
         "\nSCHEMA = json.loads({:?})\n",
@@ -44,6 +49,9 @@ pub fn python(document: &Document) -> Result<String> {
             .collect::<Vec<_>>()
             .join(", ")
     )?;
+    output.push_str(
+        "encode_value, decode_value, _invoke, dispatch = bind_runtime(SCHEMA, _CLASSES, _CLIENTS)\n",
+    );
     Ok(output)
 }
 

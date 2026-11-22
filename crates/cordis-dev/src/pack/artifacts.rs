@@ -1,87 +1,259 @@
-//! DOC-15 §12.2：Cargo 的结构化构建消息提供发布目标，目标机器类型另由产物检查。
+//! Cargo 工作区成员给出包身份，compiler-artifact 消息给出本次构建的路径与特性。
 
 use crate::{Result, build_paths, tooling};
-use serde_json::Value;
+use serde::{Deserialize, Serialize};
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     path::{Path, PathBuf},
     time::Duration,
 };
 
-pub struct Artifacts {
-    pub libraries: BTreeMap<String, PathBuf>,
-    pub binaries: BTreeMap<String, PathBuf>,
+#[derive(Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Build {
+    pub workspace: Option<PathBuf>,
+    pub plugins: BTreeMap<String, Selection>,
+    pub web: Vec<Web>,
 }
 
-/// AU-12：Cargo 错误原样返回；已有清单以实际 release 产物作为复制来源。
-pub async fn build(project: &Path, target: &str, target_dir: &Path) -> Result<Artifacts> {
-    let manifest = project.join("Cargo.toml");
-    let output = match std::fs::metadata(manifest) {
-        Ok(_) => {
-            let mut command = vec!["env".into()];
-            command.extend(
-                build_paths::environment(project, Some(target))?
-                    .into_iter()
-                    .map(|(name, value)| format!("{name}={value}")),
-            );
-            command.extend([
-                tooling::executable("cargo", None)?
-                    .to_string_lossy()
-                    .into_owned(),
-                "build".into(),
-                "--release".into(),
-                "--workspace".into(),
-                "--target".into(),
-                target.into(),
-                "--target-dir".into(),
-                target_dir.to_string_lossy().into_owned(),
-                "--message-format=json-render-diagnostics".into(),
-            ]);
-            tooling::command(command, project, Duration::from_secs(600)).await?
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Selection {
+    package: String,
+    target: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Web {
+    pub name: String,
+    pub directory: PathBuf,
+    pub command: Vec<String>,
+    pub output: PathBuf,
+}
+
+#[derive(Deserialize)]
+struct Workspace {
+    workspace_root: PathBuf,
+    packages: Vec<Package>,
+}
+
+#[derive(Deserialize)]
+struct Package {
+    id: String,
+    name: String,
+    version: String,
+    targets: Vec<Target>,
+}
+
+#[derive(Deserialize)]
+struct Target {
+    name: String,
+    kind: Vec<String>,
+    crate_types: Vec<String>,
+}
+
+impl Target {
+    fn output_kind(&self) -> Option<&'static str> {
+        if self.kind.iter().any(|kind| kind == "bin") {
+            Some("bin")
+        } else if self.crate_types.iter().any(|kind| kind == "cdylib")
+            && !self.kind.iter().any(|kind| kind == "example")
+        {
+            Some("cdylib")
+        } else {
+            None
         }
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Vec::new(),
-        Err(error) => return Err(error.into()),
-    };
-    let mut artifacts = Artifacts {
-        libraries: BTreeMap::new(),
-        binaries: BTreeMap::new(),
-    };
-    for message in serde_json::Deserializer::from_slice(&output).into_iter::<Value>() {
-        let message = message?;
-        if message["reason"] != "compiler-artifact" {
-            continue;
+    }
+}
+
+#[derive(Deserialize)]
+struct Compiled {
+    package_id: String,
+    target: Target,
+    features: Vec<String>,
+    filenames: Vec<PathBuf>,
+    executable: Option<PathBuf>,
+}
+
+#[derive(Deserialize)]
+#[serde(tag = "reason", rename_all = "kebab-case")]
+enum Message {
+    CompilerArtifact(Compiled),
+    #[serde(other)]
+    Other,
+}
+
+#[derive(Serialize)]
+pub struct Artifact {
+    #[serde(skip)]
+    pub path: PathBuf,
+    package: String,
+    version: String,
+    cargo_target: String,
+    kind: &'static str,
+    platform: String,
+    profile: &'static str,
+    features: Vec<String>,
+}
+
+impl Artifact {
+    pub fn publish(&self, directory: &Path) -> Result<()> {
+        Ok(std::fs::write(
+            directory.join("cordis-build.json"),
+            serde_json::to_vec_pretty(self)?,
+        )?)
+    }
+}
+
+#[derive(Default)]
+pub struct Artifacts(Vec<Artifact>);
+
+impl Artifacts {
+    pub fn libraries(&self) -> impl Iterator<Item = &PathBuf> {
+        self.0
+            .iter()
+            .filter(|item| item.kind == "cdylib")
+            .map(|item| &item.path)
+    }
+
+    pub fn select(
+        &self,
+        kind: &str,
+        filename: &str,
+        selection: Option<&Selection>,
+    ) -> Result<Option<&Artifact>> {
+        let mut matching = self.0.iter().filter(|item| {
+            item.kind == kind
+                && match selection {
+                    Some(key) => item.package == key.package && item.cargo_target == key.target,
+                    None => item.path.file_name().is_some_and(|name| name == filename),
+                }
+        });
+        let first = matching.next();
+        if let Some(key) = selection
+            && first.is_none()
+        {
+            return Err(format!(
+                "Cargo 包 {} 缺少已构建的 {kind} 目标 {}",
+                key.package, key.target
+            )
+            .into());
         }
-        record(&mut artifacts, &message)?;
+        if let Some(second) = matching.next() {
+            return Err(format!("发布产物 {filename} 同时匹配包 {} 和 {}，请在 build.plugins 中指定 package 与 target", first.unwrap().package, second.package).into());
+        }
+        Ok(first)
+    }
+}
+
+pub async fn build(
+    project: &Path,
+    build: &Build,
+    platform: &str,
+    target_dir: &Path,
+) -> Result<Artifacts> {
+    let Some(manifest) = &build.workspace else {
+        if !build.plugins.is_empty() {
+            return Err("build.plugins 需要 build.workspace".into());
+        }
+        return Ok(Artifacts::default());
+    };
+    let manifest = project.join(manifest).canonicalize()?;
+    let cargo = tooling::executable("cargo", None)?
+        .to_string_lossy()
+        .into_owned();
+    let metadata = tooling::command(
+        vec![
+            cargo.clone(),
+            "metadata".into(),
+            "--format-version=1".into(),
+            "--no-deps".into(),
+            "--manifest-path".into(),
+            manifest.to_string_lossy().into_owned(),
+        ],
+        manifest.parent().ok_or("Cargo 清单需要父目录")?,
+        Duration::from_secs(60),
+    )
+    .await?;
+    let workspace: Workspace = serde_json::from_slice(&metadata)?;
+    let mut seen = BTreeSet::new();
+    let mut groups = BTreeMap::<PathBuf, Vec<&Package>>::new();
+    for package in &workspace.packages {
+        // 同名 bin 或 cdylib 在 Cargo release 目录占用同一路径，分配独立构建目录。
+        let outputs: Vec<_> = package
+            .targets
+            .iter()
+            .filter_map(|target| target.output_kind().map(|kind| (kind, &target.name)))
+            .collect();
+        let directory = if outputs.iter().any(|key| seen.contains(key)) {
+            target_dir.join("cordis-pack").join(&package.name)
+        } else {
+            seen.extend(outputs);
+            target_dir.to_owned()
+        };
+        groups.entry(directory).or_default().push(package);
+    }
+    let env = build_paths::environment(&workspace.workspace_root, Some(platform))?;
+    let mut artifacts = Artifacts::default();
+    for (directory, members) in groups {
+        let mut command = vec!["env".to_owned()];
+        command.extend(env.iter().map(|(key, value)| format!("{key}={value}")));
+        command.extend([
+            cargo.clone(),
+            "build".into(),
+            "--manifest-path".into(),
+            manifest.to_string_lossy().into_owned(),
+            "--release".into(),
+            "--target".into(),
+            platform.into(),
+            "--target-dir".into(),
+            directory.to_string_lossy().into_owned(),
+            "--message-format=json-render-diagnostics".into(),
+        ]);
+        for member in &members {
+            command.extend(["--package".into(), member.id.clone()]);
+        }
+        let messages =
+            tooling::command(command, &workspace.workspace_root, Duration::from_secs(600)).await?;
+        for message in serde_json::Deserializer::from_slice(&messages).into_iter::<Message>() {
+            let Message::CompilerArtifact(record) = message? else {
+                continue;
+            };
+            let Some(kind) = record.target.output_kind() else {
+                continue;
+            };
+            let Some(package) = members.iter().find(|member| member.id == record.package_id) else {
+                continue;
+            };
+            let path = match kind {
+                "bin" => record.executable,
+                _ => record.filenames.into_iter().find(|path| {
+                    matches!(
+                        path.extension().and_then(|s| s.to_str()),
+                        Some("dylib" | "so")
+                    )
+                }),
+            }
+            .ok_or_else(|| {
+                format!(
+                    "Cargo 包 {} 的 {} 消息缺少 {kind} 文件",
+                    package.name, record.target.name
+                )
+            })?;
+            artifacts.0.push(Artifact {
+                path,
+                kind,
+                package: package.name.clone(),
+                version: package.version.clone(),
+                cargo_target: record.target.name,
+                platform: platform.into(),
+                profile: "release",
+                features: record.features,
+            });
+        }
     }
     Ok(artifacts)
-}
-
-/// DOC-15 §12.2：可执行目标与 cdylib 分别服务进程和原生插口。
-fn record(artifacts: &mut Artifacts, message: &Value) -> Result<()> {
-    if message["target"]["kind"]
-        .as_array()
-        .is_some_and(|kinds| kinds.iter().any(|kind| kind == "bin"))
-        && let Some(executable) = message["executable"].as_str()
-    {
-        let path = PathBuf::from(executable);
-        artifacts.binaries.insert(filename(&path)?, path);
-    }
-    if message["target"]["crate_types"]
-        .as_array()
-        .is_some_and(|types| types.iter().any(|kind| kind == "cdylib"))
-        && let Some(filenames) = message["filenames"].as_array()
-    {
-        for filename in filenames.iter().filter_map(Value::as_str) {
-            let path = PathBuf::from(filename);
-            if matches!(
-                path.extension().and_then(|part| part.to_str()),
-                Some("dylib" | "so")
-            ) {
-                artifacts.libraries.insert(self::filename(&path)?, path);
-            }
-        }
-    }
-    Ok(())
 }
 
 pub fn filename(path: &Path) -> Result<String> {

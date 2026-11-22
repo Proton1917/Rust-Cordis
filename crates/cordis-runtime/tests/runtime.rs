@@ -201,12 +201,11 @@ fn send(project: &Path, id: u64, interface: &str, method: &str, args: Value) -> 
 }
 
 fn manage(project: &Path, id: u64, method: &str, args: Value) -> Value {
-    let reply = send(project, id, "cordis.manage@1.1", method, args.clone());
-    if method != "replace_batch" || reply["ok"] != true {
+    let reply = send(project, id, "cordis.manage@2.0", method, args);
+    if matches!(method, "install" | "shutdown") || reply["ok"] != true {
         return reply;
     }
-    let request_id = args[2].as_str().unwrap();
-    assert_eq!(reply["value"]["id"], request_id, "{reply}");
+    let request_id = reply["value"]["id"].as_str().unwrap();
     let outcome = until("batch reaches a final result", || {
         let snapshot = status(project)?;
         snapshot["last_batch"]
@@ -215,12 +214,12 @@ fn manage(project: &Path, id: u64, method: &str, args: Value) -> Value {
             .find(|outcome| {
                 outcome["caller"] == "admin"
                     && outcome["id"] == request_id
-                    && matches!(outcome["state"].as_str(), Some("succeeded" | "rejected"))
+                    && outcome["state"] != "pending"
             })
             .cloned()
     });
-    json!({ "ok": outcome["state"] == "succeeded", "code": outcome["code"],
-        "value": outcome["error"] })
+    json!({ "ok": matches!(outcome["state"].as_str(), Some("succeeded" | "committed_with_cleanup")),
+        "state": outcome["state"], "code": outcome["code"], "value": outcome["error"] })
 }
 
 fn version(project: &Path, expected: &str) {
@@ -484,9 +483,7 @@ fn rollback_returns_to_previous_version_across_restart() {
 
 /// DOC-11 SW-9：旧进程拒绝退役时，已提交的新版本跨核心重启继续生效。
 #[test]
-fn replace_restores_original_after_committed_retirement_failure() {
-    // 单项 replace 是只有一项的批次，按 ADR-0031 第 5 条：
-    // 监管器已确认新版本（内层 committed=true），旧进程退役失败后管理层恢复原版本与原快照（外层 committed=false）。
+fn replace_keeps_new_source_after_committed_retirement_failure() {
     let case = TestGuard::for_package(
         Path::new(env!("CARGO_MANIFEST_DIR")),
         "committed-retirement",
@@ -505,15 +502,13 @@ fn replace_restores_original_after_committed_retirement_failure() {
     );
     assert_eq!(installed["ok"], true, "{installed}");
     let replaced = manage(&project, 3, "replace", json!(["store", installed["value"]]));
-    assert_eq!(replaced["code"], 1003, "{replaced}");
-    assert_eq!(replaced["detail"]["committed"], false, "{replaced}");
-    assert_eq!(replaced["detail"]["cause"]["committed"], true, "{replaced}");
-    version(&project, "0.1.0");
+    assert_eq!(replaced["ok"], true, "{replaced}");
+    version(&project, "0.2.0");
     let overlay = storage::Store::create(project.join("state"))
         .unwrap()
         .overlay()
         .unwrap();
-    assert_ne!(
+    assert_eq!(
         overlay
             .instance
             .get("store")
@@ -523,6 +518,19 @@ fn replace_restores_original_after_committed_retirement_failure() {
     let restored = send(&project, 4, "fixture.counter@1.0", "get", json!([]));
     assert_eq!(restored["value"], 63, "{restored}");
     core.kill();
+    let offline = offline::query(&project);
+    assert_eq!(
+        offline["instances"]["store"]["installed_reference"],
+        installed["value"]
+    );
+    let mut restarted = Process::start(&project, "retirement-restart");
+    version(&project, "0.2.0");
+    active(&project, "client");
+    assert_eq!(
+        send(&project, 5, "fixture.counter@1.0", "get", json!([]))["value"],
+        63
+    );
+    restarted.kill();
     case.success();
 }
 
@@ -621,9 +629,9 @@ fn batch_restores_configuration_and_accepts_joint_interface_change() {
     case.success();
 }
 
-/// ADR-0031、SW-9：确认后的旧进程退役错误也恢复窗口前配置、版本和原快照。
+/// 批次持久决定包含新基础配置和程序引用，旧进程退役故障保留在报告中。
 #[test]
-fn batch_restores_window_after_committed_retirement_failure() {
+fn batch_keeps_new_configuration_after_committed_retirement_failure() {
     let case = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "batch-retirement");
     let _fixture = fixture().for_case(&case);
     let project = managed_project(&case, "batch-retirement", "shutdown-fail");
@@ -653,15 +661,24 @@ fn batch_restores_window_after_committed_retirement_failure() {
         "replace_batch",
         json!([[["store", installed]], true, "retirement"]),
     );
-    assert_eq!(result["code"], 1003, "{result}");
-    version(&project, "0.1.0");
+    assert_eq!(result["ok"], true, "{result}");
+    let report = until("旧进程退役错误进入换代报告", || {
+        let status = status(&project)?;
+        status["last_replace"]
+            .as_array()?
+            .iter()
+            .find(|item| item["group"] == "fixture-store" && item["failure"]["code"] == 1003)
+            .cloned()
+    });
+    assert_eq!(report["committed"], true);
+    version(&project, "0.2.0");
     assert_eq!(
         send(&project, 4, "fixture.counter@1.0", "get", json!([]))["value"],
         42
     );
     assert_eq!(
         send(&project, 5, "fixture.counter@1.0", "initial", json!([]))["value"],
-        17
+        999
     );
     core.kill();
     case.success();
@@ -690,7 +707,15 @@ fn batch_tickets_report_results_and_resubmit_after_core_restart() {
         true
     );
     version(&project, "0.2.0");
-    // 同一标识重发：结果只在内存中按最近一次记录，已完成的批次再次执行；版本相同，不做改动。
+    let direct = send(
+        &project,
+        101,
+        "cordis.manage@2.0",
+        "result",
+        json!(["once"]),
+    );
+    assert_eq!(direct["value"]["state"], "succeeded", "{direct}");
+    // 当前核心保留该调用方的结果，重投同一标识取得原票据。
     assert_eq!(
         manage(&project, 3, "replace_batch", arguments.clone())["ok"],
         true
@@ -713,6 +738,61 @@ fn batch_tickets_report_results_and_resubmit_after_core_restart() {
     version(&project, "0.2.0");
     assert_eq!(manage(&project, 6, "shutdown", json!([]))["ok"], true);
     core.finish();
+    case.success();
+}
+
+#[test]
+fn shutdown_ticket_is_accepted_while_state_export_is_waiting() {
+    let case = TestGuard::for_package(
+        Path::new(env!("CARGO_MANIFEST_DIR")),
+        "shutdown-during-export",
+    );
+    let _fixture = fixture().for_case(&case);
+    let project = managed_project(&case, "shutdown-during-export", "v1");
+    let gate = project.join("export.continue");
+    let config = project.join("cordis.toml");
+    let settings = fs::read_to_string(&config)
+        .unwrap()
+        .replace("checkpoint_ms = 100", "checkpoint_ms = 0")
+        .replace("lifecycle_timeout_ms = 1000", "lifecycle_timeout_ms = 8000")
+        .replace(
+            "initial = 17",
+            &format!("initial = 17, export_gate = {}", quoted(&gate)),
+        );
+    fs::write(config, settings).unwrap();
+    let mut core = Process::start(&project, "waiting");
+    active(&project, "admin");
+    active(&project, "client");
+    let change = send(
+        &project,
+        1,
+        "cordis.manage@2.0",
+        "configure",
+        json!(["store", {"initial": 19}]),
+    );
+    assert_eq!(change["ok"], true, "{change}");
+    until("状态导出已冻结并等待继续", || {
+        gate.with_extension("started").is_file().then_some(())
+    });
+    let stop = manage(&project, 2, "shutdown", json!([]));
+    assert_eq!(stop["ok"], true, "{stop}");
+    until("状态导出等待期间发布停机意图", || {
+        let published = status(&project)?;
+        (published["phase"] == "stopping").then_some(())
+    });
+    fs::write(gate, []).unwrap();
+    core.finish();
+    let stopped = status(&project).unwrap();
+    assert_eq!(stopped["phase"], "stopped");
+    let outcomes = stopped["last_batch"].as_array().unwrap();
+    for ticket in [change, stop] {
+        assert!(
+            outcomes
+                .iter()
+                .any(|row| row["id"] == ticket["value"]["id"] && row["state"] == "succeeded"),
+            "{stopped}"
+        );
+    }
     case.success();
 }
 

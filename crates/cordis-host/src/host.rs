@@ -393,7 +393,7 @@ impl Host {
 
     pub fn is_current(&self, context: u64) -> Result<bool> {
         let response = self.request_sync("is_current", to_value(&payload::Context { context })?)?;
-        from_value(response.value().clone())
+        from_value(response.value())
     }
 
     pub fn config(&self, context: u64) -> Result<Vec<u8>> {
@@ -417,7 +417,7 @@ impl Host {
             intercept: options.intercept,
         };
         let response = self.request_sync("context_derive", to_value(&request)?)?;
-        let result: payload::ContextDerived = from_value(response.value().clone())?;
+        let result: payload::ContextDerived = from_value(response.value())?;
         let reference = response.import(result.object).map_err(from_wire)?;
         let lease = self.bridge()?.import(
             reference,
@@ -467,7 +467,7 @@ impl Host {
         self.scheduled(
             async move {
                 let response = host.request("plugin", to_value(&request)?).await?;
-                Ok(from_value::<payload::PluginResult>(response.value().clone())?.instance)
+                Ok(from_value::<payload::PluginResult>(response.value())?.instance)
             },
             false,
         )
@@ -492,7 +492,7 @@ impl Host {
         };
         let outgoing = Outgoing::with_commit(to_value(&params)?, move || refs.commit());
         let response = self.request_sync("effect", outgoing)?;
-        Ok(from_value::<payload::EffectHandle>(response.value().clone())?.effect)
+        Ok(from_value::<payload::EffectHandle>(response.value())?.effect)
     }
 
     pub fn defer(&self, scope: u64, cleanup: Object, asynchronous: bool) -> Result<()> {
@@ -577,7 +577,7 @@ impl Host {
                 interface: interface.into(),
             })?,
         )?;
-        let result: payload::GetResult = from_value(response.value().clone())?;
+        let result: payload::GetResult = from_value(response.value())?;
         let object = response.import(result.object).map_err(from_wire)?;
         if result.interface == "cordis.forward@1.0" {
             return crate::forward::object(self.clone(), context, object);
@@ -787,7 +787,6 @@ impl Host {
 
     /// DOC-16：握手建立进程身份并装入核心指定的初始原生库。
     fn hello(&self, request: payload::Hello) -> Result<Value> {
-        self.0.executor.group(request.group.clone());
         if request.protocol != 1 {
             return Err(Error::new(3, "UP/1 主版本不匹配"));
         }
@@ -845,8 +844,7 @@ impl Host {
 
     /// DOC-16 资源协议：参数导入和结果导出分别持有调用所需资源。
     async fn invoke(&self, params: Payload) -> Result<Outgoing> {
-        let request: payload::Invoke = from_value(params.value().clone())?;
-        crate::native::method(&request.method);
+        let request: payload::Invoke = from_value(params.value())?;
         let object = self.objects().borrow(request.object)?;
         let bridge = self.bridge()?;
         let arguments = bridge.incoming(&params, Value::Array(request.args)).await?;
@@ -882,40 +880,40 @@ impl Host {
     /// DOC-15 Q0、DOC-16：按协议方法转发核心已作出的生命周期与调用决定。
     async fn execute(&self, method: String, params: Payload) -> Result<Outgoing> {
         let reply = match method.as_str() {
-            "hello" => self.hello(from_value(params.value().clone())?)?,
+            "hello" => self.hello(from_value(params.value())?)?,
             "resolve" => {
-                let request: payload::Resolve = from_value(params.value().clone())?;
+                let request: payload::Resolve = from_value(params.value())?;
                 self.component(&request.plugin, &request.component, request.library)?
                     .resolve(&encode(&request.config)?)?;
                 Value::Null
             }
-            "apply" => self.apply(from_value(params.value().clone())?).await?,
+            "apply" => self.apply(from_value(params.value())?).await?,
             "callback" => {
-                let request: payload::Callback = from_value(params.value().clone())?;
+                let request: payload::Callback = from_value(params.value())?;
                 let object = self.objects().borrow(request.object)?;
                 self.callback(request, params, object).await?;
                 return Ok(Value::Null.into());
             }
             "invoke" => return self.invoke(params).await,
-            "object_info" => self.object_info(from_value(params.value().clone())?)?,
-            "export" => self.export(from_value(params.value().clone())?)?,
+            "object_info" => self.object_info(from_value(params.value())?)?,
+            "export" => self.export(from_value(params.value())?)?,
             "thaw" => {
-                let request: payload::Thaw = from_value(params.value().clone())?;
+                let request: payload::Thaw = from_value(params.value())?;
                 self.objects().thaw(request.object)?;
                 Value::Null
             }
             "library_prepare" => {
-                let request: payload::LibraryPrepare = from_value(params.value().clone())?;
+                let request: payload::LibraryPrepare = from_value(params.value())?;
                 to_value(&self.prepare(Path::new(&request.path))?)?
             }
             "library_status" => to_value(&self.library_status())?,
             "library_activate" => {
-                let request: payload::LibraryHandle = from_value(params.value().clone())?;
+                let request: payload::LibraryHandle = from_value(params.value())?;
                 self.activate(request.library)?;
                 Value::Null
             }
             "library_retire" => {
-                let request: payload::LibraryHandle = from_value(params.value().clone())?;
+                let request: payload::LibraryHandle = from_value(params.value())?;
                 to_value(&self.retire(request.library).await?)?
             }
             "shutdown" => {
@@ -929,7 +927,7 @@ impl Host {
 
     /// DOC-16：通知回调在原生执行器运行，关闭上下文时取消并等待该批任务。
     fn notify_callback(&self, params: Payload) -> Result<()> {
-        let request: payload::Callback = from_value(params.value().clone())?;
+        let request: payload::Callback = from_value(params.value())?;
         let record = {
             let contexts = self.0.contexts.lock();
             match contexts.get(&request.context) {
@@ -1049,7 +1047,9 @@ impl Handler for Host {
                 .executor
                 .clone()
                 .run(
-                    async move { host.execute(method, params).await },
+                    cordis_up::rpc::inherit_invocation(async move {
+                        host.execute(method, params).await
+                    }),
                     cancellable,
                 )
                 .await
@@ -1076,15 +1076,13 @@ impl Handler for Host {
                 }
                 "callback" => self.notify_callback(params).map_err(to_wire)?,
                 "release" => {
-                    let request: payload::Release =
-                        from_value(params.value().clone()).map_err(to_wire)?;
+                    let request: payload::Release = from_value(params.value()).map_err(to_wire)?;
                     for id in request.objects {
                         self.objects().release(id).map_err(to_wire)?;
                     }
                 }
                 "release_context" => {
-                    let request: payload::Context =
-                        from_value(params.value().clone()).map_err(to_wire)?;
+                    let request: payload::Context = from_value(params.value()).map_err(to_wire)?;
                     self.release_context(request.context);
                 }
                 _ => return Err(WireError::new(3, format!("宿主通知 {method} 无对应入口"))),

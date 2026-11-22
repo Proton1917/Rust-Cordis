@@ -4,7 +4,8 @@ use super::Native;
 use crate::{
     Result,
     pack::{Plan, artifacts::Artifacts, string},
-    tooling,
+    receipts::{files_equal, stamp_path},
+    tooling, verify,
 };
 use cordis_types::VerificationReceipt;
 use cordis_up::payload;
@@ -35,6 +36,7 @@ pub async fn run(
     }
     let directory = deployment.join(".cordis/verified");
     fs::create_dir_all(&directory)?;
+    let mut pending = Vec::new();
     for native in libraries {
         let previous = receipt(&native.source)?;
         if let Some(previous) = previous
@@ -42,11 +44,46 @@ pub async fn run(
         {
             continue;
         }
-        execute(plan, artifacts, deployment, native).await?;
+        pending.push(native);
+    }
+    let mut suites = Vec::new();
+    if !pending.is_empty() {
+        for library in artifacts.libraries() {
+            let described;
+            let descriptor = match plan.descriptions.get(&library.canonicalize()?) {
+                Some(descriptor) => descriptor.as_ref(),
+                None => {
+                    described = tooling::describe(
+                        &plan.host,
+                        library,
+                        &plan.project,
+                        Duration::from_secs(30),
+                    )
+                    .await?;
+                    &described
+                }
+            };
+            suites.extend(
+                descriptor
+                    .components
+                    .iter()
+                    .filter(|component| {
+                        component
+                            .inject
+                            .iter()
+                            .any(|dependency| dependency.interface.starts_with("cordis.contract@"))
+                    })
+                    .cloned()
+                    .map(|component| (library.as_path(), component)),
+            );
+        }
+    }
+    for native in pending {
+        execute(plan, &suites, deployment, native).await?;
         let mut verified = receipt(&native.deployed)?.ok_or("真实验证结束后需要库旁印记")?;
         verified.verified_copy = verified.verified_copy.strip_prefix(&directory)?.to_owned();
         fs::write(
-            path(&native.deployed),
+            stamp_path(&native.deployed),
             serde_json::to_vec_pretty(&verified)?,
         )?;
     }
@@ -58,14 +95,8 @@ pub async fn run(
     }
 }
 
-fn path(source: &Path) -> PathBuf {
-    let mut path = source.as_os_str().to_owned();
-    path.push(".verified.json");
-    PathBuf::from(path)
-}
-
 fn receipt(source: &Path) -> Result<Option<VerificationReceipt>> {
-    match fs::read(path(source)) {
+    match fs::read(stamp_path(source)) {
         Ok(bytes) => Ok(Some(serde_json::from_slice(&bytes)?)),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
         Err(error) => Err(error.into()),
@@ -85,7 +116,7 @@ fn retain(
             .join(".cordis/verified")
             .join(&previous.verified_copy)
     };
-    if fs::read(&copy)? != fs::read(&native.deployed)? {
+    if !files_equal(&copy, &native.deployed)? {
         return Ok(false);
     }
     let name = format!(
@@ -103,7 +134,7 @@ fn retain(
     let mut published = previous.clone();
     published.verified_copy = PathBuf::from(name);
     fs::write(
-        path(&native.deployed),
+        stamp_path(&native.deployed),
         serde_json::to_vec_pretty(&published)?,
     )?;
     Ok(true)
@@ -112,29 +143,17 @@ fn retain(
 /// ADR-0036：套件先按实际 Contract 注入与接口覆盖选择，再通过独立核心执行。
 async fn execute(
     plan: &Plan,
-    artifacts: &Artifacts,
+    suites: &[(&Path, payload::Component)],
     deployment: &Path,
     native: &Native,
 ) -> Result<()> {
-    let mut suites = Vec::new();
-    for library in artifacts.libraries.values() {
-        let descriptor =
-            tooling::describe(&plan.host, library, &plan.project, Duration::from_secs(30)).await?;
-        for component in descriptor.components {
-            if component
-                .inject
-                .iter()
-                .any(|dependency| dependency.interface.starts_with("cordis.contract@"))
-            {
-                suites.push((library.clone(), component));
+    for component in &native.descriptor.components {
+        let mut applicable = Vec::new();
+        for (path, suite) in suites {
+            if !verify::covered(component, suite)?.is_empty() {
+                applicable.push((*path, &suite.name));
             }
         }
-    }
-    for component in &native.descriptor.components {
-        let applicable: Vec<_> = suites
-            .iter()
-            .filter(|(_, suite)| covered(component, suite))
-            .collect();
         if applicable.is_empty() {
             return Err(format!(
                 "发布 {} 的组件 {} 需要可执行契约套件",
@@ -156,7 +175,7 @@ async fn execute(
                 native,
                 &component.name,
                 suite,
-                &entry.name,
+                entry,
                 &path,
             )
             .await?;
@@ -177,19 +196,6 @@ fn configuration(native: &Native, component: &str) -> Result<Table> {
         }
     }
     Ok(Table::new())
-}
-
-fn covered(component: &payload::Component, suite: &payload::Component) -> bool {
-    component.provides.iter().any(|interface| {
-        let major = interface.rsplit_once('.').map(|(major, _)| major);
-        suite.inject.iter().any(|dependency| {
-            dependency
-                .interface
-                .rsplit_once('.')
-                .map(|(major, _)| major)
-                == major
-        })
-    })
 }
 
 async fn verify(

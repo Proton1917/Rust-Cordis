@@ -21,8 +21,9 @@ pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 pub fn generate(document: &Document, language: &str) -> Result<String> {
     match language {
         "rust" => rust::generate(document),
-        "python" => script::python(document),
+        "python" => script::python(document, false),
+        "python-sdk" => script::python(document, true),
         "ts" | "typescript" => script::typescript(document),
-        _ => Err(format!("绑定语言 {language} 需要为 rust、python 或 ts").into()),
+        _ => Err(format!("绑定语言 {language} 需要为 rust、python、python-sdk 或 ts").into()),
     }
 }

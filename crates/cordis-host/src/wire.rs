@@ -38,16 +38,15 @@ impl Bridge {
         let bridge = self.clone();
         let object = object.clone();
         let task = self.executor.start(
-            async move {
+            cordis_up::rpc::inherit_invocation(async move {
                 let response = object
                     .peer()
                     .request("invoke", outgoing, bridge.timeout)
                     .await
                     .map_err(from_wire)?;
-                let result: payload::InvokeResult =
-                    cordis_abi::from_value(response.value().clone())?;
+                let result: payload::InvokeResult = cordis_abi::from_value(response.value())?;
                 bridge.incoming(&response, result.value).await
-            },
+            }),
             true,
         );
         make_invoke_future(task, abi::environment())
@@ -85,7 +84,7 @@ impl Bridge {
                     )
                     .await
                     .map_err(from_wire)?;
-                let info: payload::ObjectInfo = cordis_abi::from_value(metadata.value().clone())?;
+                let info: payload::ObjectInfo = cordis_abi::from_value(metadata.value())?;
                 let object = self.import(reference, info)?;
                 let value = encoded.export(object)?;
                 replacements.insert(id, value.clone());

@@ -17,13 +17,12 @@ struct Entry<R> {
     owner: Option<u64>,
     lifetime: Option<Retirement>,
 }
-struct Counter {
+struct Recipient<R> {
     next: u64,
-    active: usize,
+    routes: HashMap<u64, Entry<R>>,
 }
 struct Entries<R> {
-    values: HashMap<(u64, u64), Entry<R>>,
-    counters: HashMap<u64, Counter>,
+    recipients: HashMap<u64, Recipient<R>>,
     lifetimes: HashMap<usize, HashSet<(u64, u64)>>,
 }
 struct Directory<R> {
@@ -45,7 +44,7 @@ pub struct Batch<R> {
 
 impl<R> Entries<R> {
     fn remove_one(&mut self, key: (u64, u64)) -> Option<Entry<R>> {
-        let entry = self.values.remove(&key)?;
+        let entry = self.recipients.get_mut(&key.0)?.routes.remove(&key.1)?;
         if let Some(lifetime) = &entry.lifetime {
             let id = lifetime.id();
             if let Some(keys) = self.lifetimes.get_mut(&id) {
@@ -59,14 +58,9 @@ impl<R> Entries<R> {
     }
 
     fn remove(&mut self, recipient: u64, ids: &[u64]) -> Vec<Entry<R>> {
-        let discarded: Vec<_> = ids
-            .iter()
+        ids.iter()
             .filter_map(|id| self.remove_one((recipient, *id)))
-            .collect();
-        if let Some(counter) = self.counters.get_mut(&recipient) {
-            counter.active -= discarded.len();
-        }
-        discarded
+            .collect()
     }
 }
 
@@ -97,8 +91,7 @@ impl<R: RouteLifetime + Send + Sync + 'static> Router<R> {
         Self {
             directory: Arc::new(Directory {
                 entries: Mutex::new(Entries {
-                    values: HashMap::new(),
-                    counters: HashMap::new(),
+                    recipients: HashMap::new(),
                     lifetimes: HashMap::new(),
                 }),
                 max_exports,
@@ -111,8 +104,9 @@ impl<R: RouteLifetime + Send + Sync + 'static> Router<R> {
         self.directory
             .entries
             .lock()
-            .values
-            .get(&(recipient, id))
+            .recipients
+            .get(&recipient)
+            .and_then(|peer| peer.routes.get(&id))
             .map(|entry| entry.route.clone())
             .ok_or_else(|| error(4, "对象编号已退役或属于另一条连接"))
     }
@@ -133,34 +127,37 @@ impl<R: RouteLifetime + Send + Sync + 'static> Router<R> {
         if !recipient.is_alive() {
             return Err(error(4, "接收连接已结束"));
         }
-        let counter = entries
-            .counters
+        let peer = entries
+            .recipients
             .entry(recipient.id())
-            .or_insert(Counter { next: 1, active: 0 });
-        if counter.active >= self.directory.max_exports {
+            .or_insert_with(|| Recipient {
+                next: 1,
+                routes: HashMap::new(),
+            });
+        if peer.routes.len() >= self.directory.max_exports {
             return Err(error(8, "该连接的活跃出口资源已达上限"));
         }
-        let id = counter.next;
-        counter.next = counter
+        let id = peer.next;
+        peer.next = peer
             .next
             .checked_add(1)
             .ok_or_else(|| error(8, "出口编号空间已耗尽"))?;
-        counter.active += 1;
-        if let Some(lifetime) = &lifetime {
-            entries
-                .lifetimes
-                .entry(lifetime.id())
-                .or_default()
-                .insert((recipient.id(), id));
-        }
-        entries.values.insert(
-            (recipient.id(), id),
+        let lifetime_id = lifetime.as_ref().map(Retirement::id);
+        peer.routes.insert(
+            id,
             Entry {
                 route,
                 owner,
                 lifetime,
             },
         );
+        if let Some(lifetime_id) = lifetime_id {
+            entries
+                .lifetimes
+                .entry(lifetime_id)
+                .or_default()
+                .insert((recipient.id(), id));
+        }
         batch.ids.push(id);
         Ok(id)
     }
@@ -179,9 +176,9 @@ impl<R: RouteLifetime + Send + Sync + 'static> Router<R> {
         let discarded = {
             let mut entries = self.directory.entries.lock();
             let next = entries
-                .counters
+                .recipients
                 .get(&recipient)
-                .map_or(1, |counter| counter.next);
+                .map_or(1, |peer| peer.next);
             for id in ids {
                 if *id == 0 || *id >= next {
                     return Err(error(4, "release编号属于该连接已分配范围之外"));
@@ -197,23 +194,19 @@ impl<R: RouteLifetime + Send + Sync + 'static> Router<R> {
     pub fn reclaim(&self, connection: u64) {
         let discarded = {
             let mut entries = self.directory.entries.lock();
-            let ids: Vec<_> = entries
-                .values
-                .iter()
-                .filter_map(|(id, entry)| {
-                    (id.0 == connection || entry.owner == Some(connection)).then_some(*id)
-                })
-                .collect();
-            let discarded: Vec<_> = ids
-                .iter()
-                .filter_map(|id| entries.remove_one(*id).map(|entry| (id.0, entry)))
-                .collect();
-            for (recipient, _) in &discarded {
-                if let Some(counter) = entries.counters.get_mut(recipient) {
-                    counter.active -= 1;
+            let mut ids = Vec::new();
+            for (&recipient, peer) in &entries.recipients {
+                for (&id, entry) in &peer.routes {
+                    if recipient == connection || entry.owner == Some(connection) {
+                        ids.push((recipient, id));
+                    }
                 }
             }
-            entries.counters.remove(&connection);
+            let discarded: Vec<_> = ids
+                .into_iter()
+                .filter_map(|key| entries.remove_one(key))
+                .collect();
+            entries.recipients.remove(&connection);
             discarded
         };
         drop(discarded);
@@ -226,14 +219,9 @@ impl<R: RouteLifetime + Send + Sync + 'static> Router<R> {
             let mut entries = self.directory.entries.lock();
             let keys = entries.lifetimes.remove(&lifetime.id()).unwrap_or_default();
             let mut discarded = Vec::with_capacity(keys.len());
-            for key in keys {
-                if let Some(entry) = entries.values.remove(&key) {
-                    if let Some(counter) = entries.counters.get_mut(&key.0) {
-                        counter.active -= 1;
-                    }
-                    discarded.push(entry);
-                }
-            }
+            discarded.extend(keys.into_iter().filter_map(|(recipient, id)| {
+                entries.recipients.get_mut(&recipient)?.routes.remove(&id)
+            }));
             discarded
         };
         drop(discarded);

@@ -12,8 +12,13 @@ let invocation: InvocationScope = {
     current: () => undefined,
     run: (_signal, operation) => operation(),
 };
+let invocationScopeConfigured = false;
 export function configureInvocation(scope: InvocationScope): void {
     invocation = scope;
+    invocationScopeConfigured = true;
+}
+export function supportsInvocationBudget(): boolean {
+    return invocationScopeConfigured;
 }
 export function currentSignal(): AbortSignal | undefined {
     return invocation.current();
@@ -63,7 +68,7 @@ export class Runtime {
                 {
                     name: this.name,
                     version: this.version,
-                    sdk_version: "0.2.2",
+                    sdk_version: "0.2.3",
                     build_info: "TypeScript UP/1 SDK",
                     format: 2,
                     library: null,
@@ -121,7 +126,8 @@ export class Runtime {
             const result = await invocation.run(signal, () =>
                 service.invoke(this, params.method, params.args, payload),
             );
-            if (signal.aborted) throw new CordisError(7, "调用已取消");
+            if (signal.aborted)
+                throw signal.reason instanceof CordisError ? signal.reason : new CordisError(7, "调用已取消");
             const offers: Identifier[] = [];
             return { value: { value: outgoing(this, result, offers), refs: offers }, offers };
         } else if (method === "object_info") {

@@ -15,6 +15,7 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     fs,
     path::{Path, PathBuf},
+    sync::Arc,
     time::Duration,
 };
 use toml::{Table, Value};
@@ -46,6 +47,8 @@ pub struct Options {
 struct Plan {
     project: PathBuf,
     configuration: Table,
+    build: artifacts::Build,
+    web_outputs: BTreeMap<String, PathBuf>,
     settings: Table,
     name: String,
     version: String,
@@ -53,16 +56,41 @@ struct Plan {
     core: PathBuf,
     host: PathBuf,
     platform: platform::Platform,
-    descriptions: BTreeMap<PathBuf, cordis_up::payload::Plugin>,
+    descriptions: BTreeMap<PathBuf, Arc<cordis_up::payload::Plugin>>,
     secret_paths: BTreeSet<PathBuf>,
 }
 
 /// AU-12：输出目录由本次命令创建；失败保留装配目录与具体错误。
 pub async fn run(options: Options) -> Result<()> {
     let mut plan = plan(&options).await?;
+    let requested = plugins::requested(&plan.configuration)?;
+    for name in plan.build.plugins.keys() {
+        if !requested.contains_key(name) {
+            return Err(format!("build.plugins 中的 {name} 缺少部署引用").into());
+        }
+    }
+    let mut names = BTreeSet::new();
+    for web in &plan.build.web {
+        if !requested.contains_key(&web.name) || !names.insert(&web.name) {
+            return Err(format!("网页构建 {} 需要唯一的部署引用", web.name).into());
+        }
+        if web.command.first().is_none_or(String::is_empty) {
+            return Err("网页构建需要程序和参数数组".into());
+        }
+    }
     let target_dir = absolute(&plan.project, &options.target_dir);
-    let artifacts = artifacts::build(&plan.project, &options.target, &target_dir).await?;
-    secrets::sources(&mut plan, &artifacts).await?;
+    let artifacts =
+        artifacts::build(&plan.project, &plan.build, &options.target, &target_dir).await?;
+    for web in &plan.build.web {
+        let directory = plan.project.join(&web.directory);
+        tooling::command(web.command.clone(), &directory, Duration::from_secs(600)).await?;
+        let output = directory.join(&web.output).canonicalize()?;
+        if !output.is_dir() {
+            return Err(format!("网页 {} 的构建输出需要目录", web.name).into());
+        }
+        plan.web_outputs.insert(web.name.clone(), output);
+    }
+    let sources = plugins::prepare(&mut plan, &artifacts, requested).await?;
     let out = absolute(&plan.project, &options.out);
     fs::create_dir_all(&out)?;
     let staging = plan.project.join("target/pack");
@@ -80,11 +108,11 @@ pub async fn run(options: Options) -> Result<()> {
     let native = plugins::assemble(
         &mut plan,
         &artifacts,
+        sources,
         &deployment,
         &runtimes,
         options.app.then_some(binaries.as_path()),
-    )
-    .await?;
+    )?;
     assets(&plan, &deployment)?;
     configuration(&mut plan, &deployment, options.app)?;
     if options.app {
@@ -92,7 +120,7 @@ pub async fn run(options: Options) -> Result<()> {
     }
     let code = platform::code_files(&destination, plan.platform)?;
     signing::sign(&plan, &options, &destination, &binaries, &runtimes, &code).await?;
-    plugins::verification(&plan, &artifacts, &deployment, &native).await?;
+    plugins::verification::run(&plan, &artifacts, &deployment, &native).await?;
     service(&plan, &binaries, &deployment)?;
     signing::finish(&plan, &options, &destination, &code).await?;
     privacy::check(&destination, options.allow_private_paths)?;
@@ -113,13 +141,57 @@ async fn plan(options: &Options) -> Result<Plan> {
         return Err("app 发布格式需要 macOS 目标".into());
     }
     let project = options.project.canonicalize()?;
-    let configuration: Table = toml::from_str(&fs::read_to_string(project.join("cordis.toml"))?)?;
+    let mut configuration: Table =
+        toml::from_str(&fs::read_to_string(project.join("cordis.toml"))?)?;
+    let format: u32 = configuration
+        .get("format_version")
+        .cloned()
+        .map(Value::try_into)
+        .transpose()?
+        .unwrap_or(1);
+    let build = match format {
+        1 => {
+            if configuration.contains_key("build") {
+                return Err("build 表需要部署格式 2".into());
+            }
+            let manifest = project.join("Cargo.toml");
+            artifacts::Build {
+                workspace: manifest.try_exists()?.then_some(manifest),
+                ..Default::default()
+            }
+        }
+        2 => configuration
+            .remove("build")
+            .map(Value::try_into)
+            .transpose()?
+            .unwrap_or_default(),
+        other => return Err(format!("部署格式 {other} 超出支持的版本 1、2").into()),
+    };
     let settings = configuration
         .get("pack")
         .map(|value| value.as_table().ok_or("pack 需要 TOML 表"))
         .transpose()?
         .cloned()
         .unwrap_or_default();
+    if let Some(overrides) = settings.get("instance_config") {
+        let overrides = overrides
+            .as_table()
+            .ok_or("pack.instance_config 需要 TOML 表")?;
+        let instances = configuration
+            .get_mut("instance")
+            .and_then(Value::as_table_mut)
+            .ok_or("pack.instance_config 需要已声明的实例")?;
+        for (name, config) in overrides {
+            let instance = instances
+                .get_mut(name)
+                .and_then(Value::as_table_mut)
+                .ok_or_else(|| format!("pack.instance_config 引用了未知实例 {name}"))?;
+            let config = config
+                .as_table()
+                .ok_or_else(|| format!("pack.instance_config.{name} 需要 TOML 表"))?;
+            instance.insert("config".into(), Value::Table(config.clone()));
+        }
+    }
     let name = string(&settings, "name")?
         .map(str::to_owned)
         .unwrap_or_else(|| project.file_name().unwrap().to_string_lossy().into_owned());
@@ -146,6 +218,8 @@ async fn plan(options: &Options) -> Result<Plan> {
     Ok(Plan {
         project,
         configuration,
+        build,
+        web_outputs: BTreeMap::new(),
         settings,
         name,
         version,
@@ -219,6 +293,7 @@ fn configuration(plan: &mut Plan, deployment: &Path, app: bool) -> Result<()> {
         .expect("已解析 pack 表");
     settings.insert("app".into(), Value::Boolean(app));
     settings.insert("identifier".into(), Value::String(plan.identifier.clone()));
+    settings.remove("instance_config");
     if let Some(paths) = settings
         .get_mut("runtime_paths")
         .and_then(Value::as_table_mut)

@@ -167,7 +167,7 @@ fn reject_changed_candidate(artifacts: &Artifacts, project: &Path, reference: &s
             .contains("配置验证目录中缺少与候选完整字节相同的副本"),
         "{rejected}"
     );
-    assert_eq!(rejected["detail"]["committed"], false, "{rejected}");
+    assert_eq!(rejected["state"], "rejected", "{rejected}");
     assert_eq!(
         instance(&active(project, "store"), "store").unwrap()["revision"],
         revision
@@ -225,10 +225,16 @@ fn native_checkpoints_recover_after_core_sigkill() {
     fs::write(&config, toml::to_string_pretty(&settings).unwrap()).unwrap();
     let mut core = Process::start_binary(&artifacts.tools.join("cordis"), &project, "before-kill");
     active(&project, "client");
-    assert_eq!(
-        send(&project, 1, "kv@1.0", "put", json!(["crash", [1, 3, 7]]))["ok"],
-        true
-    );
+    let mut id = 0;
+    until("原生 KV 在检查点解冻后接纳写入", || {
+        id += 1;
+        let reply = send(&project, id, "kv@1.0", "put", json!(["crash", [1, 3, 7]]));
+        if reply["code"] == 4 && reply["value"] == "组件正在导出状态" {
+            return None;
+        }
+        assert_eq!(reply["ok"], true, "{reply}");
+        Some(())
+    });
     let expected = cordis_up::Value::Map(vec![(
         "entries".into(),
         cordis_up::Value::Map(vec![(
@@ -256,7 +262,7 @@ fn native_checkpoints_recover_after_core_sigkill() {
         Process::start_binary(&artifacts.tools.join("cordis"), &project, "after-kill");
     active(&project, "client");
     assert_eq!(
-        send(&project, 2, "kv@1.0", "get", json!(["crash"]))["value"],
+        send(&project, id + 1, "kv@1.0", "get", json!(["crash"]))["value"],
         json!([1, 3, 7])
     );
     assert_eq!(manage(&project, 3, "shutdown", json!([]))["ok"], true);

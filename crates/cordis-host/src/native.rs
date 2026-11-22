@@ -1,14 +1,10 @@
 //! DOC-15 CP-1、CP-8：原生代码在独立执行器轮询和析构，协议读写保持响应。
 
-mod monitor;
-pub(crate) use monitor::method;
-
 use cordis_abi::{Error, Result};
 use std::{
     future::Future,
     ops::Deref,
     pin::Pin,
-    sync::Arc,
     task::{Context, Poll},
 };
 
@@ -17,7 +13,6 @@ use std::{
 pub struct NativeExecutor {
     runtime: tokio::runtime::Handle,
     io: tokio::runtime::Handle,
-    monitor: Arc<monitor::Monitor>,
 }
 
 pub struct RuntimeOwner(Option<tokio::runtime::Runtime>);
@@ -55,16 +50,7 @@ impl Drop for RuntimeOwner {
 
 impl NativeExecutor {
     pub fn new(runtime: tokio::runtime::Handle, io: tokio::runtime::Handle) -> Self {
-        let monitor = monitor::Monitor::new(runtime.metrics().num_workers());
-        Self {
-            runtime,
-            io,
-            monitor,
-        }
-    }
-
-    pub fn group(&self, group: String) {
-        self.monitor.group(group);
+        Self { runtime, io }
     }
 
     /// DOC-15 CP-8：原生 Future 在独立线程池执行，调用方等待结果或取消。
@@ -81,13 +67,9 @@ impl NativeExecutor {
         F: Future<Output = Result<T>> + Send + 'static,
         T: Send + 'static,
     {
-        let task = self.runtime.spawn(self.monitor.clone().track(future));
+        let task = self.runtime.spawn(future);
         let cancellation = cancellable.then(|| Cancellation(task.abort_handle()));
-        NativeTask {
-            task,
-            cancellation,
-            monitor: self.monitor.clone(),
-        }
+        NativeTask { task, cancellation }
     }
 
     /// HostV1允许插件从运行时任务和系统线程调用同步方法。
@@ -97,7 +79,6 @@ impl NativeExecutor {
 
     /// ADR-0051：在调用线程执行同步体，Tokio 将该线程的工作交给替代线程。
     pub fn block_in_place<T>(&self, body: impl FnOnce() -> T) -> T {
-        let _suspended = monitor::Suspension::enter();
         tokio::task::block_in_place(body)
     }
 
@@ -122,7 +103,6 @@ impl Cancellation {
 pub struct NativeTask<T> {
     task: tokio::task::JoinHandle<Result<T>>,
     cancellation: Option<Cancellation>,
-    monitor: Arc<monitor::Monitor>,
 }
 
 impl<T> NativeTask<T> {
@@ -174,9 +154,6 @@ impl<T: Send + 'static> Drop for Owned<T> {
 impl<T> Drop for NativeTask<T> {
     fn drop(&mut self) {
         if let Some(cancellation) = &self.cancellation {
-            if !self.task.is_finished() {
-                self.monitor.cancelled();
-            }
             cancellation.cancel();
         }
     }

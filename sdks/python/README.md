@@ -11,6 +11,8 @@ python -m pip install ./sdks/python
 cordis idl gen plugins/kv-api/kv.wit --lang python --output bindings.py
 ```
 
+`--lang python` 将通用值编解码嵌入生成文件。运行目录已携带同版 Python SDK 时，可用 `--lang python-sdk` 让生成文件共用 `cordis_sdk.wit`。官方 Python KV、计数和 HTTP 插件采用该选项，各绑定的接口与类型图随所属插件分发。
+
 Component 声明组件名称、apply、依赖、提供接口和状态模式。run 接受插件名称与组件列表，进入 asyncio 事件循环。核心在依赖满足时执行 apply(context, config)，组件通过 Context 贡献服务、效应和监听器。
 
 ```python

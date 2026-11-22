@@ -2,7 +2,7 @@
 import { Decoder, Encoder, setSizeLimits } from "cbor-x";
 import { CordisError, fields, identifier, type Identifier, type Fields } from "./types.js";
 import type { Payload } from "./bindings.js";
-import { currentSignal, type Runtime } from "./runtime.js";
+import { currentSignal, supportsInvocationBudget, type Runtime } from "./runtime.js";
 import { checkValue, type ValueLimits } from "./budget.js";
 
 interface Pending {
@@ -48,6 +48,8 @@ export class Connection {
     private timeouts = 0;
     private writes = 0;
     private tail: Promise<void> = Promise.resolve();
+    private peerBudget = false;
+    private readonly deadlines = new WeakMap<AbortSignal, number>();
 
     constructor(
         readonly runtime: Runtime,
@@ -101,14 +103,16 @@ export class Connection {
         const signal = currentSignal();
         if (signal?.aborted) {
             this.runtime.releaseExports(offers);
-            throw new CordisError(7, "调用已取消");
+            throw signal.reason instanceof CordisError ? signal.reason : new CordisError(7, "调用已取消");
         }
         if (this.pending.size >= this.limits.maxInflight) {
             this.runtime.releaseExports(offers);
             throw new CordisError(8, "在途请求额度耗尽");
         }
         const id = this.next++;
-        const deadline = performance.now() + this.limits.timeoutMs;
+        const started = performance.now();
+        const local = started + this.limits.timeoutMs;
+        const deadline = Math.min(local, (signal && this.deadlines.get(signal)) ?? local);
         let writing = false;
         let cancelled = false;
         let rejectResponse: (error: unknown) => void;
@@ -119,8 +123,9 @@ export class Connection {
             rejectResponse = reject;
             this.pending.set(id, { resolve, reject });
             cancel = () => {
+                if (cancelled) return;
                 cancelled = true;
-                reject(new CordisError(7, "调用已取消"));
+                reject(signal?.reason instanceof CordisError ? signal.reason : new CordisError(7, "调用已取消"));
                 if (writing) this.notifySoon("cancel", { id });
             };
             signal?.addEventListener("abort", cancel, { once: true });
@@ -129,10 +134,10 @@ export class Connection {
                 cancelled = true;
                 reject(new CordisError(6, "请求超过截止时间"));
                 if (writing) this.notifySoon("cancel", { id });
-                if (++this.timeouts >= this.limits.consecutiveTimeouts)
+                if (deadline === local && ++this.timeouts >= this.limits.consecutiveTimeouts)
                     this.fail(new CordisError(6, "连续请求超时"));
             };
-            timer = setTimeout(expire, this.limits.timeoutMs);
+            timer = setTimeout(expire, Math.max(0, deadline - started));
         });
         // 截止时间同时覆盖写入等待，结果 Promise 从创建起即具有失败接收方。
         const completed = result.finally(() => {
@@ -141,6 +146,9 @@ export class Connection {
             signal?.removeEventListener("abort", cancel);
         });
         try {
+            if (method === "invoke" && this.peerBudget) {
+                params = { ...params, budget_ms: Math.max(1, Math.floor(deadline - performance.now())) };
+            }
             const sent = this.send({ request: { id, method, params } }, offers, () => {
                 if (performance.now() >= deadline) expire();
                 writing = !cancelled;
@@ -261,8 +269,25 @@ export class Connection {
         if (this.running.size >= this.limits.maxInflight)
             throw new CordisError(8, "入站请求额度耗尽");
         const abort = new AbortController();
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        if (body.method === "invoke" && supportsInvocationBudget()) {
+            const budget = fields(body.params).budget_ms;
+            if (budget !== undefined) {
+                const integer = typeof budget === "bigint" || Number.isSafeInteger(budget);
+                if (!integer || budget < 0 || budget > 0xFFFF_FFFF_FFFF_FFFFn)
+                    throw new CordisError(2, "调用预算需要 u64 毫秒值");
+                this.peerBudget = true;
+                const duration = Math.min(Number(budget), this.limits.timeoutMs);
+                this.deadlines.set(abort.signal, performance.now() + duration);
+                const expired = () => abort.abort(new CordisError(6, "服务调用超过截止时间"));
+                if (duration === 0) expired();
+                else timer = setTimeout(expired, duration);
+            }
+        }
         this.running.set(id, { method: body.method, abort });
-        void this.execute(id, body, abort.signal).catch((error) => this.fail(error));
+        void this.execute(id, body, abort.signal)
+            .finally(() => clearTimeout(timer))
+            .catch((error) => this.fail(error));
     }
 
     private async execute(id: Identifier, body: Fields, signal: AbortSignal): Promise<void> {
@@ -271,9 +296,13 @@ export class Connection {
         try {
             let result: object;
             try {
+                if (signal.aborted) throw signal.reason;
                 const response = await this.runtime.request(body.method, payload, signal);
                 offers = response.offers;
-                result = { ok: response.value };
+                const value = body.method === "hello" && supportsInvocationBudget()
+                    ? { ...(response.value as object), invoke_budget_v1: true }
+                    : response.value;
+                result = { ok: value };
             } catch (problem) {
                 const error =
                     problem instanceof CordisError

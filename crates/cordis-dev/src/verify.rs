@@ -108,6 +108,9 @@ async fn prepare(project: &Path, source: &Path, options: &Options) -> Result<Dep
     let component = select(&subject, options.component.as_deref())?;
     let suite_component = select(&contract, options.suite_component.as_deref())?;
     let interfaces = covered(component, suite_component)?;
+    if interfaces.is_empty() {
+        return Err("套件注入接口与被测组件提供接口缺少交集".into());
+    }
     let configuration = match &options.config {
         Some(path) => toml::from_str(std::str::from_utf8(&receipts::read(path)?)?)?,
         None => Table::new(),
@@ -147,7 +150,10 @@ fn select<'a>(plugin: &'a payload::Plugin, name: Option<&str>) -> Result<&'a pay
 }
 
 /// DOC-11 §3/§8.3：套件声明的接口与被测提供声明相交，印记记录覆盖的接口主版本。
-fn covered(subject: &payload::Component, suite: &payload::Component) -> Result<Vec<String>> {
+pub(super) fn covered(
+    subject: &payload::Component,
+    suite: &payload::Component,
+) -> Result<Vec<String>> {
     let mut result = Vec::new();
     for provided in &subject.provides {
         let major = interface_major(provided)?;
@@ -161,9 +167,6 @@ fn covered(subject: &payload::Component, suite: &payload::Component) -> Result<V
     }
     result.sort();
     result.dedup();
-    if result.is_empty() {
-        return Err("套件注入接口与被测组件提供接口缺少交集".into());
-    }
     Ok(result)
 }
 

@@ -14,11 +14,11 @@
 
 ## 2 构建与部署目录
 
-目标工具接受部署清单、源码工作区、目标平台、锁定运行时和应用资源声明。相对路径从声明它的清单解析。例如应用可以有 `plugins/Cargo.toml`、`web/` 与 `deployment/cordis.toml`。Cargo 工作区负责报告编译产物，网页工程交付静态资源，部署描述给出实例及其来源。应用只维护拥有这些事实的文件。
+`cordis pack --project deployment --target aarch64-apple-darwin` 读取 `deployment/cordis.toml`。格式 2 的 `build.workspace` 可指向其他目录的 Cargo 清单。构建消息给出该工作区实际生成的可执行文件和动态库，部署目录中的清单给出各实例及其来源。
 
 ### 新清单的构建输入
 
-下例是目标格式的目录约定。部署清单放在 `deployment/cordis.toml`，业务 Cargo 工作区与网页目录是它的同仓库兄弟目录。独立构建步骤使用明确的参数数组，工作目录按各自字段定位。
+下例在同一应用中装配原生存储插件与网页笔记插件。Cargo 工作区和网页工程均位于部署目录之外。
 
 ```toml
 format_version = 2
@@ -26,14 +26,28 @@ format_version = 2
 [build]
 workspace = "../plugins/Cargo.toml"
 
+[build.plugins.storage]
+package = "app-storage"
+target = "storage_native"
+
 [[build.web]]
 name = "notes"
 directory = "../web/notes"
 command = ["npm", "run", "build"]
 output = "dist"
+
+[instance.store]
+plugin = "storage"
+
+[instance.notes]
+plugin = "notes"
 ```
 
-`workspace` 相对部署清单解析。`directory` 指向网页工程，`output` 相对该工程解析。Rust 插件通过 Cargo 包名和目标身份选定产物；目标平台与配置来自本次构建。部署引用、源包身份和实际产物一一对应。两个候选产物都满足同一声明时，工具报告歧义并列出候选，应用通过显式源身份消除歧义。预建插件直接声明已交付的清单与版本，不触发源码构建。
+`build.plugins` 的键对应实例的 `plugin` 引用，`package` 是工作区包名，`target` 是 Cargo 的库或可执行目标名。省略选择器时，工具按清单中的文件名选择唯一产物。同名目标由各自独立的 Cargo 编译目录承载，打包遇到歧义会报告包名。采用预建插件的格式 2 部署可省略 `build.workspace`。
+
+网页构建项的 `name` 同样对应 `plugin` 引用。`directory` 以部署目录为基准，工具在该目录直接运行 `command` 中的程序及参数，把 `output` 目录内容装入插件清单指定的 `web.assets`。发布配置移除源码构建输入。每份经 Cargo 构建的发布插件在同一目录保存 `cordis-build.json`，其中记录包名、包版本、Cargo 目标、目标平台、release 配置及编译器报告的包特性。
+
+`[pack.instance_config.<实例名>]` 为发布包指定实例的完整 `config` 表。开发工具在装配前应用此配置，把实际实例参数写入包内的 `cordis.toml`。生成项目用 `[pack.instance_config.watch]` 将发布环境的 `paths` 设为空数组，watch 继续监视部署配置文件。
 
 ## 3 单次装配
 
@@ -51,7 +65,7 @@ output = "dist"
 
 ## 5 现行入口
 
-发布版 `pack` 在传入项目根查找 `Cargo.toml`，也接受已有的装配目录。应用将源码与部署目录分开时，当前流程需显式交接编译产物。目标设计将源码工作区位置作为公开输入，由工具完成交接。[现行源码](../crates/cordis-dev/src/pack/artifacts.rs) · [使用指南](guide.md)
+旧格式在传入项目根查找 `Cargo.toml`，也接受已有的装配目录。格式 2 按上述清单定位构建输入。两种格式共用描述符探测、契约验证、代码签名和归档流程。[构建实现](../crates/cordis-dev/src/pack/artifacts.rs) · [使用指南](guide.md)
 
 ## 6 错误与资源
 

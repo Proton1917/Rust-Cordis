@@ -1,11 +1,26 @@
 //! DOC-15 §11、ADR-0041：网页状态与后端部署共用事务，资源和页面由唯一内核管理。
 
 use super::*;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 pub(super) enum WebChange {
     Update(String, cordis_web_deployment::Change),
-    Add(cordis_web_deployment::Spec),
+    Add {
+        spec: cordis_web_deployment::Spec,
+        mounted: AtomicBool,
+    },
     Remove(String, cordis_web_deployment::Change),
+}
+
+pub(super) enum PreparationFailure {
+    Rejected(WireError),
+    RecoveryRequired(WireError, Vec<WebChange>),
+}
+
+impl From<WireError> for PreparationFailure {
+    fn from(problem: WireError) -> Self {
+        Self::Rejected(problem)
+    }
 }
 
 impl Controller {
@@ -13,7 +28,7 @@ impl Controller {
     pub(super) async fn prepare_web_targets(
         &self,
         candidates: Vec<(String, Option<cordis_web_deployment::Spec>, bool)>,
-    ) -> Result<Vec<WebChange>> {
+    ) -> std::result::Result<Vec<WebChange>, PreparationFailure> {
         let mut changes = Vec::new();
         for (name, next, remount) in candidates {
             let result = self
@@ -21,8 +36,11 @@ impl Controller {
                 .await;
             if let Err(problem) = result {
                 return match self.rollback_web_changes(&changes).await {
-                    Ok(()) => Err(problem),
-                    Err(recovery) => Err(recovery_error("网页准备", problem, recovery)),
+                    Ok(()) => Err(PreparationFailure::Rejected(problem)),
+                    Err(recovery) => Err(PreparationFailure::RecoveryRequired(
+                        recovery_error("网页准备", problem, recovery),
+                        changes,
+                    )),
                 };
             }
         }
@@ -52,7 +70,10 @@ impl Controller {
                     ));
                 }
                 if let Some(candidate) = candidate {
-                    changes.push(WebChange::Add(candidate));
+                    changes.push(WebChange::Add {
+                        spec: candidate,
+                        mounted: AtomicBool::new(false),
+                    });
                 }
             }
         }
@@ -64,8 +85,9 @@ impl Controller {
         for change in changes {
             match change {
                 WebChange::Update(name, change) => self.web.finish_change(name, change).await?,
-                WebChange::Add(spec) => {
+                WebChange::Add { spec, mounted } => {
                     self.web.mount(spec.clone())?;
+                    mounted.store(true, Ordering::Release);
                     self.web.wait_mounted(&spec.instance).await?;
                 }
                 WebChange::Remove(name, _) => self.web.remove(name).await?,
@@ -91,7 +113,10 @@ impl Controller {
                 WebChange::Update(name, change) | WebChange::Remove(name, change) => {
                     self.web.rollback_change(name, change).await
                 }
-                WebChange::Add(spec) => self.web.remove(&spec.instance).await,
+                WebChange::Add { spec, mounted } if mounted.load(Ordering::Acquire) => {
+                    self.web.remove(&spec.instance).await
+                }
+                WebChange::Add { .. } => Ok(()),
             };
             if let Err(problem) = result {
                 failure.get_or_insert(problem);
@@ -137,37 +162,6 @@ impl Controller {
             config: Value::serialized(&settings.config).map_err(parameter)?,
             view: view.clone(),
         })
-    }
-
-    /// DOC-15 §11.1：纯网页父对象在部署视图中挂载，其句柄由网页部署持有。
-    pub(super) fn mount_web(
-        &mut self,
-        name: &str,
-        settings: InstanceSettings,
-        package: Package,
-    ) -> Result<()> {
-        let view = self.mount_view(&settings)?;
-        self.web
-            .mount(Self::web_spec(name, &settings, &package, &view)?)?;
-        let group = settings
-            .group
-            .clone()
-            .unwrap_or_else(|| package.name.clone());
-        self.diagnostics
-            .lock()
-            .active_references
-            .insert(name.into(), package.reference.clone());
-        self.mounted.insert(
-            name.into(),
-            Mounted {
-                settings,
-                package,
-                group,
-                _view: view,
-                manage: None,
-            },
-        );
-        Ok(())
     }
 }
 

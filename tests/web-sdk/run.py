@@ -13,6 +13,9 @@ import tomllib
 
 from playwright.async_api import async_playwright
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from management import MANAGE, completed_reply, terminal_outcome
+
 
 def scenario_module(options, name):
     directory = Path(__file__).parent if name in ("fullstack", "dependencies") else options.modules
@@ -63,15 +66,23 @@ class Case:
             await asyncio.sleep(0.05)
         raise TimeoutError(description)
 
-    async def manage(self, method, arguments):
+    async def manage(self, method, arguments, *, wait_for_result=True):
+        started = time.monotonic()
         self.serial += 1
         filename = f"{self.serial:03}.json"
         path = self.project / "commands" / filename
         staged = path.with_suffix(".next")
-        staged.write_text(json.dumps({"interface": "cordis.manage@1.1", "method": method, "args": arguments}))
+        staged.write_text(json.dumps({"interface": MANAGE, "method": method, "args": arguments}))
         staged.rename(path)
         result = self.project / "results" / filename
-        return await self.wait(lambda: json.loads(result.read_text()) if result.exists() else None, f"管理调用{method}完成")
+        reply = await self.wait(lambda: json.loads(result.read_text()) if result.exists() else None, f"管理调用 {method} 应答")
+        if not reply["ok"] or method == "install" or not wait_for_result:
+            return reply
+        ticket = reply["value"]["id"]
+        remaining = max(0, 35 - (time.monotonic() - started))
+        outcome = await self.wait(lambda: terminal_outcome(self.status(), "admin", ticket),
+                                  f"管理调用 {method} 票据 {ticket} 达到终态", timeout=remaining)
+        return completed_reply(reply, outcome)
 
     async def session(self):
         response = await self.context.request.get(self.url + "_cordis/session.json")
@@ -106,7 +117,7 @@ class Case:
         if self.options.scenario == "channel-faults":
             configuration += 'invoke_timeout_ms=200\n'
         configuration += '[instance.http]\nplugin="http"\nforwarder=true\n[instance.notes]\nplugin="web-notes"\n'
-        configuration += '[instance.admin]\nplugin="fixture-admin"\ncomponent="admin"\ngrants={"cordis.manage@1"=["*"]}\nconfig={commands=' + json.dumps(str(self.project / "commands")) + ',results=' + json.dumps(str(self.project / "results")) + '}\n'
+        configuration += '[instance.admin]\nplugin="fixture-admin"\ncomponent="admin"\ngrants={"cordis.manage@2"=["*"]}\nconfig={commands=' + json.dumps(str(self.project / "commands")) + ',results=' + json.dumps(str(self.project / "results")) + '}\n'
         if self.options.scenario in ("fullstack", "batch", "watch-replace"):
             shutil.copytree(self.examples / "plugins/kv-dashboard-rust", plugins / "store")
             shutil.copy2(self.tools / "libkv_mem.dylib", plugins / "store/libkv_mem.dylib")

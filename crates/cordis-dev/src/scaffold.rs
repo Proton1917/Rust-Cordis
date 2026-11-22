@@ -209,7 +209,11 @@ fn write_new(path: &Path, content: &str) -> Result<()> {
     Ok(())
 }
 
-const CONFIGURATION: &str = r#"requires_core = ">=0.1.5,<0.2.0"
+const CONFIGURATION: &str = r#"format_version = 2
+requires_core = ">=0.1.10,<0.2.0"
+
+[build]
+workspace = "Cargo.toml"
 
 [runtime]
 plugin_dir = ".cordis/plugins"
@@ -218,8 +222,11 @@ source_dirs = ["plugins", "target/debug"]
 [instance.watch]
 plugin = "watch"
 component = "watch"
-grants = { "cordis.manage@1" = ["install", "replace_batch", "reload"] }
+grants = { "cordis.manage@2" = ["install", "replace_batch", "reload"] }
 config = { paths = ["target/debug"], debounce_ms = 300 }
+
+[pack.instance_config.watch]
+paths = []
 "#;
 
 const README: &str = r#"# Cordis 插件项目
@@ -227,6 +234,8 @@ const README: &str = r#"# Cordis 插件项目
 运行 `cargo build --target-dir target` 编译插件，然后运行 `cordis run`。构建参数使产物位于本项目的 `target/debug`，并覆盖全局 `CARGO_TARGET_DIR`。`app` 激活时发送日志事件，`watch` 监听构建产物和 `cordis.toml`，通过管理接口请求热替换和配置重读。运行状态可通过 `cordis status` 查看；`console-log` 插件把日志事件写入终端。
 
 运行 `cordis new-plugin hello --rust` 新建插件。修改插件后再次运行 `cargo build --target-dir target`；正在运行的系统会装载新构建。实例配置位于 `cordis.toml`，运行状态可通过 `cordis status` 查看。
+
+运行 `cordis pack --project . --target aarch64-apple-darwin` 生成 macOS Apple Silicon 发布包。打包器按 `build.workspace` 构建发布产物，包内的 watch 监视随包交付的 `cordis.toml`。将归档解开到部署目录，进入该目录运行 `./cordis run`。
 
 `interfaces/` 保存接口定义，`contracts/` 保存契约套件。`state/` 保存状态与检查点，`.cordis/` 保存插件版本副本。
 "#;

@@ -3,13 +3,17 @@ from pathlib import Path
 import shutil
 import signal
 import subprocess
+import sys
 import time
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from management import MANAGE, completed_reply, terminal_outcome
 from support import EVIDENCE, manifest, test_environment
 
 
-def wait_for(process, operation, description):
-    deadline = time.monotonic() + 20
+def wait_for(process, operation, description, deadline=None):
+    if deadline is None:
+        deadline = time.monotonic() + 20
     while True:
         value = operation()
         if value is not None:
@@ -40,7 +44,7 @@ def execute():
     for name, role in (("admin", "admin"), ("client", "kv-client")):
         config += f'[instance.{name}]\nplugin="fixture-{role}"\ncomponent="{role}"\n'
         if name == "admin":
-            config += 'grants={"cordis.manage@1"=["*"]}\n'
+            config += 'grants={"cordis.manage@2"=["*"]}\n'
         config += (
             "config={commands="
             + json.dumps(str(project / (name + "-commands")))
@@ -69,24 +73,36 @@ def execute():
             )
             serial = 0
 
-            def command(target, method, args):
+            def result_for(ticket):
+                path = project / "state/status.json"
+                snapshot = json.loads(path.read_text()) if path.exists() else None
+                return terminal_outcome(snapshot, "admin", ticket)
+
+            def command(target, method, args, *, wait_for_result=True):
                 nonlocal serial
+                deadline = time.monotonic() + 20
                 serial += 1
                 path = project / (target + "-commands") / f"{serial:03}.json"
                 staged = path.with_suffix(".next")
-                interface = "kv@1.0" if target == "client" else "cordis.manage@1.1"
+                interface = "kv@1.0" if target == "client" else MANAGE
                 staged.write_text(
                     json.dumps({"interface": interface, "method": method, "args": args})
                 )
                 staged.rename(path)
                 response = project / (target + "-results") / path.name
-                return wait_for(
+                reply = wait_for(
                     process,
                     lambda: (
                         json.loads(response.read_text()) if response.exists() else None
                     ),
                     f"{method}回复超时",
+                    deadline,
                 )
+                if target != "admin" or method == "install" or not reply["ok"] or not wait_for_result:
+                    return reply
+                ticket = reply["value"]["id"]
+                outcome = wait_for(process, lambda: result_for(ticket), f"{method}票据终态超时", deadline)
+                return completed_reply(reply, outcome)
 
             def counter():
                 response = command("client", "get", ["count"])
@@ -119,23 +135,10 @@ def execute():
                 "admin",
                 "replace_batch",
                 [[["store", "libkv_mem.dylib"]], False, "python-native"],
+                wait_for_result=False,
             )
-            assert ticket["ok"], ticket
-
-            def batch_outcome():
-                snapshot = json.loads((project / "state/status.json").read_text())
-                return next(
-                    (
-                        entry
-                        for entry in snapshot["last_batch"]
-                        if entry["caller"] == "admin"
-                        and entry["id"] == "python-native"
-                        and entry["state"] in ("succeeded", "rejected")
-                    ),
-                    None,
-                )
-
-            outcome = wait_for(process, batch_outcome, "批次替换结果超时")
+            assert ticket["ok"] and ticket["value"]["id"] == "python-native", ticket
+            outcome = wait_for(process, lambda: result_for("python-native"), "批次替换结果超时")
             assert outcome["state"] == "succeeded", outcome
             batch_count = counter()
             assert batch_count >= native_count, (native_count, batch_count)

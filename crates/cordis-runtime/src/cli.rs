@@ -54,6 +54,11 @@ pub struct StatusOptions {
     /// 输出带版本的已确认程序绑定，适用于运行期间和停机后。
     #[arg(long)]
     pub offline: bool,
+    /// 按真实调用实例与票据读取最近发布的管理结果。
+    #[arg(long, requires = "caller", conflicts_with = "offline")]
+    pub ticket: Option<String>,
+    #[arg(long, requires = "ticket")]
+    pub caller: Option<String>,
 }
 
 impl StatusOptions {
@@ -62,7 +67,17 @@ impl StatusOptions {
         if self.offline {
             offline_status(&self.configuration.config)
         } else {
-            status(&self.configuration.config)
+            let state = read_status(&self.configuration.config)?;
+            if let (Some(caller), Some(id)) = (&self.caller, &self.ticket) {
+                let result = state["last_batch"].as_array().and_then(|rows| {
+                    rows.iter().find(|row| {
+                        row["caller"].as_str() == Some(caller) && row["id"].as_str() == Some(id)
+                    })
+                });
+                serde_json::to_string_pretty(&result).map_err(parameter)
+            } else {
+                serde_json::to_string_pretty(&state).map_err(parameter)
+            }
         }
     }
 }
@@ -146,6 +161,10 @@ pub fn forward(arguments: &[OsString]) -> Result<i32> {
 
 /// DOC-11 §10：按配置定位已发布状态文件，读取和 JSON 格式错误直接返回。
 pub fn status(configuration: &Path) -> Result<String> {
+    serde_json::to_string_pretty(&read_status(configuration)?).map_err(parameter)
+}
+
+fn read_status(configuration: &Path) -> Result<serde_json::Value> {
     let (_, directory) = status_location(configuration)?;
     let value: serde_json::Value =
         serde_json::from_slice(&storage::read(&directory.join("status.json"))?)
@@ -156,7 +175,7 @@ pub fn status(configuration: &Path) -> Result<String> {
         None if matches!(value["phase"].as_str(), Some("stopped" | "shutdown-failed")) => {}
         None => return Err(parameter("快照属于先前的核心，当前运行状态无法确认")),
     }
-    serde_json::to_string_pretty(&value).map_err(parameter)
+    Ok(value)
 }
 
 /// ADR-0054：公开最近持久确认的绑定，读取失败直接返回，路径按原记录展开。

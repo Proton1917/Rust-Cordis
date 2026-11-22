@@ -3,10 +3,13 @@ import asyncio
 import io
 import struct
 import sys
+from contextvars import ContextVar
 
 import cbor2
 
 from .errors import CordisError
+
+_invoke_deadline = ContextVar("invoke_deadline", default=None)
 
 
 class Connection:
@@ -17,6 +20,7 @@ class Connection:
         self.max_frame = max_frame
         self.max_inflight = max_inflight
         self.timeout = timeout
+        self.peer_budget = False
         self.pending = {}
         self.running = {}
         self.notifications = set()
@@ -49,12 +53,20 @@ class Connection:
         request_id = None
         delivered = False
         try:
-            async with asyncio.timeout(self.timeout):
+            loop = asyncio.get_running_loop()
+            deadline = loop.time() + self.timeout
+            parent = _invoke_deadline.get()
+            if parent is not None:
+                deadline = min(parent, deadline)
+            async with asyncio.timeout_at(deadline):
                 async with self.capacity:
                     request_id = self.next_id
                     self.next_id += 1
-                    future = asyncio.get_running_loop().create_future()
+                    future = loop.create_future()
                     self.pending[request_id] = future
+                    if method == "invoke" and self.peer_budget:
+                        remaining = max(1, int((deadline - loop.time()) * 1000))
+                        params = {**params, "budget_ms": remaining}
                     await self.send(
                         {
                             "request": {
@@ -188,7 +200,7 @@ class Connection:
         if len(self.running) >= self.max_inflight:
             raise CordisError(8, "入站请求额度耗尽")
         payload = self.runtime.payload(body["params"])
-        task = asyncio.create_task(self._execute(body, payload))
+        task = asyncio.create_task(self._execute(body, payload, asyncio.get_running_loop().time()))
         self.running[request_id] = (body["method"], task)
         task.add_done_callback(lambda finished: self._request_done(request_id, payload, finished))
 
@@ -204,11 +216,32 @@ class Connection:
             self.closed = True
             self.writer.close()
 
-    async def _execute(self, body, payload):
+    async def _execute(self, body, payload, received):
         offers = []
+        method = body["method"]
+        timeout = None
         try:
-            value, offers = await self.runtime.request(body["method"], payload)
+            deadline = None
+            if method == "invoke" and "budget_ms" in payload.value:
+                budget = payload.value["budget_ms"]
+                if type(budget) is not int or not 0 <= budget < 1 << 64:
+                    raise CordisError(2, "调用预算需要 u64 毫秒值")
+                self.peer_budget = True
+                deadline = received + min(self.timeout, budget / 1000)
+            token = _invoke_deadline.set(deadline)
+            try:
+                timeout = asyncio.timeout_at(deadline)
+                async with timeout:
+                    value, offers = await self.runtime.request(method, payload)
+            finally:
+                _invoke_deadline.reset(token)
+            if method == "hello":
+                value = {**value, "invoke_budget_v1": True}
             result = {"ok": value}
+        except TimeoutError as problem:
+            expired = timeout is not None and timeout.expired()
+            error = CordisError(6, "服务调用超过截止时间") if expired else CordisError(1, str(problem))
+            result = {"error": error.wire()}
         except CordisError as problem:
             result = {"error": problem.wire()}
         except (ValueError, TypeError, KeyError) as problem:

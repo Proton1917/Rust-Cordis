@@ -6,6 +6,7 @@ import unittest
 
 import cbor2
 from cordis_sdk import CordisError, Runtime
+from cordis_sdk.bindings import Service
 
 
 def frame(message):
@@ -77,6 +78,64 @@ class CancellationTest(unittest.IsolatedAsyncioTestCase):
                 await plugin.wait()
         self.assertEqual(plugin.returncode, 0)
 
+    async def test_negotiated_deadline_reduces_the_nested_request_budget(self):
+        plugin = await asyncio.create_subprocess_exec(
+            sys.executable, "-B", __file__, "deadline-peer",
+            stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
+        )
+        try:
+            async with asyncio.timeout(5):
+                plugin.stdin.write(frame({"request": {"id": 1, "method": "hello", "params": {"protocol": 1}}}))
+                await plugin.stdin.drain()
+                hello = (await receive(plugin.stdout))["response"]
+                self.assertIs(hello["result"]["ok"]["invoke_budget_v1"], True)
+
+                params = {"object": 1, "method": "relay", "args": [], "refs": [], "budget_ms": 1000}
+                plugin.stdin.write(frame({"request": {"id": 2, "method": "invoke", "params": params}}))
+                await plugin.stdin.drain()
+                nested = (await receive(plugin.stdout))["request"]
+                self.assertEqual(nested["params"]["method"], "leaf")
+                self.assertIn(nested["params"]["budget_ms"], range(1, 981))
+                plugin.stdin.write(frame({"response": {"id": nested["id"], "result": {"ok": {"value": 91, "refs": []}}}}))
+                await plugin.stdin.drain()
+                result = (await receive(plugin.stdout))["response"]
+                self.assertEqual((result["id"], result["result"]["ok"]["value"]), (2, 91))
+        finally:
+            plugin.stdin.close()
+            try:
+                await asyncio.wait_for(plugin.wait(), 5)
+            except TimeoutError:
+                plugin.kill()
+                await plugin.wait()
+        self.assertEqual(plugin.returncode, 0)
+
+
+async def deadline_peer():
+    runtime = Runtime("relay", "1.0.0", [])
+    interface = "test.deadline@1.0"
+
+    class Relay:
+        async def relay(self):
+            await asyncio.sleep(0.02)
+            nested = await runtime.connection.request("invoke", {"object": 7, "method": "leaf", "args": [], "refs": []})
+            try:
+                return nested.value["value"]
+            finally:
+                nested.close()
+
+    class Binding:
+        SCHEMA = {"services": [{"interface": interface, "methods": [{"name": "relay"}]}]}
+
+        @staticmethod
+        async def dispatch(provider, transport, name, method, args):
+            return await getattr(provider, method)(*args)
+
+    runtime.offer(Service(Relay(), Binding, interface))
+    await runtime.connection.serve()
+
 
 if __name__ == "__main__":
-    unittest.main()
+    if sys.argv[1:] == ["deadline-peer"]:
+        asyncio.run(deadline_peer())
+    else:
+        unittest.main()

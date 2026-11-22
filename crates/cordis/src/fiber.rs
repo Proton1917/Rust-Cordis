@@ -148,6 +148,14 @@ impl FiberData {
             FiberState::Pending
         }
     }
+
+    fn is_settled(&self) -> bool {
+        !self.inertia && !self.queued && self.notifications == 0 && self.suspended.is_none()
+    }
+
+    pub(crate) fn is_current(&self) -> bool {
+        self.alive && self.target == self.running_epoch
+    }
 }
 
 /// T-LIF-8、T-LIF-9：组件实例的共享句柄。
@@ -271,9 +279,7 @@ impl Fiber {
     /// 且 `suspended.is_none()`：排队请求、迁移、状态传播及保留待重新提交的任务均已处理。
     /// `Pending` 和清理已结束的 `Failed` 状态也可达到稳定。
     pub fn is_settled(&self) -> bool {
-        let state = self.kernel.state.lock();
-        let data = &state.fibers[self.id];
-        !data.inertia && !data.queued && data.notifications == 0 && data.suspended.is_none()
+        self.kernel.state.lock().fibers[self.id].is_settled()
     }
     /// T-LIF-9：返回该实例自身的上下文，效应归属于当前实例。
     pub fn context(&self) -> Context {
@@ -281,6 +287,14 @@ impl Fiber {
             kernel: self.kernel.clone(),
             scope: self.scope.clone(),
         }
+    }
+
+    /// 取得挂载此实例的父视图，保留挂载点的隔离域与拦截配置。
+    pub fn parent_context(&self) -> Option<Context> {
+        self.scope.parent.as_ref().map(|scope| Context {
+            kernel: self.kernel.clone(),
+            scope: scope.clone(),
+        })
     }
     /// 返回当前组件定义的身份。
     ///
@@ -342,8 +356,7 @@ impl Fiber {
                 return Poll::Ready(Err(error));
             }
             let data = &mut state.fibers[fiber.id];
-            if !data.inertia && !data.queued && data.notifications == 0 && data.suspended.is_none()
-            {
+            if data.is_settled() {
                 return Poll::Ready(if report_error {
                     data.error.clone().map_or(Ok(()), Err)
                 } else {
@@ -501,8 +514,7 @@ impl Context {
     /// 组件可在值变为 `false` 后结束当前执行，由卸载流程恢复已经登记的效应。
     pub fn is_current(&self) -> bool {
         let state = self.kernel.state.lock();
-        let data = &state.fibers[self.scope.fiber];
-        data.alive && data.target == data.running_epoch
+        state.fibers[self.scope.fiber].is_current()
     }
 }
 
@@ -762,7 +774,7 @@ fn wake_stable(fiber: &Fiber) {
     let waiters = {
         let mut state = fiber.kernel.state.lock();
         let data = &mut state.fibers[fiber.id];
-        if data.queued || data.inertia || data.notifications != 0 || data.suspended.is_some() {
+        if !data.is_settled() {
             return;
         }
         std::mem::take(&mut data.waiters)
@@ -803,7 +815,7 @@ fn release_record(fiber: &Fiber) {
     let removed = {
         let mut state = fiber.kernel.state.lock();
         let data = &mut state.fibers[fiber.id];
-        if data.inertia || data.queued || data.notifications != 0 || data.suspended.is_some() {
+        if !data.is_settled() {
             return;
         }
         (

@@ -1,57 +1,136 @@
 //! DOC-15 §12.2、ADR-0036：插件引用改写为发布目录，验证结果继续绑定实际库字节。
 
-mod verification;
+pub(super) mod verification;
 
-use super::{Artifacts, Plan, absolute, artifacts, files, string};
-use crate::Result;
+use super::{Artifacts, Plan, absolute, artifacts, files, secrets, string};
+use crate::{Result, tooling};
 use cordis_up::payload;
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs,
     path::{Path, PathBuf},
+    sync::Arc,
+    time::Duration,
 };
 use toml::{Table, Value};
 
 pub struct Native {
     pub source: PathBuf,
     pub deployed: PathBuf,
-    pub descriptor: payload::Plugin,
+    pub descriptor: Arc<payload::Plugin>,
     pub instances: Vec<Table>,
 }
 
+pub(super) struct Source<'a> {
+    reference: String,
+    path: PathBuf,
+    manifest: Option<Table>,
+    library: Option<Library<'a>>,
+    instances: Vec<Table>,
+}
+
+struct Library<'a> {
+    source: PathBuf,
+    artifact: Option<&'a artifacts::Artifact>,
+    descriptor: Arc<payload::Plugin>,
+}
+
+/// 同一来源解析的清单、产物和描述符由资源过滤、装配与验证共用。
+pub(super) async fn prepare<'a>(
+    plan: &mut Plan,
+    artifacts: &'a Artifacts,
+    requested: BTreeMap<String, Vec<Table>>,
+) -> Result<Vec<Source<'a>>> {
+    let mut sources = Vec::with_capacity(requested.len());
+    for (reference, instances) in requested {
+        let path = source(plan, &reference)?;
+        let manifest: Option<Table> = if path.is_dir() {
+            Some(toml::from_str(&fs::read_to_string(
+                path.join("cordis-plugin.toml"),
+            )?)?)
+        } else {
+            None
+        };
+        let declared = match &manifest {
+            None => Some(path.clone()),
+            Some(manifest) if string(manifest, "socket")? == Some("native") => {
+                let library = string(manifest, "library")?.ok_or("原生清单需要 library")?;
+                Some(absolute(&path, Path::new(library)))
+            }
+            Some(_) => None,
+        };
+        let mut library = None;
+        if let Some(declared) = declared {
+            let (source, artifact) = native_library(plan, artifacts, &reference, &declared)?;
+            let canonical = source.canonicalize()?;
+            let descriptor = match plan.descriptions.entry(canonical) {
+                std::collections::btree_map::Entry::Occupied(entry) => entry.get().clone(),
+                std::collections::btree_map::Entry::Vacant(entry) => {
+                    plan.platform.binary(entry.key())?;
+                    let payload = tooling::describe(
+                        &plan.host,
+                        entry.key(),
+                        &plan.project,
+                        Duration::from_secs(30),
+                    )
+                    .await?;
+                    entry.insert(Arc::new(payload)).clone()
+                }
+            };
+            secrets::collect(plan, &descriptor, &instances)?;
+            library = Some(Library {
+                source,
+                artifact,
+                descriptor,
+            });
+        }
+        sources.push(Source {
+            reference,
+            path,
+            manifest,
+            library,
+            instances,
+        });
+    }
+    Ok(sources)
+}
+
 /// AU-12：同一引用复制一次，各实例保留组件、配置与隔离元数据。
-pub async fn assemble(
+pub(super) fn assemble(
     plan: &mut Plan,
     artifacts: &Artifacts,
+    sources: Vec<Source<'_>>,
     deployment: &Path,
     runtime_root: &BTreeMap<String, PathBuf>,
     app_binaries: Option<&Path>,
 ) -> Result<Vec<Native>> {
-    let requested = requested(&plan.configuration)?;
     let mut mapping = BTreeMap::new();
     let mut native = Vec::new();
-    for (index, (reference, instances)) in requested.into_iter().enumerate() {
-        let original = source(plan, &reference)?;
+    for (index, source) in sources.into_iter().enumerate() {
+        let reference = source.reference;
         let target = format!("plugin-{}", index + 1);
         let root = deployment.join("plugins").join(&target);
         fs::create_dir(&root)?;
-        let package = if original.is_dir() {
+        let manifest = source.manifest.unwrap_or_default();
+        let web_output = plan.web_outputs.get(&reference);
+        if web_output.is_some() && !manifest.contains_key("web") {
+            return Err(format!("网页构建 {reference} 需要 web 资源声明").into());
+        }
+        if let Some(library) = source.library {
+            assets(plan, &source.path, &root, &manifest, web_output)?;
+            native.push(native_package(library, &root, manifest, source.instances)?);
+        } else {
             directory(
                 plan,
                 artifacts,
-                &original,
+                &reference,
+                &source.path,
                 &root,
+                manifest,
+                web_output,
                 runtime_root,
                 app_binaries,
-            )
-            .await?
-        } else {
-            let source = native_library(plan, artifacts, &original)?;
-            native_package(plan, source, &root, None).await?
-        };
-        if let Some(mut package) = package {
-            package.instances = instances;
-            native.push(package);
+            )?;
         }
         mapping.insert(reference, target);
     }
@@ -60,7 +139,7 @@ pub async fn assemble(
 }
 
 /// 与运行时共用目录优先级，发布准备和装配解析同一个插件。
-pub(super) fn source(plan: &Plan, reference: &str) -> Result<PathBuf> {
+fn source(plan: &Plan, reference: &str) -> Result<PathBuf> {
     let paths = crate::tooling::plugin_paths(&plan.project, &plan.configuration, reference)?;
     if let Some(path) = paths
         .iter()
@@ -83,22 +162,23 @@ pub(super) fn source(plan: &Plan, reference: &str) -> Result<PathBuf> {
     Ok(paths[0].clone())
 }
 
-pub(super) fn native_library(
+fn native_library<'a>(
     plan: &Plan,
-    artifacts: &Artifacts,
+    artifacts: &'a Artifacts,
+    reference: &str,
     declared: &Path,
-) -> Result<PathBuf> {
+) -> Result<(PathBuf, Option<&'a artifacts::Artifact>)> {
     let name = artifacts::filename(declared)?;
     let filename = if declared.extension().is_some() {
         name
     } else {
         plan.platform.library(&name)
     };
-    Ok(artifacts
-        .libraries
-        .get(&filename)
-        .cloned()
-        .unwrap_or_else(|| declared.with_file_name(filename)))
+    let built = artifacts.select("cdylib", &filename, plan.build.plugins.get(reference))?;
+    let path = built
+        .map(|artifact| artifact.path.clone())
+        .unwrap_or_else(|| declared.with_file_name(filename));
+    Ok((path, built))
 }
 
 /// DOC-15 §12.2：按部署引用合并同一个库的组件配置。
@@ -135,75 +215,79 @@ fn references(configuration: &mut Table, mapping: &BTreeMap<String, String>) {
 }
 
 /// DOC-15 §9：目录清单保留原元数据，原生库与进程命令按其插口分别发布。
-async fn directory(
+fn directory(
     plan: &Plan,
     artifacts: &Artifacts,
+    reference: &str,
     source: &Path,
     destination: &Path,
+    mut manifest: Table,
+    web_output: Option<&PathBuf>,
     runtimes: &BTreeMap<String, PathBuf>,
     app_binaries: Option<&Path>,
-) -> Result<Option<Native>> {
-    let mut manifest: Table =
-        toml::from_str(&fs::read_to_string(source.join("cordis-plugin.toml"))?)?;
+) -> Result<()> {
     match string(&manifest, "socket")?.ok_or("插件清单需要 socket")? {
-        "native" => {
-            let declared = string(&manifest, "library")?.ok_or("原生清单需要 library")?;
-            let original = absolute(source, Path::new(declared));
-            let library = native_library(plan, artifacts, &original)?;
-            assets(plan, source, destination, &manifest)?;
-            native_package(plan, library, destination, Some(manifest)).await
-        }
         "process" => {
             if manifest.get("protocol").and_then(Value::as_integer) != Some(1) {
                 return Err("进程插件需要 UP/1".into());
             }
             if source.join("Cargo.toml").is_file() {
-                assets(plan, source, destination, &manifest)?;
+                assets(plan, source, destination, &manifest, web_output)?;
+            } else if let Some(output) = web_output {
+                let assets_path = web_assets(&manifest)?.ok_or("网页构建需要 web.assets")?;
+                let mut excluded = plan.secret_paths.clone();
+                let old = source.join(assets_path);
+                if old.try_exists()? {
+                    excluded.insert(old.canonicalize()?);
+                }
+                files::copy_tree(source, destination, &excluded)?;
+                files::copy_tree(output, &destination.join(assets_path), &plan.secret_paths)?;
             } else {
                 files::copy_tree(source, destination, &plan.secret_paths)?;
             }
             process_command(
                 plan,
                 artifacts,
+                reference,
                 source,
                 destination,
                 &mut manifest,
                 runtimes,
                 app_binaries,
             )?;
-            fs::write(
-                destination.join("cordis-plugin.toml"),
-                toml::to_string_pretty(&manifest)?,
-            )?;
-            Ok(None)
         }
         "web" => {
             if manifest.get("web").is_none() {
                 return Err("网页插件需要 web 资源声明".into());
             }
-            assets(plan, source, destination, &manifest)?;
-            fs::write(
-                destination.join("cordis-plugin.toml"),
-                toml::to_string_pretty(&manifest)?,
-            )?;
-            Ok(None)
+            if plan.build.plugins.contains_key(reference) {
+                return Err(format!("网页插件 {reference} 需要网页构建来源").into());
+            }
+            assets(plan, source, destination, &manifest, web_output)?;
         }
-        other => Err(format!("发布清单需要 native、process 或 web，收到 {other}").into()),
+        other => return Err(format!("发布清单需要 native、process 或 web，收到 {other}").into()),
     }
+    fs::write(
+        destination.join("cordis-plugin.toml"),
+        toml::to_string_pretty(&manifest)?,
+    )?;
+    Ok(())
 }
 
-async fn native_package(
-    plan: &Plan,
-    source: PathBuf,
+fn native_package(
+    library: Library<'_>,
     destination: &Path,
-    declared: Option<Table>,
-) -> Result<Option<Native>> {
-    let descriptor = plan
-        .descriptions
-        .get(&source.canonicalize()?)
-        .ok_or("原生发布描述符缺席")?
-        .clone();
-    let mut manifest = declared.unwrap_or_default();
+    mut manifest: Table,
+    instances: Vec<Table>,
+) -> Result<Native> {
+    let Library {
+        source,
+        artifact,
+        descriptor,
+    } = library;
+    if let Some(artifact) = artifact {
+        artifact.publish(destination)?;
+    }
     for (name, value) in [
         ("name", descriptor.name.as_str()),
         ("version", descriptor.version.as_str()),
@@ -224,15 +308,15 @@ async fn native_package(
         destination.join("cordis-plugin.toml"),
         toml::to_string_pretty(&manifest)?,
     )?;
-    Ok(Some(Native {
+    Ok(Native {
         source,
         deployed,
         descriptor,
-        instances: Vec::new(),
-    }))
+        instances,
+    })
 }
 
-fn assets(plan: &Plan, source: &Path, destination: &Path, manifest: &Table) -> Result<()> {
+fn web_assets(manifest: &Table) -> Result<Option<&Path>> {
     if let Some(web) = manifest.get("web").and_then(Value::as_table) {
         let assets = string(web, "assets")?.ok_or("web 需要 assets")?;
         let path = Path::new(assets);
@@ -243,8 +327,22 @@ fn assets(plan: &Plan, source: &Path, destination: &Path, manifest: &Table) -> R
         {
             return Err("发布 assets 需要插件目录内的相对路径".into());
         }
+        return Ok(Some(path));
+    }
+    Ok(None)
+}
+
+fn assets(
+    plan: &Plan,
+    source: &Path,
+    destination: &Path,
+    manifest: &Table,
+    built: Option<&PathBuf>,
+) -> Result<()> {
+    if let Some(path) = web_assets(manifest)? {
+        let original = source.join(path);
         files::copy_tree(
-            &source.join(path),
+            built.unwrap_or(&original),
             &destination.join(path),
             &plan.secret_paths,
         )?;
@@ -289,6 +387,7 @@ pub(super) fn runtimes(plan: &Plan, deployment: &Path) -> Result<BTreeMap<String
 fn process_command(
     plan: &Plan,
     artifacts: &Artifacts,
+    reference: &str,
     source: &Path,
     destination: &Path,
     manifest: &mut Table,
@@ -305,6 +404,10 @@ fn process_command(
         .filter(|value| !value.is_empty())
         .ok_or("command 需要启动程序")?;
     let name = artifacts::filename(Path::new(first))?;
+    let selection = plan.build.plugins.get(reference);
+    if selection.is_some() && matches!(name.as_str(), "python" | "python3" | "node") {
+        return Err(format!("进程插件 {reference} 的解释器与 Cargo 可执行目标冲突").into());
+    }
     let runtime = match name.as_str() {
         "python" | "python3" => runtimes.get("python"),
         "node" => runtimes.get("node"),
@@ -319,10 +422,11 @@ fn process_command(
         );
     } else if matches!(name.as_str(), "python" | "python3" | "node") {
         return Ok(());
-    } else if let Some(binary) = artifacts.binaries.get(&name) {
-        plan.platform.binary(binary)?;
+    } else if let Some(binary) = artifacts.select("bin", &name, selection)? {
+        plan.platform.binary(&binary.path)?;
         let executable = window_binary(&name, destination, app_binaries);
-        fs::copy(binary, &executable)?;
+        fs::copy(&binary.path, &executable)?;
+        binary.publish(destination)?;
         command[0] = Value::String(relative_command(&executable, destination)?);
     } else {
         let binary = absolute(source, Path::new(first));
@@ -362,13 +466,4 @@ fn relative_command(executable: &Path, directory: &Path) -> Result<String> {
     let relative =
         pathdiff::diff_paths(executable, directory).ok_or("进程程序与插件需要共同发布根目录")?;
     Ok(format!("./{}", relative.display()))
-}
-
-pub async fn verification(
-    plan: &Plan,
-    artifacts: &Artifacts,
-    deployment: &Path,
-    native: &[Native],
-) -> Result<()> {
-    verification::run(plan, artifacts, deployment, native).await
 }

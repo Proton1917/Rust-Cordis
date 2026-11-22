@@ -91,7 +91,7 @@ pub struct Deployment {
     owners: Mutex<BTreeMap<String, Owner>>,
     live: Mutex<BTreeMap<String, Arc<Live>>>,
     pages: Mutex<HashMap<u64, Page>>,
-    saved: Mutex<HashMap<String, payload::State>>,
+    saved: Mutex<HashMap<String, Arc<payload::State>>>,
     next: AtomicU64,
 }
 

@@ -1,6 +1,6 @@
 //! 类型化服务键、调用方句柄与元数据。
 
-use crate::{Context, Effect, Logger, Result, Task, kernel::ImplId};
+use crate::{AnyArc, Context, Effect, Logger, Result, Task, kernel::ImplId};
 use std::{fmt, marker::PhantomData, ops::Deref, sync::Arc};
 
 /// T-COE-9：定义服务键对应的元数据合并运算。
@@ -61,6 +61,19 @@ impl<K: ServiceKey> Deref for Scoped<K> {
     }
 }
 impl<K: ServiceKey> Scoped<K> {
+    pub(crate) fn from_binding(
+        caller: &Context,
+        value: &AnyArc,
+        definition: impl FnOnce() -> Context,
+    ) -> Option<Self> {
+        Some(Self {
+            value: value.downcast_ref::<Arc<K::Value>>()?.clone(),
+            caller: caller.clone(),
+            definition: definition(),
+            requester: caller.clone(),
+        })
+    }
+
     /// 返回原使用点上下文，服务方法在此登记效应及读取使用点的隔离、拦截视图。
     ///
     /// 经由 `dependency` 进行嵌套服务访问时，该上下文继续沿用原使用点。

@@ -4,6 +4,7 @@ pub use kv_mem_component::KvStore;
 
 cordis_sdk::export_plugin!(
     name = "kv",
+    tokio = false,
     version = env!("CARGO_PKG_VERSION"),
     components = [KvStore]
 );

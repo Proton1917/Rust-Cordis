@@ -5,6 +5,7 @@ import sys
 
 from aggregate import manifest
 from files import equal
+from management import request_admin
 from measure import fixture, runtime, save
 
 
@@ -49,11 +50,11 @@ def run(options):
         cancelled = project / "cancelled.json"
         addition = f'[instance.cancelled]\nplugin="libhttp_test_native.dylib"\ncomponent="stream-probe"\ngroup="cancelled"\nconfig={{output={json.dumps(str(project / "partial.bin"))},result={json.dumps(str(cancelled))},cancel=true,typed=false}}\n'
         (project / "cordis.toml").write_text(configuration + addition)
-        current.request("admin", "cordis.manage@1.1", "reload", [])
+        request_admin(current, "reload", [])
         current.wait(cancelled.exists, "中途释放流对象")
         report = json.loads(cancelled.read_text())
         assert report["cancelled"] and 0 < report["bytes"] <= 1048576
-        current.request("admin", "cordis.manage@1.1", "remove", ["cancelled"])
+        request_admin(current, "remove", ["cancelled"])
         sender = next(group["pid"] for group in current.status()["groups"] if group["name"] == "provider")
         def released():
             output = subprocess.run(["lsof", "-a", "-p", str(sender), "-F", "n", "--", str(source)], capture_output=True, text=True)

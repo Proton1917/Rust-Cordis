@@ -22,6 +22,78 @@ type Ended = watch::Receiver<Option<String>>;
 type Notification = (Connection, String, Payload);
 pub type HandlerFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
+const INVOKE_BUDGET_CAPABILITY: &str = "invoke_budget_v1";
+const INVOKE_BUDGET_FIELD: &str = "budget_ms";
+
+tokio::task_local! {
+    static INVOCATION_DEADLINE: Instant;
+}
+
+fn invocation_deadline() -> Option<Instant> {
+    INVOCATION_DEADLINE.try_with(|deadline| *deadline).ok()
+}
+
+/// 将当前调用的截止时间交给执行这个调用的另一个任务。
+pub fn inherit_invocation<F: Future>(call: F) -> impl Future<Output = F::Output> {
+    let deadline = invocation_deadline();
+    async move {
+        match deadline {
+            Some(deadline) => INVOCATION_DEADLINE.scope(deadline, call).await,
+            None => call.await,
+        }
+    }
+}
+
+/// 按本地预算和父调用截止时间中较早的时刻返回结果。
+pub async fn bound_invocation<T>(
+    duration: Duration,
+    call: impl Future<Output = Result<T>>,
+) -> Result<T> {
+    let local = deadline_after(duration)?;
+    let deadline = invocation_deadline().map_or(local, |parent| local.min(parent));
+    at_invocation_deadline(deadline, call).await
+}
+
+async fn at_invocation_deadline<T>(
+    deadline: Instant,
+    call: impl Future<Output = Result<T>>,
+) -> Result<T> {
+    if Instant::now() >= deadline {
+        return Err(error(6, "服务调用超过截止时间"));
+    }
+    INVOCATION_DEADLINE
+        .scope(deadline, timeout_at(deadline, call))
+        .await
+        .map_err(|_| error(6, "服务调用超过截止时间"))?
+}
+
+fn deadline_after(duration: Duration) -> Result<Instant> {
+    Instant::now()
+        .checked_add(duration)
+        .ok_or_else(|| error(2, "请求截止时间超过时钟表示范围"))
+}
+
+fn parameter_field<'a>(value: &'a Value, name: &str) -> Option<&'a Value> {
+    let Value::Map(fields) = value else {
+        return None;
+    };
+    fields
+        .iter()
+        .find_map(|(key, value)| (key.as_text() == Some(name)).then_some(value))
+}
+
+fn set_parameter(value: &mut Value, name: &str, parameter: Value) {
+    if let Value::Map(fields) = value {
+        match fields
+            .iter_mut()
+            .find(|(key, _)| key.as_text() == Some(name))
+        {
+            Some((_, value)) => *value = parameter,
+            None => fields.push((Value::Text(name.into()), parameter)),
+        }
+    }
+}
+
 /// CP-5：实现者在等待插件响应前释放自己的锁。
 pub trait Handler: Send + Sync + 'static {
     /// 纯本地簿记可在读取下一帧前完成；涉及远端等待或插件执行时沿用异步队列。
@@ -92,6 +164,7 @@ struct Inner {
     inbound: Mutex<HashMap<u64, Option<oneshot::Sender<()>>>>,
     next: AtomicU64,
     alive: AtomicBool,
+    peer_budget: AtomicBool,
     timeouts: Mutex<u32>,
     permits: Arc<Semaphore>,
     ended: watch::Sender<Option<String>>,
@@ -256,6 +329,7 @@ impl Connection {
             inbound: Mutex::new(HashMap::new()),
             next: AtomicU64::new(1),
             alive: AtomicBool::new(true),
+            peer_budget: AtomicBool::new(false),
             timeouts: Mutex::new(0),
             ended,
         }));
@@ -355,9 +429,9 @@ impl Connection {
         duration: Duration,
     ) -> Result<Payload> {
         let mut outgoing = params.into();
-        let deadline = Instant::now()
-            .checked_add(duration)
-            .ok_or_else(|| error(2, "请求截止时间超过时钟表示范围"))?;
+        let own_deadline = deadline_after(duration)?;
+        let deadline =
+            invocation_deadline().map_or(own_deadline, |parent| own_deadline.min(parent));
         let _permit = timeout_at(deadline, self.0.permits.acquire())
             .await
             .map_err(|_| error(6, "插件请求容量等待超时"))?
@@ -367,30 +441,8 @@ impl Connection {
             .next
             .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |id| id.checked_add(1))
             .map_err(|_| error(8, "请求编号空间已耗尽"))?;
-        let params = outgoing.take_value();
+        let mut params = outgoing.take_value();
         let label = call_label(method, &params);
-        let bytes = crate::encode(
-            &Message::Request {
-                id,
-                method: method.into(),
-                params,
-            },
-            &self.0.options.limits,
-        )
-        .map_err(|problem| encoding_error(problem, &format!("{label} 的参数")))?;
-        let (send, receive) = oneshot::channel();
-        {
-            let mut pending = self.0.pending.lock();
-            if !self.is_alive() {
-                return Err(error(4, "插件进程已结束"));
-            }
-            pending.insert(id, send);
-        }
-        let mut guard = Pending {
-            peer: self.clone(),
-            id,
-            completed: false,
-        };
         let operation = async {
             let permit = self
                 .0
@@ -398,17 +450,55 @@ impl Connection {
                 .reserve()
                 .await
                 .map_err(|_| error(4, "插件管道已关闭"))?;
+            if method == "invoke" && self.0.peer_budget.load(Ordering::Acquire) {
+                let remaining = deadline
+                    .saturating_duration_since(Instant::now())
+                    .as_millis();
+                set_parameter(
+                    &mut params,
+                    INVOKE_BUDGET_FIELD,
+                    Value::from(u64::try_from(remaining.max(1)).unwrap_or(u64::MAX)),
+                );
+            }
+            let bytes = crate::encode(
+                &Message::Request {
+                    id,
+                    method: method.into(),
+                    params,
+                },
+                &self.0.options.limits,
+            )
+            .map_err(|problem| encoding_error(problem, &format!("{label} 的参数")))?;
+            if Instant::now() >= deadline {
+                return Err(error(6, "插件请求在入队前超过截止时间"));
+            }
+            let (send, receive) = oneshot::channel();
+            {
+                let mut pending = self.0.pending.lock();
+                if !self.is_alive() {
+                    return Err(error(4, "插件进程已结束"));
+                }
+                pending.insert(id, send);
+            }
+            let _pending = Pending { peer: self, id };
             permit.send(outgoing.sent(bytes));
             receive.await.map_err(|_| error(4, "插件请求已结束"))?
         };
         let result = timeout_at(deadline, operation).await;
         match result {
             Ok(result) => {
-                guard.completed = true;
+                if method == "hello"
+                    && result.as_ref().is_ok_and(|reply| {
+                        parameter_field(reply.value(), INVOKE_BUDGET_CAPABILITY)
+                            == Some(&Value::Bool(true))
+                    })
+                {
+                    self.0.peer_budget.store(true, Ordering::Release);
+                }
                 result
             }
             Err(_) => {
-                let stop = {
+                let stop = deadline == own_deadline && {
                     let mut count = self.0.timeouts.lock();
                     *count += 1;
                     *count >= self.0.options.consecutive_timeouts
@@ -648,6 +738,26 @@ async fn receive_request(
             return false;
         }
     };
+    let deadline = if method == "invoke"
+        && let Some(value) = parameter_field(params.value(), INVOKE_BUDGET_FIELD)
+    {
+        let Some(value) = value
+            .as_integer()
+            .and_then(|value| u64::try_from(value).ok())
+        else {
+            return peer
+                .respond(id, &method, Err(error(2, "调用预算需要 u64 毫秒值")))
+                .await
+                .is_ok();
+        };
+        peer.0.peer_budget.store(true, Ordering::Release);
+        match deadline_after(Duration::from_millis(value)) {
+            Ok(deadline) => Some(deadline),
+            Err(problem) => return peer.respond(id, &method, Err(problem)).await.is_ok(),
+        }
+    } else {
+        None
+    };
     let permit = match permits.clone().try_acquire_owned() {
         Ok(permit) => permit,
         Err(_) => {
@@ -668,6 +778,7 @@ async fn receive_request(
         params,
         permit,
         cancelled,
+        deadline,
     ));
     true
 }
@@ -709,16 +820,29 @@ async fn serve_request(
     params: Payload,
     _permit: tokio::sync::OwnedSemaphorePermit,
     cancelled: Option<oneshot::Receiver<()>>,
+    deadline: Option<Instant>,
 ) {
     let label = call_label(&method, params.value());
-    let call = handler.request(peer.clone(), method, params);
-    let result = match cancelled {
-        Some(cancelled) => tokio::select! {
+    let hello = method == "hello";
+    let call = async { handler.request(peer.clone(), method, params).await };
+    let mut result = match (cancelled, deadline) {
+        (Some(cancelled), Some(deadline)) => tokio::select! {
+            result = at_invocation_deadline(deadline, call) => result,
+            _ = cancelled => Err(error(7, "服务调用已取消")),
+        },
+        (Some(cancelled), None) => tokio::select! {
             result = call => result,
             _ = cancelled => Err(error(7, "服务调用已取消")),
         },
-        None => call.await,
+        _ => call.await,
     };
+    if hello && let Ok(reply) = &mut result {
+        set_parameter(
+            &mut reply.value,
+            INVOKE_BUDGET_CAPABILITY,
+            Value::Bool(true),
+        );
+    }
     let removed = peer.0.inbound.lock().remove(&id);
     drop(removed);
     let _closed = peer.respond(id, &label, result).await;
@@ -783,16 +907,15 @@ fn cancel_request(peer: &Connection, params: &Value) -> bool {
     true
 }
 
-struct Pending {
-    peer: Connection,
+struct Pending<'a> {
+    peer: &'a Connection,
     id: u64,
-    completed: bool,
 }
 
-impl Drop for Pending {
+impl Drop for Pending<'_> {
     fn drop(&mut self) {
         let removed = self.peer.0.pending.lock().remove(&self.id);
-        if !self.completed && removed.is_some() {
+        if removed.is_some() {
             let _closed = self.peer.try_notify(
                 "cancel",
                 Value::Map(vec![(

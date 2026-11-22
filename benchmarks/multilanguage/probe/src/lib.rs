@@ -7,6 +7,8 @@ use std::{hint::black_box, num::NonZeroUsize, time::Instant};
 #[derive(serde::Deserialize)]
 struct Config {
     samples: NonZeroUsize,
+    #[serde(default)]
+    warmup: usize,
     key: String,
     value: Vec<u8>,
     label: String,
@@ -41,6 +43,9 @@ impl Component for Latency {
         if store.get(&config.key)? != Some(config.value) {
             return Err(Error::new(2, "测量键需要返回已写入的字节值"));
         }
+        for _ in 0..config.warmup {
+            drop(black_box(store.get(&config.key)?));
+        }
         let mut samples = Vec::with_capacity(config.samples.get());
         let wall = Instant::now();
         for _ in 0..config.samples.get() {
@@ -65,15 +70,65 @@ impl Component for Latency {
             wall_ns,
             sample_ns: samples,
         };
-        let output = context.data_dir()?.join("rpc-latency.json");
-        let encoded = serde_json::to_vec_pretty(&report)
-            .map_err(|problem| Error::new(2, problem.to_string()))?;
-        std::fs::write(output, encoded).map_err(|problem| Error::new(1, problem.to_string()))
+        publish(context, "rpc-latency.json", &report)
     }
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum StateAction {
+    Seed,
+    Restore,
+}
+
+#[derive(serde::Deserialize)]
+struct StateConfig {
+    action: StateAction,
+    bytes: usize,
+}
+
+struct StateProbe;
+
+impl Component for StateProbe {
+    const NAME: &'static str = "state-probe";
+    type Config = StateConfig;
+
+    fn inject() -> Inject {
+        Latency::inject()
+    }
+
+    async fn apply(context: Context, config: StateConfig) -> Result<()> {
+        let store = context.get::<dyn Kv>()?;
+        let key = "checkpoint-payload";
+        if matches!(config.action, StateAction::Seed) {
+            store.put(key, (0..config.bytes).map(|i| (i % 251) as u8).collect())?;
+        }
+        let value = store
+            .get(key)?
+            .ok_or_else(|| Error::new(4, "KV 缺少检查点中的业务值"))?;
+        if value.len() != config.bytes
+            || value
+                .iter()
+                .enumerate()
+                .any(|(i, &byte)| byte != (i % 251) as u8)
+        {
+            return Err(Error::new(2, "KV 继承值与初始写入的字节序列有差异"));
+        }
+        publish(context, "inherited.json", &value.len())
+    }
+}
+
+fn publish(context: Context, name: &str, result: &impl serde::Serialize) -> Result<()> {
+    let path = context.data_dir()?.join(name);
+    let staged = path.with_extension("next");
+    let bytes = serde_json::to_vec(result).map_err(|e| Error::new(2, e.to_string()))?;
+    std::fs::write(&staged, bytes)
+        .and_then(|()| std::fs::rename(staged, path))
+        .map_err(|e| Error::new(1, e.to_string()))
 }
 
 cordis_sdk::export_plugin!(
     name = "cordis-latency-probe",
     version = "0.1.0",
-    components = [Latency]
+    components = [Latency, StateProbe]
 );

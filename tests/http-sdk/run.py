@@ -6,6 +6,8 @@ import shutil
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "benchmarks/multilanguage"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from management import request_admin
 from measure import fixture, runtime, save
 
 
@@ -72,8 +74,8 @@ class Case:
         finally:
             connection.close()
 
-    def manage(self, method, arguments):
-        return self.current.request("admin", "cordis.manage@1.1", method, arguments)[0]
+    def manage(self, method, arguments, *, expect_success=True):
+        return request_admin(self.current, method, arguments, expect_success=expect_success)
 
 
 def routes(case):

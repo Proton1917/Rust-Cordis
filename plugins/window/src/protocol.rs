@@ -167,7 +167,7 @@ impl Shared {
     /// DOC-15 §11.6：Web 提供页面地址，管理授权用于用户触发的有序退出。
     async fn apply(self: &Arc<Self>, peer: Connection, request: payload::Apply) -> Result<()> {
         let config: Config = decode(&request.config)?;
-        let manage = get(&peer, request.context, "cordis.manage@1.0").await?;
+        let manage = get(&peer, request.context, "cordis.manage@2.0").await?;
         let web = get(&peer, request.context, "cordis.web@1.0").await?;
         #[derive(Deserialize)]
         struct Entry {
@@ -567,7 +567,7 @@ fn description() -> payload::Describe {
             library: None,
             components: vec![payload::Component {
                 name: "window".into(),
-                inject: ["cordis.web@1.0", "cordis.manage@1.0"]
+                inject: ["cordis.web@1.0", "cordis.manage@2.0"]
                     .map(|interface| payload::Dependency {
                         interface: interface.into(),
                         required: true,

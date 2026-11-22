@@ -361,10 +361,7 @@ impl Session {
             Ok(ticket) if ticket.id == id => Ok(()),
             Ok(_) => Err(Error::new(2, "批次受理票据与请求标识不符")),
             Err(error) => {
-                let snapshot = self.runtime.snapshot()?;
-                if snapshot.last_batch.iter().any(|outcome| outcome.id == id)
-                    || matches!(error.code(), 4 | 6 | 7)
-                {
+                if self.manage.result(&id)?.is_some() || matches!(error.code(), 4 | 6 | 7) {
                     return Err(error);
                 }
                 self.reject_pending()?;
@@ -382,23 +379,23 @@ impl Session {
             .expect("pending window")
             .id
             .clone();
-        let outcome = self
-            .runtime
-            .snapshot()?
-            .last_batch
-            .into_iter()
-            .find(|outcome| outcome.id == id);
+        let outcome = self.manage.result(&id)?;
         let Some(outcome) = outcome else {
             self.send_pending().await?;
             return Ok(());
         };
         match outcome.state.as_str() {
             "pending" => Ok(()),
-            "succeeded" => {
+            "succeeded" | "committed_with_cleanup" => {
                 self.completed()?;
-                self.context.log(2, "watch批次已完成")
+                match outcome.error {
+                    Some(problem) => self
+                        .context
+                        .log(1, &format!("watch批次已提交，清理失败：{problem}")),
+                    None => self.context.log(2, "watch批次已完成"),
+                }
             }
-            "rejected" => {
+            "rejected" | "restored" | "recovery_required" => {
                 self.reject_pending()?;
                 self.context.log(
                     0,

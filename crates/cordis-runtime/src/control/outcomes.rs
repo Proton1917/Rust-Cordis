@@ -1,155 +1,148 @@
-//! ADR-0031：按调用方保存最近一次批次的结果，供调用方通过运行时快照读取。
-//!
-//! 结果保存在内存中。同一调用方最近一项请求的重复投递返回已有受理票据；
-//! 核心重启后调用方通过原请求标识重新提交已安装引用。
+//! 管理操作先受理，响应写出后由有界队列执行。结果按真实调用实例和票据查询。
 
 use super::*;
 use cordis_supervisor::manager::{CallContext, LocalReply};
-use cordis_types::{BatchOutcome, BatchTicket};
+use cordis_types::{BatchOutcome, BatchTicket, ConfirmationDiscard};
+use std::collections::VecDeque;
 
-enum Record {
-    Pending,
-    Succeeded,
-    Rejected {
-        error: WireError,
-        discarded_confirmation: Option<cordis_types::ConfirmationDiscard>,
-    },
-}
-
+#[derive(Default)]
 pub(crate) struct BatchOutcomes {
-    /// 调用方实例名 → (请求标识, 结果)。
-    records: BTreeMap<String, (String, Record)>,
-    diagnostics: Arc<Mutex<Diagnostics>>,
+    records: VecDeque<BatchOutcome>,
+    sequence: u64,
 }
 
 impl BatchOutcomes {
-    pub(super) fn new(diagnostics: Arc<Mutex<Diagnostics>>) -> Self {
-        Self {
-            records: BTreeMap::new(),
-            diagnostics,
+    pub(crate) fn snapshot(&self) -> Vec<BatchOutcome> {
+        self.records.iter().rev().cloned().collect()
+    }
+
+    pub(crate) fn end_pending(&mut self) {
+        for row in self.records.iter_mut().filter(|row| row.state == "pending") {
+            row.state = "rejected".into();
+            row.code = Some(7);
+            row.error = Some("核心退出，排队操作已取消".into());
         }
     }
 
-    /// 同一调用方保持一个在途批次，相同标识的重发沿用最近结果。
-    fn known(&self, caller: &str, id: &str) -> Result<bool> {
-        match self.records.get(caller) {
-            Some((pending, Record::Pending)) if pending != id => {
-                Err(WireError::new(8, "调用方已有在途批次"))
-            }
-            Some((known, _)) => Ok(known == id),
-            _ => Ok(false),
-        }
-    }
-
-    fn set(&mut self, caller: &str, id: &str, record: Record) {
-        self.records.insert(caller.into(), (id.into(), record));
-        self.diagnostics.lock().last_batch = self.snapshot();
-    }
-
-    /// 请求在执行前被取消时，仍处于 pending 的同一批次记为被拒绝。
-    fn cancel(&mut self, caller: &str, id: &str) {
-        if matches!(self.records.get(caller), Some((pending, Record::Pending)) if pending == id) {
-            self.set(
-                caller,
-                id,
-                Record::Rejected {
-                    error: WireError::new(7, "批次在执行前被取消"),
-                    discarded_confirmation: None,
-                },
-            );
-        }
-    }
-
-    fn snapshot(&self) -> Vec<BatchOutcome> {
+    pub(crate) fn get(&self, caller: &str, id: &str) -> Option<&BatchOutcome> {
         self.records
             .iter()
-            .map(|(caller, (id, record))| {
-                let (state, error) = match record {
-                    Record::Pending => ("pending", None),
-                    Record::Succeeded => ("succeeded", None),
-                    Record::Rejected { error, .. } => ("rejected", Some(error)),
-                };
-                let discarded_confirmation = match record {
-                    Record::Rejected {
-                        discarded_confirmation,
-                        ..
-                    } => discarded_confirmation.clone(),
-                    _ => None,
-                };
-                BatchOutcome {
-                    id: id.clone(),
-                    caller: caller.clone(),
-                    state: state.into(),
-                    error: error.map(ToString::to_string),
-                    code: error.map(|error| error.code),
-                    discarded_confirmation,
-                }
-            })
-            .collect()
+            .find(|row| row.caller == caller && row.id == id)
+    }
+
+    fn accept(&mut self, caller: &str, id: String) -> Result<()> {
+        if self.records.len() == crate::request::CAPACITY {
+            let index = self
+                .records
+                .iter()
+                .position(|row| row.state != "pending")
+                .ok_or_else(|| WireError::new(8, "管理票据容量已满"))?;
+            self.records.remove(index);
+        }
+        self.records.push_back(BatchOutcome {
+            caller: caller.to_owned(),
+            id,
+            state: "pending".into(),
+            error: None,
+            code: None,
+            discarded_confirmation: None,
+        });
+        Ok(())
     }
 }
 
-impl Controller {
-    /// 执行批次并记录结果。
-    pub(super) async fn execute_recorded_batch(
-        &mut self,
-        request: &Request,
-        id: &str,
-    ) -> Result<Value> {
-        self.batch_discarded = None;
-        let result = self.execute_operation(request).await;
-        let record = match &result {
-            Ok(_) => Record::Succeeded,
-            Err(error) => Record::Rejected {
-                error: error.clone(),
-                discarded_confirmation: self.batch_discarded.take(),
-            },
-        };
-        self.outcomes
-            .lock()
-            .set(&request.caller.instance, id, record);
-        result
-    }
-}
-
-/// 预约或排队中的批次被丢弃（响应写出失败、核心退出）时，把 pending 记录结束为被拒绝。
+/// 响应、预约和已提交请求依次拥有此票据。每个终态消费一次守卫。
 pub(crate) struct PendingBatch {
     outcomes: Arc<Mutex<BatchOutcomes>>,
     caller: String,
     id: String,
+    armed: bool,
+}
+
+impl PendingBatch {
+    pub(crate) fn finish(
+        mut self,
+        state: &str,
+        problem: Option<&WireError>,
+        discarded: Option<ConfirmationDiscard>,
+    ) {
+        self.record(state, problem, discarded);
+        self.armed = false;
+    }
+
+    fn record(
+        &self,
+        state: &str,
+        problem: Option<&WireError>,
+        discarded: Option<ConfirmationDiscard>,
+    ) {
+        let mut outcomes = self.outcomes.lock();
+        if let Some(row) = outcomes
+            .records
+            .iter_mut()
+            .find(|r| r.caller == self.caller && r.id == self.id && r.state == "pending")
+        {
+            row.state = state.into();
+            row.error = problem.map(ToString::to_string);
+            row.code = problem.map(|problem| problem.code);
+            row.discarded_confirmation = discarded;
+        }
+    }
 }
 
 impl Drop for PendingBatch {
     fn drop(&mut self) {
-        self.outcomes.lock().cancel(&self.caller, &self.id);
+        if self.armed {
+            self.record(
+                "rejected",
+                Some(&WireError::new(7, "管理请求在执行前被取消")),
+                None,
+            );
+        }
     }
 }
 
 impl Management {
-    /// 批次先返回受理票据，在响应写出后进入管理队列执行；调用方从运行时快照读取结果。
-    ///
-    /// 票据的作用：调用方（如 watch）可能在本批次中被替换，不能同步等待批次结束。
-    pub(crate) fn batch_reply(
+    pub(crate) fn ticket_reply(
         &self,
         context: &CallContext,
         operation: Operation,
     ) -> Result<LocalReply> {
-        let Operation::ReplaceBatch { request_id, .. } = &operation else {
-            unreachable!("batch operation selected")
-        };
-        let id = request_id.clone();
-        let ticket = Value::serialized(&BatchTicket { id: id.clone() }).map_err(parameter)?;
         let mut outcomes = self.outcomes.lock();
-        if outcomes.known(&context.instance, &id)? {
-            return Ok(LocalReply::new(ticket));
-        }
+        let id = if let Operation::ReplaceBatch { request_id, .. } = &operation {
+            if request_id.is_empty() || request_id.len() > 256 {
+                return Err(parameter("批次请求标识需要 1 至 256 个 UTF-8 字节"));
+            }
+            if outcomes.get(&context.instance, request_id).is_some() {
+                let ticket = BatchTicket {
+                    id: request_id.clone(),
+                };
+                return Ok(LocalReply::new(
+                    Value::serialized(&ticket).map_err(parameter)?,
+                ));
+            }
+            request_id.clone()
+        } else {
+            loop {
+                outcomes.sequence = outcomes
+                    .sequence
+                    .checked_add(1)
+                    .ok_or_else(|| parameter("管理票据序号耗尽"))?;
+                let id = format!("cordis-{}", outcomes.sequence);
+                if outcomes.get(&context.instance, &id).is_none() {
+                    break id;
+                }
+            }
+        };
+        let ticket = Value::serialized(&BatchTicket { id: id.clone() }).map_err(parameter)?;
         let action = self.control.reserve(context.clone(), operation)?;
-        outcomes.set(&context.instance, &id, Record::Pending);
+        outcomes.accept(&context.instance, id.clone())?;
         drop(outcomes);
         let action = action.track_batch(PendingBatch {
             outcomes: self.outcomes.clone(),
             caller: context.instance.clone(),
             id,
+            armed: true,
         });
         Ok(LocalReply::with_after_write(ticket, move || {
             action.commit()
@@ -161,11 +154,9 @@ impl Management {
 mod tests {
     use super::*;
 
-    /// 预约被丢弃时，pending 批次记为 code 7 的拒绝，调用方据此重新提交。
     #[test]
-    fn cancelled_reservation_rejects_pending_batch() {
-        let diagnostics = Arc::new(Mutex::new(Diagnostics::default()));
-        let outcomes = Arc::new(Mutex::new(BatchOutcomes::new(diagnostics.clone())));
+    fn cancelled_reservation_rejects_its_ticket_without_running_the_operation() {
+        let outcomes = Arc::new(Mutex::new(BatchOutcomes::default()));
         let (handle, mut received) = Handle::channel(Duration::from_secs(1));
         let action = handle
             .reserve(
@@ -176,28 +167,27 @@ mod tests {
                     group: "caller".into(),
                     plugin: "caller".into(),
                 },
-                Operation::ReplaceBatch {
-                    replacements: Vec::new(),
-                    reload: false,
-                    configuration: Ok(None),
-                    request_id: "cancelled".into(),
-                },
+                Operation::Remove("obsolete".into()),
             )
             .unwrap();
-        outcomes.lock().set("caller", "cancelled", Record::Pending);
-        assert!(outcomes.lock().known("caller", "cancelled").unwrap());
-        assert!(outcomes.lock().known("caller", "other").is_err());
+        let id = "request-17".to_owned();
+        outcomes.lock().accept("caller", id.clone()).unwrap();
         drop(action.track_batch(PendingBatch {
             outcomes: outcomes.clone(),
             caller: "caller".into(),
-            id: "cancelled".into(),
+            id,
+            armed: true,
         }));
         assert!(matches!(
             received.try_recv(),
             Err(tokio::sync::mpsc::error::TryRecvError::Empty)
         ));
-        let last = &diagnostics.lock().last_batch[0];
-        assert_eq!(last.state, "rejected");
-        assert!(outcomes.lock().known("caller", "cancelled").unwrap());
+        let records = outcomes.lock();
+        let outcome = records.get("caller", "request-17").unwrap();
+        assert_eq!(
+            (outcome.state.as_str(), outcome.code),
+            ("rejected", Some(7))
+        );
+        assert!(records.get("unrelated", "request-17").is_none());
     }
 }

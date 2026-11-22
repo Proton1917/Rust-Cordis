@@ -47,6 +47,10 @@ const SDK: &[(&str, &str)] = &[
         "wire.py",
         include_str!("../../../../sdks/python/cordis_sdk/wire.py"),
     ),
+    (
+        "wit.py",
+        include_str!("../../../../sdks/python/cordis_sdk/wit.py"),
+    ),
 ];
 
 /// DOC-15 §12.1：部署入口指向项目内源目录，版本副本由运行时管理。

@@ -90,7 +90,7 @@ async def conflicts(case):
     (candidate / "web/index.js").write_text("export default {name:'conflict',async apply(){}};\n")
     (candidate / "cordis-plugin.toml").write_text('name="conflicting-web"\nversion="0.1.0"\nsocket="web"\n[web]\nassets="web"\nmount="/api/sub"\nentry="index.js"\n')
     installed = await asyncio.to_thread(case.manage, "install", [str(candidate)])
-    reply, _ = await asyncio.to_thread(case.current.request, "admin", "cordis.manage@1.1", "add", ["conflicting-web", installed["value"], None, {}], expect_success=False)
+    reply = await asyncio.to_thread(case.manage, "add", ["conflicting-web", installed["value"], None, {}], expect_success=False)
     assert reply["ok"] is False
     assert (await asyncio.to_thread(case.request, "GET", "/api/version"))[0] == 200
     return {"routes": json.loads(result.read_text()), "web_after_route": reply, "longest_prefix": True}

@@ -33,7 +33,7 @@ fn copy_entries(
         }
         let target = destination.join(&name);
         let kind = entry.file_type()?;
-        if !kind.is_dir() && excluded.contains(&entry.path().canonicalize()?) {
+        if !excluded.is_empty() && excluded.contains(&entry.path().canonicalize()?) {
             continue;
         }
         if kind.is_symlink() {

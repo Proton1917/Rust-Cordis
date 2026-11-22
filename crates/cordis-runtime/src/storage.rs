@@ -112,6 +112,28 @@ pub struct Store {
     pub directory: PathBuf,
 }
 
+#[derive(Debug)]
+pub(crate) enum CommitError {
+    NotCommitted(WireError),
+    RecoveryRequired(WireError),
+}
+
+impl From<WireError> for CommitError {
+    fn from(error: WireError) -> Self {
+        Self::NotCommitted(error)
+    }
+}
+
+/// 决定已同步到磁盘，清理错误随已提交结果返回。
+#[derive(Debug)]
+pub(crate) struct Committed {
+    pub cleanup_error: Option<WireError>,
+}
+
+const BASE: &str = "deployment-base-v1.toml";
+const JOURNAL_FORMAT: &str = ".format-version";
+const JOURNAL_VERSION: &[u8] = b"2\n";
+
 // consumed 是部署目录中位置固定的目录。进程全程持有的所有者锁位于其父目录。
 fn deployment_lock_file(directory: &Path) -> std::io::Result<File> {
     File::open(directory.join("consumed"))
@@ -139,9 +161,25 @@ pub(crate) fn read_committed_sources(path: &Path) -> Result<Vec<u8>> {
     lock.lock_shared().map_err(io_error)?;
     let journal = directory.join(".deployment-undo");
     if journal.try_exists().map_err(io_error)? {
+        check_journal_format(&journal)?;
         read(&journal.join("sources.json"))
     } else {
         read(path)
+    }
+}
+
+fn check_journal_format(journal: &Path) -> Result<()> {
+    let path = journal.join(JOURNAL_FORMAT);
+    match File::open(&path) {
+        Ok(file) => {
+            if read_file(file, &path)? == JOURNAL_VERSION {
+                Ok(())
+            } else {
+                Err(parameter("部署日志使用未知格式版本"))
+            }
+        }
+        Err(problem) if problem.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(problem) => Err(io_error(problem)),
     }
 }
 
@@ -156,6 +194,9 @@ impl Store {
     pub(crate) fn recover_deployment(&self) -> Result<()> {
         let _lock = self.lock_deployment()?;
         self.restore_deployment_files()?;
+        if let Err(problem) = self.clear_staging() {
+            eprintln!("已恢复部署，暂存目录清理失败：{problem}");
+        }
         // 旧版可能同时留下两个版本，根目录里的检查点较新。
         let legacy = self.directory.join("consumed");
         let mut migrated = Vec::new();
@@ -191,6 +232,7 @@ impl Store {
     fn restore_deployment_files(&self) -> Result<()> {
         let journal = self.directory.join(".deployment-undo");
         if journal.try_exists().map_err(io_error)? {
+            check_journal_format(&journal)?;
             for folder in ["", "consumed"] {
                 let destination = self.directory.join(folder);
                 let entries = match fs::read_dir(journal.join(folder)) {
@@ -209,6 +251,9 @@ impl Store {
                         .file_name()
                         .into_string()
                         .map_err(|_| parameter("部署记录文件名无效"))?;
+                    if folder.is_empty() && name == JOURNAL_FORMAT {
+                        continue;
+                    }
                     if let Some(absent) = name.strip_suffix(".absent") {
                         remove_file(&destination.join(absent))?;
                     } else {
@@ -222,29 +267,36 @@ impl Store {
                 }
                 sync_directory(&destination)?;
             }
-            self.finish_deployment()?;
-        }
-        let staging = self.directory.join(".deployment-staging");
-        if staging.try_exists().map_err(io_error)? {
-            fs::remove_dir_all(staging).map_err(io_error)?;
+            self.move_decision_marker()?;
+            sync_directory(&self.directory)?;
         }
         Ok(())
     }
 
-    fn finish_deployment(&self) -> Result<()> {
+    fn clear_staging(&self) -> Result<()> {
+        let staging = self.directory.join(".deployment-staging");
+        match fs::remove_dir_all(staging) {
+            Ok(()) => Ok(()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(e) => Err(io_error(e)),
+        }
+    }
+
+    fn move_decision_marker(&self) -> Result<()> {
         fs::rename(
             self.directory.join(".deployment-undo"),
             self.directory.join(".deployment-staging"),
         )
-        .map_err(io_error)?;
-        sync_directory(&self.directory)
+        .map_err(io_error)
     }
 
     /// 用原文件的硬链接保存回退点。覆盖层、代码来源和实例状态共享一次提交。
     fn prepare_deployment<'a>(&self, names: impl Iterator<Item = &'a String>) -> Result<()> {
         self.restore_deployment_files()?;
+        self.clear_staging()?;
         let staging = self.directory.join(".deployment-staging");
         fs::create_dir(&staging).map_err(io_error)?;
+        write(&staging.join(JOURNAL_FORMAT), JOURNAL_VERSION)?;
         let preserve = |relative: &Path| -> Result<()> {
             let saved = staging.join(relative);
             match fs::hard_link(self.directory.join(relative), &saved) {
@@ -258,6 +310,7 @@ impl Store {
         };
         preserve(Path::new("instances.toml"))?;
         preserve(Path::new("sources.json"))?;
+        preserve(Path::new(BASE))?;
         for name in names {
             config::instance_name(name)?;
             preserve(Path::new(&format!("{name}.state")))?;
@@ -267,28 +320,67 @@ impl Store {
         sync_directory(&self.directory)
     }
 
-    pub(crate) fn commit_deployment(
+    pub(crate) fn commit_deployment<S: std::borrow::Borrow<payload::State>>(
         &self,
+        base: &config::Configuration,
         overlay: &Overlay,
-        states: &HashMap<String, Option<payload::State>>,
+        states: &HashMap<String, Option<S>>,
         sources: &[u8],
-    ) -> Result<()> {
+    ) -> std::result::Result<Committed, CommitError> {
         let _lock = self.lock_deployment()?;
-        self.prepare_deployment(states.keys())?;
+        let bytes = toml::to_string(base).map_err(parameter)?;
+        config::text(bytes.as_bytes())?;
+        if let Err(problem) = self.prepare_deployment(states.keys()) {
+            return Err(self.reject_deployment(problem));
+        }
+        self.commit_prepared(bytes.as_bytes(), overlay, states, sources)
+    }
+
+    fn commit_prepared<S: std::borrow::Borrow<payload::State>>(
+        &self,
+        base: &[u8],
+        overlay: &Overlay,
+        states: &HashMap<String, Option<S>>,
+        sources: &[u8],
+    ) -> std::result::Result<Committed, CommitError> {
         let result = (|| {
+            write(&self.directory.join(BASE), base)?;
             self.restore_states(states)?;
             self.save_overlay(overlay)?;
             write(&self.directory.join("sources.json"), sources)?;
             sync_directory(&self.directory)?;
-            self.finish_deployment()
+            self.move_decision_marker()
         })();
         if let Err(problem) = result {
-            self.restore_deployment_files().map_err(|recovery| {
-                WireError::new(1, format!("{problem}；部署恢复失败：{recovery}"))
-            })?;
-            return Err(problem);
+            return Err(self.reject_deployment(problem));
         }
-        fs::remove_dir_all(self.directory.join(".deployment-staging")).map_err(io_error)
+        self.sync_decision()
+    }
+
+    fn reject_deployment(&self, problem: WireError) -> CommitError {
+        match self.restore_deployment_files() {
+            Ok(()) => CommitError::NotCommitted(problem),
+            Err(recovery) => CommitError::RecoveryRequired(WireError::new(
+                1,
+                format!("{problem}；部署恢复失败：{recovery}"),
+            )),
+        }
+    }
+
+    fn sync_decision(&self) -> std::result::Result<Committed, CommitError> {
+        sync_directory(&self.directory).map_err(CommitError::RecoveryRequired)?;
+        Ok(Committed {
+            cleanup_error: self.clear_staging().err(),
+        })
+    }
+
+    pub(crate) fn accepted_base(&self) -> Result<Option<config::Configuration>> {
+        let path = self.directory.join(BASE);
+        match File::open(&path) {
+            Ok(file) => config::parse(&read_file(file, &path)?).map(Some),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(e) => Err(io_error(e)),
+        }
     }
 
     /// CP-11、PR-7：准备部署锁目录和插件数据目录，并固定存储根路径。
@@ -332,12 +424,15 @@ impl Store {
     ///
     /// 已发布文件与本次导出逐字节相同时跳过写入：检查点周期可以很短（例如 1 秒），
     /// 每次都 `sync_all` 会让空闲实例持续刷盘。
-    pub fn checkpoint(&self, states: &HashMap<String, payload::State>) -> Result<()> {
+    pub fn checkpoint<S: std::borrow::Borrow<payload::State>>(
+        &self,
+        states: &HashMap<String, S>,
+    ) -> Result<()> {
         let mut failure = None;
         for (name, state) in states {
             let result = (|| {
                 config::instance_name(name)?;
-                let value = Value::serialized(state).map_err(parameter)?;
+                let value = Value::serialized(state.borrow()).map_err(parameter)?;
                 let bytes = cordis_up::encode_value(&value, &Limits::DEFAULT).map_err(parameter)?;
                 let path = self.directory.join(format!("{name}.state"));
                 if fs::read(&path).is_ok_and(|current| current == bytes) {
@@ -358,11 +453,14 @@ impl Store {
     }
 
     /// DOC-11 §7、CP-11：发布替换继承状态，清除已移除实例或失效身份的检查点。
-    pub fn restore_states(&self, states: &HashMap<String, Option<payload::State>>) -> Result<()> {
+    pub fn restore_states<S: std::borrow::Borrow<payload::State>>(
+        &self,
+        states: &HashMap<String, Option<S>>,
+    ) -> Result<()> {
         for (name, state) in states {
             config::instance_name(name)?;
             if let Some(state) = state {
-                let value = Value::serialized(state).map_err(parameter)?;
+                let value = Value::serialized(state.borrow()).map_err(parameter)?;
                 let bytes = cordis_up::encode_value(&value, &Limits::DEFAULT).map_err(parameter)?;
                 write(&self.directory.join(format!("{name}.state")), &bytes)?;
             } else {
@@ -396,6 +494,127 @@ mod tests {
     use cordis_testkit::cleanup::TestGuard;
 
     #[test]
+    fn write_and_marker_faults_preserve_the_previously_committed_deployment() {
+        let case = TestGuard::for_package(
+            Path::new(env!("CARGO_MANIFEST_DIR")),
+            "decision-write-marker",
+        );
+        let store = Store::create(case.directory("decision-write-marker")).unwrap();
+        let old_base = config::parse(b"[instance.old]\nplugin='kv'\n").unwrap();
+        let new_base = b"[instance.new]\nplugin='kv'\n";
+        let overlay = Overlay::default();
+        let states = HashMap::<String, Option<payload::State>>::new();
+        store
+            .commit_deployment(&old_base, &overlay, &states, b"old")
+            .unwrap();
+
+        let blocked_file = store.directory.join(BASE).with_added_extension("next");
+        fs::create_dir(&blocked_file).unwrap();
+        let failure =
+            store.commit_deployment(&config::parse(new_base).unwrap(), &overlay, &states, b"new");
+        assert!(
+            matches!(failure, Err(CommitError::NotCommitted(_))),
+            "{failure:?}"
+        );
+        fs::remove_dir(blocked_file).unwrap();
+        assert_eq!(
+            read_committed_sources(&store.directory.join("sources.json")).unwrap(),
+            b"old"
+        );
+
+        let staging = store.directory.join(".deployment-staging");
+        {
+            let _lock = store.lock_deployment().unwrap();
+            store.prepare_deployment(states.keys()).unwrap();
+            fs::create_dir(&staging).unwrap();
+            File::create(staging.join("reserved")).unwrap();
+            let failure = store.commit_prepared(new_base, &overlay, &states, b"new");
+            assert!(
+                matches!(failure, Err(CommitError::RecoveryRequired(_))),
+                "{failure:?}"
+            );
+        }
+        assert_eq!(
+            read_committed_sources(&store.directory.join("sources.json")).unwrap(),
+            b"old"
+        );
+        fs::remove_file(staging.join("reserved")).unwrap();
+        fs::remove_dir(staging).unwrap();
+        let reopened = Store::create(store.directory.clone()).unwrap();
+        reopened.recover_deployment().unwrap();
+        assert_eq!(reopened.accepted_base().unwrap(), Some(old_base));
+        assert_eq!(
+            read_committed_sources(&reopened.directory.join("sources.json")).unwrap(),
+            b"old"
+        );
+        case.success();
+    }
+
+    #[test]
+    fn cleanup_error_preserves_the_committed_source_and_base() {
+        let case =
+            TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "decision-cleanup");
+        let store = Store::create(case.directory("decision-cleanup")).unwrap();
+        let base = config::parse(b"[instance.old]\nplugin='kv'\n").unwrap();
+        store
+            .commit_deployment::<payload::State>(
+                &base,
+                &Overlay::default(),
+                &HashMap::new(),
+                b"old",
+            )
+            .unwrap();
+        store.prepare_deployment(std::iter::empty()).unwrap();
+        write(&store.directory.join("sources.json"), b"new").unwrap();
+        write(
+            &store.directory.join(BASE),
+            b"[instance.new]\nplugin='kv'\n",
+        )
+        .unwrap();
+        sync_directory(&store.directory).unwrap();
+        store.move_decision_marker().unwrap();
+        let staging = store.directory.join(".deployment-staging");
+        let displaced = store.directory.join("saved-staging");
+        fs::rename(&staging, &displaced).unwrap();
+        File::create(&staging).unwrap();
+        let result = store.sync_decision();
+        assert!(result.unwrap().cleanup_error.is_some());
+        assert_eq!(
+            read_committed_sources(&store.directory.join("sources.json")).unwrap(),
+            b"new"
+        );
+        fs::remove_file(&staging).unwrap();
+        fs::rename(displaced, &staging).unwrap();
+        store.recover_deployment().unwrap();
+        assert!(
+            store
+                .accepted_base()
+                .unwrap()
+                .unwrap()
+                .instance
+                .contains_key("new")
+        );
+        case.success();
+    }
+
+    #[test]
+    fn directory_sync_error_after_marker_move_requires_disk_recovery() {
+        let case = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "decision-sync");
+        let store = Store::create(case.directory("decision-sync").join("state")).unwrap();
+        store.prepare_deployment(std::iter::empty()).unwrap();
+        store.move_decision_marker().unwrap();
+        let moved = store.directory.with_extension("detached");
+        fs::rename(&store.directory, &moved).unwrap();
+        assert!(matches!(
+            store.sync_decision(),
+            Err(CommitError::RecoveryRequired(_))
+        ));
+        fs::rename(moved, &store.directory).unwrap();
+        store.recover_deployment().unwrap();
+        case.success();
+    }
+
+    #[test]
     fn interrupted_deployment_restores_code_and_consumed_state_together() {
         let case =
             TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "deployment-recovery");
@@ -415,10 +634,14 @@ mod tests {
         let new = config::parse_overlay(b"[instance.store]\nplugin='two'\n").unwrap();
         let sources_v1 = br#"{"store":{"declared_source":"counter","installed_reference":"one","plugin_directory":"plugins"}}"#;
         let sources_v2 = br#"{"store":{"declared_source":"counter","installed_reference":"two","plugin_directory":"plugins"}}"#;
-        store.commit_deployment(&old, &before, sources_v1).unwrap();
+        let base = config::parse(b"").unwrap();
+        store
+            .commit_deployment(&base, &old, &before, sources_v1)
+            .unwrap();
         store.prepare_deployment(after.keys()).unwrap();
         // v0.2.10 的回退日志可以只在 consumed 中保存原值。
         let journal = store.directory.join(".deployment-undo");
+        fs::remove_file(journal.join(JOURNAL_FORMAT)).unwrap();
         fs::create_dir(journal.join("consumed")).unwrap();
         fs::rename(
             journal.join("store.state"),
@@ -474,7 +697,7 @@ mod tests {
         assert!(!recovered.directory.join("consumed/store.state").exists());
         assert!(recovered.load("second").unwrap().is_none());
         recovered
-            .commit_deployment(&new, &after, sources_v2)
+            .commit_deployment(&base, &new, &after, sources_v2)
             .unwrap();
         recovered.recover_deployment().unwrap();
         assert_eq!(recovered.overlay().unwrap().instance["store"].plugin, "two");

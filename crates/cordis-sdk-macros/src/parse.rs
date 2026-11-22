@@ -62,6 +62,7 @@ pub struct Plugin {
     pub name: Expr,
     pub version: Expr,
     pub components: Vec<Type>,
+    pub tokio: bool,
 }
 
 impl Parse for Plugin {
@@ -69,12 +70,14 @@ impl Parse for Plugin {
         let mut name = None;
         let mut version = None;
         let mut components = None;
+        let mut tokio = true;
         while !input.is_empty() {
             let key: Ident = input.parse()?;
             input.parse::<Token![=]>()?;
             match key.to_string().as_str() {
                 "name" => name = Some(input.parse()?),
                 "version" => version = Some(input.parse()?),
+                "tokio" => tokio = input.parse::<syn::LitBool>()?.value,
                 "components" => {
                     let content;
                     bracketed!(content in input);
@@ -88,7 +91,7 @@ impl Parse for Plugin {
                 _ => {
                     return Err(syn::Error::new_spanned(
                         key,
-                        "接受 name、version 与 components",
+                        "接受 name、version、components 与 tokio",
                     ));
                 }
             }
@@ -100,6 +103,7 @@ impl Parse for Plugin {
             name: name.ok_or_else(|| input.error("请声明 name"))?,
             version: version.ok_or_else(|| input.error("请声明 version"))?,
             components: components.ok_or_else(|| input.error("请声明 components"))?,
+            tokio,
         })
     }
 }

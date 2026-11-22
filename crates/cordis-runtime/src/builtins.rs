@@ -1,10 +1,10 @@
 //! DOC-15 §3.2、PR-7：核心内置管理、运行快照、数据目录与日志接口。
 
 use crate::{
-    config::{InstanceSettings, Result, parameter},
+    config::{Result, parameter},
     control::BatchOutcomes,
     request::{Handle, Operation},
-    status::{Diagnostics, View},
+    status::View,
     storage::Store,
 };
 use cordis_supervisor::manager::{
@@ -14,27 +14,21 @@ use cordis_up::{Value, WireError, rpc::HandlerFuture};
 use parking_lot::Mutex;
 use serde::Serialize;
 use std::{
-    collections::BTreeMap,
     path::PathBuf,
     sync::{Arc, Weak},
 };
 
-pub type Permissions = Arc<Mutex<BTreeMap<String, InstanceSettings>>>;
-
 pub struct Management {
-    pub owner: String,
-    pub manager: Weak<Manager>,
-    pub permissions: Permissions,
+    pub legacy: bool,
+    pub grants: Vec<String>,
     pub control: Handle,
     pub configuration: PathBuf,
-    pub store: Store,
-    pub diagnostics: Arc<Mutex<Diagnostics>>,
     pub outcomes: Arc<Mutex<BatchOutcomes>>,
     pub logs: Logs,
 }
 
 impl LocalService for Management {
-    /// DOC-15 §3.2：逐方法授权后分派请求，自变更在响应写出后执行。
+    /// 安装返回已固定的产物引用；结构变更在票据写出后交给队列。
     fn invoke<'a>(
         &'a self,
         context: &'a CallContext,
@@ -43,12 +37,24 @@ impl LocalService for Management {
     ) -> HandlerFuture<'a, Result<LocalReply>> {
         Box::pin(async move {
             self.authorize(context, method)?;
+            if !self.legacy && method == "result" {
+                let [Value::Text(id)] = args.values.as_slice() else {
+                    return Err(parameter("result 需要一个票据标识"));
+                };
+                let records = self.outcomes.lock();
+                return Value::serialized(&records.get(&context.instance, id))
+                    .map(LocalReply::new)
+                    .map_err(parameter);
+            }
+            if self.legacy && !matches!(method, "install" | "replace_batch" | "shutdown") {
+                return Err(WireError::new(
+                    3,
+                    "该结构变更使用 cordis.manage@2.0 票据接口",
+                ));
+            }
             let operation = match Operation::decode(method, &args.values, &self.configuration) {
                 Ok(operation) => operation,
                 Err(problem) => {
-                    if method == "reload" {
-                        self.diagnostics.lock().configuration_error = Some(problem.to_string());
-                    }
                     self.logs.emit(
                         0,
                         &context.instance,
@@ -60,20 +66,19 @@ impl LocalService for Management {
             if matches!(&operation, Operation::ReplaceBatch { reload: true, .. }) {
                 self.authorize(context, "reload")?;
             }
-            if matches!(&operation, Operation::ReplaceBatch { .. }) {
-                return self.batch_reply(context, operation);
-            }
-            if self.deferred(&context.instance, &operation)? {
-                let action = self.control.reserve(context.clone(), operation)?;
-                Ok(LocalReply::with_after_write(Value::Null, move || {
-                    action.commit()
-                }))
-            } else {
-                self.control
+            if matches!(operation, Operation::Install(_)) {
+                return self
+                    .control
                     .call(context.clone(), operation)
                     .await
-                    .map(LocalReply::new)
+                    .map(LocalReply::new);
             }
+            let shutdown = matches!(operation, Operation::Shutdown);
+            let mut reply = self.ticket_reply(context, operation)?;
+            if self.legacy && shutdown {
+                reply.value = Value::Null;
+            }
+            Ok(reply)
         })
     }
 }
@@ -81,11 +86,11 @@ impl LocalService for Management {
 impl Management {
     /// DOC-15 §3.2、ADR-0031：包含配置重读的批次同时需要 replace_batch 和 reload 授权。
     fn authorize(&self, context: &CallContext, method: &str) -> Result<()> {
-        if self
-            .permissions
-            .lock()
-            .get(&self.owner)
-            .is_some_and(|settings| settings.allows(method))
+        if (!self.legacy && method == "result")
+            || self
+                .grants
+                .iter()
+                .any(|allowed| allowed == "*" || allowed == method)
         {
             return Ok(());
         }
@@ -98,49 +103,6 @@ impl Management {
             9,
             format!("实例 {} 缺少管理方法 {method} 的授权", context.instance),
         ))
-    }
-
-    /// DOC-15 §3.2：自移除、同库替换或授权配置变化在调用方收取响应后提交。
-    fn deferred(&self, caller: &str, operation: &Operation) -> Result<bool> {
-        let manager = self
-            .manager
-            .upgrade()
-            .ok_or_else(|| WireError::new(4, "管理器已关闭"))?;
-        let affects = |target: &str, library| {
-            target == self.owner || manager.change_affects(caller, target, library)
-        };
-        let addition = |plugin: &str, group: Option<&str>| {
-            let resolved = group.map(str::to_owned).or_else(|| {
-                self.diagnostics
-                    .lock()
-                    .sources
-                    .iter()
-                    .find(|package| package.reference == plugin)
-                    .map(|package| package.name.clone())
-            });
-            manager.candidate_change_affects(caller, resolved.as_deref())
-        };
-        Ok(match operation {
-            Operation::Shutdown => true,
-            Operation::Replace { name, .. }
-            | Operation::Rollback(name)
-            | Operation::Remove(name) => affects(name, true),
-            Operation::Configure { name, .. } => affects(name, false),
-            Operation::Add { plugin, group, .. } => addition(plugin, group.as_deref()),
-            Operation::Reload(configuration) => {
-                let target = configuration.effective(&self.store.overlay()?)?;
-                let current = self.permissions.lock().clone();
-                current
-                    .iter()
-                    .any(|(name, old)| target.get(name) != Some(old) && affects(name, true))
-                    || target.iter().any(|(name, next)| {
-                        current.get(name) != Some(next)
-                            && addition(&next.plugin, next.group.as_deref())
-                    })
-            }
-            Operation::ReplaceBatch { .. } => true,
-            Operation::Install(_) => false,
-        })
     }
 }
 
@@ -160,7 +122,15 @@ impl LocalService for RuntimeInfo {
             if !args.values.is_empty() {
                 return Err(parameter("该方法接受空参数数组"));
             }
-            let snapshot = self.0.runtime_snapshot().await?;
+            let mut snapshot = self.0.runtime_snapshot()?;
+            // 运行快照 1.x 保留已发布的状态值，管理接口 2.0 直接返回详细终态。
+            for outcome in &mut snapshot.last_batch {
+                outcome.state = match outcome.state.as_str() {
+                    "committed_with_cleanup" => "succeeded".into(),
+                    "restored" | "recovery_required" => "rejected".into(),
+                    _ => continue,
+                };
+            }
             Value::serialized(&snapshot)
                 .map(LocalReply::new)
                 .map_err(parameter)

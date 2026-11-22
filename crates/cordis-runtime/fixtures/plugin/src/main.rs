@@ -37,6 +37,7 @@ struct Config {
     results: PathBuf,
     observed: Option<PathBuf>,
     checkpoint_source: Option<PathBuf>,
+    export_gate: Option<PathBuf>,
     meta_observed: Option<PathBuf>,
     scoped: bool,
     invalid: bool,
@@ -125,7 +126,7 @@ impl Shared {
     }
     fn description(&self) -> payload::Describe {
         let inject = match self.role.as_str() {
-            "admin" => vec!["cordis.manage@1.0", "cordis.runtime@1.1"],
+            "admin" => vec!["cordis.manage@2.0", "cordis.runtime@1.1"],
             "reader" | "client" => vec![self.counter_interface()],
             "kv-client" => vec!["kv@1.0"],
             "native-client" => vec!["loader.counter@1.0"],
@@ -513,15 +514,24 @@ impl Handler for Program {
                     let Resource::Exporter(session) = object.as_ref() else {
                         return Err(WireError::new(2, "fixture exporter type"));
                     };
-                    let mut counter = session.counter.lock();
-                    counter.frozen = true;
+                    let value_at_freeze = {
+                        let mut counter = session.counter.lock();
+                        counter.frozen = true;
+                        counter.value
+                    };
+                    if let Some(gate) = &session.config.export_gate {
+                        publish(&gate.with_extension("started"), Vec::new())?;
+                        while !gate.try_exists().map_err(error)? {
+                            tokio::time::sleep(Duration::from_millis(10)).await;
+                        }
+                    }
                     let saved = match &session.config.checkpoint_source {
                         Some(path) => fs::read_to_string(path)
                             .map_err(error)?
                             .trim()
                             .parse::<u64>()
                             .map_err(error)?,
-                        None => counter.value,
+                        None => value_at_freeze,
                     };
                     value(&payload::ValueResult {
                         value: saved.into(),

@@ -28,7 +28,7 @@ pub trait Runtime: Send + Sync {
 }
 
 /// ADR-0024：核心按实例授权执行串行管理操作。
-#[crate::interface(name = "cordis.manage", version = "1.1")]
+#[crate::interface(name = "cordis.manage", version = "2.0")]
 pub trait Manage: Send + Sync {
     async fn install(&self, source: &str) -> Result<String>;
     async fn add(
@@ -37,13 +37,14 @@ pub trait Manage: Send + Sync {
         plugin: &str,
         group: Option<String>,
         config: crate::CborValue,
-    ) -> Result<()>;
-    async fn remove(&self, name: &str) -> Result<()>;
-    async fn replace(&self, name: &str, plugin: &str) -> Result<()>;
-    async fn rollback(&self, name: &str) -> Result<()>;
-    async fn configure(&self, name: &str, config: crate::CborValue) -> Result<()>;
-    async fn reload(&self) -> Result<()>;
-    async fn shutdown(&self) -> Result<()>;
+    ) -> Result<BatchTicket>;
+    async fn remove(&self, name: &str) -> Result<BatchTicket>;
+    async fn replace(&self, name: &str, plugin: &str) -> Result<BatchTicket>;
+    async fn rollback(&self, name: &str) -> Result<BatchTicket>;
+    async fn configure(&self, name: &str, config: crate::CborValue) -> Result<BatchTicket>;
+    async fn reload(&self) -> Result<BatchTicket>;
+    async fn shutdown(&self) -> Result<BatchTicket>;
+    fn result(&self, id: &str) -> Result<Option<BatchOutcome>>;
     /// ADR-0031：一个防抖窗口的替换与可选配置重读由核心统一提交。
     async fn replace_batch(
         &self,

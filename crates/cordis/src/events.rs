@@ -140,6 +140,22 @@ impl Hook {
             !self.removed.load(Ordering::Acquire)
         }
     }
+
+    async fn invoke_async<E: AsyncEvent>(
+        &self,
+        kernel: &Arc<Kernel>,
+        args: impl FnOnce() -> E::Args,
+    ) -> Result<Option<E::Output>> {
+        if !self.claim(kernel) {
+            return Ok(None);
+        }
+        (self
+            .callback
+            .downcast_ref::<AsyncCallback<E>>()
+            .expect("event callback type")
+            .0)(args())
+        .await
+    }
 }
 
 /// `internal/listener` 接收的登记请求，可由监听器接管为另一个效应。
@@ -270,11 +286,7 @@ impl Context {
         callback: impl Fn(&E::Args) -> Option<E::Output> + Send + Sync + 'static,
         options: EventOptions,
     ) -> Result<Effect> {
-        self.listen::<E>(
-            Arc::new(SyncCallback::<E>(Arc::new(callback))),
-            options,
-            false,
-        )
+        self.listen_sync::<E>(EventId::of::<E>(), E::NAME.into(), callback, options, false)
     }
 
     /// 以默认选项登记一次性同步监听器，在调用回调前撤销登记。
@@ -293,11 +305,7 @@ impl Context {
         callback: impl Fn(&E::Args) -> Option<E::Output> + Send + Sync + 'static,
         options: EventOptions,
     ) -> Result<Effect> {
-        self.listen::<E>(
-            Arc::new(SyncCallback::<E>(Arc::new(callback))),
-            options,
-            true,
-        )
+        self.listen_sync::<E>(EventId::of::<E>(), E::NAME.into(), callback, options, true)
     }
 
     /// 登记拥有参数的异步回调，返回监听器效应；任务由派发调用方等待。
@@ -385,16 +393,7 @@ impl Context {
         callback: impl Fn(&AnyArc) -> Result<Option<AnyArc>> + Send + Sync + 'static,
         options: EventOptions,
     ) -> Result<Effect> {
-        let name = name.into();
-        self.listen_event(
-            EventId::Named(name.clone(), false),
-            name,
-            Arc::new(SyncCallback::<NamedSync>(Arc::new(move |args| {
-                callback(args).err()
-            }))),
-            options,
-            false,
-        )
+        self.listen_named_sync(name.into(), callback, options, false)
     }
 
     /// S-EVT-9、K-3：在首次调用前撤销命名同步监听器，支持递归派发。
@@ -404,15 +403,41 @@ impl Context {
         name: impl Into<Arc<str>>,
         callback: impl Fn(&AnyArc) -> Result<Option<AnyArc>> + Send + Sync + 'static,
     ) -> Result<Effect> {
-        let name = name.into();
-        self.listen_event(
+        self.listen_named_sync(name.into(), callback, EventOptions::default(), true)
+    }
+
+    #[track_caller]
+    fn listen_named_sync(
+        &self,
+        name: Arc<str>,
+        callback: impl Fn(&AnyArc) -> Result<Option<AnyArc>> + Send + Sync + 'static,
+        options: EventOptions,
+        once: bool,
+    ) -> Result<Effect> {
+        self.listen_sync::<NamedSync>(
             EventId::Named(name.clone(), false),
             name,
-            Arc::new(SyncCallback::<NamedSync>(Arc::new(move |args| {
-                callback(args).err()
-            }))),
-            EventOptions::default(),
-            true,
+            move |args| callback(args).err(),
+            options,
+            once,
+        )
+    }
+
+    #[track_caller]
+    fn listen_sync<E: SyncEvent>(
+        &self,
+        event: EventId,
+        name: Arc<str>,
+        callback: impl Fn(&E::Args) -> Option<E::Output> + Send + Sync + 'static,
+        options: EventOptions,
+        once: bool,
+    ) -> Result<Effect> {
+        self.listen_event(
+            event,
+            name,
+            Arc::new(SyncCallback::<E>(Arc::new(callback))),
+            options,
+            once,
         )
     }
 
@@ -592,10 +617,8 @@ impl Context {
         args: &E::Args,
         filter: Option<&dyn Fn(&Context) -> bool>,
     ) {
-        self.emit_hooks::<E>(
-            self.event_snapshot::<E>(DispatchMode::Emit, args, filter),
-            args,
-        );
+        let hooks = self.event_snapshot::<E>(DispatchMode::Emit, args, filter);
+        let _ = self.dispatch_sync::<E>(hooks, args, false);
     }
 
     /// K-3、S-EVT-4：同步派发命名事件，首个监听器错误交回调用方。
@@ -608,20 +631,8 @@ impl Context {
             || args.clone(),
             None,
         );
-        self.bail_hooks::<NamedSync>(hooks, args)
+        self.dispatch_sync::<NamedSync>(hooks, args, true)
             .map_or(Ok(()), Err)
-    }
-
-    fn emit_hooks<E: SyncEvent>(&self, hooks: Vec<Arc<Hook>>, args: &E::Args) {
-        for hook in hooks {
-            if hook.claim(&self.kernel) {
-                (hook
-                    .callback
-                    .downcast_ref::<SyncCallback<E>>()
-                    .expect("event callback type")
-                    .0)(args);
-            }
-        }
     }
 
     /// S-EVT-6：首个 `Some` 结束同步派发。
@@ -635,22 +646,26 @@ impl Context {
         args: &E::Args,
         filter: Option<&dyn Fn(&Context) -> bool>,
     ) -> Option<E::Output> {
-        self.bail_hooks::<E>(
-            self.event_snapshot::<E>(DispatchMode::Bail, args, filter),
-            args,
-        )
+        let hooks = self.event_snapshot::<E>(DispatchMode::Bail, args, filter);
+        self.dispatch_sync::<E>(hooks, args, true)
     }
 
-    fn bail_hooks<E: SyncEvent>(&self, hooks: Vec<Arc<Hook>>, args: &E::Args) -> Option<E::Output> {
+    fn dispatch_sync<E: SyncEvent>(
+        &self,
+        hooks: Vec<Arc<Hook>>,
+        args: &E::Args,
+        stop_on_value: bool,
+    ) -> Option<E::Output> {
         for hook in hooks {
-            if hook.claim(&self.kernel)
-                && let Some(value) = (hook
+            if hook.claim(&self.kernel) {
+                let output = (hook
                     .callback
                     .downcast_ref::<SyncCallback<E>>()
                     .expect("event callback type")
-                    .0)(args)
-            {
-                return Some(value);
+                    .0)(args);
+                if stop_on_value && output.is_some() {
+                    return output;
+                }
             }
         }
         None
@@ -696,19 +711,7 @@ impl Context {
             let results = join_all(hooks.into_iter().map(|hook| {
                 let kernel = kernel.clone();
                 let args = args.clone();
-                async move {
-                    if hook.claim(&kernel) {
-                        (hook
-                            .callback
-                            .downcast_ref::<AsyncCallback<E>>()
-                            .expect("event callback type")
-                            .0)(args)
-                        .await
-                        .map(|_| ())
-                    } else {
-                        Ok(())
-                    }
-                }
+                async move { hook.invoke_async::<E>(&kernel, || args).await.map(|_| ()) }
             }))
             .await;
             let causes: Vec<_> = results
@@ -744,14 +747,7 @@ impl Context {
         let kernel = self.kernel.clone();
         Box::pin(async move {
             for hook in hooks {
-                if hook.claim(&kernel)
-                    && let Some(value) = (hook
-                        .callback
-                        .downcast_ref::<AsyncCallback<E>>()
-                        .expect("event callback type")
-                        .0)(args.clone())
-                    .await?
-                {
+                if let Some(value) = hook.invoke_async::<E>(&kernel, || args.clone()).await? {
                     return Ok(Some(value));
                 }
             }

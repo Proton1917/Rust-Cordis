@@ -38,6 +38,20 @@ pub struct Catalog {
     pub packages: BTreeMap<String, Package>,
 }
 
+impl Package {
+    pub(crate) fn group(&self, declared: Option<&str>, format_version: u32) -> String {
+        declared
+            .unwrap_or_else(|| {
+                if format_version == 2 && matches!(self.entry, Entry::Native { .. }) {
+                    "native"
+                } else {
+                    &self.name
+                }
+            })
+            .to_owned()
+    }
+}
+
 impl Catalog {
     /// DOC-11 §10：按来源建立插件库存，单个来源错误记入诊断并继续其他来源。
     pub async fn discover(

@@ -7,11 +7,14 @@ import subprocess
 import sys
 import time
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from acceptance import EVIDENCE, PLUGIN, PROVIDER, environment, manifest, stop
+from management import MANAGE, completed_reply, terminal_outcome
 
 
-def until(observe):
-    deadline = time.monotonic() + 25
+def until(observe, deadline=None):
+    if deadline is None:
+        deadline = time.monotonic() + 25
     while time.monotonic() < deadline:
         value = observe()
         if value is not None:
@@ -54,7 +57,7 @@ def execute():
         '[runtime]\ncheckpoint_ms=0\nconfirm_ms=20\n'
         '[instance.store]\nplugin="kv"\ncomponent="kv-store"\n'
         '[instance.counter]\nplugin="counter"\ncomponent="counter"\nconfig={interval_ms=5}\n'
-        '[instance.admin]\nplugin="admin"\ncomponent="admin"\ngrants={"cordis.manage@1"=["*"]}\n'
+        '[instance.admin]\nplugin="admin"\ncomponent="admin"\ngrants={"cordis.manage@2"=["*"]}\n'
         f'config={{commands={json.dumps(str(project / "commands"))},results={json.dumps(str(project / "results"))}}}\n'
         '[instance.client]\nplugin="client"\ncomponent="kv-client"\n'
         f'config={{commands={json.dumps(str(project / "client-commands"))},results={json.dumps(str(project / "client-results"))}}}\n'
@@ -62,6 +65,7 @@ def execute():
     ids = itertools.count(1)
 
     def call(interface, method, args, success=True):
+        deadline = time.monotonic() + 25
         prefix = "client-" if interface == "kv@1.0" else ""
         number = next(ids)
         path = project / f"{prefix}commands/{number}.json"
@@ -69,7 +73,11 @@ def execute():
         temporary = path.with_suffix(".next")
         temporary.write_text(json.dumps({"interface": interface, "method": method, "args": args}))
         temporary.rename(path)
-        result = until(lambda: read(project / f"{prefix}results/{number}.json"))
+        result = until(lambda: read(project / f"{prefix}results/{number}.json"), deadline)
+        if interface == MANAGE and method != "install" and result["ok"]:
+            ticket = result["value"]["id"]
+            outcome = until(lambda: terminal_outcome(read(project / "state/status.json"), "admin", ticket), deadline)
+            result = completed_reply(result, outcome)
         assert result["ok"] == success, result
         return result["value"] if success else result
 
@@ -102,8 +110,8 @@ def execute():
                 previous = until(active)
                 before = next(item["context"] for item in previous["instances"] if item["name"] == "counter")
                 previous_reference = next(item["reference"] for item in previous["instances"] if item["name"] == "store")
-                installed = call("cordis.manage@1.0", "install", [str(source)])
-                replacement = call("cordis.manage@1.0", "replace", ["store", installed], success=not rollback)
+                installed = call(MANAGE, "install", [str(source)])
+                replacement = call(MANAGE, "replace", ["store", installed], success=not rollback)
                 if rollback:
                     assert replacement["code"] == 1001, replacement
                 snapshot = until(lambda: published(before, previous_reference if rollback else installed, rollback))

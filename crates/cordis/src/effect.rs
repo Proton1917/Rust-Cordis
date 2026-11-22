@@ -169,12 +169,9 @@ impl EffectScope {
 
     /// 返回效应守卫有效、所属纤程存活且运行纪元符合当前目标的状态。
     pub fn is_current(&self) -> bool {
-        if !self.0.armed.load(Ordering::Acquire) {
-            return false;
-        }
         let state = self.0.kernel.state.lock();
-        let owner = &state.fibers[state.effects[self.0.id].owner];
-        owner.alive && owner.target == owner.running_epoch
+        self.0.armed.load(Ordering::Acquire)
+            && state.fibers[state.effects[self.0.id].owner].is_current()
     }
 }
 
@@ -457,7 +454,7 @@ impl Effect {
         }));
     }
 
-    /// 清理任务由 State 持有；宿主拒收后重新提交一次，随后保留 Future 供显式释放恢复。
+    /// 宿主拒收时取回原清理任务并重新提交一次；再次拒收将 Future 留给显式释放。
     fn submit_cleanup(&self, task: Task) {
         let owner = self.kernel.state.lock().effects[self.id].owner;
         let Err(failure) = self.kernel.submit(task) else {

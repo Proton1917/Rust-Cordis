@@ -15,7 +15,7 @@ use cordis_types::{
 use parking_lot::Mutex;
 use serde::Serialize;
 use std::{
-    collections::{BTreeMap, HashSet},
+    collections::{BTreeMap, BTreeSet, HashSet},
     path::Path,
     sync::{Arc, Weak},
 };
@@ -26,15 +26,19 @@ pub struct Diagnostics {
     pub web: Option<Weak<cordis_web_deployment::Deployment>>,
     pub phase: String,
     pub configuration_error: Option<String>,
+    pub recovery_error: Option<String>,
     pub instance_errors: BTreeMap<String, String>,
     pub plugin_errors: BTreeMap<String, String>,
     pub overrides: Vec<String>,
     pub sources: Vec<Package>,
     #[serde(skip)]
-    pub desired: BTreeMap<String, InstanceSettings>,
+    pub desired: Arc<BTreeMap<String, InstanceSettings>>,
+    #[serde(skip)]
+    pub(crate) candidate_forwarders: Option<Arc<BTreeSet<String>>>,
     #[serde(skip)]
     pub active_references: BTreeMap<String, String>,
-    pub last_batch: Vec<BatchOutcome>,
+    #[serde(skip)]
+    pub(crate) outcomes: Arc<Mutex<crate::control::BatchOutcomes>>,
 }
 
 #[derive(Clone)]
@@ -42,6 +46,13 @@ pub struct View {
     pub manager: Weak<Manager>,
     pub diagnostics: Arc<Mutex<Diagnostics>>,
     ids: Arc<Mutex<LibraryIds>>,
+    libraries: Arc<Mutex<LibrarySample>>,
+}
+
+#[derive(Clone, Default)]
+struct LibrarySample {
+    libraries: Vec<LibraryInfo>,
+    errors: BTreeMap<String, String>,
 }
 
 #[derive(Default)]
@@ -60,6 +71,7 @@ impl LibraryIds {
 
 #[derive(Serialize)]
 pub struct Status {
+    pub last_batch: Vec<BatchOutcome>,
     pub core_version: &'static str,
     pub pid: u32,
     #[serde(flatten)]
@@ -67,6 +79,8 @@ pub struct Status {
     #[serde(flatten)]
     pub diagnostics: Diagnostics,
     pub libraries: Vec<LibraryInfo>,
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub library_sample_errors: BTreeMap<String, String>,
     pub last_swap: Vec<SwapReport>,
     pub available_plugins: Vec<PluginInfo>,
 }
@@ -78,12 +92,13 @@ impl View {
             manager: Arc::downgrade(manager),
             diagnostics,
             ids: Arc::new(Mutex::new(LibraryIds::default())),
+            libraries: Arc::new(Mutex::new(LibrarySample::default())),
         }
     }
 
     /// ADR-0028：内核失败记录转换为接口诊断文本，其余字段保持真实来源。
-    pub async fn runtime_snapshot(&self) -> Result<RuntimeSnapshot> {
-        let observed = self.snapshot().await?;
+    pub fn runtime_snapshot(&self) -> Result<RuntimeSnapshot> {
+        let observed = self.snapshot()?;
         Ok(RuntimeSnapshot {
             libraries: observed.libraries,
             instances: observed
@@ -106,18 +121,39 @@ impl View {
                 .into_iter()
                 .map(runtime_replace)
                 .collect(),
-            last_batch: observed.diagnostics.last_batch,
+            last_batch: observed.last_batch,
+            library_sample_errors: observed.library_sample_errors,
         })
     }
 
-    /// DOC-15 CP-5：锁外查询宿主，连接内库编号映射为运行时编号后发布快照。
-    pub async fn snapshot(&self) -> Result<Status> {
+    async fn sample_libraries(&self) -> Result<()> {
         let manager = self
             .manager
             .upgrade()
             .ok_or_else(|| cordis_up::WireError::new(4, "核心已退出"))?;
-        let mut libraries = manager.library_snapshots().await?;
+        let (mut libraries, errors) = manager.sample_libraries().await;
+        let mut sample = self.libraries.lock();
+        libraries.extend(
+            sample
+                .libraries
+                .drain(..)
+                .filter(|library| errors.contains_key(&library.group)),
+        );
         libraries.sort_by_key(|library| (library.connection, library.id));
+        *sample = LibrarySample { libraries, errors };
+        Ok(())
+    }
+
+    /// 读者组合当前内核视图和最近的宿主采样。
+    pub fn snapshot(&self) -> Result<Status> {
+        let manager = self
+            .manager
+            .upgrade()
+            .ok_or_else(|| cordis_up::WireError::new(4, "核心已退出"))?;
+        let LibrarySample {
+            mut libraries,
+            errors: library_sample_errors,
+        } = self.libraries.lock().clone();
         let (mut snapshot, last_swap) = self.map_library_ids(&manager, &mut libraries)?;
         let diagnostics = self.diagnostics.lock().clone();
         if let Some(web) = diagnostics.web.as_ref().and_then(Weak::upgrade) {
@@ -136,11 +172,14 @@ impl View {
             snapshot.instances.extend(web.snapshot());
         }
         complete_instances(&mut snapshot, &diagnostics);
+        let last_batch = diagnostics.outcomes.lock().snapshot();
         Ok(Status {
+            last_batch,
             core_version: env!("CARGO_PKG_VERSION"),
             pid: std::process::id(),
             snapshot,
             libraries,
+            library_sample_errors,
             last_swap,
             available_plugins: diagnostics.sources.iter().map(package_info).collect(),
             diagnostics,
@@ -315,7 +354,8 @@ fn component(component: &cordis_up::payload::Component) -> ComponentInfo {
 
 /// DOC-15 CP-11：快照变化时原子发布，写入错误交由发布任务记录。
 pub async fn write(path: &Path, view: &View, previous: &mut Vec<u8>) -> Result<()> {
-    let bytes = serde_json::to_vec_pretty(&view.snapshot().await?).map_err(parameter)?;
+    view.sample_libraries().await?;
+    let bytes = serde_json::to_vec_pretty(&view.snapshot()?).map_err(parameter)?;
     if *previous != bytes {
         storage::write_snapshot(path, &bytes)?;
         *previous = bytes;

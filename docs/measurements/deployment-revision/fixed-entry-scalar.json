@@ -1,0 +1,104 @@
+{
+  "reference": "2edc244cae71bd895d55b062fd20c3acd1318cb2",
+  "system": "macOS-27.2-arm64-arm-64bit",
+  "rounds": 10,
+  "warmup": 10000,
+  "iterations": 100000,
+  "latency_samples": 2048,
+  "pairs": [
+    {
+      "pair": 1,
+      "typed_ns": 29.565,
+      "fixed_ns": 136.04583,
+      "typed_p99_ns": 84,
+      "fixed_p99_ns": 208,
+      "throughput_ratio": 0.21731647342663868,
+      "p99_ratio": 2.4761904761904763
+    },
+    {
+      "pair": 2,
+      "typed_ns": 22.22667,
+      "fixed_ns": 118.98917,
+      "typed_p99_ns": 42,
+      "fixed_p99_ns": 167,
+      "throughput_ratio": 0.18679573947780287,
+      "p99_ratio": 3.9761904761904763
+    },
+    {
+      "pair": 3,
+      "typed_ns": 21.27125,
+      "fixed_ns": 105.27416,
+      "typed_p99_ns": 42,
+      "fixed_p99_ns": 167,
+      "throughput_ratio": 0.20205575613236904,
+      "p99_ratio": 3.9761904761904763
+    },
+    {
+      "pair": 4,
+      "typed_ns": 19.0575,
+      "fixed_ns": 101.60667,
+      "typed_p99_ns": 42,
+      "fixed_p99_ns": 125,
+      "throughput_ratio": 0.187561505558641,
+      "p99_ratio": 2.9761904761904763
+    },
+    {
+      "pair": 5,
+      "typed_ns": 18.6975,
+      "fixed_ns": 95.85125,
+      "typed_p99_ns": 42,
+      "fixed_p99_ns": 167,
+      "throughput_ratio": 0.19506787861399827,
+      "p99_ratio": 3.9761904761904763
+    },
+    {
+      "pair": 6,
+      "typed_ns": 17.52667,
+      "fixed_ns": 88.43417,
+      "typed_p99_ns": 42,
+      "fixed_p99_ns": 125,
+      "throughput_ratio": 0.19818889010887986,
+      "p99_ratio": 2.9761904761904763
+    },
+    {
+      "pair": 7,
+      "typed_ns": 17.50875,
+      "fixed_ns": 88.72959,
+      "typed_p99_ns": 42,
+      "fixed_p99_ns": 125,
+      "throughput_ratio": 0.19732706980839199,
+      "p99_ratio": 2.9761904761904763
+    },
+    {
+      "pair": 8,
+      "typed_ns": 18.04042,
+      "fixed_ns": 92.26833,
+      "typed_p99_ns": 42,
+      "fixed_p99_ns": 125,
+      "throughput_ratio": 0.19552125848598323,
+      "p99_ratio": 2.9761904761904763
+    },
+    {
+      "pair": 9,
+      "typed_ns": 18.24,
+      "fixed_ns": 90.87208,
+      "typed_p99_ns": 42,
+      "fixed_p99_ns": 125,
+      "throughput_ratio": 0.2007217178257612,
+      "p99_ratio": 2.9761904761904763
+    },
+    {
+      "pair": 10,
+      "typed_ns": 18.02084,
+      "fixed_ns": 91.29333,
+      "typed_p99_ns": 42,
+      "fixed_p99_ns": 125,
+      "throughput_ratio": 0.1973949246894598,
+      "p99_ratio": 2.9761904761904763
+    }
+  ],
+  "scalar_gate": "rejected",
+  "median_throughput_ratio": 0.1973609972489259,
+  "median_p99_ratio": 2.9761904761904763,
+  "compiler": "rustc 1.96.0 (ac68faa20 2026-05-25)\nbinary: rustc\ncommit-hash: ac68faa20c58cbccd01ee7208bf3b6e93a7d7f96\ncommit-date: 2026-05-25\nhost: aarch64-apple-darwin\nrelease: 1.96.0\nLLVM version: 22.1.2\n"
+}

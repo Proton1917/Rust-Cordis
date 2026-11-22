@@ -7,70 +7,67 @@ use cordis_types::{LibraryInfo, SwapReport};
 use futures_util::future::join_all;
 use std::path::{Path, PathBuf};
 
-struct NativeSwap {
-    group: Arc<Group>,
-    plugin: String,
-    previous: Arc<GroupGeneration>,
-    candidate: Arc<GroupGeneration>,
-    specification: Option<LaunchPlan>,
-    old_library: u64,
-    new_library: u64,
-    transition: lifecycle::Transition,
-}
-
 impl Manager {
     /// DOC-15 §11.3、ADR-0041：在既有页面连接登记新的逻辑插件，保留原组件定义身份。
     pub async fn add_library(&self, group: String, path: PathBuf) -> Result<payload::Plugin> {
-        self.transaction(move |manager| async move {
-            manager.running()?;
-            let group = manager.group(&group)?;
-            if group.specification.lock().is_some() {
-                return Err(error(3, "动态页面模块登记需要逻辑连接分组"));
-            }
-            let previous = group.current.lock().clone();
-            let prepared = manager.prepare_library(&previous.connection, &path).await?;
-            let result = async {
-                if previous
-                    .descriptor
-                    .plugins
-                    .iter()
-                    .any(|plugin| plugin.name == prepared.plugin.name)
-                {
-                    return Err(error(2, "页面插件名称已经登记"));
+        self.submit(
+            move |manager| async move {
+                manager.running()?;
+                let group = manager.group(&group)?;
+                if group.specification.lock().is_some() {
+                    return Err(error(3, "动态页面模块登记需要逻辑连接分组"));
                 }
-                let candidate = manager.native_generation(
-                    &group.name,
-                    &prepared.plugin.name,
-                    &previous,
-                    &prepared,
-                )?;
-                manager
-                    .library_command::<()>(
-                        &previous.connection,
-                        "library_activate",
-                        prepared.library,
-                    )
-                    .await?;
-                manager.activate(&group, candidate, None)?;
-                Ok(prepared.plugin.clone())
-            }
-            .await;
-            if result.is_err() {
-                manager
-                    .library_command::<payload::LibraryRetired>(
-                        &previous.connection,
-                        "library_retire",
-                        prepared.library,
-                    )
-                    .await?;
-            }
-            result
-        })
+                let previous = group.current.lock().clone();
+                let prepared = manager.prepare_library(&previous.connection, &path).await?;
+                let result = async {
+                    if previous
+                        .descriptor
+                        .plugins
+                        .iter()
+                        .any(|plugin| plugin.name == prepared.plugin.name)
+                    {
+                        return Err(error(2, "页面插件名称已经登记"));
+                    }
+                    let candidate = manager.native_generation(
+                        &group.name,
+                        &prepared.plugin.name,
+                        &previous,
+                        &prepared,
+                    )?;
+                    manager
+                        .library_command::<()>(
+                            &previous.connection,
+                            "library_activate",
+                            prepared.library,
+                        )
+                        .await?;
+                    manager.activate(&group, candidate)?;
+                    Ok(prepared.plugin.clone())
+                }
+                .await;
+                if result.is_err() {
+                    manager
+                        .library_command::<payload::LibraryRetired>(
+                            &previous.connection,
+                            "library_retire",
+                            prepared.library,
+                        )
+                        .await?;
+                }
+                result
+            },
+            true,
+        )
         .await
     }
 
-    /// DOC-15 CP-5：锁外查询活动宿主，查询错误写入对应分组状态。
+    /// 取出当前可达宿主报告的库。
     pub async fn library_snapshots(&self) -> Result<Vec<LibraryInfo>> {
+        Ok(self.sample_libraries().await.0)
+    }
+
+    /// 每个错误归本次采样，连接事件由监管流程处理。
+    pub async fn sample_libraries(&self) -> (Vec<LibraryInfo>, BTreeMap<String, String>) {
         let groups: Vec<_> = self.0.catalog.lock().groups.values().cloned().collect();
         let queried = join_all(groups.into_iter().map(|group| async move {
             let version = group.current.lock().clone();
@@ -81,7 +78,7 @@ impl Manager {
                     .iter()
                     .any(|plugin| plugin.format == 1)
             {
-                return Vec::new();
+                return Ok(Vec::new());
             }
             match self.library_status(&version.connection).await {
                 Ok(mut status) => {
@@ -89,16 +86,23 @@ impl Manager {
                         library.group = group.name.clone();
                         library.connection = Some(version.connection.id());
                     }
-                    status.libraries
+                    Ok(status.libraries)
                 }
-                Err(problem) => {
-                    group.health.lock().error = Some(saved_error(&problem));
-                    Vec::new()
-                }
+                Err(problem) => Err((group.name.clone(), saved_error(&problem).to_string())),
             }
         }))
         .await;
-        Ok(queried.into_iter().flatten().collect())
+        let mut libraries = Vec::new();
+        let mut errors = BTreeMap::new();
+        for sample in queried {
+            match sample {
+                Ok(group) => libraries.extend(group),
+                Err((group, problem)) => {
+                    errors.insert(group, problem);
+                }
+            }
+        }
+        (libraries, errors)
     }
 
     /// DOC-11 SW-9：返回各逻辑插件最近的实际换库报告及来源连接。
@@ -112,41 +116,36 @@ impl Manager {
             .collect()
     }
 
-    /// DOC-11 SW-1–SW-9：按当前导出状态替换单个逻辑插件，失败恢复原版本。
-    ///
-    /// 运行时的部署变更统一走批次；网页页面组的组件实例挂在父实例之下，
-    /// 批次的实例集合不覆盖它们，所以页面模块更新使用此入口。
+    /// 页面与原生库使用同一批次切换，报告归该连接和插件。
     pub async fn replace_library(
         &self,
         group: String,
         plugin: String,
         path: PathBuf,
     ) -> Result<SwapReport> {
-        let committed = Arc::new(AtomicBool::new(false));
-        let marker = committed.clone();
-        let reported_group = group.clone();
-        let reported_plugin = plugin.clone();
-        self.transaction(move |manager| async move {
-            let started = std::time::Instant::now();
-            let result = manager
-                .swap_library(&group, &plugin, &path, marker.clone(), started)
-                .await;
-            match result {
-                Err(problem) if !marker.load(Ordering::Acquire) => {
-                    Err(manager.after_failed_libraries(problem, [group]).await)
-                }
-                other => other,
-            }
-        })
+        let page = self.group(&group)?.specification.lock().is_none();
+        self.submit(
+            move |manager| async move {
+                let change = BatchReplacement::Native {
+                    group: group.clone(),
+                    plugin: plugin.clone(),
+                    path,
+                };
+                manager
+                    .change_running_group(&group, Some(change), None)
+                    .await?;
+                manager
+                    .0
+                    .catalog
+                    .lock()
+                    .native_reports
+                    .get(&(group, plugin))
+                    .map(|(_, report)| report.clone())
+                    .ok_or_else(|| error(4, "换库报告缺席"))
+            },
+            page,
+        )
         .await
-        .map_err(|problem| {
-            replacement_failure(
-                &reported_group,
-                Some(&reported_plugin),
-                committed.load(Ordering::Acquire),
-                problem,
-            )
-        })
     }
 
     /// DOC-15 §8.7：读取宿主的库、租约与映像状态，协议错误交给调用方处理。
@@ -251,57 +250,6 @@ impl Manager {
         decode(response.value())
     }
 
-    /// DOC-11 SW-1–SW-5：准备原生候选与原状态，前置失败退役候选。
-    async fn prepare_native(
-        &self,
-        group_name: &str,
-        plugin_name: &str,
-        path: &Path,
-    ) -> Result<NativeSwap> {
-        self.running()?;
-        let group = self.group(group_name)?;
-        let previous = group.current.lock().clone();
-        let old = previous
-            .descriptor
-            .plugins
-            .iter()
-            .find(|plugin| plugin.name == plugin_name)
-            .ok_or_else(|| error(4, "待替换插件缺席"))?;
-        let old_library = old
-            .library
-            .ok_or_else(|| error(3, "组内换库适用于原生插件"))?;
-        let prepared = self.prepare_library(&previous.connection, path).await?;
-        let result = async {
-            let candidate =
-                self.native_generation(group_name, plugin_name, &previous, &prepared)?;
-            self.preflight(&group, &candidate).await?;
-            let specification = self.restart_specification(&group, &candidate).await?;
-            let transition = self
-                .prepare_replacement_transition(group_name, Some(plugin_name), &candidate)
-                .await?;
-            Ok(NativeSwap {
-                group,
-                plugin: plugin_name.into(),
-                previous: previous.clone(),
-                candidate,
-                specification,
-                old_library,
-                new_library: prepared.library,
-                transition,
-            })
-        }
-        .await;
-        if result.is_err() {
-            self.library_command::<payload::LibraryRetired>(
-                &previous.connection,
-                "library_retire",
-                prepared.library,
-            )
-            .await?;
-        }
-        result
-    }
-
     /// DOC-11 SW-1–SW-3：宿主复制与握手完成后返回候选编号，保持当前实例。
     pub(super) async fn prepare_library(
         &self,
@@ -370,253 +318,17 @@ impl Manager {
         }))
     }
 
-    /// DOC-11 SW-6–SW-8：切换候选后等待依赖重建，失败进入原状态回滚。
-    async fn swap_library(
-        &self,
-        group_name: &str,
-        plugin_name: &str,
-        path: &Path,
-        committed: Arc<AtomicBool>,
-        started: std::time::Instant,
-    ) -> Result<SwapReport> {
-        let mut swap = self.prepare_native(group_name, plugin_name, path).await?;
-        self.activate_native(&swap).await?;
-        let mut report = SwapReport {
-            plugin: plugin_name.into(),
-            previous_library: swap.old_library,
-            candidate_library: swap.new_library,
-            affected_instances: 0,
-            pause_ms: 0,
-            quiescence_ms: None,
-            committed: false,
-            succeeded: false,
-            rolled_back: false,
-            failure: None,
-            discarded_confirmation: None,
-        };
-        let accepted = match self
-            .stabilize(&swap.transition.before, &swap.transition.names)
-            .await
-        {
-            Ok(changed) => {
-                report.affected_instances = changed.len();
-                report.pause_ms = started.elapsed().as_millis().min(u64::MAX as u128) as u64;
-                self.confirm_transition(
-                    &mut swap.transition,
-                    &changed,
-                    std::slice::from_ref(&swap.previous.connection),
-                )
-                .await
-            }
-            Err(problem) => Err(problem),
-        };
-        let confirmation = match accepted {
-            Ok(duration) => duration,
-            Err(problem) => return self.rollback_native(swap, report, problem).await,
-        };
-        report.pause_ms = started
-            .elapsed()
-            .saturating_sub(confirmation)
-            .as_millis()
-            .min(u64::MAX as u128) as u64;
-        committed.store(true, Ordering::Release);
-        self.commit_native(swap, report, started + confirmation)
-            .await
-    }
-
-    /// DOC-11 SW-6：宿主切换成功后提交内核定义，宿主拒绝时解冻原版本。
-    async fn activate_native(&self, swap: &NativeSwap) -> Result<()> {
-        swap.group.health.lock().state = "replacing".into();
-        let activated = self
-            .library_command::<()>(
-                &swap.previous.connection,
-                "library_activate",
-                swap.new_library,
-            )
-            .await;
-        if let Err(problem) = activated {
-            self.thaw(&swap.transition.frozen).await?;
-            swap.group.health.lock().state = "running".into();
-            self.library_command::<payload::LibraryRetired>(
-                &swap.previous.connection,
-                "library_retire",
-                swap.new_library,
-            )
-            .await?;
-            return Err(problem);
-        }
-        self.inherit(&swap.transition.inherited);
-        self.activate(&swap.group, swap.candidate.clone(), Some(&swap.plugin))
-    }
-
-    /// DOC-11 §7：候选失败时恢复原定义及原状态，并记录实际回滚结果。
-    async fn rollback_native(
-        &self,
-        swap: NativeSwap,
-        mut report: SwapReport,
-        problem: WireError,
-    ) -> Result<SwapReport> {
-        report.discarded_confirmation = self.confirmation_discard(&swap.transition);
-        let rollback = async {
-            let recovered = if swap.previous.connection.is_alive() {
-                self.library_command::<()>(
-                    &swap.previous.connection,
-                    "library_activate",
-                    swap.old_library,
-                )
-                .await?;
-                None
-            } else {
-                Some(
-                    self.prepare_transition(&self.group_instances(&swap.group.name), false)
-                        .await?,
-                )
-            };
-            if let Some(recovered) = &recovered {
-                self.inherit(&recovered.inherited);
-            }
-            self.inherit(&swap.transition.inherited);
-            let restored = self.rollback_version(&swap.group, &swap.previous).await?;
-            let plugin = recovered.is_none().then_some(swap.plugin.as_str());
-            self.activate(&swap.group, restored, plugin)?;
-            self.stabilize(&swap.transition.before, &swap.transition.names)
-                .await?;
-            if let Some(recovered) = &recovered {
-                self.thaw_current(&recovered.frozen).await?;
-            }
-            self.thaw_current(&swap.transition.frozen).await
-        }
-        .await;
-        report.rolled_back = rollback.is_ok();
-        report.failure = Some(metadata::clipped(&problem.message));
-        swap.group.health.lock().state = if rollback.is_ok() {
-            "running"
-        } else {
-            "failed"
-        }
-        .into();
-        swap.group.health.lock().error = Some(saved_error(&problem));
-        self.record_native(&swap, &report);
-        drop(swap.transition.frozen);
-        if swap.previous.connection.is_alive() {
-            self.library_command::<payload::LibraryRetired>(
-                &swap.previous.connection,
-                "library_retire",
-                swap.new_library,
-            )
-            .await?;
-        }
-        rollback?;
-        Err(problem)
-    }
-
-    /// DOC-11 SW-9：释放冻结引用后退役原库，保存宿主报告及手动回滚所需的原状态。
-    async fn commit_native(
-        &self,
-        mut swap: NativeSwap,
-        mut report: SwapReport,
-        started: std::time::Instant,
-    ) -> Result<SwapReport> {
-        report.committed = true;
-        *swap.group.health.lock() = Health {
-            state: "running".into(),
-            error: None,
-        };
-        if let Some(specification) = &swap.specification {
-            self.replace_plan(&swap.group, Some(specification.clone()))
-                .await;
-        }
-        self.record_native(&swap, &report);
-        drop(std::mem::take(&mut swap.transition.frozen));
-        let retired_images = match self.retire_native(&swap, &mut report).await {
-            Ok(count) => count,
-            Err(problem) => {
-                return Err(self
-                    .after_failed_libraries(problem, [swap.group.name.clone()])
-                    .await);
-            }
-        };
-        self.finish_native(swap, report, retired_images, started)
-            .await
-    }
-
-    /// SW-9：释放原库的实际租约，退役错误保留已确认的版本提交事实。
-    async fn retire_native(&self, swap: &NativeSwap, report: &mut SwapReport) -> Result<u64> {
-        let retired = self
-            .library_command::<payload::LibraryRetired>(
-                &swap.previous.connection,
-                "library_retire",
-                swap.old_library,
-            )
-            .await;
-        let retired = match retired {
-            Ok(retired) => retired,
-            Err(problem) => {
-                report.failure = Some(metadata::clipped(&problem.message));
-                swap.group.health.lock().error = Some(saved_error(&problem));
-                self.record_native(swap, report);
-                return Err(problem);
-            }
-        };
-        report.quiescence_ms = retired.quiescence_ms;
-        if retired.leases != 0 {
-            report.failure = Some("旧库仍有活动租约".into());
-            self.record_native(swap, report);
-            return Err(error(6, "旧库仍有活动租约"));
-        }
-        Ok(retired.retired_images)
-    }
-
-    /// RM-3/RM-4：阈值重启属于原替换事务，统计最终稳定时刻与全部纪元变化。
-    async fn finish_native(
-        &self,
-        mut swap: NativeSwap,
-        mut report: SwapReport,
-        retired_images: u64,
-        started: std::time::Instant,
-    ) -> Result<SwapReport> {
-        let restarted = self
-            .enforce_image_limit(swap.specification.take(), retired_images, started)
-            .await;
-        match restarted {
-            Ok(Some(restarted)) => {
-                report.pause_ms = restarted.pause_ms;
-                report.affected_instances = self
-                    .epochs()
-                    .iter()
-                    .filter(|(name, epoch)| {
-                        swap.transition
-                            .before
-                            .get(*name)
-                            .is_some_and(|before| before != *epoch)
-                    })
-                    .count();
-            }
-            Ok(None) => {}
-            Err(problem) => {
-                report.succeeded = false;
-                report.failure = Some(metadata::clipped(&problem.message));
-                self.record_native(&swap, &report);
-                return Err(problem);
-            }
-        }
-        report.succeeded = true;
-        self.record_native(&swap, &report);
-        Ok(report)
-    }
-
     /// DOC-15 §8.7：退役映像超过配置阈值时重启该组，实例继承重启前导出的状态。
     pub(super) async fn enforce_image_limit(
         &self,
         specification: Option<LaunchPlan>,
         retired_images: u64,
-        started: std::time::Instant,
     ) -> Result<Option<ReplaceReport>> {
         if retired_images > self.0.options.retired_image_limit
             && let Some(specification) = specification
         {
             return self
-                .replace_process_group(specification.specification.clone(), None, started)
+                .replace_process_group(specification.specification.clone())
                 .await
                 .map(Some);
         }
@@ -648,12 +360,8 @@ impl Manager {
             }
             let recovery = async {
                 let status = self.library_status(&current.connection).await?;
-                self.enforce_image_limit(
-                    Some(plan),
-                    status.retired_images,
-                    std::time::Instant::now(),
-                )
-                .await
+                self.enforce_image_limit(Some(plan), status.retired_images)
+                    .await
             }
             .await;
             if let Err(error) = recovery {
@@ -664,13 +372,5 @@ impl Manager {
             }
         }
         problem
-    }
-
-    /// DOC-10 RM-3/RM-4：阈值重启完成后保存整次事务的实际影响数和 Active 时间。
-    fn record_native(&self, swap: &NativeSwap, report: &SwapReport) {
-        self.0.catalog.lock().native_reports.insert(
-            (swap.group.name.clone(), swap.plugin.clone()),
-            (swap.previous.connection.id(), report.clone()),
-        );
     }
 }

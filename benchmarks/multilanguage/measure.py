@@ -7,7 +7,11 @@ import platform
 import shutil
 import signal
 import subprocess
+import sys
 import time
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tests"))
+from management import request_admin
 
 
 VALUE = list(range(64))
@@ -36,7 +40,7 @@ def fixture(project, tools, role):
     (directory / "cordis-plugin.toml").write_text(
         f'name="fixture-{role}"\nversion="0.1.0"\nsocket="process"\nprotocol=1\ncommand={json.dumps(command)}\n'
     )
-    grant = 'grants={"cordis.manage@1"=["*"]}\n' if role == "admin" else ""
+    grant = 'grants={"cordis.manage@2"=["*"]}\n' if role == "admin" else ""
     return f'[instance.{role}]\nplugin="{role}"\ncomponent="{role}"\ngroup="{role}"\n{grant}config={{commands={json.dumps(str(project / (role + "-commands")))},results={json.dumps(str(project / (role + "-results")))}}}\n'
 
 
@@ -154,7 +158,7 @@ def rpc(options):
 
 
 def replacement(options):
-    """RM-8、ADR-0035：一次真实替换分别记录pause、管理RPC与外部观察耗时。"""
+    """RM-8：一次真实替换分别记录停顿、受理 RPC 和票据完成耗时。"""
     directory, configuration = project(options, options.label, options.provider)
     configuration += fixture(directory, options.tools, "admin")
     configuration += fixture(directory, options.tools, "kv-client")
@@ -165,17 +169,19 @@ def replacement(options):
     with runtime(directory, options) as running:
         before = running.wait(lambda: running.active("store") and running.active("kv-client") and running.active("admin") and running.status(), "测量实例激活")
         running.request("kv-client", "kv@1.0", "put", [KEY, VALUE])
-        installed, _ = running.request("admin", "cordis.manage@1.1", "install", [str(candidate)])
+        installed = request_admin(running, "install", [str(candidate)])
         old = next(item for item in before["instances"] if item["name"] == "store")
         socket = next(item["entry"]["socket"] for item in before["sources"] if item["reference"] == old["reference"])
         assert installed["value"] != old["reference"], "候选需产生新的安装引用以执行实际替换"
-        reply, wall_ns = running.request("admin", "cordis.manage@1.1", "replace", ["store", installed["value"]])
+        started = time.perf_counter_ns()
+        reply = request_admin(running, "replace", ["store", installed["value"]])
+        wall_ns = time.perf_counter_ns() - started
         after = running.wait(lambda: replacement_ready(running.status(), old, socket), "替换后提供方、依赖方和报告完成")
         restored, _ = running.request("kv-client", "kv@1.0", "get", [KEY])
         assert restored["value"] == VALUE, restored
         report = replacement_report(after, socket)
         assert report["succeeded"] and report["committed"], report
-        result = {"label": options.label, "socket": socket, "provider": str(options.provider.resolve()), "candidate": str(options.candidate.resolve()), "samples": 1, "pause_ms": report["pause_ms"], "rpc_wall_us": reply["rpc_wall_us"], "harness_wall_ns": wall_ns, "state_bytes": VALUE, "replacement": report, "before": before, "after": after}
+        result = {"label": options.label, "socket": socket, "provider": str(options.provider.resolve()), "candidate": str(options.candidate.resolve()), "samples": 1, "pause_ms": report["pause_ms"], "admission_rpc_wall_us": reply["rpc_wall_us"], "harness_wall_ns": wall_ns, "state_bytes": VALUE, "replacement": report, "before": before, "after": after}
         save(directory / "measurement.json", result)
         return result
 

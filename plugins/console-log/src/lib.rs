@@ -48,6 +48,7 @@ impl Component for Console {
 
 cordis_sdk::export_plugin!(
     name = "console-log",
+    tokio = false,
     version = env!("CARGO_PKG_VERSION"),
     components = [Console]
 );

@@ -4,6 +4,7 @@ pub use counter_component::{Counter, CounterConfig};
 
 cordis_sdk::export_plugin!(
     name = "counter",
+    tokio = false,
     version = env!("CARGO_PKG_VERSION"),
     components = [Counter]
 );

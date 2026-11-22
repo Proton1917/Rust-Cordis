@@ -11,6 +11,7 @@ pub fn expand(plugin: Plugin) -> syn::Result<TokenStream> {
         name,
         version,
         components,
+        tokio,
     } = plugin;
     // SAFETY: DOC-12 §3、ADR-0042，动态库导出固定 C 符号，测试程序使用模块内 Rust 符号。
     let export = quote!(#[cfg_attr(not(test), unsafe(no_mangle))]);
@@ -23,7 +24,7 @@ pub fn expand(plugin: Plugin) -> syn::Result<TokenStream> {
         callbacks.push(apply_callback(component, &apply));
         callbacks.push(resolve_callback(component, &resolve));
     }
-    let entry = plugin_entry(&name, &version, &export, &definitions);
+    let entry = plugin_entry(&name, &version, &export, &definitions, tokio);
     Ok(quote! {
         #[doc = "DOC-12 §3：返回由本 crate 固定入口模板构造的进程内插件入口句柄。"]
         pub fn cordis_entry() -> ::cordis_sdk::__private::abi::PluginEntry {
@@ -133,7 +134,9 @@ fn plugin_entry(
     version: &Expr,
     export: &TokenStream,
     definitions: &[TokenStream],
+    tokio: bool,
 ) -> TokenStream {
+    let install = tokio.then(|| quote!(::cordis_sdk::__private::install_ambient();));
     quote! {
         // SAFETY: DOC-12 §3，宿主和输出存储有效，入口每个插件库调用一次。
         #export
@@ -152,7 +155,7 @@ fn plugin_entry(
                     __cordis_plugin::ENVIRONMENT.set(environment)
                         .map_err(|_| ::cordis_sdk::Error::new(4, "插件入口已调用"))?;
                     // ADR-0055：之后的边界调用都在插件库的执行环境中运行。
-                    ::cordis_sdk::__private::install_ambient();
+                    #install
                     let metadata = ::cordis_sdk::__private::abi::PluginMetadata {
                         name: (#name).to_string(),
                         version: (#version).to_string(),

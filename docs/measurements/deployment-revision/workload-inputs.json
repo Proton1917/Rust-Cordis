@@ -1,0 +1,51 @@
+{
+  "platform": "macOS-27.2-arm64-arm-64bit",
+  "cpu_count": 14,
+  "pairs": 10,
+  "scenarios": [
+    "state-1MiB",
+    "state-4MiB",
+    "rpc-64B"
+  ],
+  "probe": {
+    "bytes": 984608,
+    "mtime_ns": 1795341421897064811,
+    "name": "libcordis_latency_probe.dylib"
+  },
+  "bins": {
+    "baseline": [
+      {
+        "bytes": 9482416,
+        "mtime_ns": 1795328358748722132,
+        "name": "cordis"
+      },
+      {
+        "bytes": 3639648,
+        "mtime_ns": 1795328352956476785,
+        "name": "cordis-host"
+      },
+      {
+        "bytes": 1106240,
+        "mtime_ns": 1795328351548864050,
+        "name": "libkv_mem.dylib"
+      }
+    ],
+    "candidate": [
+      {
+        "bytes": 10076864,
+        "mtime_ns": 1795341419080125455,
+        "name": "cordis"
+      },
+      {
+        "bytes": 3534656,
+        "mtime_ns": 1795341410675956558,
+        "name": "cordis-host"
+      },
+      {
+        "bytes": 727152,
+        "mtime_ns": 1795341408412268932,
+        "name": "libkv_mem.dylib"
+      }
+    ]
+  }
+}

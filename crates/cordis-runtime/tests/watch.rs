@@ -418,7 +418,7 @@ fn self_replacement(guard: &TestGuard, workspace: &Path, artifacts: &Path) {
             && snapshot["last_batch"].as_array().is_some_and(|outcomes| {
                 outcomes
                     .iter()
-                    .any(|outcome| outcome["caller"] == "watch" && outcome["state"] == "rejected")
+                    .any(|outcome| outcome["caller"] == "watch" && outcome["state"] == "restored")
             })
     });
     let outcome = rejected["last_batch"]

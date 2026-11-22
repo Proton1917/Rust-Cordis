@@ -5,6 +5,8 @@ import shutil
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "benchmarks/multilanguage"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from management import request_admin
 from measure import fixture, runtime, save
 
 
@@ -61,7 +63,7 @@ def observed(current, project, previous=None):
 
 
 def manage(current, method, arguments, success=True):
-    return current.request("admin", "cordis.manage@1.1", method, arguments, expect_success=success)[0]
+    return request_admin(current, method, arguments, expect_success=success)
 
 
 def lifecycle(current, project, options, original):

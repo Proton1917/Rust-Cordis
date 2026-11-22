@@ -1,0 +1,36 @@
+{
+  "deployment": {
+    "versions": 2,
+    "durable_fields": 4,
+    "event_depth_limit": 20,
+    "depth_explored": 19,
+    "reached_fixed_point": true,
+    "reachable_states": 22,
+    "transitions": 66,
+    "events": [
+      "activate",
+      "activation_fails",
+      "begin",
+      "cleanup",
+      "cleanup_fails",
+      "confirmation_fails",
+      "crash_recover",
+      "directory_sync_fails",
+      "directory_synced",
+      "files_sync_fails",
+      "journal_synced",
+      "recover_staging",
+      "recover_undo",
+      "rename",
+      "rename_fails",
+      "same_target",
+      "write_fails",
+      "write_file"
+    ]
+  },
+  "selection": {
+    "nodes": 3,
+    "edge_sets": 64,
+    "graph_seed_pairs": 512
+  }
+}

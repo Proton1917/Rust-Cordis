@@ -21,7 +21,7 @@ async def install(case, source):
 
 async def replace_batch(case, replacements, request_id, expected):
     """ADR-0031：受理票据匹配请求，最终结果从状态快照读取。"""
-    ticket = await case.manage("replace_batch", [replacements, False, request_id])
+    ticket = await case.manage("replace_batch", [replacements, False, request_id], wait_for_result=False)
     assert ticket["ok"] and ticket["value"]["id"] == request_id, ticket
 
     def completed():
@@ -30,7 +30,7 @@ async def replace_batch(case, replacements, request_id, expected):
 
     outcome = await case.wait(completed, f"{request_id} 结果完成")
     assert outcome["state"] == expected, outcome
-    if expected == "rejected":
+    if expected == "restored":
         assert "候选页面激活失败" in outcome["error"], outcome
     result = {"ticket": ticket, "outcome": outcome}
     case.save(request_id + ".json", result)
@@ -129,7 +129,7 @@ async def run(case):
     for candidate in (store, failed):
         shutil.copy2(case.tools / "libkv_mem.dylib", candidate / "libkv_mem.dylib")
     candidates = {"notes": await install(case, notes), "store": await install(case, store), "failed": await install(case, failed)}
-    rejected = await replace_batch(case, [["notes", candidates["notes"]], ["store", candidates["failed"]]], "web-batch-rejected", "rejected")
+    rejected = await replace_batch(case, [["notes", candidates["notes"]], ["store", candidates["failed"]]], "web-batch-rejected", "restored")
     await case.wait(lambda: all(active_reference(case.status(), name, reference) for name, reference in original.items()), "原笔记与后端来源恢复")
     await verify_pages(case, origins, "页面笔记", "Rust 数据便笺", "restored")
     accepted = await replace_batch(case, [["notes", candidates["notes"]], ["store", candidates["store"]]], "web-batch-accepted", "succeeded")

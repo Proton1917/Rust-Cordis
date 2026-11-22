@@ -1,0 +1,2 @@
+{"borrow_then_decode":{"requested_bytes":1049174,"requests":10},"checkpoint":"state-1MiB.state","checkpoint_bytes":1048644,"clone_then_decode":{"requested_bytes":2098561,"requests":29}}
+{"borrow_then_decode":{"requested_bytes":4194902,"requests":10},"checkpoint":"state-4MiB.state","checkpoint_bytes":4194372,"clone_then_decode":{"requested_bytes":8390017,"requests":29}}

@@ -54,7 +54,7 @@ impl Forward {
         let values = decode_arguments(args)?;
         match (method, values.as_slice()) {
             ("open", [metadata, Value::Tag(cordis_up::OBJECT_TAG, id)]) => {
-                let number: u64 = from_value(id.as_ref().clone())?;
+                let number: u64 = from_value(id.as_ref())?;
                 let receiver = abi::environment().host().object_import(number)?;
                 if receiver.interface()? != "cordis.forward-receiver@1.0" {
                     return Err(Error::new(2, "open 需要 ForwardReceiver"));
@@ -62,12 +62,11 @@ impl Forward {
                 Ok(Operation::Open(metadata.clone(), receiver))
             }
             ("frame", [number, Value::Bytes(frame)]) => {
-                Ok(Operation::Frame(from_value(number.clone())?, frame.clone()))
+                Ok(Operation::Frame(from_value(number)?, frame.clone()))
             }
-            ("close", [number, Value::Text(reason)]) => Ok(Operation::Close(
-                from_value(number.clone())?,
-                reason.clone(),
-            )),
+            ("close", [number, Value::Text(reason)]) => {
+                Ok(Operation::Close(from_value(number)?, reason.clone()))
+            }
             _ => Err(Error::new(2, "Forward 方法或参数形状错误")),
         }
     }
@@ -168,10 +167,10 @@ impl Forwarders {
     /// DOC-15 AU-15：回程接收失败回收对应页面，保持其他页面与物理连接。
     pub async fn receive(self: Arc<Self>, host: Host, method: &str, params: Payload) -> Result<()> {
         let (channel, callback, arguments, closing) = if method == "channel_frame" {
-            let request: payload::ChannelFrame = from_value(params.value().clone())?;
+            let request: payload::ChannelFrame = from_value(params.value())?;
             (request.channel, "frame", vec![request.frame], false)
         } else {
-            let request: payload::ChannelClose = from_value(params.value().clone())?;
+            let request: payload::ChannelClose = from_value(params.value())?;
             (
                 request.channel,
                 "close",

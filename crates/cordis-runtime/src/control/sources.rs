@@ -158,12 +158,13 @@ impl SourceBindings {
     pub(super) fn commit(
         &mut self,
         store: &Store,
+        base: &Configuration,
         overlay: &Overlay,
-        states: &HashMap<String, Option<payload::State>>,
-    ) -> Result<()> {
-        store.commit_deployment(overlay, states, &self.encoded()?)?;
+        states: &HashMap<String, Option<Arc<payload::State>>>,
+    ) -> std::result::Result<crate::storage::Committed, crate::storage::CommitError> {
+        let committed = store.commit_deployment(base, overlay, states, &self.encoded()?)?;
         self.dirty = false;
-        Ok(())
+        Ok(committed)
     }
 
     pub(super) fn confirm(&mut self, manager: &Manager) -> Result<()> {

@@ -256,8 +256,90 @@ fn archive_runs_real_plugins_without_toolchain_or_source() {
     let _tools = tools().for_case(&case);
     let (_, project) = project("native");
     let project = case.track(project);
-    let deployed = release(&project, &tools().binaries, false);
-    activate(&project, &deployed, 2);
+    // 两份库导出相同的 Cargo 目标名，业务描述符分别是计数器与内存 KV。
+    for (name, component) in [
+        ("memory", "kv-mem-component"),
+        ("counter", "counter-component"),
+    ] {
+        let path = project.join("plugins").join(name).join("Cargo.toml");
+        let mut package: toml::Table = toml::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+        package["lib"]
+            .as_table_mut()
+            .unwrap()
+            .insert("name".into(), "shared".into());
+        package["dependencies"][component]
+            .as_table_mut()
+            .unwrap()
+            .insert("optional".into(), true.into());
+        package.insert(
+            "features".into(),
+            toml::Value::Table(
+                toml::from_str(&format!(
+                    "default=['component']\ncomponent=['dep:{component}']"
+                ))
+                .unwrap(),
+            ),
+        );
+        fs::write(path, toml::to_string_pretty(&package).unwrap()).unwrap();
+    }
+    let deployment = project.join("deployment");
+    fs::create_dir(&deployment).unwrap();
+    let config = deployment.join("cordis.toml");
+    let base = "format_version=2\n[build]\nworkspace='../Cargo.toml'\n[pack]\nname='pack-native'\n[runtime]\ncheckpoint_ms=0\n";
+    fs::write(
+        &config,
+        format!("{base}[instance.store]\nplugin='shared'\n"),
+    )
+    .unwrap();
+    let error = {
+        let _lock = cordis_testkit::build::shared_build_lock(&tools().root).unwrap();
+        pack_command(&tools(), &deployment).output().unwrap()
+    };
+    let diagnostic = String::from_utf8_lossy(&error.stderr);
+    assert!(
+        !error.status.success()
+            && diagnostic.contains("build.plugins")
+            && diagnostic.contains("memory")
+            && diagnostic.contains("counter"),
+        "{diagnostic}"
+    );
+    fs::write(
+        &config,
+        format!(
+            "{base}
+[build.plugins.store]
+package='memory'
+target='shared'
+[build.plugins.counter]
+package='counter'
+target='shared'
+[instance.store]
+plugin='store'
+component='kv-store'
+[instance.counter]
+plugin='counter'
+component='counter'
+"
+        ),
+    )
+    .unwrap();
+    let deployed = release(&deployment, &tools().binaries, false);
+    let snapshot = activate(&deployment, &deployed, 2);
+    assert_eq!(snapshot["groups"].as_array().unwrap().len(), 1);
+    let manifest: toml::Table =
+        toml::from_str(&fs::read_to_string(deployed.join("cordis.toml")).unwrap()).unwrap();
+    for (instance, package) in [("store", "memory"), ("counter", "counter")] {
+        let plugin = manifest["instance"][instance]["plugin"].as_str().unwrap();
+        let path = deployed
+            .join("plugins")
+            .join(plugin)
+            .join("cordis-build.json");
+        let record: Value = serde_json::from_slice(&fs::read(path).unwrap()).unwrap();
+        assert_eq!(record["package"], package);
+        assert_eq!(record["cargo_target"], "shared");
+        let features = record["features"].as_array().unwrap();
+        assert!(features.iter().any(|feature| feature == "component"));
+    }
     eprintln!(
         "AU-12 真实压缩包运行：{}",
         case.evidence_for(&project).display()
@@ -577,6 +659,13 @@ fn scaffold_http_package_remaps_build_paths_and_preserves_user_flags() {
         evidence.len() >= 7,
         "核心、宿主、app、watch、HTTP、处理方和 C 诊断插件已打包"
     );
+    let deployed = fs::read_dir(&extracted)
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    activate(&project, &deployed, 5);
     fs::write(
         project.join("privacy-result.json"),
         serde_json::to_vec_pretty(&evidence).unwrap(),
@@ -613,10 +702,9 @@ fn prepare_http_application(tools: &Tools, project: &Path) {
     .unwrap();
     let mut config: toml::Value =
         toml::from_str(&fs::read_to_string(project.join("cordis.toml")).unwrap()).unwrap();
-    config.as_table_mut().unwrap().insert(
-        "pack".into(),
-        toml::Value::try_from(serde_json::json!({"name":"pack-native","version":"0.1.0"})).unwrap(),
-    );
+    let pack = config["pack"].as_table_mut().unwrap();
+    pack.insert("name".into(), "pack-native".into());
+    pack.insert("version".into(), "0.1.0".into());
     config["instance"].as_table_mut().unwrap().insert(
         "http".into(),
         toml::Value::try_from(

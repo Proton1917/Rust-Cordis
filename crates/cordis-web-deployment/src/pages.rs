@@ -160,6 +160,7 @@ impl Deployment {
         let mut interfaces = page.provides.lock().clone();
         interfaces.extend([
             "cordis.manage@1".into(),
+            "cordis.manage@2".into(),
             "cordis.forward@1".into(),
             "cordis.web@1".into(),
         ]);

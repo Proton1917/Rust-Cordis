@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 import shutil
 import signal
@@ -7,7 +8,7 @@ import sys
 import time
 
 
-from support import EVIDENCE, manifest, test_environment
+from support import DEPENDENCIES, EVIDENCE, SOURCE, manifest, test_environment
 
 
 def probe():
@@ -72,9 +73,20 @@ def scenario(name, python_provider):
     )
     (project / "cordis.toml").write_text(configuration)
     environment = test_environment()
+    modules = project / "python"
+    modules.mkdir()
+    for package in (
+        SOURCE / "sdks/python/cordis_sdk",
+        SOURCE / "plugins/kv-py/kv_py",
+        SOURCE / "plugins/counter-py/counter_py",
+    ):
+        shutil.copytree(package, modules / package.name, ignore=shutil.ignore_patterns("__pycache__"))
+    environment["PYTHONPATH"] = os.pathsep.join((str(modules), str(DEPENDENCIES)))
+    status = project / "state/status.json"
+    stderr = project / "stderr.log"
     with (
         (project / "stdout.log").open("w") as output,
-        (project / "stderr.log").open("w") as error,
+        stderr.open("w") as error,
     ):
         process = subprocess.Popen(
             [str(EVIDENCE / "bin/cordis"), "run"],
@@ -86,6 +98,18 @@ def scenario(name, python_provider):
         try:
             deadline = time.monotonic() + 25
             while not (project / "observed.json").exists():
+                if status.exists():
+                    snapshot = json.loads(status.read_text())
+                    if (
+                        snapshot["instance_errors"]
+                        or snapshot["plugin_errors"]
+                        or any(item["state"] == "failed" for item in snapshot["instances"])
+                    ):
+                        diagnostics = "\n".join(stderr.read_text(errors="replace").splitlines()[-30:])
+                        raise RuntimeError(
+                            f"{name} 的插件运行失败\n{status}\n"
+                            f"{json.dumps(snapshot, ensure_ascii=False)}\n{diagnostics}"
+                        )
                 if process.poll() is not None:
                     raise RuntimeError(f"{name}核心退出 {process.returncode}")
                 if time.monotonic() >= deadline:

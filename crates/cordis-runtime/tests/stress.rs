@@ -234,7 +234,13 @@ fn memory(snapshot: &Value) -> Value {
 }
 
 /// RM-3/RM-4：依据实际公开报告等待最终统计，21/42轮包含整组重启带来的 idle。
-fn round_snapshot(project: &Path, reference: &Value, changed: usize, previous: &Value) -> Value {
+fn round_snapshot(
+    project: &Path,
+    ticket: &Value,
+    reference: &Value,
+    changed: usize,
+    previous: &Value,
+) -> Value {
     let previous_candidate = previous["last_swap"]
         .as_array()
         .unwrap()
@@ -243,6 +249,14 @@ fn round_snapshot(project: &Path, reference: &Value, changed: usize, previous: &
         .map(|report| &report["candidate_library"]);
     until("本轮完整替换报告发布", || {
         let snapshot = status(project)?;
+        let outcome = snapshot["last_batch"]
+            .as_array()?
+            .iter()
+            .find(|row| row["caller"] == "admin" && row["id"] == *ticket)?;
+        if outcome["state"] == "pending" {
+            return None;
+        }
+        assert_eq!(outcome["state"], "succeeded", "{outcome}");
         let report = snapshot["last_swap"]
             .as_array()?
             .iter()
@@ -299,7 +313,7 @@ fn eight_threads_survive_fifty_native_replacements_with_stateful_restarts() {
             "scenario":"AC-9/AU-10", "threads":8, "replacements":50,"state":137,"restarts":[21,42],
             "profile":"release","compiler_consumer":"1.85.0","rss_unit":"KiB", "initial_rss":initial_memory,
             "RM-3":distribution(&samples,"affected_instances"),"RM-4_ms":distribution(&samples,"pause_ms"),
-            "wall_ms":distribution(&samples,"wall_ms"),"harness_wall_ms":distribution(&samples,"harness_wall_ms"),
+            "admission_ms":distribution(&samples,"admission_ms"),"harness_wall_ms":distribution(&samples,"harness_wall_ms"),
             "RM-6_total_kib_per_swap":(final_memory["total_kib"].as_i64().unwrap()-initial_memory["total_kib"].as_i64().unwrap()) as f64/50.0,
             "RM-6_core_kib_per_swap":(final_memory["core_kib"].as_i64().unwrap()-initial_memory["core_kib"].as_i64().unwrap()) as f64/50.0,
             "samples":samples
@@ -324,7 +338,7 @@ fn install_versions(project: &Path, artifacts: &Artifacts) -> [Value; 2] {
             request(
                 project,
                 10 + index as u64,
-                "cordis.manage@1.1",
+                "cordis.manage@2.0",
                 "install",
                 json!([path]),
             )["value"]
@@ -350,13 +364,19 @@ fn replace_rounds(
         let reply = request(
             project,
             100 + round,
-            "cordis.manage@1.1",
+            "cordis.manage@2.0",
             "replace",
             json!(["store", reference]),
         );
+        let snapshot = round_snapshot(
+            project,
+            &reply["value"]["id"],
+            reference,
+            if restarted { 4 } else { 3 },
+            &previous,
+        );
         let harness_wall_ms = started.elapsed().as_secs_f64() * 1000.0;
         current_counter(project, round, version);
-        let snapshot = round_snapshot(project, reference, if restarted { 4 } else { 3 }, &previous);
         let observation = observed(project, native_pid(&snapshot), version, 137);
         let rss = restart_observation(&previous, &snapshot, &previous_memory, restarted, round);
         let report = &snapshot["last_swap"]
@@ -365,14 +385,10 @@ fn replace_rounds(
             .iter()
             .find(|report| report["plugin"] == "loader-fixture")
             .unwrap();
-        let wall_ms = reply["rpc_wall_us"].as_u64().unwrap() as f64 / 1000.0;
-        assert!(
-            wall_ms >= report["pause_ms"].as_u64().unwrap() as f64,
-            "完整RPC调用覆盖RM-4"
-        );
+        let admission_ms = reply["rpc_wall_us"].as_u64().unwrap() as f64 / 1000.0;
         samples.push(json!({"round":round,"implementation":version,"value":137,"restarted":restarted,
             "affected_instances":report["affected_instances"],"pause_ms":report["pause_ms"],"rpc_wall_us":reply["rpc_wall_us"],
-            "wall_ms":wall_ms,"harness_wall_ms":harness_wall_ms,"quiescence_ms":report["quiescence_ms"],
+            "admission_ms":admission_ms,"harness_wall_ms":harness_wall_ms,"quiescence_ms":report["quiescence_ms"],
             "native_pid":native_pid(&snapshot),"idle_revision":instance(&snapshot,"idle")["revision"],"threads":observation,"rss":rss}));
         previous = snapshot;
         previous_memory = rss;

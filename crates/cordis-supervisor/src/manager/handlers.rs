@@ -147,9 +147,11 @@ impl Manager {
                 return Ok(batch.outgoing(result));
             }
             "invoke" => {
-                return self
-                    .invoke(connection, request(connection, params)?, params)
-                    .await;
+                return cordis_up::rpc::bound_invocation(self.0.options.invoke_timeout, async {
+                    self.invoke(connection, request(connection, params)?, params)
+                        .await
+                })
+                .await;
             }
             "object_info" => {
                 let request: payload::ObjectInfoRequest = request(connection, params)?;

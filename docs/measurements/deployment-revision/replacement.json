@@ -1,0 +1,2494 @@
+{
+  "RM-3": {
+    "max": 4.0,
+    "median": 3.0
+  },
+  "RM-4_ms": {
+    "max": 756.0,
+    "median": 167.0
+  },
+  "RM-6_core_kib_per_swap": 29.12,
+  "RM-6_total_kib_per_swap": 170.24,
+  "admission_ms": {
+    "max": 0.363,
+    "median": 0.247
+  },
+  "compiler_consumer": "1.85.0",
+  "harness_wall_ms": {
+    "max": 809.9132500000001,
+    "median": 230.7531875
+  },
+  "initial_rss": {
+    "core_kib": 9248,
+    "native_kib": 6544,
+    "processes": {
+      "28393": 9248,
+      "28400": 3088,
+      "28401": 3120,
+      "28402": 6544
+    },
+    "total_kib": 22000
+  },
+  "profile": "release",
+  "replacements": 50,
+  "restarts": [
+    21,
+    42
+  ],
+  "rss_unit": "KiB",
+  "samples": [
+    {
+      "admission_ms": 0.341,
+      "affected_instances": 3,
+      "harness_wall_ms": 200.791542,
+      "idle_revision": 0,
+      "implementation": 2,
+      "native_pid": 28402,
+      "pause_ms": 132,
+      "quiescence_ms": 0,
+      "restarted": false,
+      "round": 1,
+      "rpc_wall_us": 341,
+      "rss": {
+        "core_kib": 9648,
+        "native_kib": 7616,
+        "processes": {
+          "28393": 9648,
+          "28400": 3184,
+          "28401": 3200,
+          "28402": 7616
+        },
+        "total_kib": 23648
+      },
+      "threads": {
+        "complete": true,
+        "pid": 28402,
+        "values": [
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137
+        ],
+        "versions": [
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2
+        ]
+      },
+      "value": 137
+    },
+    {
+      "admission_ms": 0.228,
+      "affected_instances": 3,
+      "harness_wall_ms": 227.681292,
+      "idle_revision": 0,
+      "implementation": 1,
+      "native_pid": 28402,
+      "pause_ms": 168,
+      "quiescence_ms": 0,
+      "restarted": false,
+      "round": 2,
+      "rpc_wall_us": 228,
+      "rss": {
+        "core_kib": 9776,
+        "native_kib": 8368,
+        "processes": {
+          "28393": 9776,
+          "28400": 3216,
+          "28401": 3264,
+          "28402": 8368
+        },
+        "total_kib": 24624
+      },
+      "threads": {
+        "complete": true,
+        "pid": 28402,
+        "values": [
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137
+        ],
+        "versions": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ]
+      },
+      "value": 137
+    },
+    {
+      "admission_ms": 0.363,
+      "affected_instances": 3,
+      "harness_wall_ms": 213.816667,
+      "idle_revision": 0,
+      "implementation": 2,
+      "native_pid": 28402,
+      "pause_ms": 156,
+      "quiescence_ms": 0,
+      "restarted": false,
+      "round": 3,
+      "rpc_wall_us": 363,
+      "rss": {
+        "core_kib": 9792,
+        "native_kib": 9056,
+        "processes": {
+          "28393": 9792,
+          "28400": 3232,
+          "28401": 3296,
+          "28402": 9056
+        },
+        "total_kib": 25376
+      },
+      "threads": {
+        "complete": true,
+        "pid": 28402,
+        "values": [
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137
+        ],
+        "versions": [
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2
+        ]
+      },
+      "value": 137
+    },
+    {
+      "admission_ms": 0.281,
+      "affected_instances": 3,
+      "harness_wall_ms": 236.974292,
+      "idle_revision": 0,
+      "implementation": 1,
+      "native_pid": 28402,
+      "pause_ms": 169,
+      "quiescence_ms": 0,
+      "restarted": false,
+      "round": 4,
+      "rpc_wall_us": 281,
+      "rss": {
+        "core_kib": 9824,
+        "native_kib": 9792,
+        "processes": {
+          "28393": 9824,
+          "28400": 3264,
+          "28401": 3296,
+          "28402": 9792
+        },
+        "total_kib": 26176
+      },
+      "threads": {
+        "complete": true,
+        "pid": 28402,
+        "values": [
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137
+        ],
+        "versions": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ]
+      },
+      "value": 137
+    },
+    {
+      "admission_ms": 0.237,
+      "affected_instances": 3,
+      "harness_wall_ms": 226.962625,
+      "idle_revision": 0,
+      "implementation": 2,
+      "native_pid": 28402,
+      "pause_ms": 167,
+      "quiescence_ms": 0,
+      "restarted": false,
+      "round": 5,
+      "rpc_wall_us": 237,
+      "rss": {
+        "core_kib": 9888,
+        "native_kib": 10528,
+        "processes": {
+          "28393": 9888,
+          "28400": 3280,
+          "28401": 3312,
+          "28402": 10528
+        },
+        "total_kib": 27008
+      },
+      "threads": {
+        "complete": true,
+        "pid": 28402,
+        "values": [
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137
+        ],
+        "versions": [
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2
+        ]
+      },
+      "value": 137
+    },
+    {
+      "admission_ms": 0.201,
+      "affected_instances": 3,
+      "harness_wall_ms": 218.007792,
+      "idle_revision": 0,
+      "implementation": 1,
+      "native_pid": 28402,
+      "pause_ms": 158,
+      "quiescence_ms": 0,
+      "restarted": false,
+      "round": 6,
+      "rpc_wall_us": 201,
+      "rss": {
+        "core_kib": 9904,
+        "native_kib": 11232,
+        "processes": {
+          "28393": 9904,
+          "28400": 3296,
+          "28401": 3328,
+          "28402": 11232
+        },
+        "total_kib": 27760
+      },
+      "threads": {
+        "complete": true,
+        "pid": 28402,
+        "values": [
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137
+        ],
+        "versions": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ]
+      },
+      "value": 137
+    },
+    {
+      "admission_ms": 0.25,
+      "affected_instances": 3,
+      "harness_wall_ms": 241.019333,
+      "idle_revision": 0,
+      "implementation": 2,
+      "native_pid": 28402,
+      "pause_ms": 161,
+      "quiescence_ms": 0,
+      "restarted": false,
+      "round": 7,
+      "rpc_wall_us": 250,
+      "rss": {
+        "core_kib": 9904,
+        "native_kib": 11936,
+        "processes": {
+          "28393": 9904,
+          "28400": 3296,
+          "28401": 3328,
+          "28402": 11936
+        },
+        "total_kib": 28464
+      },
+      "threads": {
+        "complete": true,
+        "pid": 28402,
+        "values": [
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137
+        ],
+        "versions": [
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2
+        ]
+      },
+      "value": 137
+    },
+    {
+      "admission_ms": 0.292,
+      "affected_instances": 3,
+      "harness_wall_ms": 248.22050000000002,
+      "idle_revision": 0,
+      "implementation": 1,
+      "native_pid": 28402,
+      "pause_ms": 164,
+      "quiescence_ms": 0,
+      "restarted": false,
+      "round": 8,
+      "rpc_wall_us": 292,
+      "rss": {
+        "core_kib": 9936,
+        "native_kib": 12656,
+        "processes": {
+          "28393": 9936,
+          "28400": 3312,
+          "28401": 3376,
+          "28402": 12656
+        },
+        "total_kib": 29280
+      },
+      "threads": {
+        "complete": true,
+        "pid": 28402,
+        "values": [
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137
+        ],
+        "versions": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ]
+      },
+      "value": 137
+    },
+    {
+      "admission_ms": 0.212,
+      "affected_instances": 3,
+      "harness_wall_ms": 220.559333,
+      "idle_revision": 0,
+      "implementation": 2,
+      "native_pid": 28402,
+      "pause_ms": 166,
+      "quiescence_ms": 0,
+      "restarted": false,
+      "round": 9,
+      "rpc_wall_us": 212,
+      "rss": {
+        "core_kib": 9936,
+        "native_kib": 13328,
+        "processes": {
+          "28393": 9936,
+          "28400": 3360,
+          "28401": 3424,
+          "28402": 13328
+        },
+        "total_kib": 30048
+      },
+      "threads": {
+        "complete": true,
+        "pid": 28402,
+        "values": [
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137
+        ],
+        "versions": [
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2
+        ]
+      },
+      "value": 137
+    },
+    {
+      "admission_ms": 0.249,
+      "affected_instances": 3,
+      "harness_wall_ms": 455.99004199999996,
+      "idle_revision": 0,
+      "implementation": 1,
+      "native_pid": 28402,
+      "pause_ms": 407,
+      "quiescence_ms": 0,
+      "restarted": false,
+      "round": 10,
+      "rpc_wall_us": 249,
+      "rss": {
+        "core_kib": 9936,
+        "native_kib": 14016,
+        "processes": {
+          "28393": 9936,
+          "28400": 3360,
+          "28401": 3504,
+          "28402": 14016
+        },
+        "total_kib": 30816
+      },
+      "threads": {
+        "complete": true,
+        "pid": 28402,
+        "values": [
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137
+        ],
+        "versions": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ]
+      },
+      "value": 137
+    },
+    {
+      "admission_ms": 0.175,
+      "affected_instances": 3,
+      "harness_wall_ms": 221.313083,
+      "idle_revision": 0,
+      "implementation": 2,
+      "native_pid": 28402,
+      "pause_ms": 168,
+      "quiescence_ms": 0,
+      "restarted": false,
+      "round": 11,
+      "rpc_wall_us": 175,
+      "rss": {
+        "core_kib": 9968,
+        "native_kib": 14736,
+        "processes": {
+          "28393": 9968,
+          "28400": 3360,
+          "28401": 3568,
+          "28402": 14736
+        },
+        "total_kib": 31632
+      },
+      "threads": {
+        "complete": true,
+        "pid": 28402,
+        "values": [
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137
+        ],
+        "versions": [
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2
+        ]
+      },
+      "value": 137
+    },
+    {
+      "admission_ms": 0.252,
+      "affected_instances": 3,
+      "harness_wall_ms": 241.88625,
+      "idle_revision": 0,
+      "implementation": 1,
+      "native_pid": 28402,
+      "pause_ms": 167,
+      "quiescence_ms": 0,
+      "restarted": false,
+      "round": 12,
+      "rpc_wall_us": 252,
+      "rss": {
+        "core_kib": 9984,
+        "native_kib": 15392,
+        "processes": {
+          "28393": 9984,
+          "28400": 3376,
+          "28401": 3584,
+          "28402": 15392
+        },
+        "total_kib": 32336
+      },
+      "threads": {
+        "complete": true,
+        "pid": 28402,
+        "values": [
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137
+        ],
+        "versions": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ]
+      },
+      "value": 137
+    },
+    {
+      "admission_ms": 0.279,
+      "affected_instances": 3,
+      "harness_wall_ms": 460.954458,
+      "idle_revision": 0,
+      "implementation": 2,
+      "native_pid": 28402,
+      "pause_ms": 403,
+      "quiescence_ms": 0,
+      "restarted": false,
+      "round": 13,
+      "rpc_wall_us": 279,
+      "rss": {
+        "core_kib": 9984,
+        "native_kib": 16080,
+        "processes": {
+          "28393": 9984,
+          "28400": 3392,
+          "28401": 3584,
+          "28402": 16080
+        },
+        "total_kib": 33040
+      },
+      "threads": {
+        "complete": true,
+        "pid": 28402,
+        "values": [
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137
+        ],
+        "versions": [
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2
+        ]
+      },
+      "value": 137
+    },
+    {
+      "admission_ms": 0.246,
+      "affected_instances": 3,
+      "harness_wall_ms": 207.153917,
+      "idle_revision": 0,
+      "implementation": 1,
+      "native_pid": 28402,
+      "pause_ms": 156,
+      "quiescence_ms": 0,
+      "restarted": false,
+      "round": 14,
+      "rpc_wall_us": 246,
+      "rss": {
+        "core_kib": 10032,
+        "native_kib": 16752,
+        "processes": {
+          "28393": 10032,
+          "28400": 3408,
+          "28401": 3600,
+          "28402": 16752
+        },
+        "total_kib": 33792
+      },
+      "threads": {
+        "complete": true,
+        "pid": 28402,
+        "values": [
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137
+        ],
+        "versions": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ]
+      },
+      "value": 137
+    },
+    {
+      "admission_ms": 0.275,
+      "affected_instances": 3,
+      "harness_wall_ms": 230.895667,
+      "idle_revision": 0,
+      "implementation": 2,
+      "native_pid": 28402,
+      "pause_ms": 164,
+      "quiescence_ms": 0,
+      "restarted": false,
+      "round": 15,
+      "rpc_wall_us": 275,
+      "rss": {
+        "core_kib": 10144,
+        "native_kib": 17472,
+        "processes": {
+          "28393": 10144,
+          "28400": 3408,
+          "28401": 3600,
+          "28402": 17472
+        },
+        "total_kib": 34624
+      },
+      "threads": {
+        "complete": true,
+        "pid": 28402,
+        "values": [
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137
+        ],
+        "versions": [
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2
+        ]
+      },
+      "value": 137
+    },
+    {
+      "admission_ms": 0.185,
+      "affected_instances": 3,
+      "harness_wall_ms": 484.875791,
+      "idle_revision": 0,
+      "implementation": 1,
+      "native_pid": 28402,
+      "pause_ms": 419,
+      "quiescence_ms": 0,
+      "restarted": false,
+      "round": 16,
+      "rpc_wall_us": 185,
+      "rss": {
+        "core_kib": 10144,
+        "native_kib": 18160,
+        "processes": {
+          "28393": 10144,
+          "28400": 3408,
+          "28401": 3600,
+          "28402": 18160
+        },
+        "total_kib": 35312
+      },
+      "threads": {
+        "complete": true,
+        "pid": 28402,
+        "values": [
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137
+        ],
+        "versions": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ]
+      },
+      "value": 137
+    },
+    {
+      "admission_ms": 0.319,
+      "affected_instances": 3,
+      "harness_wall_ms": 248.77279199999998,
+      "idle_revision": 0,
+      "implementation": 2,
+      "native_pid": 28402,
+      "pause_ms": 169,
+      "quiescence_ms": 0,
+      "restarted": false,
+      "round": 17,
+      "rpc_wall_us": 319,
+      "rss": {
+        "core_kib": 10192,
+        "native_kib": 18880,
+        "processes": {
+          "28393": 10192,
+          "28400": 3408,
+          "28401": 3600,
+          "28402": 18880
+        },
+        "total_kib": 36080
+      },
+      "threads": {
+        "complete": true,
+        "pid": 28402,
+        "values": [
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137
+        ],
+        "versions": [
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2
+        ]
+      },
+      "value": 137
+    },
+    {
+      "admission_ms": 0.183,
+      "affected_instances": 3,
+      "harness_wall_ms": 238.242208,
+      "idle_revision": 0,
+      "implementation": 1,
+      "native_pid": 28402,
+      "pause_ms": 166,
+      "quiescence_ms": 0,
+      "restarted": false,
+      "round": 18,
+      "rpc_wall_us": 183,
+      "rss": {
+        "core_kib": 10192,
+        "native_kib": 19552,
+        "processes": {
+          "28393": 10192,
+          "28400": 3408,
+          "28401": 3616,
+          "28402": 19552
+        },
+        "total_kib": 36768
+      },
+      "threads": {
+        "complete": true,
+        "pid": 28402,
+        "values": [
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137
+        ],
+        "versions": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ]
+      },
+      "value": 137
+    },
+    {
+      "admission_ms": 0.251,
+      "affected_instances": 3,
+      "harness_wall_ms": 227.206917,
+      "idle_revision": 0,
+      "implementation": 2,
+      "native_pid": 28402,
+      "pause_ms": 161,
+      "quiescence_ms": 0,
+      "restarted": false,
+      "round": 19,
+      "rpc_wall_us": 251,
+      "rss": {
+        "core_kib": 10224,
+        "native_kib": 20256,
+        "processes": {
+          "28393": 10224,
+          "28400": 3408,
+          "28401": 3616,
+          "28402": 20256
+        },
+        "total_kib": 37504
+      },
+      "threads": {
+        "complete": true,
+        "pid": 28402,
+        "values": [
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137
+        ],
+        "versions": [
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2
+        ]
+      },
+      "value": 137
+    },
+    {
+      "admission_ms": 0.34,
+      "affected_instances": 3,
+      "harness_wall_ms": 212.039709,
+      "idle_revision": 0,
+      "implementation": 1,
+      "native_pid": 28402,
+      "pause_ms": 162,
+      "quiescence_ms": 0,
+      "restarted": false,
+      "round": 20,
+      "rpc_wall_us": 340,
+      "rss": {
+        "core_kib": 10224,
+        "native_kib": 20928,
+        "processes": {
+          "28393": 10224,
+          "28400": 3440,
+          "28401": 3616,
+          "28402": 20928
+        },
+        "total_kib": 38208
+      },
+      "threads": {
+        "complete": true,
+        "pid": 28402,
+        "values": [
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137
+        ],
+        "versions": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ]
+      },
+      "value": 137
+    },
+    {
+      "admission_ms": 0.268,
+      "affected_instances": 4,
+      "harness_wall_ms": 691.6293340000001,
+      "idle_revision": 1,
+      "implementation": 2,
+      "native_pid": 28593,
+      "pause_ms": 632,
+      "quiescence_ms": 0,
+      "restarted": true,
+      "round": 21,
+      "rpc_wall_us": 268,
+      "rss": {
+        "core_kib": 10384,
+        "native_kib": 6496,
+        "processes": {
+          "28393": 10384,
+          "28400": 3440,
+          "28401": 3632,
+          "28593": 6496
+        },
+        "total_kib": 23952
+      },
+      "threads": {
+        "complete": true,
+        "pid": 28593,
+        "values": [
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137
+        ],
+        "versions": [
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2
+        ]
+      },
+      "value": 137
+    },
+    {
+      "admission_ms": 0.258,
+      "affected_instances": 3,
+      "harness_wall_ms": 236.508042,
+      "idle_revision": 1,
+      "implementation": 1,
+      "native_pid": 28593,
+      "pause_ms": 180,
+      "quiescence_ms": 0,
+      "restarted": false,
+      "round": 22,
+      "rpc_wall_us": 258,
+      "rss": {
+        "core_kib": 10384,
+        "native_kib": 7584,
+        "processes": {
+          "28393": 10384,
+          "28400": 3440,
+          "28401": 3632,
+          "28593": 7584
+        },
+        "total_kib": 25040
+      },
+      "threads": {
+        "complete": true,
+        "pid": 28593,
+        "values": [
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137
+        ],
+        "versions": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ]
+      },
+      "value": 137
+    },
+    {
+      "admission_ms": 0.254,
+      "affected_instances": 3,
+      "harness_wall_ms": 220.4715,
+      "idle_revision": 1,
+      "implementation": 2,
+      "native_pid": 28593,
+      "pause_ms": 158,
+      "quiescence_ms": 0,
+      "restarted": false,
+      "round": 23,
+      "rpc_wall_us": 254,
+      "rss": {
+        "core_kib": 10384,
+        "native_kib": 8272,
+        "processes": {
+          "28393": 10384,
+          "28400": 3440,
+          "28401": 3632,
+          "28593": 8272
+        },
+        "total_kib": 25728
+      },
+      "threads": {
+        "complete": true,
+        "pid": 28593,
+        "values": [
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137
+        ],
+        "versions": [
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2
+        ]
+      },
+      "value": 137
+    },
+    {
+      "admission_ms": 0.252,
+      "affected_instances": 3,
+      "harness_wall_ms": 226.060167,
+      "idle_revision": 1,
+      "implementation": 1,
+      "native_pid": 28593,
+      "pause_ms": 164,
+      "quiescence_ms": 0,
+      "restarted": false,
+      "round": 24,
+      "rpc_wall_us": 252,
+      "rss": {
+        "core_kib": 10384,
+        "native_kib": 9088,
+        "processes": {
+          "28393": 10384,
+          "28400": 3488,
+          "28401": 3632,
+          "28593": 9088
+        },
+        "total_kib": 26592
+      },
+      "threads": {
+        "complete": true,
+        "pid": 28593,
+        "values": [
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137
+        ],
+        "versions": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ]
+      },
+      "value": 137
+    },
+    {
+      "admission_ms": 0.198,
+      "affected_instances": 3,
+      "harness_wall_ms": 221.660666,
+      "idle_revision": 1,
+      "implementation": 2,
+      "native_pid": 28593,
+      "pause_ms": 165,
+      "quiescence_ms": 0,
+      "restarted": false,
+      "round": 25,
+      "rpc_wall_us": 198,
+      "rss": {
+        "core_kib": 10384,
+        "native_kib": 9760,
+        "processes": {
+          "28393": 10384,
+          "28400": 3504,
+          "28401": 3632,
+          "28593": 9760
+        },
+        "total_kib": 27280
+      },
+      "threads": {
+        "complete": true,
+        "pid": 28593,
+        "values": [
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137
+        ],
+        "versions": [
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2
+        ]
+      },
+      "value": 137
+    },
+    {
+      "admission_ms": 0.215,
+      "affected_instances": 3,
+      "harness_wall_ms": 204.555667,
+      "idle_revision": 1,
+      "implementation": 1,
+      "native_pid": 28593,
+      "pause_ms": 160,
+      "quiescence_ms": 0,
+      "restarted": false,
+      "round": 26,
+      "rpc_wall_us": 215,
+      "rss": {
+        "core_kib": 10384,
+        "native_kib": 10496,
+        "processes": {
+          "28393": 10384,
+          "28400": 3504,
+          "28401": 3632,
+          "28593": 10496
+        },
+        "total_kib": 28016
+      },
+      "threads": {
+        "complete": true,
+        "pid": 28593,
+        "values": [
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137
+        ],
+        "versions": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ]
+      },
+      "value": 137
+    },
+    {
+      "admission_ms": 0.196,
+      "affected_instances": 3,
+      "harness_wall_ms": 241.742375,
+      "idle_revision": 1,
+      "implementation": 2,
+      "native_pid": 28593,
+      "pause_ms": 181,
+      "quiescence_ms": 0,
+      "restarted": false,
+      "round": 27,
+      "rpc_wall_us": 196,
+      "rss": {
+        "core_kib": 10400,
+        "native_kib": 11232,
+        "processes": {
+          "28393": 10400,
+          "28400": 3504,
+          "28401": 3632,
+          "28593": 11232
+        },
+        "total_kib": 28768
+      },
+      "threads": {
+        "complete": true,
+        "pid": 28593,
+        "values": [
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137
+        ],
+        "versions": [
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2
+        ]
+      },
+      "value": 137
+    },
+    {
+      "admission_ms": 0.177,
+      "affected_instances": 3,
+      "harness_wall_ms": 229.472458,
+      "idle_revision": 1,
+      "implementation": 1,
+      "native_pid": 28593,
+      "pause_ms": 156,
+      "quiescence_ms": 0,
+      "restarted": false,
+      "round": 28,
+      "rpc_wall_us": 177,
+      "rss": {
+        "core_kib": 10400,
+        "native_kib": 11920,
+        "processes": {
+          "28393": 10400,
+          "28400": 3520,
+          "28401": 3632,
+          "28593": 11920
+        },
+        "total_kib": 29472
+      },
+      "threads": {
+        "complete": true,
+        "pid": 28593,
+        "values": [
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137
+        ],
+        "versions": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ]
+      },
+      "value": 137
+    },
+    {
+      "admission_ms": 0.264,
+      "affected_instances": 3,
+      "harness_wall_ms": 248.691709,
+      "idle_revision": 1,
+      "implementation": 2,
+      "native_pid": 28593,
+      "pause_ms": 173,
+      "quiescence_ms": 0,
+      "restarted": false,
+      "round": 29,
+      "rpc_wall_us": 264,
+      "rss": {
+        "core_kib": 10400,
+        "native_kib": 12624,
+        "processes": {
+          "28393": 10400,
+          "28400": 3536,
+          "28401": 3632,
+          "28593": 12624
+        },
+        "total_kib": 30192
+      },
+      "threads": {
+        "complete": true,
+        "pid": 28593,
+        "values": [
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137
+        ],
+        "versions": [
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2
+        ]
+      },
+      "value": 137
+    },
+    {
+      "admission_ms": 0.216,
+      "affected_instances": 3,
+      "harness_wall_ms": 228.80383400000002,
+      "idle_revision": 1,
+      "implementation": 1,
+      "native_pid": 28593,
+      "pause_ms": 169,
+      "quiescence_ms": 0,
+      "restarted": false,
+      "round": 30,
+      "rpc_wall_us": 216,
+      "rss": {
+        "core_kib": 10400,
+        "native_kib": 13280,
+        "processes": {
+          "28393": 10400,
+          "28400": 3536,
+          "28401": 3632,
+          "28593": 13280
+        },
+        "total_kib": 30848
+      },
+      "threads": {
+        "complete": true,
+        "pid": 28593,
+        "values": [
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137
+        ],
+        "versions": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ]
+      },
+      "value": 137
+    },
+    {
+      "admission_ms": 0.182,
+      "affected_instances": 3,
+      "harness_wall_ms": 222.03604099999998,
+      "idle_revision": 1,
+      "implementation": 2,
+      "native_pid": 28593,
+      "pause_ms": 162,
+      "quiescence_ms": 0,
+      "restarted": false,
+      "round": 31,
+      "rpc_wall_us": 182,
+      "rss": {
+        "core_kib": 10432,
+        "native_kib": 13968,
+        "processes": {
+          "28393": 10432,
+          "28400": 3536,
+          "28401": 3632,
+          "28593": 13968
+        },
+        "total_kib": 31568
+      },
+      "threads": {
+        "complete": true,
+        "pid": 28593,
+        "values": [
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137
+        ],
+        "versions": [
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2
+        ]
+      },
+      "value": 137
+    },
+    {
+      "admission_ms": 0.267,
+      "affected_instances": 3,
+      "harness_wall_ms": 483.35441699999996,
+      "idle_revision": 1,
+      "implementation": 1,
+      "native_pid": 28593,
+      "pause_ms": 432,
+      "quiescence_ms": 0,
+      "restarted": false,
+      "round": 32,
+      "rpc_wall_us": 267,
+      "rss": {
+        "core_kib": 10512,
+        "native_kib": 14688,
+        "processes": {
+          "28393": 10512,
+          "28400": 3536,
+          "28401": 3632,
+          "28593": 14688
+        },
+        "total_kib": 32368
+      },
+      "threads": {
+        "complete": true,
+        "pid": 28593,
+        "values": [
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137
+        ],
+        "versions": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ]
+      },
+      "value": 137
+    },
+    {
+      "admission_ms": 0.255,
+      "affected_instances": 3,
+      "harness_wall_ms": 292.543541,
+      "idle_revision": 1,
+      "implementation": 2,
+      "native_pid": 28593,
+      "pause_ms": 224,
+      "quiescence_ms": 0,
+      "restarted": false,
+      "round": 33,
+      "rpc_wall_us": 255,
+      "rss": {
+        "core_kib": 10608,
+        "native_kib": 15344,
+        "processes": {
+          "28393": 10608,
+          "28400": 3536,
+          "28401": 3632,
+          "28593": 15344
+        },
+        "total_kib": 33120
+      },
+      "threads": {
+        "complete": true,
+        "pid": 28593,
+        "values": [
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137
+        ],
+        "versions": [
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2
+        ]
+      },
+      "value": 137
+    },
+    {
+      "admission_ms": 0.25,
+      "affected_instances": 3,
+      "harness_wall_ms": 230.610708,
+      "idle_revision": 1,
+      "implementation": 1,
+      "native_pid": 28593,
+      "pause_ms": 167,
+      "quiescence_ms": 0,
+      "restarted": false,
+      "round": 34,
+      "rpc_wall_us": 250,
+      "rss": {
+        "core_kib": 10608,
+        "native_kib": 16048,
+        "processes": {
+          "28393": 10608,
+          "28400": 3552,
+          "28401": 3632,
+          "28593": 16048
+        },
+        "total_kib": 33840
+      },
+      "threads": {
+        "complete": true,
+        "pid": 28593,
+        "values": [
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137
+        ],
+        "versions": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ]
+      },
+      "value": 137
+    },
+    {
+      "admission_ms": 0.248,
+      "affected_instances": 3,
+      "harness_wall_ms": 231.384458,
+      "idle_revision": 1,
+      "implementation": 2,
+      "native_pid": 28593,
+      "pause_ms": 178,
+      "quiescence_ms": 0,
+      "restarted": false,
+      "round": 35,
+      "rpc_wall_us": 248,
+      "rss": {
+        "core_kib": 10656,
+        "native_kib": 16752,
+        "processes": {
+          "28393": 10656,
+          "28400": 3552,
+          "28401": 3632,
+          "28593": 16752
+        },
+        "total_kib": 34592
+      },
+      "threads": {
+        "complete": true,
+        "pid": 28593,
+        "values": [
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137
+        ],
+        "versions": [
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2
+        ]
+      },
+      "value": 137
+    },
+    {
+      "admission_ms": 0.227,
+      "affected_instances": 3,
+      "harness_wall_ms": 244.9125,
+      "idle_revision": 1,
+      "implementation": 1,
+      "native_pid": 28593,
+      "pause_ms": 171,
+      "quiescence_ms": 0,
+      "restarted": false,
+      "round": 36,
+      "rpc_wall_us": 227,
+      "rss": {
+        "core_kib": 10656,
+        "native_kib": 17456,
+        "processes": {
+          "28393": 10656,
+          "28400": 3552,
+          "28401": 3632,
+          "28593": 17456
+        },
+        "total_kib": 35296
+      },
+      "threads": {
+        "complete": true,
+        "pid": 28593,
+        "values": [
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137
+        ],
+        "versions": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ]
+      },
+      "value": 137
+    },
+    {
+      "admission_ms": 0.207,
+      "affected_instances": 3,
+      "harness_wall_ms": 309.76158399999997,
+      "idle_revision": 1,
+      "implementation": 2,
+      "native_pid": 28593,
+      "pause_ms": 246,
+      "quiescence_ms": 0,
+      "restarted": false,
+      "round": 37,
+      "rpc_wall_us": 207,
+      "rss": {
+        "core_kib": 10672,
+        "native_kib": 18160,
+        "processes": {
+          "28393": 10672,
+          "28400": 3552,
+          "28401": 3632,
+          "28593": 18160
+        },
+        "total_kib": 36016
+      },
+      "threads": {
+        "complete": true,
+        "pid": 28593,
+        "values": [
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137
+        ],
+        "versions": [
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2
+        ]
+      },
+      "value": 137
+    },
+    {
+      "admission_ms": 0.299,
+      "affected_instances": 3,
+      "harness_wall_ms": 221.694583,
+      "idle_revision": 1,
+      "implementation": 1,
+      "native_pid": 28593,
+      "pause_ms": 164,
+      "quiescence_ms": 0,
+      "restarted": false,
+      "round": 38,
+      "rpc_wall_us": 299,
+      "rss": {
+        "core_kib": 10672,
+        "native_kib": 18864,
+        "processes": {
+          "28393": 10672,
+          "28400": 3552,
+          "28401": 3632,
+          "28593": 18864
+        },
+        "total_kib": 36720
+      },
+      "threads": {
+        "complete": true,
+        "pid": 28593,
+        "values": [
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137
+        ],
+        "versions": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ]
+      },
+      "value": 137
+    },
+    {
+      "admission_ms": 0.227,
+      "affected_instances": 3,
+      "harness_wall_ms": 222.677708,
+      "idle_revision": 1,
+      "implementation": 2,
+      "native_pid": 28593,
+      "pause_ms": 171,
+      "quiescence_ms": 0,
+      "restarted": false,
+      "round": 39,
+      "rpc_wall_us": 227,
+      "rss": {
+        "core_kib": 10672,
+        "native_kib": 19568,
+        "processes": {
+          "28393": 10672,
+          "28400": 3552,
+          "28401": 3632,
+          "28593": 19568
+        },
+        "total_kib": 37424
+      },
+      "threads": {
+        "complete": true,
+        "pid": 28593,
+        "values": [
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137
+        ],
+        "versions": [
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2
+        ]
+      },
+      "value": 137
+    },
+    {
+      "admission_ms": 0.234,
+      "affected_instances": 3,
+      "harness_wall_ms": 218.680542,
+      "idle_revision": 1,
+      "implementation": 1,
+      "native_pid": 28593,
+      "pause_ms": 156,
+      "quiescence_ms": 0,
+      "restarted": false,
+      "round": 40,
+      "rpc_wall_us": 234,
+      "rss": {
+        "core_kib": 10672,
+        "native_kib": 20272,
+        "processes": {
+          "28393": 10672,
+          "28400": 3552,
+          "28401": 3632,
+          "28593": 20272
+        },
+        "total_kib": 38128
+      },
+      "threads": {
+        "complete": true,
+        "pid": 28593,
+        "values": [
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137
+        ],
+        "versions": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ]
+      },
+      "value": 137
+    },
+    {
+      "admission_ms": 0.201,
+      "affected_instances": 3,
+      "harness_wall_ms": 220.51337500000002,
+      "idle_revision": 1,
+      "implementation": 2,
+      "native_pid": 28593,
+      "pause_ms": 168,
+      "quiescence_ms": 0,
+      "restarted": false,
+      "round": 41,
+      "rpc_wall_us": 201,
+      "rss": {
+        "core_kib": 10672,
+        "native_kib": 20944,
+        "processes": {
+          "28393": 10672,
+          "28400": 3552,
+          "28401": 3632,
+          "28593": 20944
+        },
+        "total_kib": 38800
+      },
+      "threads": {
+        "complete": true,
+        "pid": 28593,
+        "values": [
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137
+        ],
+        "versions": [
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2
+        ]
+      },
+      "value": 137
+    },
+    {
+      "admission_ms": 0.257,
+      "affected_instances": 4,
+      "harness_wall_ms": 538.336041,
+      "idle_revision": 2,
+      "implementation": 1,
+      "native_pid": 28775,
+      "pause_ms": 476,
+      "quiescence_ms": 0,
+      "restarted": true,
+      "round": 42,
+      "rpc_wall_us": 257,
+      "rss": {
+        "core_kib": 10688,
+        "native_kib": 6512,
+        "processes": {
+          "28393": 10688,
+          "28400": 3552,
+          "28401": 3632,
+          "28775": 6512
+        },
+        "total_kib": 24384
+      },
+      "threads": {
+        "complete": true,
+        "pid": 28775,
+        "values": [
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137
+        ],
+        "versions": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ]
+      },
+      "value": 137
+    },
+    {
+      "admission_ms": 0.221,
+      "affected_instances": 3,
+      "harness_wall_ms": 224.648,
+      "idle_revision": 2,
+      "implementation": 2,
+      "native_pid": 28775,
+      "pause_ms": 161,
+      "quiescence_ms": 0,
+      "restarted": false,
+      "round": 43,
+      "rpc_wall_us": 221,
+      "rss": {
+        "core_kib": 10688,
+        "native_kib": 7632,
+        "processes": {
+          "28393": 10688,
+          "28400": 3552,
+          "28401": 3632,
+          "28775": 7632
+        },
+        "total_kib": 25504
+      },
+      "threads": {
+        "complete": true,
+        "pid": 28775,
+        "values": [
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137
+        ],
+        "versions": [
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2
+        ]
+      },
+      "value": 137
+    },
+    {
+      "admission_ms": 0.224,
+      "affected_instances": 3,
+      "harness_wall_ms": 214.104458,
+      "idle_revision": 2,
+      "implementation": 1,
+      "native_pid": 28775,
+      "pause_ms": 152,
+      "quiescence_ms": 0,
+      "restarted": false,
+      "round": 44,
+      "rpc_wall_us": 224,
+      "rss": {
+        "core_kib": 10688,
+        "native_kib": 8368,
+        "processes": {
+          "28393": 10688,
+          "28400": 3552,
+          "28401": 3632,
+          "28775": 8368
+        },
+        "total_kib": 26240
+      },
+      "threads": {
+        "complete": true,
+        "pid": 28775,
+        "values": [
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137
+        ],
+        "versions": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ]
+      },
+      "value": 137
+    },
+    {
+      "admission_ms": 0.184,
+      "affected_instances": 3,
+      "harness_wall_ms": 228.454458,
+      "idle_revision": 2,
+      "implementation": 2,
+      "native_pid": 28775,
+      "pause_ms": 163,
+      "quiescence_ms": 0,
+      "restarted": false,
+      "round": 45,
+      "rpc_wall_us": 184,
+      "rss": {
+        "core_kib": 10688,
+        "native_kib": 9136,
+        "processes": {
+          "28393": 10688,
+          "28400": 3568,
+          "28401": 3632,
+          "28775": 9136
+        },
+        "total_kib": 27024
+      },
+      "threads": {
+        "complete": true,
+        "pid": 28775,
+        "values": [
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137
+        ],
+        "versions": [
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2
+        ]
+      },
+      "value": 137
+    },
+    {
+      "admission_ms": 0.143,
+      "affected_instances": 3,
+      "harness_wall_ms": 236.901083,
+      "idle_revision": 2,
+      "implementation": 1,
+      "native_pid": 28775,
+      "pause_ms": 171,
+      "quiescence_ms": 0,
+      "restarted": false,
+      "round": 46,
+      "rpc_wall_us": 143,
+      "rss": {
+        "core_kib": 10688,
+        "native_kib": 9808,
+        "processes": {
+          "28393": 10688,
+          "28400": 3568,
+          "28401": 3632,
+          "28775": 9808
+        },
+        "total_kib": 27696
+      },
+      "threads": {
+        "complete": true,
+        "pid": 28775,
+        "values": [
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137
+        ],
+        "versions": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ]
+      },
+      "value": 137
+    },
+    {
+      "admission_ms": 0.137,
+      "affected_instances": 3,
+      "harness_wall_ms": 236.06566600000002,
+      "idle_revision": 2,
+      "implementation": 2,
+      "native_pid": 28775,
+      "pause_ms": 179,
+      "quiescence_ms": 0,
+      "restarted": false,
+      "round": 47,
+      "rpc_wall_us": 137,
+      "rss": {
+        "core_kib": 10688,
+        "native_kib": 10512,
+        "processes": {
+          "28393": 10688,
+          "28400": 3568,
+          "28401": 3632,
+          "28775": 10512
+        },
+        "total_kib": 28400
+      },
+      "threads": {
+        "complete": true,
+        "pid": 28775,
+        "values": [
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137
+        ],
+        "versions": [
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2
+        ]
+      },
+      "value": 137
+    },
+    {
+      "admission_ms": 0.309,
+      "affected_instances": 3,
+      "harness_wall_ms": 238.563167,
+      "idle_revision": 2,
+      "implementation": 1,
+      "native_pid": 28775,
+      "pause_ms": 170,
+      "quiescence_ms": 0,
+      "restarted": false,
+      "round": 48,
+      "rpc_wall_us": 309,
+      "rss": {
+        "core_kib": 10688,
+        "native_kib": 11216,
+        "processes": {
+          "28393": 10688,
+          "28400": 3568,
+          "28401": 3632,
+          "28775": 11216
+        },
+        "total_kib": 29104
+      },
+      "threads": {
+        "complete": true,
+        "pid": 28775,
+        "values": [
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137
+        ],
+        "versions": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ]
+      },
+      "value": 137
+    },
+    {
+      "admission_ms": 0.187,
+      "affected_instances": 3,
+      "harness_wall_ms": 236.61075,
+      "idle_revision": 2,
+      "implementation": 2,
+      "native_pid": 28775,
+      "pause_ms": 163,
+      "quiescence_ms": 0,
+      "restarted": false,
+      "round": 49,
+      "rpc_wall_us": 187,
+      "rss": {
+        "core_kib": 10688,
+        "native_kib": 11920,
+        "processes": {
+          "28393": 10688,
+          "28400": 3568,
+          "28401": 3632,
+          "28775": 11920
+        },
+        "total_kib": 29808
+      },
+      "threads": {
+        "complete": true,
+        "pid": 28775,
+        "values": [
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137
+        ],
+        "versions": [
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2
+        ]
+      },
+      "value": 137
+    },
+    {
+      "admission_ms": 0.283,
+      "affected_instances": 3,
+      "harness_wall_ms": 809.9132500000001,
+      "idle_revision": 2,
+      "implementation": 1,
+      "native_pid": 28775,
+      "pause_ms": 756,
+      "quiescence_ms": 0,
+      "restarted": false,
+      "round": 50,
+      "rpc_wall_us": 283,
+      "rss": {
+        "core_kib": 10704,
+        "native_kib": 12608,
+        "processes": {
+          "28393": 10704,
+          "28400": 3568,
+          "28401": 3632,
+          "28775": 12608
+        },
+        "total_kib": 30512
+      },
+      "threads": {
+        "complete": true,
+        "pid": 28775,
+        "values": [
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137,
+          137
+        ],
+        "versions": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ]
+      },
+      "value": 137
+    }
+  ],
+  "scenario": "AC-9/AU-10",
+  "state": 137,
+  "threads": 8
+}

@@ -2367,6 +2367,8 @@ var Connection = class {
   timeouts = 0;
   writes = 0;
   tail = Promise.resolve();
+  peerBudget = false;
+  deadlines = /* @__PURE__ */ new WeakMap();
   /** DOC-16 §6：队列容量和编码失败归还本轮出口，写入失败终止连接。 */
   async send(message, offers = [], beginWrite) {
     let committed = false;
@@ -2402,14 +2404,16 @@ var Connection = class {
     const signal = currentSignal();
     if (signal?.aborted) {
       this.runtime.releaseExports(offers);
-      throw new CordisError(7, "\u8C03\u7528\u5DF2\u53D6\u6D88");
+      throw signal.reason instanceof CordisError ? signal.reason : new CordisError(7, "\u8C03\u7528\u5DF2\u53D6\u6D88");
     }
     if (this.pending.size >= this.limits.maxInflight) {
       this.runtime.releaseExports(offers);
       throw new CordisError(8, "\u5728\u9014\u8BF7\u6C42\u989D\u5EA6\u8017\u5C3D");
     }
     const id = this.next++;
-    const deadline = performance.now() + this.limits.timeoutMs;
+    const started = performance.now();
+    const local = started + this.limits.timeoutMs;
+    const deadline = Math.min(local, (signal && this.deadlines.get(signal)) ?? local);
     let writing = false;
     let cancelled = false;
     let rejectResponse;
@@ -2420,8 +2424,9 @@ var Connection = class {
       rejectResponse = reject;
       this.pending.set(id, { resolve, reject });
       cancel = () => {
+        if (cancelled) return;
         cancelled = true;
-        reject(new CordisError(7, "\u8C03\u7528\u5DF2\u53D6\u6D88"));
+        reject(signal?.reason instanceof CordisError ? signal.reason : new CordisError(7, "\u8C03\u7528\u5DF2\u53D6\u6D88"));
         if (writing) this.notifySoon("cancel", { id });
       };
       signal?.addEventListener("abort", cancel, { once: true });
@@ -2430,10 +2435,10 @@ var Connection = class {
         cancelled = true;
         reject(new CordisError(6, "\u8BF7\u6C42\u8D85\u8FC7\u622A\u6B62\u65F6\u95F4"));
         if (writing) this.notifySoon("cancel", { id });
-        if (++this.timeouts >= this.limits.consecutiveTimeouts)
+        if (deadline === local && ++this.timeouts >= this.limits.consecutiveTimeouts)
           this.fail(new CordisError(6, "\u8FDE\u7EED\u8BF7\u6C42\u8D85\u65F6"));
       };
-      timer = setTimeout(expire, this.limits.timeoutMs);
+      timer = setTimeout(expire, Math.max(0, deadline - started));
     });
     const completed = result.finally(() => {
       clearTimeout(timer);
@@ -2441,6 +2446,9 @@ var Connection = class {
       signal?.removeEventListener("abort", cancel);
     });
     try {
+      if (method === "invoke" && this.peerBudget) {
+        params = { ...params, budget_ms: Math.max(1, Math.floor(deadline - performance.now())) };
+      }
       const sent = this.send({ request: { id, method, params } }, offers, () => {
         if (performance.now() >= deadline) expire();
         writing = !cancelled;
@@ -2552,8 +2560,23 @@ var Connection = class {
     if (this.running.size >= this.limits.maxInflight)
       throw new CordisError(8, "\u5165\u7AD9\u8BF7\u6C42\u989D\u5EA6\u8017\u5C3D");
     const abort = new AbortController();
+    let timer;
+    if (body.method === "invoke" && supportsInvocationBudget()) {
+      const budget = fields(body.params).budget_ms;
+      if (budget !== void 0) {
+        const integer = typeof budget === "bigint" || Number.isSafeInteger(budget);
+        if (!integer || budget < 0 || budget > 0xFFFFFFFFFFFFFFFFn)
+          throw new CordisError(2, "\u8C03\u7528\u9884\u7B97\u9700\u8981 u64 \u6BEB\u79D2\u503C");
+        this.peerBudget = true;
+        const duration = Math.min(Number(budget), this.limits.timeoutMs);
+        this.deadlines.set(abort.signal, performance.now() + duration);
+        const expired = () => abort.abort(new CordisError(6, "\u670D\u52A1\u8C03\u7528\u8D85\u8FC7\u622A\u6B62\u65F6\u95F4"));
+        if (duration === 0) expired();
+        else timer = setTimeout(expired, duration);
+      }
+    }
     this.running.set(id, { method: body.method, abort });
-    void this.execute(id, body, abort.signal).catch((error) => this.fail(error));
+    void this.execute(id, body, abort.signal).finally(() => clearTimeout(timer)).catch((error) => this.fail(error));
   }
   async execute(id, body, signal) {
     const payload = this.runtime.payload(body.params);
@@ -2561,9 +2584,11 @@ var Connection = class {
     try {
       let result;
       try {
+        if (signal.aborted) throw signal.reason;
         const response = await this.runtime.request(body.method, payload, signal);
         offers = response.offers;
-        result = { ok: response.value };
+        const value = body.method === "hello" && supportsInvocationBudget() ? { ...response.value, invoke_budget_v1: true } : response.value;
+        result = { ok: value };
       } catch (problem) {
         const error = problem instanceof CordisError ? problem : new CordisError(problem instanceof TypeError ? 2 : 1, String(problem));
         result = { error: error.wire() };
@@ -3065,6 +3090,10 @@ var invocation = {
   current: () => void 0,
   run: (_signal, operation) => operation()
 };
+var invocationScopeConfigured = false;
+function supportsInvocationBudget() {
+  return invocationScopeConfigured;
+}
 function currentSignal() {
   return invocation.current();
 }
@@ -3101,7 +3130,7 @@ var Runtime = class {
         {
           name: this.name,
           version: this.version,
-          sdk_version: "0.2.2",
+          sdk_version: "0.2.3",
           build_info: "TypeScript UP/1 SDK",
           format: 2,
           library: null,
@@ -3154,7 +3183,8 @@ var Runtime = class {
         signal,
         () => service.invoke(this, params.method, params.args, payload)
       );
-      if (signal.aborted) throw new CordisError(7, "\u8C03\u7528\u5DF2\u53D6\u6D88");
+      if (signal.aborted)
+        throw signal.reason instanceof CordisError ? signal.reason : new CordisError(7, "\u8C03\u7528\u5DF2\u53D6\u6D88");
       const offers = [];
       return { value: { value: outgoing(this, result, offers), refs: offers }, offers };
     } else if (method === "object_info") {
@@ -3276,7 +3306,7 @@ var WebRuntime = class extends Runtime {
   pendingCleanups = /* @__PURE__ */ new Map();
   cleanupComplete = Promise.resolve();
   constructor(socket, limits = {}) {
-    super("cordis-web", "0.1.2", [], socket, socket, limits);
+    super("cordis-web", "0.1.3", [], socket, socket, limits);
   }
   async load(entry) {
     const url = new URL(entry.url, location.href);
@@ -3299,7 +3329,7 @@ var WebRuntime = class extends Runtime {
     return {
       name: module.entry.name,
       version: module.entry.version,
-      sdk_version: "0.1.2",
+      sdk_version: "0.1.3",
       build_info: new URL(module.entry.url, location.href).pathname,
       format: 2,
       library: module.id,

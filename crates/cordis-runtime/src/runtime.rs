@@ -15,7 +15,7 @@ use cordis::{Context, ExporterOptions, LogLevel, LogValue};
 use cordis_supervisor::manager::{Manager, ManagerOptions};
 use cordis_up::WireError;
 use parking_lot::Mutex;
-use std::{collections::BTreeMap, path::PathBuf, sync::Arc, time::Duration};
+use std::{path::PathBuf, sync::Arc, time::Duration};
 use tokio::{
     signal::unix::{Signal, SignalKind, signal},
     sync::{Notify, mpsc, watch},
@@ -33,8 +33,6 @@ pub async fn run_with_contract(path: PathBuf, plan: Option<Plan>) -> Result<()> 
     let session = plan.map(Session::new).transpose()?;
     let path = path.canonicalize().map_err(io_error)?;
     let configuration = crate::deployment::load(&path)?;
-    configuration
-        .check_version(&semver::Version::parse(env!("CARGO_PKG_VERSION")).map_err(parameter)?)?;
     let directory = config::resolve_path(
         path.parent().expect("configuration parent"),
         &configuration.runtime.state_dir,
@@ -74,12 +72,15 @@ async fn create_controller(
     configuration: Configuration,
 ) -> Result<(Controller, mpsc::Receiver<Request>, View)> {
     let project = path.parent().expect("configuration parent");
-    let locations = Locations::create(project, &configuration)?;
     let store = Store::create(config::resolve_path(
         project,
         &configuration.runtime.state_dir,
     ))?;
     store.recover_deployment()?;
+    let configuration = store.accepted_base()?.unwrap_or(configuration);
+    configuration
+        .check_version(&semver::Version::parse(env!("CARGO_PKG_VERSION")).map_err(parameter)?)?;
+    let locations = Locations::create(project, &configuration)?;
     let overlay = store.overlay()?;
     let settings = &configuration.runtime;
     let lifecycle = Duration::from_millis(settings.lifecycle_timeout_ms);
@@ -100,7 +101,6 @@ async fn create_controller(
     }));
     let view = View::new(&manager, diagnostics.clone());
     let logs = register_services(root, &manager, &store, &view)?;
-    let permissions = Arc::new(Mutex::new(BTreeMap::new()));
     // 管理请求的等待属于调用时限，与生命周期操作的时限分开。
     let (handle, requests) = Handle::channel(Duration::from_millis(settings.invoke_timeout_ms));
     let controller = Controller::new(
@@ -112,7 +112,6 @@ async fn create_controller(
         overlay,
         ControlServices {
             diagnostics,
-            permissions,
             handle,
             logs,
         },
@@ -239,11 +238,23 @@ async fn dispatch_loop(
     // 监听登记前已激活的实例也在首次确认范围内。
     activated.notify_one();
     let mut source_retry = None;
+    let handle = controller.handle.clone();
+    let mut admission = handle.admission();
+    let diagnostics = controller.diagnostics.clone();
     loop {
-        tokio::select! {
+        enum Work {
+            Checkpoint(String),
+            Manage(Request),
+        }
+        let work = tokio::select! {
+            biased;
             _ = terminate.recv() => return Ok(None),
             _ = interrupt.recv() => return Ok(None),
+            _ = admission.wait_for(|open| !*open) => return Ok(None),
             result = &mut writer.task => return writer.observed(result).map(|_| None),
+            request = requests.recv() => {
+                Work::Manage(request.ok_or_else(|| WireError::new(7, "管理队列已结束"))?)
+            }
             _ = async {
                 match source_retry {
                     Some(deadline) => tokio::time::sleep_until(deadline).await,
@@ -254,32 +265,84 @@ async fn dispatch_loop(
                     controller.logs.emit(0, "runtime", &format!("代码来源保存失败：{problem}"));
                     Instant::now() + Duration::from_secs(1)
                 });
+                continue;
             }
-            _ = checkpoint.tick(), if interval_ms > 0 && pending.is_empty() => {
-                pending = controller.manager.instance_names();
+            _ = checkpoint.tick(), if interval_ms > 0 && pending.is_empty() && controller.recovery_required.is_none() => {
+                pending = controller.manager.deployment_instance_names();
+                continue;
             }
-            _ = std::future::ready(()), if !pending.is_empty() => {
-                let name = pending.pop().expect("检查点队列有待保存的实例");
-                let result = controller.manager.checkpoint_instance(name).await.and_then(|states| controller.store.checkpoint(&states));
-                if let Err(problem) = result { controller.logs.emit(0, "runtime", &format!("检查点写入失败：{problem}")); }
+            _ = std::future::ready(()), if !pending.is_empty() && controller.recovery_required.is_none() => {
+                Work::Checkpoint(pending.pop().expect("检查点队列持有当前实例"))
             }
-            request = requests.recv() => {
-                let request = request.ok_or_else(|| WireError::new(7, "管理队列已结束"))?;
-                let finished = dispatch(controller, request).await;
-                writer.refresh.notify_one();
-                if let Some(request) = finished { return Ok(Some(request)); }
+        };
+        let executing = async {
+            match work {
+                Work::Checkpoint(name) => {
+                    let result = controller
+                        .manager
+                        .checkpoint_instance(name)
+                        .await
+                        .and_then(|states| controller.store.checkpoint(&states));
+                    if let Err(problem) = result {
+                        controller
+                            .logs
+                            .emit(0, "runtime", &format!("检查点写入失败：{problem}"));
+                    }
+                    None
+                }
+                Work::Manage(request) => {
+                    let finished = dispatch(controller, request).await;
+                    writer.refresh.notify_one();
+                    finished
+                }
             }
+        };
+        tokio::pin!(executing);
+        tokio::select! {
+            finished = &mut executing => {
+                if finished.is_some() { return Ok(finished); }
+                continue;
+            },
+            _ = terminate.recv() => {},
+            _ = interrupt.recv() => {},
+            _ = admission.wait_for(|open| !*open) => {},
         }
+        // 先停止受理，再等待队列所有者结束已经开始的导出或部署。
+        handle.stop();
+        diagnostics.lock().phase = "stopping".into();
+        writer.refresh.notify_one();
+        return Ok(executing.await);
     }
 }
 
 /// DOC-15 §3.2：普通请求返回实际结果，shutdown 的最终审计在资源释放后记录。
-async fn dispatch(controller: &mut Controller, request: Request) -> Option<Request> {
+async fn dispatch(controller: &mut Controller, mut request: Request) -> Option<Request> {
     let result = controller.execute(&request).await;
     if matches!(request.operation, Operation::Shutdown) && result.is_ok() {
         return Some(request);
     }
     controller.audit(&request, &result);
+    if let Some(ticket) = request.pending_batch.take() {
+        let cleanup = controller.last_cleanup_error.take();
+        let restored = controller.batch_restored.take();
+        let (state, problem) = if let Some(problem) = &controller.recovery_required {
+            ("recovery_required", Some(problem))
+        } else if let Err(problem) = &result {
+            (
+                if restored.is_some() {
+                    "restored"
+                } else {
+                    "rejected"
+                },
+                Some(problem),
+            )
+        } else if let Some(problem) = &cleanup {
+            ("committed_with_cleanup", Some(problem))
+        } else {
+            ("succeeded", None)
+        };
+        ticket.finish(state, problem, restored.flatten());
+    }
     if let Some(reply) = request.reply {
         let _receiver = reply.send(result);
     }
@@ -295,37 +358,51 @@ async fn finish(
 ) -> Result<()> {
     controller.handle.stop();
     requests.close();
+    let (outcome, mut stop_request) = match outcome {
+        Ok(request) => (Ok(()), request),
+        Err(problem) => (Err(problem), None),
+    };
     while let Ok(request) = requests.try_recv() {
-        if let Some(reply) = request.reply {
+        if matches!(request.operation, Operation::Shutdown) && stop_request.is_none() {
+            stop_request = Some(request);
+        } else if let Some(reply) = request.reply {
             let _receiver = reply.send(Err(WireError::new(7, "核心退出，排队操作已取消")));
         }
     }
     controller.diagnostics.lock().phase = "stopping".into();
-    let exported = controller
-        .manager
-        .export_shutdown()
-        .await
-        .and_then(|states| controller.store.checkpoint(&states));
+    let exported = match &controller.recovery_required {
+        Some(problem) => Err(problem.clone()),
+        None => controller
+            .manager
+            .export_shutdown()
+            .await
+            .and_then(|states| controller.store.checkpoint(&states)),
+    };
     // 此时实例仍在目录中，停机后的离线查询可取得最后一次 Active 绑定。
     let sources = controller.confirm_sources();
     let shutdown = controller.manager.shutdown().await;
-    let (outcome, request) = match outcome {
-        Ok(request) => (Ok(()), request),
-        Err(problem) => (Err(problem), None),
-    };
     let stopped = outcome.and(exported).and(sources).and(shutdown);
-    if let Some(request) = request {
+    if let Some(mut request) = stop_request {
         controller.audit(&request, &stopped.clone().map(|_| cordis_up::Value::Null));
+        if let Some(ticket) = request.pending_batch.take() {
+            let state = if stopped.is_ok() {
+                "succeeded"
+            } else {
+                "rejected"
+            };
+            ticket.finish(state, stopped.as_ref().err(), None);
+        }
     }
     {
         let mut diagnostics = controller.diagnostics.lock();
+        diagnostics.outcomes.lock().end_pending();
         diagnostics.phase = if stopped.is_ok() {
             "stopped"
         } else {
             "shutdown-failed"
         }
         .into();
-        diagnostics.desired.clear();
+        diagnostics.desired = Arc::default();
     }
     let written = writer.finish().await;
     stopped.and(written)

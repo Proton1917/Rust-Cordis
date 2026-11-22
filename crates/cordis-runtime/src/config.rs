@@ -11,6 +11,7 @@ use std::{
 
 pub type Result<T> = std::result::Result<T, WireError>;
 pub const MANAGE: &str = "cordis.manage@1";
+pub const MANAGE_V2: &str = "cordis.manage@2";
 pub const METHODS: &[&str] = &[
     "install",
     "add",
@@ -26,6 +27,10 @@ pub const METHODS: &[&str] = &[
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct Configuration {
+    #[serde(default = "legacy_format")]
+    pub format_version: u32,
+    #[serde(default, skip_serializing_if = "toml::Table::is_empty")]
+    pub build: toml::Table,
     #[serde(default = "any_version")]
     pub requires_core: semver::VersionReq,
     #[serde(default)]
@@ -40,6 +45,10 @@ pub struct Configuration {
 
 fn any_version() -> semver::VersionReq {
     semver::VersionReq::STAR
+}
+
+fn legacy_format() -> u32 {
+    1
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -121,7 +130,7 @@ pub struct ScopeSettings {
     pub intercept: BTreeMap<String, toml::Value>,
 }
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct Overlay {
     #[serde(default)]
@@ -132,7 +141,7 @@ pub struct Overlay {
     pub previous: BTreeMap<String, OverlayEntry>,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct OverlayEntry {
     pub plugin: String,
@@ -206,6 +215,15 @@ impl From<&InstanceSettings> for OverlayEntry {
 /// CP-2、ADR-0033：来源配置在进入生命周期前完成名称、授权和组结构检查。
 pub fn parse(bytes: &[u8]) -> Result<Configuration> {
     let configuration: Configuration = toml::from_str(text(bytes)?).map_err(parameter)?;
+    if !matches!(configuration.format_version, 1 | 2) {
+        return Err(parameter(format!(
+            "部署格式 {} 超出支持的版本 1、2",
+            configuration.format_version
+        )));
+    }
+    if configuration.format_version == 1 && !configuration.build.is_empty() {
+        return Err(parameter("build 表需要部署格式 2"));
+    }
     for (name, instance) in &configuration.instance {
         instance_name(name)?;
         instance.validate()?;
@@ -263,7 +281,10 @@ impl InstanceSettings {
             self.component.as_deref(),
             self.group.as_deref(),
         )?;
-        if let Some(methods) = self.grants.get(MANAGE) {
+        for methods in [self.grants.get(MANAGE), self.grants.get(MANAGE_V2)]
+            .into_iter()
+            .flatten()
+        {
             for method in methods {
                 if method != "*" && !METHODS.contains(&method.as_str()) {
                     return Err(WireError::new(2, format!("未知管理方法 {method}")));
@@ -273,12 +294,16 @@ impl InstanceSettings {
         Ok(())
     }
 
-    pub fn allows(&self, method: &str) -> bool {
-        self.grants.get(MANAGE).is_some_and(|methods| {
-            methods
-                .iter()
-                .any(|allowed| allowed == "*" || allowed == method)
-        })
+    pub(crate) fn management_grants(&self, legacy: bool) -> &[String] {
+        if legacy {
+            self.grants.get(MANAGE)
+        } else {
+            self.grants
+                .get(MANAGE_V2)
+                .or_else(|| self.grants.get(MANAGE))
+        }
+        .map(Vec::as_slice)
+        .unwrap_or_default()
     }
 }
 

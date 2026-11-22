@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-import json
 import inspect
 from dataclasses import dataclass
-from enum import Enum
-from typing import Any, ClassVar, Generic, Protocol, TypeVar
+from functools import partial
+from typing import Any, Generic, Protocol, TypeVar
 
 T = TypeVar("T")
 
@@ -38,9 +37,21 @@ class Transport(Protocol):
     def import_resource(self, value: Tagged, interface: str, borrowed: bool) -> Transport: ...
 
 
-def _resolved(spec):
+@dataclass(frozen=True)
+class _Binding:
+    schema: dict
+    classes: dict
+    clients: dict
+
+
+def bind_runtime(schema, classes, clients):
+    binding = _Binding(schema, classes, clients)
+    return tuple(partial(function, binding) for function in (_encode, _decode, _invoke_method, _dispatch))
+
+
+def _resolved(binding, spec):
     while "ref" in spec or spec.get("kind") == "alias":
-        spec = SCHEMA["types"][spec["ref"]] if "ref" in spec else spec["item"]
+        spec = binding.schema["types"][spec["ref"]] if "ref" in spec else spec["item"]
     return spec
 
 
@@ -69,58 +80,58 @@ def _scalar(kind, value):
     return value
 
 
-def encode_value(spec, value, transport, method=False):
+def _encode(binding, spec, value, transport, method=False):
     """DOC-15 §7：语言值转换为 CBOR 库接收的标量、聚合或标签。"""
-    spec = _resolved(spec)
+    spec = _resolved(binding, spec)
     kind = spec["kind"]
     if kind == "option":
         if value is None:
             return None
         inner = value.value if isinstance(value, Some) else value
-        wire = encode_value(spec["item"], inner, transport, method)
+        wire = _encode(binding, spec["item"], inner, transport, method)
         return Tagged(60001, wire) if wire is None or isinstance(wire, Tagged) and wire.tag == 60001 else wire
     if kind == "list":
-        if _resolved(spec["item"])["kind"] == "u8" and "length" not in spec:
+        if _resolved(binding, spec["item"])["kind"] == "u8" and "length" not in spec:
             if not isinstance(value, bytes):
                 raise ValueError("字节值需要 bytes")
             return value
         if "length" in spec and len(value) != spec["length"]:
             raise ValueError("固定数组长度错误")
-        return [encode_value(spec["item"], item, transport) for item in value]
+        return [_encode(binding, spec["item"], item, transport) for item in value]
     if kind == "tuple":
         if len(value) != len(spec["items"]):
             raise ValueError("tuple 长度错误")
-        return [encode_value(item, entry, transport) for item, entry in zip(spec["items"], value)]
+        return [_encode(binding, item, entry, transport) for item, entry in zip(spec["items"], value)]
     if kind == "map":
-        return {encode_value(spec["key"], key, transport): encode_value(spec["item"], item, transport) for key, item in value.items()}
+        return {_encode(binding, spec["key"], key, transport): _encode(binding, spec["item"], item, transport) for key, item in value.items()}
     if kind in ("record", "flags"):
-        return {field["name"]: encode_value(field["type"], getattr(value, field["python"]), transport) for field in spec["fields"]}
+        return {field["name"]: _encode(binding, field["type"], getattr(value, field["python"]), transport) for field in spec["fields"]}
     if kind == "variant":
         case = next(case for case in spec["cases"] if case["name"] == value.kind)
-        return {case["name"]: None if case["type"] is None else encode_value(case["type"], value.value, transport)}
+        return {case["name"]: None if case["type"] is None else _encode(binding, case["type"], value.value, transport)}
     if kind == "enum":
         return value.value
     if kind == "result":
         branch = "ok" if isinstance(value, Ok) else "err"
-        return {branch: encode_value(spec[branch], value.value, transport)}
+        return {branch: _encode(binding, spec[branch], value.value, transport)}
     if kind in ("resource", "error-context"):
         interface = spec.get("service", "cordis.error-context@1.0")
         return transport.export_resource(value, interface, spec.get("borrowed", False))
     return _scalar(kind, value)
 
 
-def decode_value(spec, value, transport, method=False):
+def _decode(binding, spec, value, transport, method=False):
     """ADR-0039：导入资源获得当前调用的独立引用。"""
-    spec = _resolved(spec)
+    spec = _resolved(binding, spec)
     kind = spec["kind"]
     if kind == "option":
         if value is None:
             return None
         inner = value.value if isinstance(value, Tagged) and value.tag == 60001 else value
-        result = decode_value(spec["item"], inner, transport, method)
+        result = _decode(binding, spec["item"], inner, transport, method)
         return Some(result) if result is None or isinstance(result, Some) else result
     if kind == "list":
-        if _resolved(spec["item"])["kind"] == "u8" and "length" not in spec:
+        if _resolved(binding, spec["item"])["kind"] == "u8" and "length" not in spec:
             if isinstance(value, bytes):
                 return value
             if isinstance(value, list):
@@ -128,16 +139,16 @@ def decode_value(spec, value, transport, method=False):
             raise ValueError("字节值需要字节串或 u8 数组")
         if not isinstance(value, list) or "length" in spec and len(value) != spec["length"]:
             raise ValueError("列表形状错误")
-        return [decode_value(spec["item"], item, transport) for item in value]
+        return [_decode(binding, spec["item"], item, transport) for item in value]
     if kind == "tuple":
         if not isinstance(value, list) or len(value) != len(spec["items"]):
             raise ValueError("tuple 形状错误")
-        return tuple(decode_value(item, entry, transport) for item, entry in zip(spec["items"], value))
+        return tuple(_decode(binding, item, entry, transport) for item, entry in zip(spec["items"], value))
     if kind == "map":
-        return {decode_value(spec["key"], key, transport): decode_value(spec["item"], item, transport) for key, item in value.items()}
+        return {_decode(binding, spec["key"], key, transport): _decode(binding, spec["item"], item, transport) for key, item in value.items()}
     if kind in ("record", "flags"):
-        fields = {field["python"]: decode_value(field["type"], value[field["name"]], transport) for field in spec["fields"]}
-        return _CLASSES[spec["class"]](**fields)
+        fields = {field["python"]: _decode(binding, field["type"], value[field["name"]], transport) for field in spec["fields"]}
+        return binding.classes[spec["class"]](**fields)
     if kind == "variant":
         if not isinstance(value, dict) or len(value) != 1:
             raise ValueError("variant 需要单键映射")
@@ -145,41 +156,41 @@ def decode_value(spec, value, transport, method=False):
         case = next(case for case in spec["cases"] if case["name"] == name)
         if case["type"] is None:
             _scalar("unit", payload)
-            return _CLASSES[case["class"]]()
-        return _CLASSES[case["class"]](decode_value(case["type"], payload, transport))
+            return binding.classes[case["class"]]()
+        return binding.classes[case["class"]](_decode(binding, case["type"], payload, transport))
     if kind == "enum":
-        return _CLASSES[spec["class"]](value)
+        return binding.classes[spec["class"]](value)
     if kind == "result":
         if not isinstance(value, dict) or len(value) != 1 or next(iter(value)) not in ("ok", "err"):
             raise ValueError("result 需要 ok/err 单键映射")
         branch, payload = next(iter(value.items()))
-        result = decode_value(spec[branch], payload, transport)
+        result = _decode(binding, spec[branch], payload, transport)
         return Ok(result) if branch == "ok" else Err(result)
     if kind in ("resource", "error-context"):
         if not isinstance(value, Tagged) or value.tag != 60000:
             raise ValueError("服务值需要对象引用标签")
         interface = spec.get("service", "cordis.error-context@1.0")
-        return _CLIENTS[spec.get("class", "ErrorContext")](transport.import_resource(value, interface, spec.get("borrowed", False)))
+        return binding.clients[spec.get("class", "ErrorContext")](transport.import_resource(value, interface, spec.get("borrowed", False)))
     return _scalar(kind, value)
 
 
-async def _invoke(transport, interface, index, args):
-    service = next(service for service in SCHEMA["services"] if service["interface"] == interface)
+async def _invoke_method(binding, transport, interface, index, args):
+    service = next(service for service in binding.schema["services"] if service["interface"] == interface)
     method = service["methods"][index]
-    values = [encode_value(param["type"], value, transport, True) for param, value in zip(method["params"], args)]
+    values = [_encode(binding, param["type"], value, transport, True) for param, value in zip(method["params"], args)]
     result = await transport.invoke(interface, method["name"], values, method["async"])
-    return decode_value(method["result"], result, transport, True)
+    return _decode(binding, method["result"], result, transport, True)
 
 
-async def dispatch(provider, transport, interface, name, args):
+async def _dispatch(binding, provider, transport, interface, name, args):
     """ADR-0039：提供方按声明异步属性执行，再编码统一成功值。"""
-    service = next(service for service in SCHEMA["services"] if service["interface"] == interface)
+    service = next(service for service in binding.schema["services"] if service["interface"] == interface)
     method = next(method for method in service["methods"] if method["name"] == name)
     if len(args) != len(method["params"]):
         raise ValueError("方法参数数量错误")
-    values = [decode_value(param["type"], value, transport, True) for param, value in zip(method["params"], args)]
+    values = [_decode(binding, param["type"], value, transport, True) for param, value in zip(method["params"], args)]
     result = getattr(provider, method["python"])(*values)
     if inspect.isawaitable(result):
         result = await result
-    return encode_value(method["result"], result, transport, True)
+    return _encode(binding, method["result"], result, transport, True)
 

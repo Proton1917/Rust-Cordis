@@ -108,6 +108,12 @@ impl Drop for DecodeScope {
 
 /// CP-2、CP-8：输入为一条完整CBOR消息体，帧头由传输层处理。
 pub fn decode(bytes: &[u8], limits: &Limits) -> Result<Message, CodecError> {
+    let message = read_limited(bytes, limits)?;
+    envelope(&message)?;
+    Ok(message)
+}
+
+fn read_limited<T: de::DeserializeOwned>(bytes: &[u8], limits: &Limits) -> Result<T, CodecError> {
     limits.validate()?;
     if bytes.len() > limits.max_frame {
         return Err(LimitExceeded::error(
@@ -118,14 +124,13 @@ pub fn decode(bytes: &[u8], limits: &Limits) -> Result<Message, CodecError> {
     }
     let _scope = DecodeScope::enter(*limits);
     let mut reader = Cursor::new(bytes);
-    let message: Message =
+    let value =
         ciborium::de::from_reader_with_recursion_limit(&mut reader, limits.max_depth)
             .map_err(|error| CodecError::Cbor(error.to_string()))?;
     if reader.position() as usize != bytes.len() {
         return Err(CodecError::TrailingBytes);
     }
-    envelope(&message)?;
-    Ok(message)
+    Ok(value)
 }
 
 /// 输出CBOR消息体，写入时执行帧长度限制。
@@ -149,23 +154,7 @@ pub fn encode(message: &Message, limits: &Limits) -> Result<Vec<u8>, CodecError>
 pub fn decode_value(bytes: &[u8], limits: &Limits) -> Result<Value, CodecError> {
     #[derive(serde::Deserialize)]
     struct LimitedValue(#[serde(deserialize_with = "standalone_value")] Value);
-    limits.validate()?;
-    if bytes.len() > limits.max_frame {
-        return Err(LimitExceeded::error(
-            "max_frame",
-            limits.max_frame,
-            Some(bytes.len()),
-        ));
-    }
-    let _scope = DecodeScope::enter(*limits);
-    let mut reader = Cursor::new(bytes);
-    let value: LimitedValue =
-        ciborium::de::from_reader_with_recursion_limit(&mut reader, limits.max_depth)
-            .map_err(|problem| CodecError::Cbor(problem.to_string()))?;
-    if reader.position() as usize != bytes.len() {
-        return Err(CodecError::TrailingBytes);
-    }
-    Ok(value.0)
+    Ok(read_limited::<LimitedValue>(bytes, limits)?.0)
 }
 
 /// CP-8、DOC-16 §2：编码独立状态值，超限在持久化之前返回错误。

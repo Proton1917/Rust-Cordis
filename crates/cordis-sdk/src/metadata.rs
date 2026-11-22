@@ -17,6 +17,6 @@ pub fn caller(metadata: &CborValue) -> Result<Option<Caller>> {
     fields
         .iter()
         .find(|(key, _)| key.as_text() == Some("cordis.caller"))
-        .map(|(_, value)| cordis_abi::from_value(value.clone()))
+        .map(|(_, value)| cordis_abi::from_value(value))
         .transpose()
 }

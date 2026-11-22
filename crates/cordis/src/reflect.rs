@@ -103,6 +103,19 @@ pub(crate) struct ImplData {
     pub waiters: Vec<Waker>,
 }
 
+impl ImplData {
+    fn is_active(&self, state: &State) -> bool {
+        state.fibers[self.scope.fiber].state == FiberState::Active
+    }
+
+    fn definition(&self, kernel: &Arc<Kernel>) -> Context {
+        Context {
+            kernel: kernel.clone(),
+            scope: self.scope.clone(),
+        }
+    }
+}
+
 impl Context {
     /// T-COE-2、S-SVC-1：在当前隔离域提供键 `K` 的值，返回管理该绑定的句柄。
     ///
@@ -240,17 +253,8 @@ impl Context {
     #[track_caller]
     pub fn get<K: ServiceKey>(&self) -> Result<Scoped<K>> {
         let resolved = self.get_service(K::NAME.into())?;
-        let value = resolved
-            .value
-            .downcast_ref::<Arc<K::Value>>()
-            .ok_or_else(|| Error::new("service interceptor returned a different value type"))?
-            .clone();
-        Ok(Scoped {
-            value,
-            caller: self.clone(),
-            definition: resolved.definition,
-            requester: self.clone(),
-        })
+        Scoped::from_binding(self, &resolved.value, || resolved.definition)
+            .ok_or_else(|| Error::new("service interceptor returned a different value type"))
     }
 
     /// K-2、T-CTX-2：按名称读取经授权的实际类型擦除存储值。
@@ -311,12 +315,10 @@ impl Context {
                 );
             }
         };
+        let binding = &state.impls[id];
         Ok(ServiceValue {
-            value: state.impls[id].value.clone(),
-            definition: Context {
-                kernel: self.kernel.clone(),
-                scope: state.impls[id].scope.clone(),
-            },
+            value: binding.value.clone(),
+            definition: binding.definition(&self.kernel),
         })
     }
 
@@ -326,25 +328,24 @@ impl Context {
     /// 查询条件为实时绑定和提供方状态；依赖声明授权、已提交视图由 `get` 处理，
     /// 可用性谓词由生命周期依赖解析执行。
     pub fn lookup<K: ServiceKey>(&self) -> Option<Scoped<K>> {
-        let state = self.kernel.state.lock();
-        let key: Arc<str> = K::NAME.into();
-        let id = *state.store.get(&(key, self.resolve_realm(K::NAME)))?;
-        if state.fibers[state.impls[id].scope.fiber].state == FiberState::Active {
-            scoped::<K>(&state, id, self.clone())
-        } else {
-            None
-        }
+        self.lookup_binding(K::NAME.into(), |binding| {
+            Scoped::from_binding(self, &binding.value, || binding.definition(&self.kernel))
+        })
+        .flatten()
     }
 
     /// K-2、S-SVC-3：按名称反射查询当前隔离域中活动提供方的类型擦除存储值。
     /// 返回的值沿用 lookup 的实时绑定语义，声明依赖的已提交视图由 get_named 读取。
     pub fn lookup_named(&self, name: impl Into<Arc<str>>) -> Option<AnyArc> {
-        let key = name.into();
+        self.lookup_binding(name.into(), |binding| binding.value.clone())
+    }
+
+    fn lookup_binding<T>(&self, key: Arc<str>, read: impl FnOnce(&ImplData) -> T) -> Option<T> {
+        let realm = self.resolve_realm(&key);
         let state = self.kernel.state.lock();
-        let id = *state.store.get(&(key.clone(), self.resolve_realm(&key)))?;
+        let id = *state.store.get(&(key, realm))?;
         let binding = &state.impls[id];
-        (state.fibers[binding.scope.fiber].state == FiberState::Active)
-            .then(|| binding.value.clone())
+        binding.is_active(&state).then(|| read(binding))
     }
 
     /// 返回共享内核中全部隔离域的当前绑定总数。
@@ -353,22 +354,6 @@ impl Context {
     pub fn service_count(&self) -> usize {
         self.kernel.state.lock().store.len()
     }
-}
-
-fn scoped<K: ServiceKey>(state: &State, id: ImplId, caller: Context) -> Option<Scoped<K>> {
-    let value = state.impls[id]
-        .value
-        .downcast_ref::<Arc<K::Value>>()?
-        .clone();
-    Some(Scoped {
-        value,
-        definition: Context {
-            kernel: caller.kernel.clone(),
-            scope: state.impls[id].scope.clone(),
-        },
-        requester: caller.clone(),
-        caller,
-    })
 }
 
 pub(crate) fn injected_meta<K: ServiceKey>(context: &Context) -> K::Meta {
@@ -633,9 +618,7 @@ fn refresh_keys(kernel: &Arc<Kernel>, id: FiberId, key: Option<&Arc<str>>) {
                 let pair = (entry.key.clone(), scope_realm(scope, &entry.key));
                 let binding = state.store.get(&pair).copied();
                 let revision = binding.map(|id| state.impls[id].notification_revision);
-                let active = binding.is_some_and(|binding| {
-                    state.fibers[state.impls[binding].scope.fiber].state == FiberState::Active
-                });
+                let active = binding.is_some_and(|id| state.impls[id].is_active(&state));
                 let check = binding.and_then(|binding| state.impls[binding].check.clone());
                 let provider = binding.map(|binding| state.impls[binding].scope.clone());
                 let predicate = entry.predicate.clone();
@@ -697,9 +680,7 @@ fn refresh_keys(kernel: &Arc<Kernel>, id: FiberId, key: Option<&Arc<str>>) {
                 continue;
             }
             let current = state.store.get(pair).copied();
-            let current_active = current.is_some_and(|binding| {
-                state.fibers[state.impls[binding].scope.fiber].state == FiberState::Active
-            });
+            let current_active = current.is_some_and(|id| state.impls[id].is_active(&state));
             let current_predicate = &state.fibers[id].inject.entries[*index].predicate;
             let same_predicate = match (predicate.as_ref(), current_predicate.as_ref()) {
                 (None, None) => true,

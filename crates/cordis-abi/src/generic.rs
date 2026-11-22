@@ -23,9 +23,10 @@ pub fn to_value<T: Serialize + ?Sized>(value: &T) -> Result<CborValue> {
     })
 }
 
-pub fn from_value<T: DeserializeOwned>(value: CborValue) -> Result<T> {
+pub fn from_value<T: DeserializeOwned>(value: impl std::borrow::Borrow<CborValue>) -> Result<T> {
     crate::encoding::plain(|| {
         value
+            .borrow()
             .deserialized()
             .map_err(|error| Error::new(2, error.to_string()))
     })

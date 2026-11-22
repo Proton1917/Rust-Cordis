@@ -4,15 +4,10 @@ use crate::config::{Configuration, Result, parameter};
 use cordis_supervisor::manager::CallContext;
 use cordis_up::{Value, WireError};
 use serde::de::DeserializeOwned;
-use std::{
-    path::Path,
-    sync::{
-        Arc,
-        atomic::{AtomicBool, Ordering},
-    },
-    time::Duration,
-};
-use tokio::sync::{mpsc, oneshot};
+use std::{path::Path, time::Duration};
+use tokio::sync::{mpsc, oneshot, watch};
+
+pub(crate) const CAPACITY: usize = 64;
 
 pub enum Operation {
     Install(String),
@@ -38,7 +33,7 @@ pub enum Operation {
         name: String,
         config: toml::Table,
     },
-    Reload(Configuration),
+    Reload(Result<Configuration>),
     Shutdown,
 }
 
@@ -100,7 +95,7 @@ impl Operation {
                 if method == "shutdown" {
                     Self::Shutdown
                 } else {
-                    Self::Reload(load_configuration(configuration)?)
+                    Self::Reload(load_configuration(configuration))
                 }
             }
             _ => return Err(WireError::new(3, "管理方法缺席")),
@@ -139,19 +134,20 @@ pub struct Request {
     pub caller: CallContext,
     pub operation: Operation,
     pub reply: Option<oneshot::Sender<Result<Value>>>,
-    pending_batch: Option<crate::control::PendingBatch>,
+    pub(crate) pending_batch: Option<crate::control::PendingBatch>,
 }
 
 #[derive(Clone)]
 pub struct Handle {
     sender: mpsc::Sender<Request>,
-    accepting: Arc<AtomicBool>,
+    accepting: watch::Sender<bool>,
     timeout: Duration,
 }
 
 pub struct Reserved {
     permit: mpsc::OwnedPermit<Request>,
     request: Request,
+    accepting: watch::Sender<bool>,
 }
 impl Reserved {
     /// ADR-0031：预约和排队请求共同持有批次，取消时由守卫记录拒绝结果。
@@ -162,18 +158,33 @@ impl Reserved {
 
     /// DOC-15 §3.2：响应写入完成后消费预留位置，队列继续拥有操作执行责任。
     pub fn commit(self) {
-        self.permit.send(self.request);
+        let Self {
+            permit,
+            request,
+            accepting,
+        } = self;
+        let mut reserved = Some((permit, request));
+        accepting.send_if_modified(|open| {
+            if !*open {
+                return false;
+            }
+            let (permit, request) = reserved.take().expect("已取得一次队列预约");
+            let shutdown = matches!(request.operation, Operation::Shutdown);
+            permit.send(request);
+            *open = !shutdown;
+            shutdown
+        });
     }
 }
 
 impl Handle {
     /// CP-3/CP-4：固定容量管理队列和调用方等待时限。
     pub fn channel(timeout: Duration) -> (Self, mpsc::Receiver<Request>) {
-        let (sender, receiver) = mpsc::channel(64);
+        let (sender, receiver) = mpsc::channel(CAPACITY);
         (
             Self {
                 sender,
-                accepting: Arc::new(AtomicBool::new(true)),
+                accepting: watch::channel(true).0,
                 timeout,
             },
             receiver,
@@ -187,7 +198,7 @@ impl Handle {
         operation: Operation,
         reply: Option<oneshot::Sender<Result<Value>>>,
     ) -> Result<Reserved> {
-        if !self.accepting.load(Ordering::Acquire) {
+        if !*self.accepting.borrow() {
             return Err(WireError::new(7, "核心正在退出"));
         }
         let permit = self
@@ -200,6 +211,7 @@ impl Handle {
             })?;
         Ok(Reserved {
             permit,
+            accepting: self.accepting.clone(),
             request: Request {
                 caller,
                 operation,
@@ -226,7 +238,11 @@ impl Handle {
 
     /// DOC-11 §9：退出阶段关闭新请求入口，现有队列由运行循环处理。
     pub fn stop(&self) {
-        self.accepting.store(false, Ordering::Release);
+        self.accepting.send_replace(false);
+    }
+
+    pub fn admission(&self) -> watch::Receiver<bool> {
+        self.accepting.subscribe()
     }
 }
 

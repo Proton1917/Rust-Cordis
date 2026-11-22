@@ -13,7 +13,7 @@ pub enum Action {
 #[derive(Args)]
 pub struct Options {
     input: PathBuf,
-    #[arg(long, value_parser = ["rust", "python", "ts"])]
+    #[arg(long, value_parser = ["rust", "python", "python-sdk", "ts"])]
     lang: String,
     #[arg(long)]
     output: PathBuf,

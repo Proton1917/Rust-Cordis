@@ -152,13 +152,13 @@ pub struct State {
     pub data: Value,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Apply {
+pub struct Apply<C = Value, S = State> {
     pub plugin: String,
     pub component: String,
     pub library: Option<u64>,
     pub context: u64,
-    pub config: Value,
-    pub inherited: Option<State>,
+    pub config: C,
+    pub inherited: Option<S>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Resolve {

@@ -4,31 +4,6 @@ use super::*;
 use generation::{Binding, Configuration};
 
 impl Manager {
-    /// SW-5：分组和单库替换共用候选提供声明、实际绑定及状态冻结范围。
-    pub(super) async fn prepare_replacement_transition(
-        &self,
-        group: &str,
-        plugin: Option<&str>,
-        candidate: &GroupGeneration,
-    ) -> Result<lifecycle::Transition> {
-        let instances: Vec<_> = self
-            .group_instances(group)
-            .into_iter()
-            .filter(|instance| plugin.is_none_or(|name| instance.data.plugin == name))
-            .collect();
-        let incoming = instances.iter().filter_map(|instance| {
-            candidate
-                .components
-                .get(&(
-                    instance.data.plugin.clone(),
-                    instance.data.component.clone(),
-                ))
-                .map(|component| (instance.fiber.context(), component.clone()))
-        });
-        let instances = self.include_incoming(instances.clone(), incoming);
-        self.prepare_transition(&instances, true).await
-    }
-
     /// SW-8：归还继续运行的原实例写权，记录候选纪元，再观察本次变更的所有连接。
     pub(super) async fn confirm_transition(
         &self,
@@ -45,7 +20,8 @@ impl Manager {
             .instances
             .iter()
             .filter(|(name, instance)| {
-                instance.fiber.state() == cordis::FiberState::Active
+                changed.contains(&instance.fiber)
+                    && instance.fiber.state() == cordis::FiberState::Active
                     && transition
                         .before
                         .get(*name)
@@ -57,49 +33,6 @@ impl Manager {
         transition.confirming = Some((std::time::Instant::now(), instances));
         self.confirm(changed, connections).await?;
         Ok(confirming.elapsed())
-    }
-
-    /// ADR-0052：候选新增服务会重建同域中的可选依赖方，已有 Binding 继续决定当前边。
-    pub(super) fn include_incoming(
-        &self,
-        roots: Vec<Arc<Instance>>,
-        incoming: impl IntoIterator<Item = (Context, Arc<RemoteComponent>)>,
-    ) -> Vec<Arc<Instance>> {
-        let mut provided = HashSet::new();
-        for (view, component) in incoming {
-            for interface in &component.provides {
-                provided.insert((interface.key.clone(), view.realm_named(&interface.key)));
-            }
-        }
-        self.include_unbound(roots, |view, key| {
-            provided.contains(&(key.to_owned(), view.realm_named(key)))
-        })
-    }
-
-    fn include_unbound(
-        &self,
-        mut roots: Vec<Arc<Instance>>,
-        may_provide: impl Fn(&Context, &str) -> bool,
-    ) -> Vec<Arc<Instance>> {
-        let mut candidates = self.0.catalog.lock().instances.clone();
-        for root in &roots {
-            candidates.remove(&root.data.name);
-        }
-        for instance in candidates.into_values() {
-            let Some(current) = instance.data.current.lock().upgrade() else {
-                continue;
-            };
-            if current.component.inject.iter().any(|(interface, _)| {
-                may_provide(&current.context, &interface.key)
-                    && current
-                        .context
-                        .lookup_named(interface.key.clone())
-                        .is_none()
-            }) {
-                roots.push(instance);
-            }
-        }
-        roots
     }
 
     /// SW-5：保守纳入的实例沿原纪元继续运行时，归还其冻结写入权限。
@@ -191,161 +124,95 @@ impl Manager {
         Some(loss)
     }
 
-    /// ADR-0052 I-1：配置变化和依赖方共用最新快照，加载失败时恢复原配置及原状态。
-    pub(super) async fn update_stateful(
+    /// 按同一快照闭合真实绑定、父子关系和候选可能补足的依赖。
+    pub(super) fn select_instances(
         &self,
-        instance: Arc<Instance>,
-        config: Value,
-    ) -> Result<()> {
-        let current = self.group(&instance.data.group)?.current.lock().clone();
-        let component = current
-            .components
-            .get(&(
-                instance.data.plugin.clone(),
-                instance.data.component.clone(),
-            ))
-            .cloned()
-            .ok_or_else(|| error(4, "配置目标组件缺席"))?;
-        let roots = self.include_incoming(
-            vec![instance.clone()],
-            [(instance.fiber.context(), component)],
-        );
-        let previous = instance.configuration()?.config.clone();
-        let transition = self.prepare_transition(&roots, true).await?;
-        self.inherit(&transition.inherited);
-        let outcome = match instance.clone().set_configuration(Arc::new(config)).await {
-            Ok(()) => self
-                .stabilize_with(&transition.before, &transition.names, true)
-                .await
-                .map(|_| ()),
-            Err(problem) => Err(problem),
+        roots: impl IntoIterator<Item = String>,
+        incoming: Vec<(Context, Arc<RemoteComponent>, String)>,
+    ) -> Vec<Arc<Instance>> {
+        let (instances, groups) = {
+            let catalog = self.0.catalog.lock();
+            (catalog.instances.clone(), catalog.groups.clone())
         };
-        if let Err(problem) = outcome {
-            self.inherit(&transition.inherited);
-            let restored = async {
-                instance.set_configuration(previous).await?;
-                self.stabilize_with(&transition.before, &transition.names, true)
-                    .await
-            }
-            .await;
-            let mut failure = problem;
-            if let Err(restored) = restored {
-                failure = error(
-                    1,
-                    format!(
-                        "配置更新失败：{}；恢复失败：{}",
-                        metadata::clipped(&failure.message),
-                        metadata::clipped(&restored.message)
-                    ),
-                );
-            }
-            if let Err(thaw) = self.thaw_current(&transition.frozen).await {
-                failure.message = format!(
-                    "{}；解冻失败：{}",
-                    metadata::clipped(&failure.message),
-                    metadata::clipped(&thaw.message)
-                );
-            }
-            return Err(failure);
-        }
-        self.thaw_current(&transition.frozen).await?;
-        Ok(())
-    }
-
-    /// 管理服务在应答前判断调用方或其依赖是否可能换代。
-    pub fn change_affects(&self, caller: &str, target: &str, replace_library: bool) -> bool {
-        if caller == target {
-            return true;
-        }
-        let Ok(instance) = self.instance(target) else {
-            return false;
-        };
-        if replace_library {
-            return self.candidate_change_affects(caller, Some(&instance.data.group));
-        }
-        self.may_rebind_caller(caller, vec![instance])
-    }
-
-    /// 候选握手前，其新接口可以满足缺失的依赖；原生宿主也可能整组重启。
-    pub fn candidate_change_affects(&self, caller: &str, group: Option<&str>) -> bool {
-        let roots = match group {
-            Some(name) => self.group_instances(name),
-            None => {
-                let groups = self.0.catalog.lock().groups.clone();
-                let native: HashSet<_> = groups
-                    .values()
-                    .filter(|g| {
-                        g.current
-                            .lock()
-                            .descriptor
-                            .plugins
-                            .iter()
-                            .any(|p| p.format == 1)
-                    })
-                    .map(|group| &group.name)
-                    .collect();
-                self.0
-                    .catalog
-                    .lock()
-                    .instances
-                    .values()
-                    .filter(|instance| native.contains(&instance.data.group))
-                    .cloned()
-                    .collect()
-            }
-        };
-        self.may_rebind_caller(caller, roots)
-    }
-
-    fn may_rebind_caller(&self, caller: &str, roots: Vec<Arc<Instance>>) -> bool {
-        if roots.iter().any(|instance| instance.data.name == caller) {
-            return true;
-        }
-        // 连带激活的组件也能发布服务。应答前将缺席依赖视为可能绑定，
-        // 实际冻结时由 include_incoming 按候选声明及隔离域选择实例。
-        let roots = self.include_unbound(roots, |_, _| true);
-        self.affected_instances(&roots)
-            .iter()
-            .any(|item| item.data.name == caller)
-    }
-
-    /// 当前 Binding 指明真实提供方，闭包沿反向边扩展；目录锁在读取绑定前释放。
-    pub(super) fn affected_instances(&self, roots: &[Arc<Instance>]) -> Vec<Arc<Instance>> {
-        let instances = self.0.catalog.lock().instances.clone();
         let mut dependents = HashMap::<String, Vec<String>>::new();
+        let mut waiting = HashMap::<(String, cordis::Realm), Vec<(u32, String)>>::new();
+        let replaced: HashSet<_> = incoming.iter().map(|(_, _, name)| name.clone()).collect();
+        let mut providers = incoming;
         for (name, instance) in &instances {
-            let Some(current) = instance.data.current.lock().upgrade() else {
-                continue;
-            };
-            for (interface, _) in &current.component.inject {
-                let Ok(value) = current.context.get_named(interface.key.clone()) else {
-                    continue;
-                };
-                if let Some(binding) = value.downcast_ref::<Binding>()
-                    && let Some(provider) = &binding.generation
-                {
+            let mut parent = instance.fiber.parent_context();
+            while let Some(context) = parent {
+                let fiber = context.fiber();
+                if let Some(config) = fiber.config::<Configuration>() {
                     dependents
-                        .entry(provider.instance.name.clone())
+                        .entry(config.instance.name.clone())
                         .or_default()
                         .push(name.clone());
+                    break;
+                }
+                parent = fiber.parent_context();
+            }
+            let current = instance.data.current.lock().upgrade();
+            let component = current.as_ref().map(|g| g.component.clone()).or_else(|| {
+                let group = groups.get(&instance.data.group)?;
+                let key = (
+                    instance.data.plugin.clone(),
+                    instance.data.component.clone(),
+                );
+                group.current.lock().components.get(&key).cloned()
+            });
+            let Some(component) = component else { continue };
+            let view = instance.fiber.context();
+            for (interface, _) in &component.inject {
+                let binding = match &current {
+                    Some(generation) => generation.context.get_named(interface.key.clone()).ok(),
+                    None => view.lookup_named(interface.key.clone()),
+                }
+                .and_then(|value| value.downcast::<Binding>().ok())
+                .filter(|binding| binding.interface.minor >= interface.minor);
+                match binding {
+                    Some(binding) => {
+                        if let Some(provider) = &binding.generation {
+                            dependents
+                                .entry(provider.instance.name.clone())
+                                .or_default()
+                                .push(name.clone());
+                        }
+                    }
+                    None => waiting
+                        .entry((interface.key.clone(), view.realm_named(&interface.key)))
+                        .or_default()
+                        .push((interface.minor, name.clone())),
+                }
+            }
+            if !replaced.contains(name) {
+                providers.push((view, component, name.clone()));
+            }
+        }
+        for (view, component, provider) in providers {
+            for provided in &component.provides {
+                let key = (provided.key.clone(), view.realm_named(&provided.key));
+                if let Some(consumers) = waiting.get(&key) {
+                    dependents.entry(provider.clone()).or_default().extend(
+                        consumers
+                            .iter()
+                            .filter(|(required, _)| provided.minor >= *required)
+                            .map(|(_, name)| name.clone()),
+                    );
                 }
             }
         }
-        let mut names: HashSet<_> = roots
-            .iter()
-            .map(|instance| instance.data.name.clone())
-            .collect();
-        let mut pending: Vec<_> = names.iter().cloned().collect();
-        while let Some(provider) = pending.pop() {
-            for consumer in dependents.get(&provider).into_iter().flatten() {
-                if names.insert(consumer.clone()) {
-                    pending.push(consumer.clone());
-                }
+        let mut selected = HashSet::new();
+        let mut pending: Vec<_> = roots.into_iter().collect();
+        while let Some(name) = pending.pop() {
+            if selected.insert(name.clone())
+                && let Some(next) = dependents.remove(&name)
+            {
+                pending.extend(next);
             }
         }
-        let mut names: Vec<_> = names.into_iter().collect();
-        names.sort();
-        names
+        let mut selected: Vec<_> = selected.into_iter().collect();
+        selected.sort_unstable();
+        selected
             .into_iter()
             .filter_map(|name| instances.get(&name).cloned())
             .collect()

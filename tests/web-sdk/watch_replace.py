@@ -41,7 +41,7 @@ async def rejected_projection(case, snapshot):
     page = next(item for item in snapshot["instances"] if item.get("page_of") == "store")
     parent = next(item for item in snapshot["instances"] if item["name"] == "store")
     request = "explicit-page-target"
-    ticket = await case.manage("replace_batch", [[[page["name"], parent["reference"]]], False, request])
+    ticket = await case.manage("replace_batch", [[[page["name"], parent["reference"]]], False, request], wait_for_result=False)
     assert ticket["ok"], ticket
     def completed():
         result = case.batch_outcome("admin", request)

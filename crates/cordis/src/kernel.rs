@@ -18,10 +18,7 @@ use std::{
     future::Future,
     panic::{AssertUnwindSafe, catch_unwind},
     pin::Pin,
-    sync::{
-        Arc,
-        atomic::{AtomicBool, Ordering},
-    },
+    sync::Arc,
     time::Duration,
 };
 
@@ -47,7 +44,6 @@ new_key_type! {
     pub(crate) struct FiberId;
     pub(crate) struct EffectId;
     pub(crate) struct ImplId;
-    struct SubmissionId;
 }
 
 pub(crate) struct Kernel {
@@ -73,7 +69,6 @@ pub(crate) struct State {
     pub store: HashMap<(Arc<str>, Realm), ImplId>,
     pub names: HashMap<Arc<str>, Option<TypeId>>,
     pub impl_counter: u64,
-    submissions: SlotMap<SubmissionId, Task>,
 }
 
 pub(crate) struct SubmissionFailure {
@@ -86,38 +81,21 @@ impl Kernel {
         crate::logger::record_error(self, fiber, error);
     }
 
-    /// A-3、A-7：宿主接收调度句柄，任务在首次轮询时移出 State。
-    /// 拒收时将任务所有权交回调用方；接收后发生的 panic 保留既有执行。
+    /// A-3、A-7：首次轮询取得原任务；宿主拒收时，唯一剩余的所有者取回原任务。
     pub(crate) fn submit(
         self: &Arc<Self>,
         task: Task,
     ) -> std::result::Result<(), SubmissionFailure> {
-        let id = self.state.lock().submissions.insert(task);
-        let started = Arc::new(AtomicBool::new(false));
-        let lease = Arc::new(());
-        let task_started = started.clone();
-        let task_lease = lease.clone();
-        let kernel = self.clone();
+        let pending = Arc::new(Mutex::new(Some(task)));
+        let worker = pending.clone();
         let submission = Box::pin(async move {
-            let _lease = task_lease;
-            task_started.store(true, Ordering::Release);
-            let task = kernel
-                .state
-                .lock()
-                .submissions
-                .remove(id)
-                .expect("submitted task retained");
+            let task = worker.lock().take().expect("首次轮询取得任务");
             task.await;
         });
         catch_unwind(AssertUnwindSafe(|| self.spawner.spawn(submission))).map_err(|payload| {
-            let rejected = if started.load(Ordering::Acquire) || Arc::strong_count(&lease) > 1 {
-                None
-            } else {
-                self.state.lock().submissions.remove(id)
-            };
             SubmissionFailure {
                 error: Error::panic(payload),
-                rejected,
+                rejected: Arc::try_unwrap(pending).ok().and_then(Mutex::into_inner),
             }
         })
     }
@@ -144,7 +122,6 @@ impl Kernel {
                     store: HashMap::new(),
                     names: HashMap::new(),
                     impl_counter: 0,
-                    submissions: SlotMap::with_key(),
                 }),
                 spawner: host.clone(),
                 clock: host,

@@ -1,10 +1,8 @@
 # Rust-cordis 应用开发指南
 
-本指南的命令适用于 v0.2.10。宿主 ABI 为 1.2，Rust SDK 为 0.2.4。使用该 SDK 重建原生插件后，宿主可在主动卸载时等待库级 Tokio 任务退出。旧插件仍可加载与替换，退役映像随宿主退出回收。已有 TypeScript 插件应更新随应用交付的 SDK 至 0.2.2，Python SDK 为 0.1.2。网页 SDK 0.1.2 随 HTTP 0.1.3 交付。共享默认分组、固定原生入口和跨目录构建契约见[运行时设计](15-universal-socket.md)。
+本指南适用于 v0.3.0。核心为 0.1.10，原生宿主为 0.1.4，开发工具和 Rust SDK 为 0.3.0。原生 ABI 为 1.2，进程插件与浏览器组件通过 UP/1 连接。Python SDK 为 0.1.3，TypeScript SDK 为 0.2.3，HTTP 0.1.4 内置网页 SDK 0.1.3。watch 为 0.1.3，window 为 0.1.1。完整组件版本列在发行包的 `README.md` 中。[发行包](https://github.com/Proton1917/Rust-Cordis/releases/tag/v0.3.0)
 
-运行时将部署覆盖层、已确认的程序来源和本次变更涉及的检查点一起提交。核心进程在提交中途退出时，下次启动会在挂载实例前恢复提交前的文件。状态目录所用文件系统需要支持同目录树内的硬链接和原子重命名。
-
-插件通过单项管理接口变更部署时，运行时会考虑调用方依赖的实例、尚待绑定的服务，以及可能一起重启的宿主成员。调用方可能受影响时，先收到受理应答，再由管理队列执行。这里采用保守判断，实际切换范围由候选组件的声明和隔离域决定。需要查询最终结果时，使用带请求编号的 `replace_batch`。
+运行时把已接纳的基础配置、部署覆盖层、已确认的程序来源和受影响的检查点作为同一次提交处理。启动时先依据磁盘上的决定记录恢复部署，再挂载实例。状态目录使用支持同目录树内硬链接和原子重命名的文件系统。[部署与恢复规格](deployment-semantics.md)
 
 ## 启动第一个插件
 
@@ -27,9 +25,11 @@ cordis run
 
 在另一个终端进入该项目运行 `cordis status`。成功时可看到 `hello` 已激活。修改插件后重新编译，watch 向管理接口提交候选；切换成功后，依赖方取得新绑定。Ctrl-C 通知核心有序退出。
 
+使用当前工作树编译开发工具时，可在新建项目时通过 `--sdk-path` 指向该工作树的 `crates/cordis-sdk`，使工程使用与开发工具相同的 SDK 源码。
+
 ## 让两个原生插件共享宿主
 
-对部署文件里两个已有实例分别设置相同的 `group`。下面展示实例字段，示例中的库由应用事先装配。
+`cordis.toml` 缺省使用格式 1，省略 `group` 时按插件名分组。声明 `format_version = 2` 后，省略 `group` 的原生插件默认使用 `native` 组。两种格式都可以显式设置 `group`，进程插件与网页组件沿用自身的执行方式。让两份已装配的原生库共用指定宿主时，在各自的实例声明中填写同一组名。
 
 ```toml
 [instance.storage]
@@ -41,7 +41,24 @@ plugin = "counter"
 group = "editor"
 ```
 
-提供方和使用方仍要通过接口声明依赖。该设置只改变执行位置。正常替换按依赖图处理；组进程退出时两者共同重建。v0.2.6 对省略 `group` 的原生库分别成组。
+提供方和使用方通过接口声明依赖。正常替换按实际绑定处理，组进程退出时同组成员共同恢复。
+
+## 提交管理操作与查询结果
+
+新管理插件调用 `cordis.manage@2.0`，并在实例的 `grants` 中用 `cordis.manage@2` 授权所需方法。`install` 返回安装后的候选引用。`add`、`remove`、`replace`、`rollback`、`configure`、`reload`、`replace_batch` 和 `shutdown` 返回带 `id` 的受理票据。受理应答写出后，核心把操作交给管理队列。包含配置重读的批次使用 `replace_batch` 和 `reload` 两项授权。
+
+管理实例调用 `result(id)` 查询本实例的票据，操作者也可以执行 `cordis status --caller <实例名> --ticket <票据 ID>` 读取发布到状态页的结果。票据记录在当前进程内有界保留。重启后用离线查询核对已确认的程序来源。
+
+| 票据状态 | 含义 |
+|---|---|
+| `pending` | 已受理，等待执行结果。 |
+| `succeeded` | 操作成功。 |
+| `committed_with_cleanup` | 部署已经提交，旧资源退役或暂存清理出了错。 |
+| `rejected` | 操作被拒绝或执行失败，见票据的 `code` 和 `error`。 |
+| `restored` | 候选执行失败，运行时已恢复先前部署。 |
+| `recovery_required` | 运行时需要恢复磁盘决定或原部署，期间暂停新的结构变更和检查点覆盖。 |
+
+`cordis.manage@1.1` 保留三个兼容方法。`install` 返回安装引用，`replace_batch` 接受原请求编号并返回票据，`shutdown` 用空应答表示受理。旧接口使用 `cordis.manage@1` 授权，2.0 接口优先使用 `cordis.manage@2` 授权，缺省时沿用已有的 `cordis.manage@1` 授权。其他管理方法和详细查询使用 2.0 接口。[部署与恢复规格](deployment-semantics.md)
 
 ## 契约与语言
 
@@ -51,7 +68,7 @@ group = "editor"
 cargo run -p cordis-dev -- idl gen --lang ts --output target/kv.ts plugins/kv-api/kv.wit
 ```
 
-Rust 服务由 `#[interface]` 或生成接口表达。同步方法中的异步等待可交给 `Context::wait`；异步方法直接 `.await`。Rust SDK 0.2.2 的默认 Tokio 特性为插件库提供执行上下文，支持需要 Tokio 网络驱动的第三方库。[Rust 接口](../skills/cordis-first-principles/references/rust-api.md) · [等待与任务](adr/0051-native-synchronous-wait.md)
+Rust 服务由 `#[interface]` 或生成接口表达。同步方法中的异步等待可交给 `Context::wait`，异步方法直接使用 `.await`。Rust SDK 的 `tokio` 特性为需要 Tokio 网络驱动等能力的库提供执行上下文。插件可在导出声明中设置 `tokio = false`，按宿主提供的上下文执行。[Rust 接口](../skills/cordis-first-principles/references/rust-api.md) · [等待与任务](adr/0051-native-synchronous-wait.md)
 
 生成 Python 插件后安装该项目的实际依赖：
 
@@ -85,14 +102,22 @@ cordis verify --plugin target/release/libkv_mem.dylib --suite target/release/lib
 cordis pack --project . --target aarch64-apple-darwin --out dist
 ```
 
-`pack` 使用项目根的 Cargo 配置及产物记录，也可装配已有插件清单。v0.2.6 的 `runtime.source_dirs` 可列出插件来源目录。源码工作区与部署工程分开时，先从源码工作区编译原生库，再由部署工程装配产物与资源。下一版把这一步并入工具的公开输入。与发布包一起装入的 Python、Node、网页资产及签名约束见[打包规则](adr/0036-release-packaging.md)与[脚本解释器布局](adr/0043-bundled-script-runtimes.md)。
+格式 2 使用 `build.workspace` 定位 Cargo 清单。新生成项目默认指向自己的 `Cargo.toml`。部署文件与源码分开时，可在 `build.workspace` 填写相对于部署目录的路径，并用 `build.plugins` 指定同名产物的来源包。源目录中的预编译插件和网页构建结果也可随包交付。格式 1 沿用项目根的 Cargo 清单，`runtime.source_dirs` 可列出两种格式的附加插件目录。[格式 2 示例与产物信息](13-runtime-architecture.md) · [脚本解释器布局](adr/0043-bundled-script-runtimes.md)
+
+将生成的归档解开到部署目录，再进入包内目录执行 `./cordis run`。用另一终端运行 `./cordis status` 查看实例状态。新生成项目的 watch 在开发目录监视构建产物和配置文件，在发布目录监视包内的 `cordis.toml`。[打包规则](adr/0036-release-packaging.md)
 
 ## 停机后的程序绑定查询
 
 `cordis status --offline --config cordis.toml` 输出最后确认的程序绑定。退出码 0 表示读取成功，1 表示配置或记录读取失败，2 表示参数错误。先检查 `schema_version` 为 1，再从 `instances` 按名称读取 `declared_source`、`installed_reference` 与 `plugin_directory`。有效的空映射与读取失败分别处理。确认中的候选沿用上一份已提交指向；部署者根据当前引用、前一版本和其他使用方决定保留范围。[公开查询契约](adr/0054-offline-source-query.md)
 
+### 升级与恢复
+
+升级前先有序停机，并一起保留 `cordis.toml`、整个状态目录、已确认的插件安装目录与业务数据。状态目录含已接纳的基础配置、来源文件、检查点和可能存在的 `.deployment-undo`、`.deployment-staging` 记录。核心启动时依据这些记录选择已提交的一组文件并完成恢复。需要让部署采用编辑后的 `cordis.toml` 时，在运行后提交 `reload` 或由 watch 提交包含重读的批次。
+
+实例级 `rollback(name)` 选回上一个程序引用，并交接当前导出的业务状态。回退核心发行版时，使用与旧核心配套的升级前配置、状态目录及插件副本，并按应用自己的数据恢复约定处理业务数据库。出现 `recovery_required` 时，保留当前日志和完整状态目录，按同一版本完成恢复，再用离线查询核对已确认来源。[部署与恢复规格](deployment-semantics.md)
+
 <a id="里程碑验收摘要m0m18"></a>
 
 ## 版本与验收资料
 
-第一阶段的验收对象为进程内组件。第二阶段增加独立原生库与部署管理，后续阶段扩展到进程插件、网页、外部 HTTP 和字节流。各版本的运行条件和样本在[历史页](history/progress-2026-11-16.md)中分别列出。
+v0.3.0 提供 macOS arm64 发行资产，本次运行与性能记录也来自该平台。开发工具支持在 Linux x86_64 目标机器上打包，Linux PSS 和时延留待该平台测量。实现量统计分别列出手写生产代码、构建工具、交付模板和生成源码，性能结果按各场景的样本与波动报告。[v0.3.0 实测与统计](measurements/deployment-revision.md) · [历史验收](history/progress-2026-11-16.md)

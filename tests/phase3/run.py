@@ -5,6 +5,8 @@ import shutil
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "benchmarks/multilanguage"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from management import request_admin
 from measure import fixture, runtime, save
 
 
@@ -118,8 +120,8 @@ def migration(options):
             before = current.wait(lambda: active(current, 4), "当前提供方稳定")
             prior = next(item["context"] for item in before["instances"] if item["name"] == "counter")
             previous_value = counter(current)
-            installed, _ = current.request("admin", "cordis.manage@1.1", "install", [str(candidate)])
-            replacement, _ = current.request("admin", "cordis.manage@1.1", "replace", ["store", installed["value"]])
+            installed = request_admin(current, "install", [str(candidate)])
+            replacement = request_admin(current, "replace", ["store", installed["value"]])
             after = current.wait(lambda: migrated(current, prior, installed["value"]), "候选发布并重建计数器")
             observed = counter(current)
             assert observed >= previous_value, [previous_value, observed]

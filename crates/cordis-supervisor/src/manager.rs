@@ -12,7 +12,9 @@ mod transition;
 mod trusted;
 mod views;
 
-pub use batch::{BatchCompletion, BatchInstance, BatchReplacement};
+pub use batch::{
+    BatchCompletion, BatchFailure, BatchInstance, BatchReplacement, DeploymentDecision,
+};
 pub use cordis_routing::{Arguments, CallContext, LocalReply, LocalService};
 pub use lifecycle::FrozenSnapshot;
 pub use model::{
@@ -176,6 +178,7 @@ type Command = Box<dyn Operation>;
 struct CommandQueue {
     accepting: bool,
     sender: mpsc::Sender<Command>,
+    pages: mpsc::Sender<Command>,
 }
 
 pub(super) struct Core {
@@ -194,6 +197,8 @@ pub(super) struct Core {
     exported: AtomicBool,
     shutdown_export: Mutex<Option<lifecycle::Frozen>>,
     commands: Mutex<CommandQueue>,
+    page_commands: tokio::sync::Mutex<mpsc::Receiver<Command>>,
+    recovery_batch: Mutex<Option<batch::HeldDeployment>>,
     stop: watch::Sender<bool>,
     finished: watch::Sender<Option<Result<()>>>,
     log_sink: Mutex<Option<LogSink>>,
@@ -236,6 +241,7 @@ impl Manager {
     ) -> Result<Self> {
         let (stop, _) = watch::channel(false);
         let (finished, _) = watch::channel(None);
+        let (pages, page_commands) = mpsc::channel(options.operation_queue_capacity);
         let manager = Self(Arc::new(Core {
             context: context.clone(),
             fiber,
@@ -259,7 +265,10 @@ impl Manager {
             commands: Mutex::new(CommandQueue {
                 accepting: true,
                 sender,
+                pages,
             }),
+            page_commands: tokio::sync::Mutex::new(page_commands),
+            recovery_batch: Mutex::new(None),
             stop,
             finished,
             log_sink: Mutex::new(None),
@@ -296,6 +305,10 @@ impl Manager {
                             while let Ok(command) = receiver.try_recv() {
                                 command.cancel();
                             }
+                            while let Ok(command) = manager.0.page_commands.lock().await.try_recv()
+                            {
+                                command.cancel();
+                            }
                             let result = manager.close_all().await;
                             manager.0.finished.send_replace(Some(result));
                             return Ok(());
@@ -303,6 +316,9 @@ impl Manager {
                         tokio::select! {
                             biased;
                             _ = shutdown.changed() => {},
+                            page = manager.next_page_command() => {
+                                if let Some(page) = page { page.run(manager.clone()).await; }
+                            },
                             command = receiver.recv() => match command {
                                 Some(command) if *shutdown.borrow() => command.cancel(),
                                 Some(command) => command.run(manager).await,
@@ -330,7 +346,9 @@ impl Manager {
         }
     }
     pub(super) fn running(&self) -> Result<()> {
-        if self.0.stopping.load(Ordering::Acquire) {
+        if self.0.recovery_batch.lock().is_some() {
+            Err(error(4, "部署决定需要从磁盘恢复"))
+        } else if self.0.stopping.load(Ordering::Acquire) {
             Err(error(4, "核心管理器正在退出"))
         } else if self.0.exported.load(Ordering::Acquire) {
             Err(error(4, "实例状态已冻结导出，等待退出"))
@@ -340,6 +358,19 @@ impl Manager {
     }
     /// DOC-15 §3.2：提交后由队列拥有操作，调用者结束等待时事务继续完成。
     async fn transaction<T, F, Fut>(&self, action: F) -> Result<T>
+    where
+        T: Send + 'static,
+        F: FnOnce(Manager) -> Fut + Send + 'static,
+        Fut: std::future::Future<Output = Result<T>> + Send + 'static,
+    {
+        self.submit(action, false).await
+    }
+
+    async fn next_page_command(&self) -> Option<Command> {
+        self.0.page_commands.lock().await.recv().await
+    }
+
+    async fn submit<T, F, Fut>(&self, action: F, page: bool) -> Result<T>
     where
         T: Send + 'static,
         F: FnOnce(Manager) -> Fut + Send + 'static,
@@ -355,7 +386,7 @@ impl Manager {
             if !queue.accepting {
                 return Err(error(4, "核心管理器正在退出"));
             }
-            queue.sender.try_send(work)
+            if page { &queue.pages } else { &queue.sender }.try_send(work)
         };
         submitted.map_err(|problem| match problem {
             mpsc::error::TrySendError::Full(_) => error(8, "核心管理操作队列已满"),

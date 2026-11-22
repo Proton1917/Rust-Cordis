@@ -331,8 +331,8 @@ impl Manager {
             component: generation.component.info.name.clone(),
             library: generation.component.library,
             context: generation.id,
-            config: generation.config.as_ref().clone(),
-            inherited: generation.inherited.as_deref().cloned(),
+            config: generation.config.as_ref(),
+            inherited: generation.inherited.as_deref(),
         };
         let output = self
             .lifecycle_request(

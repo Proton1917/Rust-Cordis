@@ -7,7 +7,7 @@ pub use context::{ContextOptions, Interception, Isolation};
 pub use verification::{ContractAssertion, ContractReport, VerificationReceipt, VerificationSuite};
 
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::{collections::BTreeMap, path::PathBuf};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct LibraryInfo {
@@ -157,14 +157,14 @@ pub struct BatchTicket {
     pub id: String,
 }
 
-/// ADR-0031：核心持久化的最近批次结果，由请求标识关联到调用方的待确认窗口。
+/// 管理队列最近一次操作的内存结果，按调用实例和票据标识关联。
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct BatchOutcome {
     pub id: String,
     pub caller: String,
     pub state: String,
     pub error: Option<String>,
-    /// 被拒绝时的错误码。
+    /// 执行、恢复或提交后清理的错误码。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub code: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -184,4 +184,6 @@ pub struct RuntimeSnapshot {
     pub last_replace: Vec<GroupReplaceReport>,
     #[serde(default)]
     pub last_batch: Vec<BatchOutcome>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub library_sample_errors: BTreeMap<String, String>,
 }

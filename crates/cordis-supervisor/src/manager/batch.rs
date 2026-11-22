@@ -3,7 +3,7 @@
 use super::*;
 use futures_util::future::join_all;
 use generation::{Binding, RemoteComponent};
-use std::{borrow::Cow, path::PathBuf};
+use std::{borrow::Cow, collections::BTreeSet, path::PathBuf};
 
 /// ADR-0031：原生候选按逻辑插件准备，进程候选携带完整启动计划。
 pub enum BatchReplacement {
@@ -25,28 +25,63 @@ pub struct BatchInstance {
 }
 
 /// ADR-0052 R-2：批次执行结果与核心形成的丢弃信息保持同一次操作的所有权。
-pub struct BatchCompletion {
-    pub result: Result<HashMap<String, Option<payload::State>>>,
-    pub discarded_confirmation: Option<cordis_types::ConfirmationDiscard>,
-    pub original_states: Option<HashMap<String, Option<payload::State>>>,
+pub struct BatchCommit {
+    original: SharedStates,
+    pub cleanup: Option<WireError>,
 }
 
-struct ActivatedBatch {
-    original: HashMap<String, Option<payload::State>>,
-    retirement: Result<()>,
-}
+pub type BatchCompletion = std::result::Result<BatchCommit, BatchFailure>;
 
-impl BatchCompletion {
-    fn rejected(
+pub enum BatchFailure {
+    Rejected(WireError),
+    Restored {
         problem: WireError,
-        discarded_confirmation: Option<cordis_types::ConfirmationDiscard>,
-    ) -> Self {
-        Self {
-            result: Err(replacement_failure("batch", None, false, problem)),
-            original_states: None,
-            discarded_confirmation,
+        discarded: Option<cordis_types::ConfirmationDiscard>,
+    },
+    RecoveryRequired(WireError),
+}
+
+impl From<WireError> for BatchFailure {
+    fn from(problem: WireError) -> Self {
+        Self::Rejected(problem)
+    }
+}
+
+impl BatchFailure {
+    fn problem(self) -> WireError {
+        match self {
+            Self::Rejected(problem)
+            | Self::Restored { problem, .. }
+            | Self::RecoveryRequired(problem) => problem,
         }
     }
+}
+
+pub enum DeploymentDecision {
+    NotCommitted(WireError),
+    Committed,
+    RecoveryRequired(WireError),
+}
+
+type States = HashMap<String, Option<payload::State>>;
+type SharedStates = HashMap<String, Option<Arc<payload::State>>>;
+struct CommitWindow {
+    candidate: oneshot::Sender<SharedStates>,
+    decision: oneshot::Receiver<DeploymentDecision>,
+}
+
+/// 磁盘决定待恢复期间，旧连接和交接状态跟随原操作存活。
+pub(super) struct HeldDeployment {
+    groups: BTreeMap<String, PreparedGroup>,
+    _transition: lifecycle::Transition,
+}
+
+#[derive(Clone, Copy)]
+enum TargetSource<'a> {
+    Manifest,
+    Handshake,
+    Restoration,
+    Recovery(&'a [Weak<Instance>]),
 }
 
 struct LibraryChange {
@@ -64,6 +99,150 @@ struct PreparedGroup {
 }
 
 impl Manager {
+    /// 冷启动和契约往返恢复已经接受的声明，组件的激活由内核按依赖推进。
+    pub async fn restore_instance(
+        &self,
+        target: BatchInstance,
+        state: Option<payload::State>,
+    ) -> Result<()> {
+        self.transaction(move |manager| async move {
+            let name = target.specification.name.clone();
+            if manager.find_instance(&name).is_some() {
+                return Err(error(2, "实例名称已经存在"));
+            }
+            let states = state.map(|state| (name, Some(state))).into_iter().collect();
+            manager.restore_declared(vec![], vec![target], states).await
+        })
+        .await
+    }
+
+    pub(super) async fn restore_declared(
+        &self,
+        sources: Vec<BatchReplacement>,
+        targets: Vec<BatchInstance>,
+        states: States,
+    ) -> Result<()> {
+        self.execute_deployment_batch(
+            sources,
+            vec![],
+            targets,
+            states,
+            true,
+            TargetSource::Restoration,
+            None,
+        )
+        .await
+        .map_err(BatchFailure::problem)?
+        .cleanup
+        .map_or(Ok(()), Err)
+    }
+
+    fn batch_members(&self, group: &str) -> Result<Vec<BatchInstance>> {
+        self.group_instances(group)
+            .into_iter()
+            .map(|instance| {
+                let data = &instance.data;
+                Ok(BatchInstance {
+                    specification: InstanceSpec {
+                        name: data.name.clone(),
+                        group: data.group.clone(),
+                        plugin: data.plugin.clone(),
+                        component: data.component.clone(),
+                        config: instance.configuration()?.config.as_ref().clone(),
+                    },
+                    version: String::new(),
+                    view: instance.fiber.context(),
+                    remount: false,
+                })
+            })
+            .collect()
+    }
+
+    /// 失联分组以原启动计划进入同一部署事务，退避由连接监管器安排。
+    pub(super) async fn retry_deployment(
+        &self,
+        specification: GroupSpec,
+        cohort: &[Weak<Instance>],
+    ) -> Result<()> {
+        let members = self.batch_members(&specification.name)?;
+        let committed = self
+            .execute_deployment_batch(
+                vec![BatchReplacement::Process(specification)],
+                members.clone(),
+                members,
+                HashMap::new(),
+                true,
+                TargetSource::Recovery(cohort),
+                None,
+            )
+            .await
+            .map_err(BatchFailure::problem)?;
+        if let Some(problem) = committed.cleanup {
+            self.0
+                .context
+                .logger()
+                .error(saved_error(&problem).to_string());
+        }
+        Ok(())
+    }
+    /// 按监管目录选取实际实例，包括由页面父效应持有的子实例。
+    pub(super) async fn change_running_group(
+        &self,
+        group: &str,
+        replacement: Option<BatchReplacement>,
+        configuration: Option<(String, Value)>,
+    ) -> Result<()> {
+        self.group(group)?;
+        let before = self.batch_members(group)?;
+        let permit_pending = configuration.is_some();
+        let mut target = before.clone();
+        if let Some((name, config)) = configuration {
+            let item = target
+                .iter_mut()
+                .find(|item| item.specification.name == name)
+                .ok_or_else(|| error(4, "配置目标实例缺席"))?;
+            item.specification.config = config;
+        }
+        let library = match &replacement {
+            Some(BatchReplacement::Native { plugin, .. }) => Some(plugin.clone()),
+            _ => None,
+        };
+        let result = self
+            .execute_deployment_batch(
+                replacement.into_iter().collect(),
+                before,
+                target,
+                HashMap::new(),
+                permit_pending,
+                TargetSource::Handshake,
+                None,
+            )
+            .await;
+        match result {
+            Ok(batch) => batch.cleanup.map_or(Ok(()), |problem| {
+                Err(replacement_failure(
+                    group,
+                    library.as_deref(),
+                    true,
+                    problem,
+                ))
+            }),
+            Err(BatchFailure::RecoveryRequired(problem)) => Err(problem),
+            Err(failure) => {
+                let mut problem = failure.problem();
+                if library.is_some() {
+                    problem =
+                        Box::pin(self.after_failed_libraries(problem, [group.to_owned()])).await;
+                }
+                Err(replacement_failure(
+                    group,
+                    library.as_deref(),
+                    false,
+                    problem,
+                ))
+            }
+        }
+    }
     /// ADR-0031：配置回滚可能重建纤程，运行时从唯一目录刷新持有句柄。
     pub fn instance_fiber(&self, name: &str) -> Result<Fiber> {
         self.instance(name).map(|instance| instance.fiber.clone())
@@ -77,32 +256,68 @@ impl Manager {
         target: Vec<BatchInstance>,
         states: HashMap<String, Option<payload::State>>,
     ) -> Result<HashMap<String, Option<payload::State>>> {
-        self.replace_batch_reported(replacements, before, target, states, false)
+        match self
+            .submit_batch(replacements, before, target, states, false, None)
             .await
-            .result
+        {
+            Ok(BatchCommit {
+                original,
+                cleanup: None,
+            }) => Ok(original
+                .into_iter()
+                .map(|(name, state)| (name, state.map(Arc::unwrap_or_clone)))
+                .collect()),
+            Ok(BatchCommit {
+                cleanup: Some(problem),
+                ..
+            }) => Err(replacement_failure("batch", None, true, problem)),
+            Err(BatchFailure::RecoveryRequired(problem)) => Err(problem),
+            Err(failure) => Err(replacement_failure("batch", None, false, failure.problem())),
+        }
     }
 
-    /// ADR-0044：配置目标允许依赖缺席，执行与清理错误仍进入同一批次恢复。
-    pub async fn reconfigure_batch(
+    pub async fn deploy<F, Fut>(
         &self,
         replacements: Vec<BatchReplacement>,
         before: Vec<BatchInstance>,
         target: Vec<BatchInstance>,
-        states: HashMap<String, Option<payload::State>>,
-    ) -> Result<HashMap<String, Option<payload::State>>> {
-        self.replace_batch_reported(replacements, before, target, states, true)
-            .await
-            .result
-    }
-
-    /// ADR-0052：类型化确认期信息来自当前事务，运行时可据此持久化批次结果。
-    pub async fn replace_batch_reported(
-        &self,
-        replacements: Vec<BatchReplacement>,
-        before: Vec<BatchInstance>,
-        target: Vec<BatchInstance>,
-        states: HashMap<String, Option<payload::State>>,
         permit_pending: bool,
+        decide: F,
+    ) -> BatchCompletion
+    where
+        F: FnOnce(SharedStates) -> Fut,
+        Fut: std::future::Future<Output = DeploymentDecision>,
+    {
+        let (ready, candidate) = oneshot::channel();
+        let (vote, decision) = oneshot::channel();
+        let window = CommitWindow {
+            candidate: ready,
+            decision,
+        };
+        let worker = self.submit_batch(
+            replacements,
+            before,
+            target,
+            HashMap::new(),
+            permit_pending,
+            Some(window),
+        );
+        let client = async move {
+            if let Ok(states) = candidate.await {
+                let _ = vote.send(decide(states).await);
+            }
+        };
+        tokio::join!(worker, client).0
+    }
+
+    async fn submit_batch(
+        &self,
+        replacements: Vec<BatchReplacement>,
+        before: Vec<BatchInstance>,
+        target: Vec<BatchInstance>,
+        states: States,
+        permit_pending: bool,
+        window: Option<CommitWindow>,
     ) -> BatchCompletion {
         self.transaction(move |manager| async move {
             let groups: std::collections::BTreeSet<_> = replacements
@@ -112,41 +327,28 @@ impl Manager {
                     BatchReplacement::Process(_) => None,
                 })
                 .collect();
-            let mut discarded = None;
-            let activated = manager
+            let mut result = manager
                 .execute_deployment_batch(
                     replacements,
                     before,
                     target,
                     states,
-                    &mut discarded,
                     permit_pending,
+                    TargetSource::Manifest,
+                    window,
                 )
                 .await;
-            let activated = match activated {
-                Ok(batch) => batch,
-                Err(problem) => {
-                    return Ok(BatchCompletion::rejected(
-                        manager.after_failed_libraries(problem, groups).await,
-                        discarded,
-                    ));
-                }
-            };
-            let (result, original_states) = match activated.retirement {
-                Ok(()) => (Ok(activated.original), None),
-                Err(problem) => (
-                    Err(replacement_failure("batch", None, true, problem)),
-                    Some(activated.original),
-                ),
-            };
-            Ok(BatchCompletion {
-                result,
-                original_states,
-                discarded_confirmation: None,
-            })
+            if let Err(BatchFailure::Rejected(problem) | BatchFailure::Restored { problem, .. }) =
+                &mut result
+            {
+                *problem = manager
+                    .after_failed_libraries(problem.clone(), groups)
+                    .await;
+            }
+            Ok(result)
         })
         .await
-        .unwrap_or_else(|problem| BatchCompletion::rejected(problem, None))
+        .unwrap_or_else(|problem| Err(problem.into()))
     }
 
     /// SW-1–SW-5：候选和最终配置全部通过预检后才冻结旧实例。
@@ -156,60 +358,161 @@ impl Manager {
         before: Vec<BatchInstance>,
         mut target: Vec<BatchInstance>,
         states: HashMap<String, Option<payload::State>>,
-        discarded_confirmation: &mut Option<cordis_types::ConfirmationDiscard>,
         permit_pending: bool,
-    ) -> Result<ActivatedBatch> {
+        source: TargetSource<'_>,
+        window: Option<CommitWindow>,
+    ) -> BatchCompletion {
         let started = std::time::Instant::now();
-        self.running()?;
+        if let Err(problem) = self.running() {
+            return Err(if self.0.recovery_batch.lock().is_some() {
+                BatchFailure::RecoveryRequired(problem)
+            } else {
+                BatchFailure::Rejected(problem)
+            });
+        }
         let (prepared, names) = self
-            .prepare_batch_sources(replacements, &before, &mut target, permit_pending)
+            .prepare_batch_sources(replacements, &before, &mut target, permit_pending, source)
             .await?;
-        let mut transition = match self.freeze_batch(&prepared, &before, &target, &names).await {
-            Ok(frozen) => frozen,
-            Err(problem) => return Err(self.discard_batch(&prepared, problem).await),
+        let restoring = matches!(source, TargetSource::Restoration);
+        let recovering = matches!(source, TargetSource::Recovery(_));
+        let mut transition = if restoring {
+            lifecycle::Transition::default()
+        } else {
+            match self.freeze_batch(&prepared, &target, &names, source).await {
+                Ok(frozen) => frozen,
+                Err(problem) => return Err(self.discard_batch(&prepared, problem).await.into()),
+            }
         };
         transition.permit_pending = permit_pending;
+        if !recovering {
+            for group in prepared.values() {
+                group.group.health.lock().state = "replacing".into();
+            }
+        }
         let applied = {
             let inherited = batch_inherited(&transition, &before, &target, states);
             self.apply_batch(&prepared, &before, &target, &inherited, false)
                 .await
         };
         let accepted = match applied {
+            Ok(()) if restoring => Ok((started.elapsed(), 0)),
+            applied if recovering => {
+                let settled = match applied {
+                    Ok(()) => {
+                        self.stabilize_with(&transition.before, &transition.names, true)
+                            .await
+                    }
+                    Err(problem) => Err(problem),
+                };
+                let thawed = self.thaw_current(&transition.frozen).await;
+                let problem = settled.err().or_else(|| thawed.err());
+                for group in prepared.values() {
+                    group.group.health.lock().error = problem.as_ref().map(saved_error);
+                }
+                Ok((started.elapsed(), transition.names.len()))
+            }
             Ok(()) => {
                 self.accept_batch(&prepared, &mut transition, &names, &target, started)
                     .await
             }
             Err(problem) => Err(problem),
         };
+        let accepted = match (accepted, window) {
+            (Ok(timing), Some(window)) => {
+                let names: Vec<_> = target
+                    .iter()
+                    .map(|item| item.specification.name.clone())
+                    .collect();
+                let mut states = self.capture_deployment(&names).await;
+                for old in &before {
+                    let old = &old.specification;
+                    if !target.iter().any(|item| {
+                        let new = &item.specification;
+                        new.name == old.name
+                            && new.plugin == old.plugin
+                            && new.component == old.component
+                    }) {
+                        states.entry(old.name.clone()).or_insert(None);
+                    }
+                }
+                let _ = window.candidate.send(states);
+                let mut decision = window.decision;
+                let decision = loop {
+                    tokio::select! {
+                        biased;
+                        outcome = &mut decision => break outcome.unwrap_or_else(|_| DeploymentDecision::NotCommitted(error(7, "部署决定方已退出"))),
+                        Some(command) = self.next_page_command() => command.run(self.clone()).await,
+                    }
+                };
+                match decision {
+                    DeploymentDecision::Committed => Ok(timing),
+                    DeploymentDecision::NotCommitted(problem) => Err(problem),
+                    DeploymentDecision::RecoveryRequired(problem) => {
+                        *self.0.recovery_batch.lock() = Some(HeldDeployment {
+                            groups: prepared,
+                            _transition: transition,
+                        });
+                        return Err(BatchFailure::RecoveryRequired(problem));
+                    }
+                }
+            }
+            (result, _) => result,
+        };
         let (paused, affected) = match accepted {
             Ok(accepted) => accepted,
             Err(problem) => {
-                let (problem, discarded) = self
+                return Err(self
                     .rollback_batch(
-                        &prepared,
+                        prepared,
                         &before,
                         &target,
                         transition,
                         started.elapsed(),
                         problem,
                     )
-                    .await;
-                *discarded_confirmation = discarded;
-                return Err(problem);
+                    .await);
             }
         };
-        self.record_batch_reports(&prepared, affected, paused, None, None, None);
-        let committed = self.commit_batch(&prepared).await;
+        if !recovering {
+            self.record_batch_reports(&prepared, affected, paused, None, None, None);
+        }
+        let committed = self.commit_batch(&prepared, recovering).await;
         let original = std::mem::take(&mut transition.inherited);
         drop(transition);
-        let finished = match committed {
-            Ok(()) => self.retire_batch(&prepared, &before, &target).await,
-            Err(problem) => Err(problem),
-        };
-        Ok(ActivatedBatch {
+        Ok(BatchCommit {
             original,
-            retirement: finished,
+            cleanup: committed
+                .and(
+                    self.retire_batch(&prepared, &before, &target, recovering)
+                        .await,
+                )
+                .err(),
         })
+    }
+
+    pub(super) async fn close_held_deployment(&self) -> Result<()> {
+        let held = self.0.recovery_batch.lock().take();
+        let mut result = Ok(());
+        if let Some(held) = held {
+            let active: HashSet<_> = self
+                .0
+                .catalog
+                .lock()
+                .groups
+                .values()
+                .map(|group| group.current.lock().connection.id())
+                .collect();
+            for group in held.groups.into_values() {
+                let mut endpoints = HashSet::new();
+                for version in group.previous.into_iter().chain([group.candidate]) {
+                    let id = version.connection.id();
+                    if !active.contains(&id) && endpoints.insert(id) {
+                        result = result.and(self.retire(&version).await);
+                    }
+                }
+            }
+        }
+        result
     }
 
     /// SW-1–SW-4：完整准备全部来源和重启计划，再按最终部署整体预检。
@@ -219,6 +522,7 @@ impl Manager {
         before: &[BatchInstance],
         target: &mut [BatchInstance],
         permit_pending: bool,
+        source: TargetSource<'_>,
     ) -> Result<(BTreeMap<String, PreparedGroup>, HashSet<String>)> {
         let mut prepared = BTreeMap::new();
         let preparation = async {
@@ -234,7 +538,7 @@ impl Manager {
                     .restart_specification(&group.group, &group.candidate)
                     .await?;
             }
-            self.preflight_batch(&prepared, before, target, permit_pending)
+            self.preflight_batch(&prepared, before, target, permit_pending, source)
                 .await
         }
         .await;
@@ -248,16 +552,11 @@ impl Manager {
     async fn freeze_batch(
         &self,
         prepared: &BTreeMap<String, PreparedGroup>,
-        before: &[BatchInstance],
         target: &[BatchInstance],
         names: &HashSet<String>,
+        source: TargetSource<'_>,
     ) -> Result<lifecycle::Transition> {
-        let instances = before
-            .iter()
-            .filter(|item| names.contains(&item.specification.name))
-            .map(|item| self.instance(&item.specification.name))
-            .collect::<Result<Vec<_>>>()?;
-        let incoming = target
+        let mut incoming = target
             .iter()
             .filter(|item| names.contains(&item.specification.name))
             .map(|item| {
@@ -270,26 +569,70 @@ impl Manager {
                     ))
                     .cloned()
                     .ok_or_else(|| error(3, "批次组件描述缺席"))?;
-                Ok((item.view.clone(), component))
+                Ok((
+                    item.view.clone(),
+                    component,
+                    item.specification.name.clone(),
+                ))
             })
             .collect::<Result<Vec<_>>>()?;
-        let instances = self.include_incoming(instances, incoming);
-        self.prepare_transition(&instances, true).await
+        let mut roots = names.clone();
+        for group in prepared.values() {
+            for instance in self.group_instances(&group.group.name) {
+                let data = &instance.data;
+                if (group.libraries.is_empty()
+                    || group
+                        .libraries
+                        .iter()
+                        .any(|library| library.plugin == data.plugin))
+                    && roots.insert(data.name.clone())
+                    && let Some(component) = group
+                        .candidate
+                        .components
+                        .get(&(data.plugin.clone(), data.component.clone()))
+                {
+                    incoming.push((
+                        instance.fiber.context(),
+                        component.clone(),
+                        data.name.clone(),
+                    ));
+                }
+            }
+        }
+        if let TargetSource::Recovery(cohort) = source {
+            roots.extend(
+                cohort
+                    .iter()
+                    .filter_map(Weak::upgrade)
+                    .filter_map(|instance| {
+                        let name = &instance.data.name;
+                        self.find_instance(name)
+                            .filter(|current| Arc::ptr_eq(current, &instance))
+                            .map(|_| name.clone())
+                    }),
+            );
+        }
+        self.prepare_transition(
+            roots,
+            incoming,
+            !matches!(source, TargetSource::Recovery(_)),
+        )
+        .await
     }
 
     /// DOC-11 §7：恢复窗口前全部定义和状态后释放候选，并保留实际回滚报告。
     async fn rollback_batch(
         &self,
-        prepared: &BTreeMap<String, PreparedGroup>,
+        prepared: BTreeMap<String, PreparedGroup>,
         before: &[BatchInstance],
         target: &[BatchInstance],
         transition: lifecycle::Transition,
         elapsed: Duration,
         problem: WireError,
-    ) -> (WireError, Option<cordis_types::ConfirmationDiscard>) {
+    ) -> BatchFailure {
         let discarded = self.confirmation_discard(&transition);
         let restored = match self
-            .apply_batch(prepared, target, before, &transition.inherited, true)
+            .apply_batch(&prepared, target, before, &transition.inherited, true)
             .await
         {
             Ok(()) => self
@@ -302,23 +645,46 @@ impl Manager {
                 .map(|_| ()),
             Err(problem) => Err(problem),
         };
+        let restored = match restored {
+            Ok(()) => self.thaw_current(&transition.frozen).await,
+            Err(problem) => Err(problem),
+        };
         self.record_batch_reports(
-            prepared,
+            &prepared,
             transition.names.len(),
             elapsed,
             Some(restored.is_ok()),
             Some(&problem),
             discarded.as_ref(),
         );
-        let restored = match restored {
-            Ok(()) => self.thaw_current(&transition.frozen).await,
-            Err(problem) => Err(problem),
-        };
-        drop(transition);
-        (
-            self.batch_failed(prepared, problem, restored).await,
+        for group in prepared.values() {
+            *group.group.health.lock() = Health {
+                state: if restored.is_ok() {
+                    "running"
+                } else {
+                    "failed"
+                }
+                .into(),
+                error: Some(saved_error(&problem)),
+            };
+        }
+        if let Err(recovery) = restored {
+            *self.0.recovery_batch.lock() = Some(HeldDeployment {
+                groups: prepared,
+                _transition: transition,
+            });
+            return BatchFailure::RecoveryRequired(error(
+                1,
+                format!("批次失败：{problem}；原状态恢复失败：{recovery}"),
+            ));
+        }
+        for group in prepared.values().filter(|group| group.previous.is_none()) {
+            self.0.catalog.lock().groups.remove(&group.group.name);
+        }
+        BatchFailure::Restored {
+            problem: self.discard_batch(&prepared, problem).await,
             discarded,
-        )
+        }
     }
 
     /// SW-1–SW-3：同宿主的多个原生候选逐个合并描述符，保留其他组件定义身份。
@@ -442,10 +808,13 @@ impl Manager {
         before: &[BatchInstance],
         target: &mut [BatchInstance],
         permit_pending: bool,
+        source: TargetSource<'_>,
     ) -> Result<HashSet<String>> {
         let mut components = HashMap::new();
         for item in target.iter_mut() {
-            self.check_view(&item.view)?;
+            if matches!(source, TargetSource::Manifest | TargetSource::Restoration) {
+                self.check_view(&item.view)?;
+            }
             let specification = &mut item.specification;
             let generation = self.batch_generation(prepared, &specification.group, false)?;
             if specification.component.is_empty() {
@@ -459,12 +828,13 @@ impl Manager {
                 ))
                 .ok_or_else(|| error(3, "批次目标缺少最终部署组件"))?
                 .clone();
-            if generation
-                .descriptor
-                .plugins
-                .iter()
-                .find(|plugin| plugin.name == specification.plugin)
-                .is_none_or(|plugin| plugin.version != item.version)
+            if matches!(source, TargetSource::Manifest | TargetSource::Restoration)
+                && generation
+                    .descriptor
+                    .plugins
+                    .iter()
+                    .find(|plugin| plugin.name == specification.plugin)
+                    .is_none_or(|plugin| plugin.version != item.version)
             {
                 return Err(error(3, "批次来源清单与握手版本冲突"));
             }
@@ -476,6 +846,11 @@ impl Manager {
             }
         }
         let affected = batch_affected(prepared, before, target);
+        if matches!(source, TargetSource::Handshake | TargetSource::Recovery(_)) {
+            for group in prepared.values() {
+                self.preflight_interfaces(&group.group, &group.candidate)?;
+            }
+        }
         for item in target
             .iter()
             .filter(|item| affected.contains(&item.specification.name))
@@ -566,14 +941,20 @@ impl Manager {
         prepared: &BTreeMap<String, PreparedGroup>,
         before: &[BatchInstance],
         target: &[BatchInstance],
-        states: &HashMap<String, Option<payload::State>>,
+        states: &SharedStates,
         rollback: bool,
     ) -> Result<()> {
         let mut recovered = Vec::new();
         for group in prepared.values() {
             if rollback && !group.candidate.connection.is_alive() {
                 let transition = self
-                    .prepare_transition(&self.group_instances(&group.group.name), false)
+                    .prepare_transition(
+                        self.group_instances(&group.group.name)
+                            .into_iter()
+                            .map(|i| i.data.name.clone()),
+                        Vec::new(),
+                        false,
+                    )
                     .await?;
                 self.inherit(&transition.inherited);
                 recovered.push(transition);
@@ -608,8 +989,7 @@ impl Manager {
                     .lock()
                     .groups
                     .insert(group.group.name.clone(), group.group.clone());
-                group.group.health.lock().state = "replacing".into();
-                self.activate(&group.group, version, None)?;
+                self.activate(&group.group, version)?;
             }
         }
         self.apply_batch_instances(prepared, target, states, rollback)
@@ -627,7 +1007,7 @@ impl Manager {
         &self,
         prepared: &BTreeMap<String, PreparedGroup>,
         target: &[BatchInstance],
-        states: &HashMap<String, Option<payload::State>>,
+        states: &SharedStates,
         rollback: bool,
     ) -> Result<()> {
         let mut updated = Vec::new();
@@ -639,7 +1019,7 @@ impl Manager {
                     updated
                         .push(instance.set_configuration(Arc::new(specification.config.clone())));
                 }
-            } else {
+            } else if item.view.fiber().is_alive() {
                 let generation = if rollback {
                     self.group(&specification.group)?.current.lock().clone()
                 } else {
@@ -711,13 +1091,15 @@ impl Manager {
         target: &[BatchInstance],
         started: std::time::Instant,
     ) -> Result<(Duration, usize)> {
-        let names = target
+        let mut selected: BTreeSet<_> = target
             .iter()
             .filter(|item| names.contains(&item.specification.name))
             .map(|item| item.specification.name.clone())
-            .collect::<Vec<_>>();
+            .collect();
+        selected.extend(transition.names.iter().cloned());
+        let selected = selected.into_iter().collect::<Vec<_>>();
         let changed = self
-            .stabilize_with(&transition.before, &names, transition.permit_pending)
+            .stabilize_with(&transition.before, &selected, transition.permit_pending)
             .await?;
         let paused = started.elapsed();
         let connections = prepared
@@ -730,17 +1112,22 @@ impl Manager {
     }
 
     /// SW-9：保存全批提交事实，进程监管继续指向本次活动版本。
-    ///
-    /// 原快照由调用方从 [`BatchCompletion::original_states`] 取得并持久化。
-    async fn commit_batch(&self, prepared: &BTreeMap<String, PreparedGroup>) -> Result<()> {
+    async fn commit_batch(
+        &self,
+        prepared: &BTreeMap<String, PreparedGroup>,
+        recovering: bool,
+    ) -> Result<()> {
         for group in prepared.values() {
             self.replace_plan(&group.group, group.specification.clone())
                 .await;
-            *group.group.health.lock() = Health {
-                state: "running".into(),
-                error: None,
-            };
-            group.group.restarts.store(0, Ordering::Release);
+            {
+                let mut health = group.group.health.lock();
+                health.state = "running".into();
+                if !recovering {
+                    health.error = None;
+                    group.group.restarts.store(0, Ordering::Release);
+                }
+            }
             if group.libraries.is_empty() {
                 self.monitor(group.group.clone(), group.candidate.clone())?;
             }
@@ -754,6 +1141,7 @@ impl Manager {
         prepared: &BTreeMap<String, PreparedGroup>,
         before: &[BatchInstance],
         target: &[BatchInstance],
+        recovering: bool,
     ) -> Result<()> {
         let mut failure = None;
         for group in prepared.values() {
@@ -765,7 +1153,9 @@ impl Manager {
             } else {
                 self.retire_batch_libraries(group).await
             };
-            if let Some(report) = self.0.catalog.lock().reports.get_mut(&group.group.name) {
+            if !recovering
+                && let Some(report) = self.0.catalog.lock().reports.get_mut(&group.group.name)
+            {
                 report.succeeded = retired.is_ok();
                 report.failure = retired.as_ref().err().map(Failure::from);
             }
@@ -779,6 +1169,9 @@ impl Manager {
             .filter(|group| !target.iter().any(|item| item.specification.group == *group))
             .collect::<HashSet<_>>();
         for name in removed {
+            if !self.group_instances(&name).is_empty() {
+                continue;
+            }
             let group = self.0.catalog.lock().groups.remove(&name);
             if let Some(group) = group {
                 let previous = group.current.lock().clone();
@@ -831,11 +1224,7 @@ impl Manager {
                 .await);
         }
         let restarted = self
-            .enforce_image_limit(
-                group.specification.clone(),
-                retired_images,
-                std::time::Instant::now(),
-            )
+            .enforce_image_limit(group.specification.clone(), retired_images)
             .await;
         self.record_image_restart(group, &restarted);
         restarted.map(|_| ())
@@ -924,37 +1313,6 @@ impl Manager {
                 );
             }
         }
-    }
-
-    /// DOC-11 §7：回滚结果和候选清理错误共同保存，已恢复分组重新进入运行状态。
-    async fn batch_failed(
-        &self,
-        prepared: &BTreeMap<String, PreparedGroup>,
-        problem: WireError,
-        restored: Result<()>,
-    ) -> WireError {
-        for group in prepared.values() {
-            *group.group.health.lock() = Health {
-                state: if restored.is_ok() {
-                    "running"
-                } else {
-                    "failed"
-                }
-                .into(),
-                error: Some(saved_error(&problem)),
-            };
-            if group.previous.is_none() {
-                self.0.catalog.lock().groups.remove(&group.group.name);
-            }
-        }
-        let problem = match restored {
-            Ok(()) => problem,
-            Err(restored) => error(
-                1,
-                format!("批次失败：{problem}；原状态恢复失败：{restored}"),
-            ),
-        };
-        self.discard_batch(prepared, problem).await
     }
 
     /// SW-1–SW-4、CP-7：候选退出与库退役覆盖全部已准备来源，保留首个清理错误。
@@ -1085,7 +1443,7 @@ fn batch_inherited<'a>(
     before: &[BatchInstance],
     target: &[BatchInstance],
     overrides: HashMap<String, Option<payload::State>>,
-) -> Cow<'a, HashMap<String, Option<payload::State>>> {
+) -> Cow<'a, SharedStates> {
     let mut inherited = Cow::Borrowed(&transition.inherited);
     for item in target {
         if before
@@ -1102,7 +1460,11 @@ fn batch_inherited<'a>(
         }
     }
     if !overrides.is_empty() {
-        inherited.to_mut().extend(overrides);
+        inherited.to_mut().extend(
+            overrides
+                .into_iter()
+                .map(|(name, state)| (name, state.map(Arc::new))),
+        );
     }
     inherited
 }

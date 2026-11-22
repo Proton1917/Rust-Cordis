@@ -3,7 +3,7 @@
 //! 视图归属原加载纪元，最后一个租约释放时撤回编号与元数据，清理回调保持原视图。
 
 use super::*;
-use generation::{Binding, Configuration, Registration};
+use generation::{Binding, Registration};
 use routing::Target;
 use tokio::sync::OnceCell;
 
@@ -297,37 +297,18 @@ impl Manager {
         self.resolve(&component, &config).await?;
         parent.active()?;
         let id = self.id();
-        let config = Arc::new(config);
-        let data = Arc::new(InstanceData {
+        let spec = InstanceSpec {
             name: format!("{}/{}:{id}", parent.instance.name, name),
             group: source.group.clone(),
             plugin: source.plugin.clone(),
             component: name,
-            current: Mutex::new(Weak::new()),
-            inherited: Mutex::new(None),
-            error: Mutex::new(None),
-        });
+            config,
+        };
         let definition = generation::definition(Arc::downgrade(&self.0), component);
-        let child = parent
-            .context
-            .mount_with(
-                &definition,
-                Configuration {
-                    instance: data,
-                    config,
-                },
-            )
-            .map_err(kernel_error)?;
-        let retained = parent.clone();
-        parent
-            .context
-            .effect("remote-child", move |scope| {
-                scope.defer(move || {
-                    drop((retained, registration));
-                    Ok(())
-                })
-            })
-            .map_err(kernel_error)?;
+        let view = parent.context.extend((parent.clone(), registration));
+        let child = self
+            .install_child(&parent.context, view, spec, definition, None)
+            .await?;
         child.settled().await.map_err(kernel_error)?;
         Ok(id)
     }

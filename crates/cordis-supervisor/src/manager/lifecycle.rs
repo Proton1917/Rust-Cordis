@@ -11,7 +11,7 @@ use generation::{Binding, Configuration, Exporter};
 /// SW-5：原状态与导出器持有关系；提交或解冻完成后统一释放。
 #[derive(Default)]
 pub(super) struct Frozen {
-    pub(super) states: HashMap<String, payload::State>,
+    pub(super) states: HashMap<String, Arc<payload::State>>,
     pub(super) stateless: HashSet<String>,
     pub(super) held: Vec<(Arc<Generation>, Arc<Exporter>)>,
     pub(super) failure: Option<WireError>,
@@ -22,15 +22,16 @@ pub(super) struct Frozen {
 pub struct FrozenSnapshot(Arc<Frozen>);
 
 impl FrozenSnapshot {
-    pub fn states(&self) -> &HashMap<String, payload::State> {
+    pub fn states(&self) -> &HashMap<String, Arc<payload::State>> {
         &self.0.states
     }
 }
 
 /// SW-5–SW-8：一次替换的原快照、受影响实例名与变更前纪元。
+#[derive(Default)]
 pub(super) struct Transition {
     pub frozen: Frozen,
-    pub inherited: HashMap<String, Option<payload::State>>,
+    pub inherited: HashMap<String, Option<Arc<payload::State>>>,
     pub names: Vec<String>,
     pub before: HashMap<String, cordis::Epoch>,
     pub permit_pending: bool,
@@ -79,10 +80,11 @@ impl Manager {
     /// SW-5：取得可逆冻结与原快照；任一导出失败时解冻已经访问的导出器。
     pub(super) async fn prepare_transition(
         &self,
-        instances: &[Arc<Instance>],
+        roots: impl IntoIterator<Item = String>,
+        incoming: Vec<(Context, Arc<RemoteComponent>, String)>,
         stop_on_error: bool,
     ) -> Result<Transition> {
-        let instances = self.affected_instances(instances);
+        let instances = self.select_instances(roots, incoming);
         let names: Vec<_> = instances
             .iter()
             .map(|instance| instance.data.name.clone())
@@ -97,12 +99,10 @@ impl Manager {
         }
         let inherited = {
             let mut catalog = self.0.catalog.lock();
-            catalog.checkpoints.extend(
-                frozen
-                    .states
-                    .drain()
-                    .map(|(name, state)| (name, Arc::new(state))),
-            );
+            for name in &frozen.stateless {
+                catalog.checkpoints.remove(name);
+            }
+            catalog.checkpoints.extend(frozen.states.drain());
             instances
                 .iter()
                 .map(|instance| {
@@ -112,9 +112,7 @@ impl Manager {
                             .checkpoints
                             .get(&instance.data.name)
                             .cloned()
-                            .or_else(|| instance.data.inherited.lock().clone())
-                            .as_deref()
-                            .cloned(),
+                            .or_else(|| instance.data.inherited.lock().clone()),
                     )
                 })
                 .collect()
@@ -123,7 +121,10 @@ impl Manager {
             frozen,
             inherited,
             names,
-            before: self.epochs(),
+            before: instances
+                .iter()
+                .map(|instance| (instance.data.name.clone(), instance.fiber.epoch()))
+                .collect(),
             permit_pending: false,
             confirming: None,
         })
@@ -131,11 +132,7 @@ impl Manager {
     /// CP-1、CP-6：准备独立进程并握手，接受其描述符后建立核心分组。
     pub async fn attach_group(&self, specification: GroupSpec) -> Result<GroupSnapshot> {
         self.transaction(move |manager| async move {
-            manager.running()?;
             validate_name(&specification.name)?;
-            if specification.restart.max > 5 {
-                return Err(error(2, "进程重启上限为5次"));
-            }
             if manager
                 .0
                 .catalog
@@ -146,8 +143,13 @@ impl Manager {
                 return Err(error(2, "连接分组已经存在"));
             }
             let name = specification.name.clone();
-            let (version, specification) = manager.prepare_launch(specification).await?;
-            manager.install_group(name.clone(), Some(specification), version)?;
+            manager
+                .restore_declared(
+                    vec![BatchReplacement::Process(specification)],
+                    vec![],
+                    HashMap::new(),
+                )
+                .await?;
             Ok(manager
                 .snapshot()
                 .groups
@@ -407,7 +409,7 @@ impl Manager {
             let definition = manager
                 .mount_definition(&specification, inherited.as_ref())
                 .await?;
-            manager.install_instance(view, specification, definition, inherited)
+            manager.install_instance(view, specification, definition, inherited.map(Arc::new))
         })
         .await
     }
@@ -439,7 +441,13 @@ impl Manager {
                 .await?;
             parent.active()?;
             manager
-                .install_child(&parent.context, view, specification, definition, inherited)
+                .install_child(
+                    &parent.context,
+                    view,
+                    specification,
+                    definition,
+                    inherited.map(Arc::new),
+                )
                 .await
         })
         .await
@@ -450,33 +458,36 @@ impl Manager {
         &self,
         parent: Context,
         specification: InstanceSpec,
-        inherited: Option<payload::State>,
+        inherited: Option<Arc<payload::State>>,
         options: payload::ContextOptions,
     ) -> Result<Fiber> {
-        self.transaction(move |manager| async move {
-            manager.running()?;
-            let view = manager.derive_context(&parent, &options)?;
-            let definition = manager
-                .mount_definition(&specification, inherited.as_ref())
-                .await?;
-            if !parent.is_current() {
-                return Err(error(4, "页面 Owner 已进入清理"));
-            }
-            manager
-                .install_child(&parent, view, specification, definition, inherited)
-                .await
-        })
+        self.submit(
+            move |manager| async move {
+                manager.running()?;
+                let view = manager.derive_context(&parent, &options)?;
+                let definition = manager
+                    .mount_definition(&specification, inherited.as_deref())
+                    .await?;
+                if !parent.is_current() {
+                    return Err(error(4, "页面 Owner 已进入清理"));
+                }
+                manager
+                    .install_child(&parent, view, specification, definition, inherited)
+                    .await
+            },
+            true,
+        )
         .await
     }
 
     /// ADR-0041：两类父对象共用子实例安装与目录清理登记。
-    async fn install_child(
+    pub(super) async fn install_child(
         &self,
         parent: &Context,
         view: Context,
         specification: InstanceSpec,
         definition: ComponentDef,
-        inherited: Option<payload::State>,
+        inherited: Option<Arc<payload::State>>,
     ) -> Result<Fiber> {
         let name = specification.name.clone();
         let child = self.install_instance(view, specification, definition, inherited)?;
@@ -491,7 +502,7 @@ impl Manager {
     fn track_child(&self, parent: &Context, name: String, child: Fiber) -> Result<()> {
         let core = Arc::downgrade(&self.0);
         parent
-            .effect("page-child", move |scope| {
+            .effect("owned-child", move |scope| {
                 scope.defer_async(move || async move {
                     let result = child.dispose().await;
                     if let Some(core) = core.upgrade() {
@@ -573,10 +584,9 @@ impl Manager {
         view: Context,
         specification: InstanceSpec,
         definition: ComponentDef,
-        inherited: Option<payload::State>,
+        inherited: Option<Arc<payload::State>>,
     ) -> Result<Fiber> {
         let config = Arc::new(specification.config);
-        let inherited = inherited.map(Arc::new);
         let data = Arc::new(InstanceData {
             name: specification.name.clone(),
             group: specification.group,
@@ -617,18 +627,9 @@ impl Manager {
         self.transaction(move |manager| async move {
             manager.running()?;
             let instance = manager.instance(&name)?;
-            let group = manager.group(&instance.data.group)?;
-            let current = group.current.lock().clone();
-            let key = (
-                instance.data.plugin.clone(),
-                instance.data.component.clone(),
-            );
-            let component = current
-                .components
-                .get(&key)
-                .ok_or_else(|| error(2, "描述符中缺少目标组件"))?;
-            manager.resolve(component, &config).await?;
-            manager.update_stateful(instance, config).await
+            manager
+                .change_running_group(&instance.data.group, None, Some((name, config)))
+                .await
         })
         .await
     }
@@ -711,13 +712,19 @@ impl Manager {
             for name in &names {
                 manager.instance(name)?;
             }
-            Ok(manager.checkpoint_selected(&names).await.states)
+            Ok(manager
+                .checkpoint_selected(&names)
+                .await
+                .states
+                .into_iter()
+                .map(|(name, state)| (name, Arc::unwrap_or_clone(state)))
+                .collect())
         })
         .await
     }
 
     /// DOC-11 §9、CP-11：停止结构变更后保存各实例成功导出的状态，冻结持有至 shutdown。
-    pub async fn export_shutdown(&self) -> Result<HashMap<String, payload::State>> {
+    pub async fn export_shutdown(&self) -> Result<HashMap<String, Arc<payload::State>>> {
         self.transaction(|manager| async move {
             if let Some(frozen) = manager.0.shutdown_export.lock().as_ref() {
                 return Ok(frozen.states.clone());
@@ -725,13 +732,11 @@ impl Manager {
             manager.running()?;
             manager.0.exported.store(true, Ordering::Release);
             let names = manager.instance_names();
-            let frozen = manager.export(&names, false).await;
+            let mut frozen = manager.export(&names, false).await;
+            let durable: HashSet<_> = manager.deployment_instance_names().into_iter().collect();
+            frozen.states.retain(|name, _| durable.contains(name));
             let states = frozen.states.clone();
-            manager.0.catalog.lock().checkpoints.extend(
-                states
-                    .iter()
-                    .map(|(name, state)| (name.clone(), Arc::new(state.clone()))),
-            );
+            manager.0.catalog.lock().checkpoints.extend(states.clone());
             *manager.0.shutdown_export.lock() = Some(frozen);
             Ok(states)
         })
@@ -742,7 +747,13 @@ impl Manager {
         self.transaction(|manager| async move {
             manager.running()?;
             let names = manager.instance_names();
-            Ok(manager.checkpoint_selected(&names).await.states)
+            Ok(manager
+                .checkpoint_selected(&names)
+                .await
+                .states
+                .into_iter()
+                .map(|(name, state)| (name, Arc::unwrap_or_clone(state)))
+                .collect())
         })
         .await
     }
@@ -754,26 +765,52 @@ impl Manager {
     ) -> Result<HashMap<String, Option<payload::State>>> {
         self.transaction(move |manager| async move {
             manager.running()?;
-            let frozen = manager.checkpoint_selected(&names).await;
-            Ok(frozen
-                .states
+            Ok(manager
+                .capture_deployment(&names)
+                .await
                 .into_iter()
-                .map(|(name, state)| (name, Some(state)))
-                .chain(frozen.stateless.into_iter().map(|name| (name, None)))
+                .map(|(name, state)| (name, state.map(Arc::unwrap_or_clone)))
                 .collect())
         })
         .await
+    }
+
+    pub(super) async fn capture_deployment(
+        &self,
+        names: &[String],
+    ) -> HashMap<String, Option<Arc<payload::State>>> {
+        let frozen = self.checkpoint_selected(names).await;
+        frozen
+            .states
+            .into_iter()
+            .map(|(name, state)| (name, Some(state)))
+            .chain(frozen.stateless.into_iter().map(|name| (name, None)))
+            .collect()
     }
 
     pub fn instance_names(&self) -> Vec<String> {
         self.0.catalog.lock().instances.keys().cloned().collect()
     }
 
+    /// 根部署拥有稳定检查点名。页面和组件创建的子实例由实际父纤程管理。
+    pub fn deployment_instance_names(&self) -> Vec<String> {
+        self.instances()
+            .into_iter()
+            .filter(|instance| {
+                instance
+                    .fiber
+                    .parent_context()
+                    .is_some_and(|view| view.fiber() == self.0.fiber)
+            })
+            .map(|instance| instance.data.name.clone())
+            .collect()
+    }
+
     /// 周期任务每次只预约一个实例。轮到该实例时，它可能已被管理事务移除。
     pub async fn checkpoint_instance(
         &self,
         name: String,
-    ) -> Result<HashMap<String, payload::State>> {
+    ) -> Result<HashMap<String, Arc<payload::State>>> {
         self.transaction(move |manager| async move {
             manager.running()?;
             Ok(manager.checkpoint_selected(&[name]).await.states)
@@ -787,7 +824,7 @@ impl Manager {
             frozen
                 .states
                 .iter()
-                .map(|(name, state)| (name.clone(), Arc::new(state.clone()))),
+                .map(|(name, state)| (name.clone(), state.clone())),
         );
         if let Err(problem) = self.thaw(&frozen).await {
             self.0
@@ -828,7 +865,9 @@ impl Manager {
             frozen.held.push((generation.clone(), exporter.clone()));
             match self.export_state(&exporter).await {
                 Ok(state) => {
-                    frozen.states.insert(instance.data.name.clone(), state);
+                    frozen
+                        .states
+                        .insert(instance.data.name.clone(), Arc::new(state));
                 }
                 Err(problem) => {
                     self.0.context.logger().error(format!(
@@ -899,222 +938,41 @@ impl Manager {
         failure.map_or(Ok(()), Err)
     }
 
-    /// DOC-11 SW-1–SW-9：从当前导出状态替换分组，失败恢复原版本及原快照。
-    ///
-    /// 运行时的部署变更统一走批次；此入口保留给契约往返等整组重启场景。
+    /// 整组重启使用当前实例声明和新的宿主启动意图。
     pub async fn replace_group(&self, specification: GroupSpec) -> Result<ReplaceReport> {
-        let group = specification.name.clone();
-        let committed = Arc::new(AtomicBool::new(false));
-        let marker = committed.clone();
         self.transaction(move |manager| async move {
-            let started = std::time::Instant::now();
-            manager
-                .replace_process_group(specification, Some(marker), started)
-                .await
+            manager.replace_process_group(specification).await
         })
         .await
-        .map_err(|problem| {
-            replacement_failure(&group, None, committed.load(Ordering::Acquire), problem)
-        })
     }
 
-    /// SW-3–SW-9、ADR-0013：候选预检后冻结旧状态，重建并确认；失败恢复原连接与原快照。
     pub(super) async fn replace_process_group(
         &self,
         specification: GroupSpec,
-        committed: Option<Arc<AtomicBool>>,
-        started: std::time::Instant,
     ) -> Result<ReplaceReport> {
-        self.running()?;
-        if specification.restart.max > 5 {
-            return Err(error(2, "进程重启上限为5次"));
-        }
-        let group = self.group(&specification.name)?;
-        let previous = group.current.lock().clone();
-        let (candidate, specification) = self.prepare_launch(specification).await?;
-        if let Err(problem) = self.preflight(&group, &candidate).await {
-            self.retire(&candidate).await?;
-            return Err(problem);
-        }
-        let mut transition = match self
-            .prepare_replacement_transition(&group.name, None, &candidate)
-            .await
-        {
-            Ok(transition) => transition,
-            Err(problem) => {
-                self.retire(&candidate).await?;
-                return Err(problem);
-            }
-        };
-        group.health.lock().state = "replacing".into();
-        self.inherit(&transition.inherited);
-        self.activate(&group, candidate.clone(), None)?;
-        let mut report = ReplaceReport {
-            group: group.name.clone(),
-            previous_connection: previous.connection.id(),
-            candidate_connection: candidate.connection.id(),
-            affected_instances: 0,
-            pause_ms: 0,
-            committed: false,
-            succeeded: false,
-            rolled_back: false,
-            failure: None,
-            discarded_confirmation: None,
-        };
-        if let Err(problem) = self
-            .accept_group(&candidate, &mut transition, &mut report, started)
-            .await
-        {
-            return self
-                .rollback_group(&group, previous, &candidate, transition, report, problem)
-                .await;
-        }
-        if let Some(committed) = committed {
-            committed.store(true, Ordering::Release);
-        }
-        self.commit_group(
-            group,
-            specification,
-            previous,
-            candidate,
-            transition,
-            report,
-        )
-        .await
-    }
-
-    /// SW-7/SW-8：受影响实例稳定后进入确认期，失败交回替换事务恢复原快照。
-    async fn accept_group(
-        &self,
-        candidate: &GroupGeneration,
-        transition: &mut Transition,
-        report: &mut ReplaceReport,
-        started: std::time::Instant,
-    ) -> Result<()> {
-        let changed = self
-            .stabilize(&transition.before, &transition.names)
-            .await?;
-        report.affected_instances = changed.len();
-        report.pause_ms = started.elapsed().as_millis().min(u64::MAX as u128) as u64;
-        self.confirm_transition(
-            transition,
-            &changed,
-            std::slice::from_ref(&candidate.connection),
-        )
-        .await
-        .map(|_| ())
-    }
-
-    /// SW-9：确认成功后保存回滚快照并退役旧进程，回收失败交给事务调用方。
-    async fn commit_group(
-        &self,
-        group: Arc<Group>,
-        specification: LaunchPlan,
-        previous: Arc<GroupGeneration>,
-        candidate: Arc<GroupGeneration>,
-        transition: Transition,
-        mut report: ReplaceReport,
-    ) -> Result<ReplaceReport> {
-        self.replace_plan(&group, Some(specification)).await;
-        *group.health.lock() = Health {
-            state: "running".into(),
-            error: None,
-        };
-        group.restarts.store(0, Ordering::Release);
-        report.committed = true;
-        self.record_group_report(report.clone());
-        drop(transition);
-        let completion = async {
-            self.monitor(group.clone(), candidate)?;
-            self.retire(&previous).await
-        }
-        .await;
-        if let Err(problem) = completion {
-            report.failure = Some(Failure::from(&problem));
-            group.health.lock().error = Some(saved_error(&problem));
-            self.record_group_report(report);
-            return Err(problem);
-        }
-        report.succeeded = true;
-        self.record_group_report(report.clone());
-        Ok(report)
-    }
-
-    /// DOC-11 §7：原快照先于旧定义恢复，候选连接在回滚结果记录后退役。
-    /// 双重失败分别保留，其他分组继续由各自生命周期管理。
-    async fn rollback_group(
-        &self,
-        group: &Arc<Group>,
-        previous: Arc<GroupGeneration>,
-        candidate: &GroupGeneration,
-        transition: Transition,
-        mut report: ReplaceReport,
-        problem: WireError,
-    ) -> Result<ReplaceReport> {
-        report.discarded_confirmation = self.confirmation_discard(&transition);
-        self.inherit(&transition.inherited);
-        let previous = self.rollback_version(group, &previous).await?;
-        self.activate(group, previous, None)?;
-        let rollback = self.stabilize(&transition.before, &transition.names).await;
-        report.rolled_back = rollback.is_ok();
-        report.failure = Some(Failure::from(&problem));
-        group.health.lock().state = if rollback.is_ok() {
-            "running"
-        } else {
-            "failed"
-        }
-        .into();
-        group.health.lock().error = Some(saved_error(&problem));
-        self.record_group_report(report);
-        self.thaw_current(&transition.frozen).await?;
-        drop(transition);
-        self.retire(candidate).await?;
-        if let Err(rollback) = rollback {
-            return Err(error(
-                1,
-                format!(
-                    "替换失败：{}；回滚失败：{}",
-                    metadata::clipped(&problem.message),
-                    metadata::clipped(&rollback.message)
-                ),
-            ));
-        }
-        Err(problem)
-    }
-
-    /// SW-8/SW-9：分组的提交、完成和回滚统一按报告中的身份发布。
-    fn record_group_report(&self, report: ReplaceReport) {
-        let mut catalog = self.0.catalog.lock();
-        catalog.reports.insert(report.group.clone(), report);
+        let group = specification.name.clone();
+        Box::pin(self.change_running_group(
+            &group,
+            Some(BatchReplacement::Process(specification)),
+            None,
+        ))
+        .await?;
+        self.0
+            .catalog
+            .lock()
+            .reports
+            .get(&group)
+            .cloned()
+            .ok_or_else(|| error(4, "分组换代报告缺席"))
     }
 
     /// SW-4：候选覆盖当前组件和被使用的接口版本；预检保持既有纪元与绑定。
-    pub(super) async fn preflight(&self, group: &Group, candidate: &GroupGeneration) -> Result<()> {
-        let current_version = group.current.lock().clone();
-        for instance in self.group_instances(&group.name) {
-            let key = (
-                instance.data.plugin.clone(),
-                instance.data.component.clone(),
-            );
-            let component = candidate
-                .components
-                .get(&key)
-                .ok_or_else(|| error(3, "候选进程缺少正在使用的组件"))?;
-            if current_version
-                .components
-                .get(&key)
-                .is_some_and(|old| Arc::ptr_eq(old, component))
-            {
-                continue;
-            }
-            self.resolve(component, &instance.configuration()?.config)
-                .await?;
-        }
-        self.preflight_interfaces(group, candidate)
-    }
-
     /// SW-4、ADR-0016：当前绑定确定实际版本需求，候选提供声明覆盖这些需求后通过预检。
-    fn preflight_interfaces(&self, group: &Group, candidate: &GroupGeneration) -> Result<()> {
+    pub(super) fn preflight_interfaces(
+        &self,
+        group: &Group,
+        candidate: &GroupGeneration,
+    ) -> Result<()> {
         let instances = self.instances();
         let mut needed = HashMap::<String, u32>::new();
         for instance in instances {
@@ -1158,21 +1016,13 @@ impl Manager {
     }
 
     /// SW-6：先切换核心定义目录，再由Registry驱动选定插件或整组的依赖重建。
-    pub(super) fn activate(
-        &self,
-        group: &Group,
-        candidate: Arc<GroupGeneration>,
-        plugin: Option<&str>,
-    ) -> Result<()> {
+    pub(super) fn activate(&self, group: &Group, candidate: Arc<GroupGeneration>) -> Result<()> {
         let previous = std::mem::replace(
             &mut *group.definitions.lock(),
             candidate.definitions.clone(),
         );
         *group.current.lock() = candidate.clone();
         for (key, old) in previous {
-            if plugin.is_some_and(|plugin| key.0 != plugin) {
-                continue;
-            }
             match candidate.definitions.get(&key) {
                 Some(next) => {
                     if old.id() != next.id() {
@@ -1190,16 +1040,6 @@ impl Manager {
         Ok(())
     }
 
-    pub(super) fn epochs(&self) -> HashMap<String, cordis::Epoch> {
-        self.0
-            .catalog
-            .lock()
-            .instances
-            .iter()
-            .map(|(name, instance)| (name.clone(), instance.fiber.epoch()))
-            .collect()
-    }
-
     pub(super) fn group_instances(&self, group: &str) -> Vec<Arc<Instance>> {
         self.0
             .catalog
@@ -1211,13 +1051,12 @@ impl Manager {
             .collect()
     }
 
-    pub(super) fn inherit(&self, states: &HashMap<String, Option<payload::State>>) {
+    pub(super) fn inherit(&self, states: &HashMap<String, Option<Arc<payload::State>>>) {
         let instances = {
             let mut catalog = self.0.catalog.lock();
             let mut instances = Vec::new();
             for (name, state) in states {
-                let shared = state.as_ref().map(|state| Arc::new(state.clone()));
-                match &shared {
+                match state {
                     Some(state) => {
                         catalog.checkpoints.insert(name.clone(), state.clone());
                     }
@@ -1226,7 +1065,7 @@ impl Manager {
                     }
                 }
                 if let Some(instance) = catalog.instances.get(name) {
-                    instances.push((instance.clone(), shared));
+                    instances.push((instance.clone(), state.clone()));
                 }
             }
             instances
@@ -1234,15 +1073,6 @@ impl Manager {
         for (instance, state) in instances {
             *instance.data.inherited.lock() = state;
         }
-    }
-
-    /// SW-7：等待显式替换及纪元变化的纤程完成；错误优先于Active状态检查。
-    pub(super) async fn stabilize(
-        &self,
-        before: &HashMap<String, cordis::Epoch>,
-        explicit: &[String],
-    ) -> Result<Vec<Fiber>> {
-        self.stabilize_with(before, explicit, false).await
     }
 
     /// ADR-0044：配置调和接受内核计算的 Pending，版本替换继续要求 Active。
@@ -1408,7 +1238,13 @@ impl Manager {
         }
         let problem = error(4, metadata::clipped(&reason));
         let transition = self
-            .prepare_transition(&self.group_instances(&group.name), false)
+            .prepare_transition(
+                self.group_instances(&group.name)
+                    .into_iter()
+                    .map(|i| i.data.name.clone()),
+                Vec::new(),
+                false,
+            )
             .await?;
         self.inherit(&transition.inherited);
         self.withdraw(&group, &version, problem).await;
@@ -1457,7 +1293,15 @@ impl Manager {
         let work: Command = Box::new(Action {
             callback: move |manager: Manager| async move {
                 if manager.recovery_current(&group, connection) {
-                    manager.restart_once(group, specification, cohort).await?;
+                    group.restarts.fetch_add(1, Ordering::AcqRel);
+                    group.health.lock().state = "restarting".into();
+                    if let Err(problem) = manager
+                        .retry_deployment(specification.specification, &cohort)
+                        .await
+                    {
+                        group.health.lock().error = Some(saved_error(&problem));
+                        manager.schedule_restart(group, cohort);
+                    }
                 }
                 Ok(())
             },
@@ -1472,77 +1316,6 @@ impl Manager {
                 _ = tokio::time::sleep(delay) => { let _ = sender.send(work).await; },
             }
         });
-    }
-
-    async fn restart_once(
-        &self,
-        group: Arc<Group>,
-        specification: LaunchPlan,
-        cohort: Vec<Weak<Instance>>,
-    ) -> Result<()> {
-        group.restarts.fetch_add(1, Ordering::AcqRel);
-        group.health.lock().state = "restarting".into();
-        match self
-            .prepare_launch(specification.specification.clone())
-            .await
-        {
-            Err(problem) => group.health.lock().error = Some(saved_error(&problem)),
-            Ok((candidate, plan)) => {
-                if let Err(problem) = self.preflight(&group, &candidate).await {
-                    group.health.lock().error = Some(saved_error(&problem));
-                    self.retire(&candidate).await?;
-                } else if self.restore_candidate(&group, &candidate, &cohort).await? {
-                    self.replace_plan(&group, Some(plan)).await;
-                    group.health.lock().state = "running".into();
-                    return self.monitor(group, candidate);
-                }
-            }
-        }
-        self.schedule_restart(group, cohort);
-        Ok(())
-    }
-
-    /// CP-6、DOC-11 §5：将保存状态交给新世代，等待真实纤程稳定并确认连接仍存活。
-    async fn restore_candidate(
-        &self,
-        group: &Group,
-        candidate: &Arc<GroupGeneration>,
-        cohort: &[Weak<Instance>],
-    ) -> Result<bool> {
-        let mut instances = self.group_instances(&group.name);
-        for instance in cohort.iter().filter_map(Weak::upgrade) {
-            if self
-                .find_instance(&instance.data.name)
-                .is_some_and(|current| Arc::ptr_eq(&current, &instance))
-                && !instances
-                    .iter()
-                    .any(|member| Arc::ptr_eq(member, &instance))
-            {
-                instances.push(instance);
-            }
-        }
-        let transition = self.prepare_transition(&instances, false).await?;
-        self.inherit(&transition.inherited);
-        self.activate(group, candidate.clone(), None)?;
-        let outcomes = join_all(instances.iter().map(|instance| instance.fiber.settled())).await;
-        if !candidate.connection.is_alive() {
-            self.reclaim_connection(candidate.connection.id());
-            let retry = self.prepare_transition(&instances, false).await?;
-            self.inherit(&retry.inherited);
-            self.withdraw(
-                group,
-                candidate,
-                error(4, candidate.connection.closed().await),
-            )
-            .await;
-            self.thaw_current(&retry.frozen).await?;
-            return Ok(false);
-        }
-        self.thaw_current(&transition.frozen).await?;
-        if let Some(problem) = outcomes.into_iter().find_map(std::result::Result::err) {
-            group.health.lock().error = Some(saved_error(&kernel_error(problem)));
-        }
-        Ok(true)
     }
 
     /// CP-6：以失败定义触发内核正常卸载，依赖方随绑定撤回进入Pending。
@@ -1675,12 +1448,11 @@ impl Manager {
             Some(frozen) => frozen,
             None => {
                 let mut frozen = self.export(&self.instance_names(), false).await;
-                self.0.catalog.lock().checkpoints.extend(
-                    frozen
-                        .states
-                        .drain()
-                        .map(|(name, state)| (name, Arc::new(state))),
-                );
+                self.0
+                    .catalog
+                    .lock()
+                    .checkpoints
+                    .extend(frozen.states.drain());
                 frozen
             }
         };
@@ -1698,6 +1470,7 @@ impl Manager {
             }
         }
         drop(frozen);
+        failure = failure.or(self.close_held_deployment().await.err());
         for group in groups {
             let definitions = std::mem::take(&mut *group.definitions.lock());
             for definition in definitions.values() {

@@ -21,7 +21,7 @@ impl Controller {
             self.manager.instance_fiber(name)?
         };
         tokio::time::timeout(
-            Duration::from_millis(self.configuration.runtime.lifecycle_timeout_ms),
+            Duration::from_millis(self.runtime.lifecycle_timeout_ms),
             fiber.settled(),
         )
         .await
@@ -43,19 +43,20 @@ impl Controller {
     ) -> Result<()> {
         self.contract_settle(suite).await?;
         self.contract_settle(subject).await?;
-        let settings = self.mounted[suite].settings.clone();
-        self.remove(suite).await?;
+        let mut paused = self.overlay.clone();
+        paused.instance.remove(suite);
+        paused.removed.insert(suite.into());
+        self.apply_deployment_batch(&[], None, paused, false)
+            .await?;
         let subject = &self.mounted[subject];
-        let plan = catalog::plan(
-            &subject.group,
-            &self.groups[&subject.group],
-            &self.project,
-            &self.configuration.runtime,
-            &self.locations,
-        )?;
+        let group = self
+            .groups
+            .get(&subject.group)
+            .ok_or_else(|| parameter("被测实例缺少可重启的宿主分组"))?;
+        let plan = self.group_plan(&subject.group, group)?;
         self.manager.replace_group(plan).await?;
         next_stage();
-        self.mount(suite, settings, None).await?;
+        self.resume_contract_suite(suite).await?;
         self.contract_settle(suite).await
     }
 }

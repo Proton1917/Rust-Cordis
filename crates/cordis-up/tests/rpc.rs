@@ -15,6 +15,30 @@ impl Handler for Arithmetic {
     ) -> HandlerFuture<'_, Result<Outgoing, WireError>> {
         Box::pin(async move {
             match method.as_str() {
+                "hello" => Ok(Value::Map(vec![("protocol".into(), 1_u64.into())]).into()),
+                "invoke" => {
+                    let fields = params
+                        .value()
+                        .as_map()
+                        .ok_or_else(|| WireError::new(2, "invoke requires fields"))?;
+                    if fields.iter().any(|(key, value)| {
+                        key.as_text() == Some("method") && value.as_text() == Some("relay")
+                    }) {
+                        tokio::time::sleep(Duration::from_millis(20)).await;
+                        let reply = peer
+                            .request(
+                                "invoke",
+                                Value::Map(vec![("method".into(), "leaf".into())]),
+                                Duration::from_secs(5),
+                            )
+                            .await?;
+                        return Ok(reply.value().clone().into());
+                    }
+                    let budget = fields.iter().find_map(|(key, value)| {
+                        (key.as_text() == Some("budget_ms")).then_some(value)
+                    });
+                    Ok(budget.cloned().unwrap_or(Value::Null).into())
+                }
                 "close" => Ok(Outgoing::new(Value::Null)
                     .after_write(move || peer.terminate("response delivered"))),
                 "bytes" => {
@@ -54,6 +78,88 @@ impl Handler for Arithmetic {
     ) -> HandlerFuture<'_, Result<(), WireError>> {
         Box::pin(async { Err(WireError::new(3, "unknown notification")) })
     }
+}
+
+#[tokio::test]
+async fn negotiated_invoke_forwards_remaining_budget_to_a_nested_peer() {
+    let (caller, provider) = tokio::io::duplex(4096);
+    let (read, write) = tokio::io::split(caller);
+    let caller = Connection::attach(
+        1,
+        read,
+        write,
+        ConnectionOptions::default(),
+        Arc::new(Arithmetic),
+    )
+    .unwrap();
+    let (read, write) = tokio::io::split(provider);
+    let provider = Connection::attach(
+        2,
+        read,
+        write,
+        ConnectionOptions::default(),
+        Arc::new(Arithmetic),
+    )
+    .unwrap();
+    let invoke = || Value::Map(vec![("method".into(), "relay".into())]);
+    let deadline = Duration::from_secs(1);
+    let legacy = caller.request("invoke", invoke(), deadline).await.unwrap();
+    assert_eq!(legacy.value(), &Value::Null);
+
+    caller
+        .request("hello", Value::Null, deadline)
+        .await
+        .unwrap();
+    let nested = caller.request("invoke", invoke(), deadline).await.unwrap();
+    let remaining = u64::try_from(nested.value().as_integer().unwrap()).unwrap();
+    assert!(
+        (1..=980).contains(&remaining),
+        "跨过 20 ms 的嵌套调用收到 {remaining} ms"
+    );
+    caller.terminate("test completed");
+    provider.terminate("test completed");
+}
+
+// 写端已满时，排队请求到期只结束该调用。随后重新开放管道，已有消息仍然到达。
+#[tokio::test]
+async fn timeout_before_enqueue_preserves_the_connection() {
+    use tokio::io::AsyncReadExt;
+    let (mut reader, server) = tokio::io::duplex(1);
+    let (read, write) = tokio::io::split(server);
+    let peer = Connection::attach(
+        1,
+        read,
+        write,
+        ConnectionOptions {
+            queue_capacity: 1,
+            ..Default::default()
+        },
+        Arc::new(Arithmetic),
+    )
+    .unwrap();
+    for value in [1_u64, 2] {
+        peer.notify("tick", Value::from(value)).await.unwrap();
+    }
+    let expired = peer
+        .request("sum", Value::Array(vec![]), Duration::from_millis(20))
+        .await;
+    assert_eq!(expired.err().unwrap().code, 6);
+    assert!(peer.is_alive());
+    tokio::time::timeout(Duration::from_secs(3), async {
+        for value in [1_u64, 2] {
+            let size = reader.read_u32().await.unwrap() as usize;
+            let mut body = vec![0; size];
+            reader.read_exact(&mut body).await.unwrap();
+            assert!(matches!(
+                cordis_up::decode(&body, &cordis_up::Limits::default()).unwrap(),
+                cordis_up::Message::Notification { method, params }
+                    if method == "tick" && params == Value::from(value)
+            ));
+        }
+    })
+    .await
+    .expect("已排队的通知应在读取方恢复后送达");
+    peer.terminate("test completed");
 }
 
 // 自管理操作的关闭动作在完整响应写出之后执行。
