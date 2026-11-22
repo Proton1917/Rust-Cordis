@@ -2,7 +2,7 @@
 
 use crate::{
     builtins::{DataDirectory, Logs, RuntimeInfo},
-    config::{self, Configuration, Result, parameter},
+    config::{Configuration, Result, parameter},
     contract::{Plan, Session},
     control::{ControlServices, Controller},
     deployment::Locations,
@@ -32,17 +32,31 @@ pub async fn run(path: PathBuf) -> Result<()> {
 pub async fn run_with_contract(path: PathBuf, plan: Option<Plan>) -> Result<()> {
     let session = plan.map(Session::new).transpose()?;
     let path = path.canonicalize().map_err(io_error)?;
-    let configuration = crate::deployment::load(&path)?;
-    let directory = config::resolve_path(
-        path.parent().expect("configuration parent"),
-        &configuration.runtime.state_dir,
-    );
+    let (directory, input) = crate::deployment::load_with_state_dir(&path)?;
     let _owner = crate::storage::claim(&directory)?;
     let mut terminate = signal(SignalKind::terminate()).map_err(io_error)?;
     let mut interrupt = signal(SignalKind::interrupt()).map_err(io_error)?;
     let root = Context::new(Arc::new(Executor::new()));
     let result = async {
-        let (controller, requests, view) = create_controller(&root, path, configuration).await?;
+        let store = Store::create(directory)?;
+        store.recover_deployment()?;
+        let version = semver::Version::parse(env!("CARGO_PKG_VERSION")).map_err(parameter)?;
+        let (configuration, candidate) = match store.accepted_base()? {
+            Some(configuration) => {
+                let candidate = match input {
+                    Ok(input) if input == configuration => None,
+                    input => Some(input.and_then(|input| {
+                        input.check_version(&version)?;
+                        Ok(input)
+                    })),
+                };
+                (configuration, candidate)
+            }
+            None => (input?, None),
+        };
+        configuration.check_version(&version)?;
+        let (controller, requests, view) =
+            create_controller(&root, path, configuration, store).await?;
         if let Some(session) = &session {
             session.install(&controller.manager)?;
         }
@@ -53,6 +67,7 @@ pub async fn run_with_contract(path: PathBuf, plan: Option<Plan>) -> Result<()> 
             &mut terminate,
             &mut interrupt,
             session.as_ref(),
+            candidate,
         )
         .await
     }
@@ -70,16 +85,9 @@ async fn create_controller(
     root: &Context,
     path: PathBuf,
     configuration: Configuration,
+    store: Store,
 ) -> Result<(Controller, mpsc::Receiver<Request>, View)> {
     let project = path.parent().expect("configuration parent");
-    let store = Store::create(config::resolve_path(
-        project,
-        &configuration.runtime.state_dir,
-    ))?;
-    store.recover_deployment()?;
-    let configuration = store.accepted_base()?.unwrap_or(configuration);
-    configuration
-        .check_version(&semver::Version::parse(env!("CARGO_PKG_VERSION")).map_err(parameter)?)?;
     let locations = Locations::create(project, &configuration)?;
     let overlay = store.overlay()?;
     let settings = &configuration.runtime;
@@ -177,6 +185,7 @@ async fn serve(
     terminate: &mut Signal,
     interrupt: &mut Signal,
     session: Option<&Session>,
+    candidate: Option<Result<Configuration>>,
 ) -> Result<()> {
     let mut writer = StatusWriter::start(
         view,
@@ -185,17 +194,20 @@ async fn serve(
     );
     if let Some(session) = session {
         let result = tokio::select! {
-            result = session.run(&mut controller) => result,
+            result = session.run(&mut controller, candidate) => result,
             _ = terminate.recv() => Err(WireError::new(7, "契约会话收到终止信号")),
             _ = interrupt.recv() => Err(WireError::new(7, "契约会话收到中断信号")),
             result = &mut writer.task => writer.observed(result).and(Err(WireError::new(7, "契约会话状态发布任务已结束"))),
         };
         return finish(&mut controller, &mut requests, writer, result.map(|_| None)).await;
     }
-    let outcome = match controller.start().await {
+    let outcome = match controller.start(candidate).await {
         Ok(()) => {
-            controller.diagnostics.lock().phase = "running".into();
-            controller.logs.emit(2, "runtime", "运行时已启动");
+            if controller.recovery_required.is_none() {
+                controller.diagnostics.lock().phase = "running".into();
+                controller.logs.emit(2, "runtime", "运行时已启动");
+            }
+            writer.refresh.notify_one();
             dispatch_loop(
                 &mut controller,
                 &mut requests,

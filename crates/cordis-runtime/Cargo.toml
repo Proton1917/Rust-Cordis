@@ -1,6 +1,6 @@
 [package]
 name = "cordis-runtime"
-version = "0.1.10"
+version = "0.1.11"
 edition.workspace = true
 rust-version.workspace = true
 publish.workspace = true
@@ -23,6 +23,7 @@ serde.workspace = true
 serde_json = "=1.0.154"
 toml = "=1.2.1"
 semver = { workspace = true, features = ["serde"] }
+uuid = { version = "=1.26.1", features = ["v4"] }
 
 [dev-dependencies]
 cordis-testkit.workspace = true

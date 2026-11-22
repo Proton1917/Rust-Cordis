@@ -135,7 +135,7 @@ impl Manager {
             (catalog.instances.clone(), catalog.groups.clone())
         };
         let mut dependents = HashMap::<String, Vec<String>>::new();
-        let mut waiting = HashMap::<(String, cordis::Realm), Vec<(u32, String)>>::new();
+        let mut waiting = HashMap::<String, Vec<(cordis::Realm, u32, String)>>::new();
         let replaced: HashSet<_> = incoming.iter().map(|(_, _, name)| name.clone()).collect();
         let mut providers = incoming;
         for (name, instance) in &instances {
@@ -178,26 +178,48 @@ impl Manager {
                                 .push(name.clone());
                         }
                     }
-                    None => waiting
-                        .entry((interface.key.clone(), view.realm_named(&interface.key)))
-                        .or_default()
-                        .push((interface.minor, name.clone())),
+                    None => waiting.entry(interface.key.clone()).or_default().push((
+                        view.realm_named(&interface.key),
+                        interface.minor,
+                        name.clone(),
+                    )),
                 }
             }
             if !replaced.contains(name) {
                 providers.push((view, component, name.clone()));
             }
         }
-        for (view, component, provider) in providers {
-            for provided in &component.provides {
-                let key = (provided.key.clone(), view.realm_named(&provided.key));
-                if let Some(consumers) = waiting.get(&key) {
-                    dependents.entry(provider.clone()).or_default().extend(
-                        consumers
+        if !waiting.is_empty() {
+            let named_realms = self.named_realms();
+            let mut declarations = HashMap::new();
+            for (view, component, provider) in &providers {
+                let plugin = component.plugin_description();
+                let interfaces = declarations
+                    .entry(std::ptr::from_ref(plugin))
+                    .or_insert_with(|| {
+                        plugin
+                            .components
                             .iter()
-                            .filter(|(required, _)| provided.minor >= *required)
-                            .map(|(_, name)| name.clone()),
-                    );
+                            .flat_map(|item| &item.provides)
+                            .map(|name| Interface::parse(name).expect("已校验的接口声明"))
+                            .collect::<Vec<_>>()
+                    });
+                let namespace = views::realm_namespace(view);
+                for provided in interfaces {
+                    let inherited = view.realm_named(&provided.key);
+                    // 动态子组件可以继承当前域，也可以选择同一命名空间中的命名域。
+                    if let Some(consumers) = waiting.get(&provided.key) {
+                        dependents.entry(provider.clone()).or_default().extend(
+                            consumers
+                                .iter()
+                                .filter(|(realm, minor, _)| {
+                                    provided.minor >= *minor
+                                        && (*realm == inherited
+                                            || named_realms.get(realm) == Some(&namespace))
+                                })
+                                .map(|(_, _, name)| name.clone()),
+                        );
+                    }
                 }
             }
         }

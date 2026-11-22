@@ -1,7 +1,7 @@
 //! DOC-11 §8、ADR-0017：独立验证会话的断言、阶段转换与状态继承。
 
 use crate::{
-    config::{Result, parameter},
+    config::{Configuration, Result, parameter},
     control::Controller,
     storage,
 };
@@ -91,9 +91,13 @@ impl Session {
     }
 
     /// ADR-0017、CP-4：启动和全部验证阶段共用截止时间，超时后监管器继续拥有已提交动作。
-    pub(crate) async fn run(&self, controller: &mut Controller) -> Result<()> {
+    pub(crate) async fn run(
+        &self,
+        controller: &mut Controller,
+        candidate: Option<Result<Configuration>>,
+    ) -> Result<()> {
         let result = tokio::time::timeout(self.0.plan.timeout, async {
-            controller.start().await?;
+            controller.start(candidate).await?;
             controller.contract_settle(&self.0.plan.subject).await?;
             controller.contract_settle(&self.0.plan.suite).await?;
             self.observe(controller)?;

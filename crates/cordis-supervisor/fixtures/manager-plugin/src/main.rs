@@ -45,6 +45,7 @@ struct Config {
     apply_ms: u64,
     invalid: bool,
     service_file: Option<std::path::PathBuf>,
+    export_gate: Option<std::path::PathBuf>,
     metadata_size: usize,
     scoped: bool,
     refs: Vec<u64>,
@@ -57,6 +58,7 @@ impl Default for Config {
             apply_ms: 0,
             invalid: false,
             service_file: None,
+            export_gate: None,
             metadata_size: 0,
             scoped: false,
             refs: Vec::new(),
@@ -1036,6 +1038,12 @@ impl Handler for Program {
                         data.frozen = true;
                         data.value
                     };
+                    if let Some(path) = &session.config.export_gate {
+                        shared.trace(&session, "export-wait", Value::Null).await?;
+                        while !path.exists() {
+                            tokio::time::sleep(Duration::from_millis(10)).await;
+                        }
+                    }
                     value(&payload::ValueResult {
                         value: count.into(),
                     })?

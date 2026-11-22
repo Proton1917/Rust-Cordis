@@ -36,6 +36,16 @@ pub(super) struct RemoteComponent {
     pub _metadata: Arc<MetadataLease>,
 }
 
+impl RemoteComponent {
+    pub(super) fn plugin_description(&self) -> &payload::Plugin {
+        self.source
+            .plugins
+            .iter()
+            .find(|plugin| plugin.name == self.plugin && plugin.library == self.library)
+            .expect("组件持有所属插件的描述符")
+    }
+}
+
 #[derive(Clone)]
 pub(super) struct ViewLease {
     pub id: u64,

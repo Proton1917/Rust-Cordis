@@ -1,7 +1,7 @@
 //! DOC-15 §3.1、§5.1：核心命令、开发工具转交与系统服务配置。
 
 use crate::{
-    config::{self, Result, parameter},
+    config::{Result, parameter},
     storage::{self, io_error},
 };
 use clap::{Args, Parser, Subcommand};
@@ -188,9 +188,8 @@ pub fn offline_status(configuration: &Path) -> Result<String> {
 /// ADR-0036、ADR-0054：两种查询共用配置与应用状态目录解析。
 fn status_location(configuration: &Path) -> Result<(PathBuf, PathBuf)> {
     let configuration = configuration.canonicalize().map_err(io_error)?;
-    let parsed = crate::deployment::load(&configuration)?;
     let project = configuration.parent().expect("configuration parent");
-    let directory = config::resolve_path(project, &parsed.runtime.state_dir);
+    let (directory, _) = crate::deployment::load_with_state_dir(&configuration)?;
     Ok((project.to_owned(), directory))
 }
 

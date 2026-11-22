@@ -195,7 +195,7 @@ dependencies = [
 
 [[package]]
 name = "cordis-supervisor"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "cordis",
  "cordis-process",

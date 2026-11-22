@@ -176,6 +176,124 @@ async fn batch_replacement_preserves_implicit_downstream_state() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn deployment_captures_new_roots_and_named_dynamic_consumers_only() {
+    use cordis_supervisor::manager::{BatchInstance, BatchReplacement, DeploymentDecision};
+    let case = TestGuard::for_package(
+        Path::new(env!("CARGO_MANIFEST_DIR")),
+        "dynamic-deployment-capture",
+    );
+    let _fixture = plugin().for_case(&case);
+    let (manager, control) = setup(options()).await;
+    for name in ["provider", "consumers"] {
+        manager
+            .attach_group(group(name, "v1", name, no_restart()))
+            .await
+            .unwrap();
+    }
+    let isolate_counter = |realm| payload::ContextOptions {
+        isolate: vec![payload::Isolation {
+            interface: "fixture.counter@1".into(),
+            realm,
+        }],
+        intercept: Vec::new(),
+    };
+    let root = manager.context();
+    let named = manager
+        .derive_context(&root, &isolate_counter(Some("child-provider".into())))
+        .unwrap();
+    let isolated = manager
+        .derive_context(&root, &isolate_counter(None))
+        .unwrap()
+        .isolate_named("fixture.consumer@1", cordis::Realm::new());
+    let before: Vec<_> = [
+        ("parent", "provider", "independent", 10, root.clone()),
+        ("reader", "consumers", "optional-stateful", 100, named),
+        ("fresh", "consumers", "optional-stateful", 200, isolated),
+    ]
+    .into_iter()
+    .map(|(name, group, component, initial, view)| BatchInstance {
+        specification: instance(name, group, group, component, configuration(initial)),
+        version: "0.1.0".into(),
+        view,
+        remount: false,
+    })
+    .collect();
+    for item in &before {
+        manager
+            .mount_in(item.view.clone(), item.specification.clone(), None)
+            .await
+            .unwrap()
+            .settled()
+            .await
+            .unwrap();
+    }
+    let old_parent = control.ready_after("parent", 0).await;
+    let old_reader = control.ready_after("reader", 0).await;
+    let fresh = control.ready_after("fresh", 0).await;
+    invoke(&old_reader, "add", vec![37u64.into()]).await;
+
+    let mut target = before.clone();
+    target[0].version = "0.2.0".into();
+    target.push(BatchInstance {
+        specification: instance(
+            "added",
+            "provider",
+            "provider",
+            "independent",
+            configuration(91),
+        ),
+        version: "0.2.0".into(),
+        view: root.isolate_named("fixture.independent@1", cordis::Realm::new()),
+        remount: false,
+    });
+    let observed = &control;
+    let previous = old_parent.context;
+    let outcome = manager
+        .deploy(
+            vec![BatchReplacement::Process(group(
+                "provider",
+                "v2",
+                "provider",
+                no_restart(),
+            ))],
+            before,
+            target,
+            false,
+            move |states| async move {
+                assert_eq!(states.len(), 3, "{states:?}");
+                for (name, expected) in [("parent", 10), ("reader", 137), ("added", 91)] {
+                    assert_eq!(integer(&states[name].as_ref().unwrap().data), expected);
+                }
+                let parent = observed.ready_after("parent", previous).await;
+                let child_view = derive(
+                    &parent,
+                    parent.context,
+                    isolate_counter(Some("child-provider".into())),
+                )
+                .await;
+                core_call(
+                    &parent,
+                    "plugin",
+                    &payload::PluginRequest {
+                        context: child_view.context,
+                        component: "b".into(),
+                        config: configuration(44),
+                    },
+                )
+                .await;
+                DeploymentDecision::Committed
+            },
+        )
+        .await;
+    assert!(outcome.is_ok());
+    let reader = control.ready_after("reader", old_reader.context).await;
+    assert_eq!(integer(&invoke(&reader, "get", Vec::new()).await), 137);
+    assert_eq!(integer(&invoke(&fresh, "get", Vec::new()).await), 200);
+    manager.shutdown().await.unwrap();
+    case.success();
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn crashed_provider_uses_checkpoint_and_preserves_live_downstream() {
     let case = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "dependent-crash");
     let _fixture = plugin().for_case(&case);

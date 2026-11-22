@@ -819,20 +819,25 @@ impl Manager {
     }
 
     async fn checkpoint_selected(&self, names: &[String]) -> Frozen {
-        let frozen = self.export(names, false).await;
+        let mut selected = Frozen::default();
+        for name in names {
+            let frozen = self.export(std::slice::from_ref(name), false).await;
+            if let Err(problem) = self.thaw(&frozen).await {
+                self.0
+                    .context
+                    .logger()
+                    .error(format!("检查点解冻失败：{problem}"));
+            }
+            selected.states.extend(frozen.states);
+            selected.stateless.extend(frozen.stateless);
+        }
         self.0.catalog.lock().checkpoints.extend(
-            frozen
+            selected
                 .states
                 .iter()
                 .map(|(name, state)| (name.clone(), state.clone())),
         );
-        if let Err(problem) = self.thaw(&frozen).await {
-            self.0
-                .context
-                .logger()
-                .error(format!("检查点解冻失败：{problem}"));
-        }
-        frozen
+        selected
     }
 
     /// DOC-11 §5、SW-5：对选定活跃实例执行有截止时间的导出，并保留源侧持有关系。

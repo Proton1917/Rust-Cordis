@@ -419,8 +419,14 @@ impl Manager {
         };
         let accepted = match (accepted, window) {
             (Ok(timing), Some(window)) => {
+                let mut affected = names;
+                affected.extend(transition.names.iter().cloned());
                 let names: Vec<_> = target
                     .iter()
+                    .filter(|item| {
+                        item.view.fiber() == self.0.fiber
+                            && affected.contains(&item.specification.name)
+                    })
                     .map(|item| item.specification.name.clone())
                     .collect();
                 let mut states = self.capture_deployment(&names).await;

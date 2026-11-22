@@ -8,7 +8,6 @@ use std::collections::VecDeque;
 #[derive(Default)]
 pub(crate) struct BatchOutcomes {
     records: VecDeque<BatchOutcome>,
-    sequence: u64,
 }
 
 impl BatchOutcomes {
@@ -123,16 +122,7 @@ impl Management {
             }
             request_id.clone()
         } else {
-            loop {
-                outcomes.sequence = outcomes
-                    .sequence
-                    .checked_add(1)
-                    .ok_or_else(|| parameter("管理票据序号耗尽"))?;
-                let id = format!("cordis-{}", outcomes.sequence);
-                if outcomes.get(&context.instance, &id).is_none() {
-                    break id;
-                }
-            }
+            uuid::Uuid::new_v4().to_string()
         };
         let ticket = Value::serialized(&BatchTicket { id: id.clone() }).map_err(parameter)?;
         let action = self.control.reserve(context.clone(), operation)?;

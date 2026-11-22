@@ -4,6 +4,7 @@ use crate::{
     config::{self, Configuration, Result, parameter},
     storage::{self, io_error},
 };
+use serde::Deserialize;
 use std::{
     env, fs,
     path::{Path, PathBuf},
@@ -35,18 +36,63 @@ fn bundle_configuration(executable: &Path) -> Option<PathBuf> {
 
 /// ADR-0036：启动、status 和 reload 共用应用路径解析，TOML 语法继续由 config::parse 处理。
 pub(crate) fn load(path: &Path) -> Result<Configuration> {
-    let mut configuration = config::parse(&storage::read(path)?)?;
-    if is_app(&configuration)? && configuration.runtime.state_dir == Path::new("state") {
-        let home = env::var_os("HOME")
-            .map(PathBuf::from)
-            .ok_or_else(|| parameter("应用状态需要用户 HOME 路径"))?;
-        configuration.runtime.state_dir = application_state(&configuration, &home)?;
-    }
+    parse(&storage::read(path)?)
+}
+
+fn parse(bytes: &[u8]) -> Result<Configuration> {
+    let mut configuration = config::parse(bytes)?;
+    resolve_application_state(&mut configuration.runtime.state_dir, &configuration.pack)?;
     Ok(configuration)
 }
 
-fn is_app(configuration: &Configuration) -> Result<bool> {
-    match configuration.pack.get("app") {
+#[derive(Deserialize)]
+struct StateLocation {
+    #[serde(default)]
+    runtime: StateDirectory,
+    pack: Option<toml::Value>,
+}
+
+#[derive(Default, Deserialize)]
+struct StateDirectory {
+    state_dir: Option<PathBuf>,
+}
+
+/// 候选配置有误时，仍可用同一份 TOML 中有效的定位字段恢复部署和查询状态。
+pub(crate) fn load_with_state_dir(path: &Path) -> Result<(PathBuf, Result<Configuration>)> {
+    let bytes = storage::read(path)?;
+    let candidate = parse(&bytes);
+    let directory = match &candidate {
+        Ok(configuration) => configuration.runtime.state_dir.clone(),
+        Err(problem) => {
+            let location: StateLocation =
+                toml::from_str(config::text(&bytes)?).map_err(|_| problem.clone())?;
+            let default = config::RuntimeSettings::default().state_dir;
+            let mut directory = location.runtime.state_dir.unwrap_or_else(|| default.clone());
+            if directory == default
+                && let Some(pack) = &location.pack
+            {
+                let pack = pack.as_table().ok_or_else(|| problem.clone())?;
+                resolve_application_state(&mut directory, pack)?;
+            }
+            directory
+        }
+    };
+    let project = path.parent().expect("configuration parent");
+    Ok((config::resolve_path(project, &directory), candidate))
+}
+
+fn resolve_application_state(directory: &mut PathBuf, pack: &toml::Table) -> Result<()> {
+    if is_app(pack)? && directory.as_path() == Path::new("state") {
+        let home = env::var_os("HOME")
+            .map(PathBuf::from)
+            .ok_or_else(|| parameter("应用状态需要用户 HOME 路径"))?;
+        *directory = application_state(pack, &home)?;
+    }
+    Ok(())
+}
+
+fn is_app(pack: &toml::Table) -> Result<bool> {
+    match pack.get("app") {
         Some(value) => value
             .as_bool()
             .ok_or_else(|| parameter("pack.app 需要布尔值")),
@@ -54,9 +100,8 @@ fn is_app(configuration: &Configuration) -> Result<bool> {
     }
 }
 
-fn application_state(configuration: &Configuration, home: &Path) -> Result<PathBuf> {
-    let identifier = configuration
-        .pack
+fn application_state(pack: &toml::Table, home: &Path) -> Result<PathBuf> {
+    let identifier = pack
         .get("identifier")
         .and_then(toml::Value::as_str)
         .filter(|identifier| {
@@ -74,7 +119,7 @@ fn application_state(configuration: &Configuration, home: &Path) -> Result<PathB
 impl Locations {
     /// ADR-0036：app 只读取资源目录，写入集中在 state_dir；普通部署保留原目录规则。
     pub(crate) fn create(project: &Path, configuration: &Configuration) -> Result<Self> {
-        let app = is_app(configuration)?;
+        let app = is_app(&configuration.pack)?;
         let sources = config::resolve_path(project, &configuration.runtime.plugin_dir);
         if !app {
             fs::create_dir_all(&sources).map_err(io_error)?;
@@ -149,7 +194,7 @@ mod tests {
         let configuration =
             config::parse(b"[pack]\napp=true\nidentifier='org.cordis.demo'\n").unwrap();
         assert_eq!(
-            application_state(&configuration, Path::new("/Users/application-owner")).unwrap(),
+            application_state(&configuration.pack, Path::new("/Users/application-owner")).unwrap(),
             PathBuf::from("/Users/application-owner/Library/Application Support/org.cordis.demo")
         );
     }

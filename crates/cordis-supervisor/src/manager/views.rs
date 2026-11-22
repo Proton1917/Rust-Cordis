@@ -17,6 +17,11 @@ pub(super) struct RealmLease {
 
 struct PageNamespace(u64);
 
+pub(super) fn realm_namespace(view: &Context) -> Option<u64> {
+    view.extension::<PageNamespace>()
+        .map(|namespace| namespace.0)
+}
+
 impl Drop for RealmLease {
     fn drop(&mut self) {
         if let Some(core) = self.core.upgrade() {
@@ -159,10 +164,7 @@ impl Manager {
 
     /// ADR-0025：同名域共享一份身份，最后一个视图释放时由 RealmLease 撤回登记。
     fn realm_lease(&self, context: &Context, name: &str) -> Arc<RealmLease> {
-        let namespace = context
-            .extension::<PageNamespace>()
-            .map(|namespace| namespace.0);
-        let name = (namespace, name.to_owned());
+        let name = (realm_namespace(context), name.to_owned());
         let mut realms = self.0.realms.lock();
         match realms.get(&name).and_then(Weak::upgrade) {
             Some(lease) => lease,
@@ -176,6 +178,15 @@ impl Manager {
                 lease
             }
         }
+    }
+
+    pub(super) fn named_realms(&self) -> HashMap<cordis::Realm, Option<u64>> {
+        let leases: Vec<_> = self.0.realms.lock().values().cloned().collect();
+        leases
+            .into_iter()
+            .filter_map(|lease| lease.upgrade())
+            .map(|lease| (lease.realm, lease.name.0))
+            .collect()
     }
 
     /// DOC-15 §6.4：有效父视图派生带额度的远端租约，响应入队后转交资源引用。
@@ -275,12 +286,7 @@ impl Manager {
         parent.active()?;
         let registration = parent.reserve()?;
         let source = &parent.component;
-        let plugin = source
-            .source
-            .plugins
-            .iter()
-            .find(|plugin| plugin.name == source.plugin && plugin.library == source.library)
-            .ok_or_else(|| error(2, "调用方插件描述符已失效"))?;
+        let plugin = source.plugin_description();
         let info = plugin
             .components
             .iter()

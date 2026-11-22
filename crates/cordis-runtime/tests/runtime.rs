@@ -629,6 +629,104 @@ fn batch_restores_configuration_and_accepts_joint_interface_change() {
     case.success();
 }
 
+#[test]
+fn startup_applies_toml_and_preserves_the_previous_deployment_on_rejection() {
+    let case = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "startup-config");
+    let _fixture = fixture().for_case(&case);
+    let project = managed_project(&case, "startup-config", "v1");
+    plugin(&project.join("plugins/rejected"), "store", "fail");
+    let path = project.join("cordis.toml");
+    let configuration = fs::read_to_string(&path).unwrap();
+    let running = || {
+        until("启动时的配置决议已经发布", || {
+            let snapshot = status(&project)?;
+            (snapshot["phase"] == "running").then_some(snapshot)
+        })
+    };
+
+    fs::write(
+        &path,
+        configuration.split("[instance.store]").next().unwrap(),
+    )
+    .unwrap();
+    let mut empty = Process::start(&project, "startup-empty");
+    assert_eq!(running()["instances"], json!([]));
+    empty.kill();
+
+    fs::write(&path, &configuration).unwrap();
+    let mut configured = Process::start(&project, "startup-configured");
+    let accepted = running();
+    assert!(instance(&accepted, "store").is_some(), "{accepted}");
+    active(&project, "client");
+    assert_eq!(
+        send(&project, 1, "fixture.counter@1.0", "set", json!([42]))["ok"],
+        true
+    );
+    checkpoint(&project, 42);
+    let source = offline::query(&project)["instances"]["store"].clone();
+    configured.kill();
+
+    fs::write(
+        &path,
+        configuration.replace("plugin = 'store'", "plugin = 'rejected'"),
+    )
+    .unwrap();
+    let mut rejected = Process::start(&project, "startup-rejected");
+    let snapshot = running();
+    assert!(
+        snapshot["configuration_error"]
+            .as_str()
+            .is_some_and(|error| error.contains("fixture apply failed")),
+        "{snapshot}"
+    );
+    active(&project, "client");
+    assert_eq!(
+        send(&project, 2, "fixture.counter@1.0", "get", json!([]))["value"],
+        42
+    );
+    assert_eq!(offline::query(&project)["instances"]["store"], source);
+    rejected.kill();
+
+    fs::write(
+        &path,
+        configuration.replace("plugin = 'store'", "plugin = 42"),
+    )
+    .unwrap();
+    let mut invalid = Process::start(&project, "startup-invalid");
+    running();
+    let output = Command::new(env!("CARGO_BIN_EXE_cordis"))
+        .args(["status", "--config"])
+        .arg(&path)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let view: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert!(view["configuration_error"].is_string(), "{view}");
+    active(&project, "admin");
+    fs::write(&path, configuration.replace("initial = 17", "initial = 29")).unwrap();
+    assert_eq!(manage(&project, 3, "reload", json!([]))["ok"], true);
+    assert_eq!(
+        send(&project, 4, "fixture.counter@1.0", "initial", json!([]))["value"],
+        29
+    );
+    assert_eq!(manage(&project, 5, "shutdown", json!([]))["ok"], true);
+    invalid.finish();
+
+    fs::write(&path, "[runtime]\nstate_dir = 42\n").unwrap();
+    let output = Command::new(env!("CARGO_BIN_EXE_cordis"))
+        .args(["run", "--config"])
+        .arg(&path)
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(1));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("state_dir"));
+    case.success();
+}
+
 /// 批次持久决定包含新基础配置和程序引用，旧进程退役故障保留在报告中。
 #[test]
 fn batch_keeps_new_configuration_after_committed_retirement_failure() {
@@ -684,8 +782,7 @@ fn batch_keeps_new_configuration_after_committed_retirement_failure() {
     case.success();
 }
 
-/// ADR-0031：批次先返回受理票据，结果从快照读取；完成后用同一标识重发会重新执行；
-/// 配置解析错误在票据之后成为拒绝结果；核心重启后用原标识重提可以完成。
+/// 自定义标识复用保留结果，自动票据跨重启保持不同身份。
 #[test]
 fn batch_tickets_report_results_and_resubmit_after_core_restart() {
     let case = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "batch-tickets");
@@ -694,6 +791,8 @@ fn batch_tickets_report_results_and_resubmit_after_core_restart() {
     let mut core = Process::start(&project, "tickets-first");
     active(&project, "admin");
     active(&project, "client");
+    let first_auto = send(&project, 102, "cordis.manage@2.0", "reload", json!([]));
+    assert_eq!(first_auto["ok"], true, "{first_auto}");
     let installed = manage(
         &project,
         1,
@@ -734,6 +833,9 @@ fn batch_tickets_report_results_and_resubmit_after_core_restart() {
     core.kill();
     core = Process::start(&project, "tickets-restarted");
     active(&project, "admin");
+    let next_auto = send(&project, 103, "cordis.manage@2.0", "reload", json!([]));
+    assert_eq!(next_auto["ok"], true, "{next_auto}");
+    assert_ne!(first_auto["value"]["id"], next_auto["value"]["id"]);
     assert_eq!(manage(&project, 5, "replace_batch", arguments)["ok"], true);
     version(&project, "0.2.0");
     assert_eq!(manage(&project, 6, "shutdown", json!([]))["ok"], true);

@@ -6,7 +6,7 @@ Rust-cordis runs independently replaceable components. The kernel manages servic
 
 ## 快速开始
 
-下载并解开 v0.3.0 的 macOS Apple Silicon 压缩包，在解包目录执行以下命令。[macOS arm64 下载](https://github.com/Proton1917/Rust-Cordis/releases/download/v0.3.0/cordis-v0.3.0-aarch64-apple-darwin.tar.gz) · [发布页](https://github.com/Proton1917/Rust-Cordis/releases/tag/v0.3.0)
+下载并解开 v0.3.1 的 macOS Apple Silicon 压缩包，在解包目录执行以下命令。[macOS arm64 下载](https://github.com/Proton1917/Rust-Cordis/releases/download/v0.3.1/cordis-v0.3.1-aarch64-apple-darwin.tar.gz) · [发布页](https://github.com/Proton1917/Rust-Cordis/releases/tag/v0.3.1)
 
 ```sh
 export PATH="$PWD/bin:$PATH"
@@ -39,6 +39,7 @@ cordis run
 | v0.2.9 发行版 | 部署中断后恢复同一次提交的程序和状态。同库实例可以发起相互替换。TypeScript SDK 跳过已超时的排队请求，网页 SDK 在握手中断后结束本轮连接。 |
 | v0.2.10 发行版 | 离线查询与部署提交、恢复共用文件锁，返回已确认的程序来源。 |
 | v0.3.0 发行版 | 核心 0.1.10、宿主 0.1.4、开发工具 0.3.0、Rust SDK 0.3.0。管理接口 `cordis.manage@2.0` 通过票据报告部署结果。格式 2 支持共享默认宿主和跨目录构建。原生插件沿用 ABI 1.2。[版本页](docs/PROGRESS.md) |
+| v0.3.1 发行版 | 启动时恢复已接纳部署，再应用当前配置。局部部署只捕获受影响的根实例，普通检查点逐实例解冻。Python SDK 在业务调用前处理已过期请求。[使用指南](docs/guide.md) |
 
 本次发行资产和运行验收面向 macOS arm64。开发工具提供 Linux x86_64 的本机打包入口，该平台的 PSS 与时延测量待取得。[测量条件与统计口径](docs/measurements/deployment-revision.md)
 

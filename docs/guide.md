@@ -1,6 +1,6 @@
 # Rust-cordis 应用开发指南
 
-本指南适用于 v0.3.0。核心为 0.1.10，原生宿主为 0.1.4，开发工具和 Rust SDK 为 0.3.0。原生 ABI 为 1.2，进程插件与浏览器组件通过 UP/1 连接。Python SDK 为 0.1.3，TypeScript SDK 为 0.2.3，HTTP 0.1.4 内置网页 SDK 0.1.3。watch 为 0.1.3，window 为 0.1.1。完整组件版本列在发行包的 `README.md` 中。[发行包](https://github.com/Proton1917/Rust-Cordis/releases/tag/v0.3.0)
+本指南适用于 v0.3.1。核心为 0.1.11，原生宿主为 0.1.5，开发工具和 Rust SDK 为 0.3.0。原生 ABI 为 1.2，进程插件与浏览器组件通过 UP/1 连接。Python SDK 为 0.1.4，TypeScript SDK 为 0.2.3，HTTP 0.1.4 内置网页 SDK 0.1.3。watch 为 0.1.3，window 为 0.1.1。完整组件版本列在发行包的 `README.md` 中。[发行包](https://github.com/Proton1917/Rust-Cordis/releases/tag/v0.3.1)
 
 运行时把已接纳的基础配置、部署覆盖层、已确认的程序来源和受影响的检查点作为同一次提交处理。启动时先依据磁盘上的决定记录恢复部署，再挂载实例。状态目录使用支持同目录树内硬链接和原子重命名的文件系统。[部署与恢复规格](deployment-semantics.md)
 
@@ -112,7 +112,9 @@ cordis pack --project . --target aarch64-apple-darwin --out dist
 
 ### 升级与恢复
 
-升级前先有序停机，并一起保留 `cordis.toml`、整个状态目录、已确认的插件安装目录与业务数据。状态目录含已接纳的基础配置、来源文件、检查点和可能存在的 `.deployment-undo`、`.deployment-staging` 记录。核心启动时依据这些记录选择已提交的一组文件并完成恢复。需要让部署采用编辑后的 `cordis.toml` 时，在运行后提交 `reload` 或由 watch 提交包含重读的批次。
+升级前先有序停机，并一起保留 `cordis.toml`、整个状态目录、已确认的插件安装目录与业务数据。状态目录含已接纳的基础配置、来源文件、检查点和可能存在的 `.deployment-undo`、`.deployment-staging` 记录。核心先恢复已提交的部署，再通过与 `reload` 相同的事务应用本次 `cordis.toml` 的变化。候选被拒绝时，已恢复的部署继续运行，`cordis status` 的 `configuration_error` 显示原因。运行中仍可提交 `reload`，或由 watch 提交包含重读的批次。
+
+启动与状态查询根据本次 `cordis.toml` 定位 `runtime.state_dir`。配置语法错误或状态目录定位字段无效时，命令直接报告错误。首次启动或旧状态目录缺少已接纳基础配置时，部署使用本次有效配置。改用另一状态目录会选择该目录的部署记录，迁移时需事先把对应的状态和安装副本准备到目标位置。宿主超时等用于初始化监管器的运行参数随下一次启动采用已接纳的值。
 
 实例级 `rollback(name)` 选回上一个程序引用，并交接当前导出的业务状态。回退核心发行版时，使用与旧核心配套的升级前配置、状态目录及插件副本，并按应用自己的数据恢复约定处理业务数据库。出现 `recovery_required` 时，保留当前日志和完整状态目录，按同一版本完成恢复，再用离线查询核对已确认来源。[部署与恢复规格](deployment-semantics.md)
 

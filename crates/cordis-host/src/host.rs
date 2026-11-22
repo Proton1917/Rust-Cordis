@@ -1030,6 +1030,10 @@ fn component_status(component: payload::Component) -> cordis_types::ComponentInf
 }
 
 impl Handler for Host {
+    fn immediate_notification(&self, method: &str) -> bool {
+        matches!(method, "callback" | "release" | "release_context")
+    }
+
     fn request(
         &self,
         peer: Connection,

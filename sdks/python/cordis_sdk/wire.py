@@ -31,18 +31,30 @@ class Connection:
         self.write_lock = asyncio.Lock()
         self.capacity = asyncio.Semaphore(max_inflight)
 
-    async def send(self, message, offers=()):
+    async def send(self, message, offers=(), *, budget_deadline=None):
         """DOC-16 §6：发送成功交付出口引用，编码或写入失败撤回本次出口。"""
         committed = False
         try:
             data = cbor2.dumps(message)
-            if len(data) > self.max_frame:
+            length = len(data)
+            if length > self.max_frame:
                 raise CordisError(8, "消息超过帧长度上限")
             async with self.write_lock:
                 if self.closed:
                     raise CordisError(4, "连接已关闭")
                 await self.writer.drain()
-                self.writer.write(struct.pack(">I", len(data)) + data)
+                budget = b""
+                if budget_deadline is not None:
+                    remaining = budget_deadline - asyncio.get_running_loop().time()
+                    if remaining <= 0:
+                        raise TimeoutError
+                    budget = cbor2.dumps(max(1, int(remaining * 1000)))
+                    # 定长映射以 budget_ms 的单字节 CBOR null 占位结尾。
+                    data = memoryview(data)[:-1]
+                    length += len(budget) - 1
+                    if length > self.max_frame:
+                        raise CordisError(8, "消息超过帧长度上限")
+                self.writer.write(b"".join((struct.pack(">I", length), data, budget)))
                 committed = True
         finally:
             if not committed:
@@ -64,9 +76,12 @@ class Connection:
                     self.next_id += 1
                     future = loop.create_future()
                     self.pending[request_id] = future
+                    budget_deadline = None
                     if method == "invoke" and self.peer_budget:
-                        remaining = max(1, int((deadline - loop.time()) * 1000))
-                        params = {**params, "budget_ms": remaining}
+                        params = dict(params)
+                        params.pop("budget_ms", None)
+                        params["budget_ms"] = None
+                        budget_deadline = deadline
                     await self.send(
                         {
                             "request": {
@@ -75,7 +90,7 @@ class Connection:
                                 "params": params,
                             }
                         },
-                        offers,
+                        budget_deadline=budget_deadline,
                     )
                     delivered = True
                     return await future
@@ -219,7 +234,6 @@ class Connection:
     async def _execute(self, body, payload, received):
         offers = []
         method = body["method"]
-        timeout = None
         try:
             deadline = None
             if method == "invoke" and "budget_ms" in payload.value:
@@ -230,18 +244,19 @@ class Connection:
                 deadline = received + min(self.timeout, budget / 1000)
             token = _invoke_deadline.set(deadline)
             try:
-                timeout = asyncio.timeout_at(deadline)
-                async with timeout:
+                async with asyncio.timeout_at(deadline) as timeout:
+                    if deadline is not None and deadline <= asyncio.get_running_loop().time():
+                        raise CordisError(6, "服务调用超过截止时间")
                     value, offers = await self.runtime.request(method, payload)
+            except TimeoutError as problem:
+                if timeout.expired():
+                    raise CordisError(6, "服务调用超过截止时间") from problem
+                raise
             finally:
                 _invoke_deadline.reset(token)
             if method == "hello":
                 value = {**value, "invoke_budget_v1": True}
             result = {"ok": value}
-        except TimeoutError as problem:
-            expired = timeout is not None and timeout.expired()
-            error = CordisError(6, "服务调用超过截止时间") if expired else CordisError(1, str(problem))
-            result = {"error": error.wire()}
         except CordisError as problem:
             result = {"error": problem.wire()}
         except (ValueError, TypeError, KeyError) as problem:

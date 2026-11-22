@@ -147,10 +147,16 @@ impl Controller {
     }
 
     /// DOC-15 §3.2：发现来源、建立进程分组，再按检查点挂载实例；局部错误记入诊断。
-    pub async fn start(&mut self) -> Result<()> {
+    pub async fn start(&mut self, candidate: Option<Result<Configuration>>) -> Result<()> {
         self.sources.load()?;
         self.discover().await?;
-        self.start_target().await
+        self.start_target().await?;
+        if let Some(candidate) = candidate
+            && let Err(problem) = self.reload_configuration(candidate).await
+        {
+            self.logs.emit(0, "runtime", &format!("启动配置应用失败：{problem}"));
+        }
+        Ok(())
     }
 
     /// DOC-15 §3.2：已授权请求由单一队列按方法分派，具体事务负责持久化。
@@ -261,16 +267,7 @@ impl Controller {
             }
             Operation::Rollback(name) => self.rollback(name).await?,
             Operation::Reload(configuration) => {
-                let result = match configuration {
-                    Ok(configuration) => {
-                        self.commit_configuration(configuration.clone(), self.overlay.clone())
-                            .await
-                    }
-                    Err(problem) => Err(problem.clone()),
-                };
-                self.diagnostics.lock().configuration_error =
-                    result.as_ref().err().map(ToString::to_string);
-                result?;
+                self.reload_configuration(configuration.clone()).await?;
             }
             Operation::Shutdown => {}
         }
@@ -590,6 +587,18 @@ impl Controller {
     ) -> Result<()> {
         self.apply_deployment_batch(&[], Some(configuration), overlay, true)
             .await
+    }
+
+    async fn reload_configuration(&mut self, configuration: Result<Configuration>) -> Result<()> {
+        let result = match configuration {
+            Ok(configuration) => {
+                self.commit_configuration(configuration, self.overlay.clone()).await
+            }
+            Err(problem) => Err(problem),
+        };
+        self.diagnostics.lock().configuration_error =
+            result.as_ref().err().map(ToString::to_string);
+        result
     }
 
     /// DOC-11 §7：回滚是把实例换回上一版本引用的单项批次，状态继承当前导出值。

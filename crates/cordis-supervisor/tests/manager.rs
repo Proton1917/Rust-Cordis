@@ -1390,6 +1390,14 @@ async fn selected_checkpoint_detach_and_shutdown_freeze_use_real_process_state()
         ))
         .await
         .unwrap();
+    let export_directory = case.directory("checkpoint-export");
+    std::fs::create_dir_all(&export_directory).unwrap();
+    let release_export = export_directory.join("continue");
+    let mut independent_config = configuration(40);
+    independent_config
+        .as_map_mut()
+        .unwrap()
+        .push(("export_gate".into(), encoded(&release_export)));
     manager
         .attach_group(group("other", "v1", "other-plugin", no_restart()))
         .await
@@ -1411,7 +1419,7 @@ async fn selected_checkpoint_detach_and_shutdown_freeze_use_real_process_state()
                 "other",
                 "other-plugin",
                 "independent",
-                configuration(40),
+                independent_config,
             ),
             None,
         )
@@ -1422,13 +1430,24 @@ async fn selected_checkpoint_detach_and_shutdown_freeze_use_real_process_state()
         .unwrap();
     let provider = control.ready_after("b", 0).await;
     let independent = control.ready_after("independent", 0).await;
-    let states = manager.checkpoint_instances(&["b".into()]).await.unwrap();
-    assert_eq!(states.keys().collect::<Vec<_>>(), vec!["b"]);
+    let events = control.events.lock().len();
+    let checkpoints = tokio::spawn({
+        let manager = manager.clone();
+        async move {
+            manager
+                .checkpoint_instances(&["b".into(), "independent".into()])
+                .await
+        }
+    });
+    control
+        .phase_after("independent", "export-wait", events)
+        .await;
+    let written = try_invoke(&provider, "add", vec![2u64.into()]).await;
+    std::fs::write(release_export, []).unwrap();
+    let states = checkpoints.await.unwrap().unwrap();
     assert_eq!(integer(&states["b"].data), 10);
-    assert_eq!(
-        integer(&invoke(&provider, "add", vec![2u64.into()]).await),
-        12
-    );
+    assert_eq!(integer(&states["independent"].data), 40);
+    assert_eq!(integer(&written.unwrap()), 12);
     manager.detach_group("subject").await.unwrap();
     assert!(
         manager

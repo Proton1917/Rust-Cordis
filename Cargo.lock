@@ -481,7 +481,7 @@ dependencies = [
 
 [[package]]
 name = "cordis-host"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "clap",
  "cordis-abi",
@@ -556,7 +556,7 @@ dependencies = [
 
 [[package]]
 name = "cordis-runtime"
-version = "0.1.10"
+version = "0.1.11"
 dependencies = [
  "clap",
  "cordis",
@@ -571,6 +571,7 @@ dependencies = [
  "serde_json",
  "tokio",
  "toml 1.2.1+spec-1.1.0",
+ "uuid",
 ]
 
 [[package]]
@@ -611,7 +612,7 @@ dependencies = [
 
 [[package]]
 name = "cordis-supervisor"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "cordis",
  "cordis-process",
