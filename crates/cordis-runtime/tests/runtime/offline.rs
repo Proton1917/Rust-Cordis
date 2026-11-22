@@ -57,6 +57,59 @@ fn one_core_owns_the_state_directory_and_only_its_snapshot_is_live() {
 }
 
 #[test]
+fn sigterm_confirms_store_source_after_its_first_write() {
+    let case = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "early-stop-source");
+    let _fixture = fixture().for_case(&case);
+    let project = project(&case, "early-stop-source");
+    plugin(&project.join("plugins/store"), "store", "waiting");
+    let ready = project.join("activate");
+    let observed = project.join("counter");
+    fs::write(project.join("cordis.toml"), format!(
+        "[runtime]\ncheckpoint_ms=0\n[instance.store]\nplugin='store'\nconfig={{initial=41,writes=1,ready={},observed={}}}\n",
+        quoted(&ready), quoted(&observed)
+    )).unwrap();
+
+    let mut core = Process::start(&project, "early-stop");
+    // 先让状态任务发布仍在加载的实例，再准许插件执行业务写入。
+    let reference = until("等待中的 store 已选定安装副本", || {
+        let snapshot = status(&project)?;
+        let store = instance(&snapshot, "store")?;
+        if snapshot["phase"] != "running" || store["state"] != "loading" {
+            return None;
+        }
+        store["reference"].as_str().map(str::to_owned)
+    });
+    fs::write(ready, "").unwrap();
+    let value = until("store 完成首次计数写入", || {
+        fs::read_to_string(&observed).ok()
+    });
+    assert_eq!(value, "42");
+    let before: Value =
+        serde_json::from_slice(&fs::read(project.join("state/sources.json")).unwrap()).unwrap();
+    assert_eq!(before, json!({}), "SIGTERM 前应处于首次来源确认窗口");
+    assert!(
+        Command::new("/bin/kill")
+            .args(["-TERM", &core.0.as_ref().unwrap().id().to_string()])
+            .status()
+            .unwrap()
+            .success()
+    );
+    core.finish();
+    assert_eq!(
+        query(&project),
+        json!({
+            "schema_version": 1,
+            "instances": {"store": {
+                "declared_source": "store",
+                "installed_reference": reference,
+                "plugin_directory": project.join("plugins").canonicalize().unwrap(),
+            }}
+        })
+    );
+    case.success();
+}
+
+#[test]
 fn a_fresh_empty_deployment_publishes_empty_confirmed_bindings() {
     let case = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "fresh-offline");
     let project = case.directory("fresh-offline");

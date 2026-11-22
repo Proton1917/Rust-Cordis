@@ -1,7 +1,7 @@
 {
   "version": 1,
   "created_at": "2026-11-19T12:29:42Z",
-  "updated_at": "2026-11-21T17:26:56Z",
+  "updated_at": "2026-11-22T02:39:53Z",
   "files": {
     ".gitattributes": {
       "role": "index",
@@ -1127,9 +1127,9 @@
     },
     "crates/cordis-runtime/tests/runtime/offline.rs": {
       "role": "observe",
-      "sha256": "8ccb032afaadce57d4b3d5892b83cfa3130faf0d11033ac388f5fbc308667f57",
-      "size": 12200,
-      "normalized_sha256": "8ccb032afaadce57d4b3d5892b83cfa3130faf0d11033ac388f5fbc308667f57"
+      "sha256": "854c7b016a3abb6ba5d08e8ab77b4ca9f5579f08cf03ecbf6b4c81b561772a00",
+      "size": 14303,
+      "normalized_sha256": "854c7b016a3abb6ba5d08e8ab77b4ca9f5579f08cf03ecbf6b4c81b561772a00"
     },
     "crates/cordis-runtime/tests/skill_examples.rs": {
       "role": "observe",
