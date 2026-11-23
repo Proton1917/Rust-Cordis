@@ -2416,33 +2416,38 @@ var Connection = class {
     const deadline = Math.min(local, (signal && this.deadlines.get(signal)) ?? local);
     let writing = false;
     let cancelled = false;
-    let rejectResponse;
+    let received;
     let timer;
     let cancel;
     let expire;
     const result = new Promise((resolve, reject) => {
-      rejectResponse = reject;
-      this.pending.set(id, { resolve, reject });
+      this.pending.set(id, {
+        ownsDeadline: deadline === local,
+        resolve(payload) {
+          received = payload;
+          resolve(payload);
+        },
+        reject
+      });
       cancel = () => {
-        if (cancelled) return;
+        const pending = this.claimPending(id);
+        if (!pending) return;
         cancelled = true;
-        reject(signal?.reason instanceof CordisError ? signal.reason : new CordisError(7, "\u8C03\u7528\u5DF2\u53D6\u6D88"));
+        pending.reject(signal?.reason instanceof CordisError ? signal.reason : new CordisError(7, "\u8C03\u7528\u5DF2\u53D6\u6D88"));
         if (writing) this.notifySoon("cancel", { id });
       };
       signal?.addEventListener("abort", cancel, { once: true });
       expire = () => {
-        if (cancelled) return;
+        const pending = this.claimPending(id, true);
+        if (!pending) return;
         cancelled = true;
-        reject(new CordisError(6, "\u8BF7\u6C42\u8D85\u8FC7\u622A\u6B62\u65F6\u95F4"));
+        pending.reject(new CordisError(6, "\u8BF7\u6C42\u8D85\u8FC7\u622A\u6B62\u65F6\u95F4"));
         if (writing) this.notifySoon("cancel", { id });
-        if (deadline === local && ++this.timeouts >= this.limits.consecutiveTimeouts)
-          this.fail(new CordisError(6, "\u8FDE\u7EED\u8BF7\u6C42\u8D85\u65F6"));
       };
       timer = setTimeout(expire, Math.max(0, deadline - started));
     });
     const completed = result.finally(() => {
       clearTimeout(timer);
-      this.pending.delete(id);
       signal?.removeEventListener("abort", cancel);
     });
     try {
@@ -2451,14 +2456,14 @@ var Connection = class {
       }
       const sent = this.send({ request: { id, method, params } }, offers, () => {
         if (performance.now() >= deadline) expire();
-        writing = !cancelled;
+        writing = !cancelled && this.pending.has(id);
         return writing;
       });
       const [, payload] = await Promise.all([sent, completed]);
-      this.timeouts = 0;
       return payload;
     } catch (error) {
-      rejectResponse(error);
+      this.claimPending(id)?.reject(error);
+      received?.close();
       throw error;
     }
   }
@@ -2541,15 +2546,25 @@ var Connection = class {
       void this.runtime.notification(body.method, body.params).catch((error) => this.fail(error));
     } else throw new CordisError(3, "\u6D88\u606F\u7C7B\u522B\u65E0\u6548");
   }
+  /** DOC-16 §10：终态先消费等待项，再更新由本调用拥有的连接健康。 */
+  claimPending(id, timedOut) {
+    const pending = this.pending.get(id);
+    if (!pending) return void 0;
+    this.pending.delete(id);
+    if (timedOut === false) this.timeouts = 0;
+    else if (timedOut && pending.ownsDeadline && ++this.timeouts >= this.limits.consecutiveTimeouts)
+      this.fail(new CordisError(6, "\u8FDE\u7EED\u8BF7\u6C42\u8D85\u65F6"));
+    return pending;
+  }
   response(body) {
     const id = identifier(body.id);
     const result = fields(body.result);
-    const pending = this.pending.get(id);
     if ("error" in result) {
       const error = fields(result.error);
-      pending?.reject(new CordisError(error.code, error.message, error.detail));
+      this.claimPending(id, error.code === 6)?.reject(new CordisError(error.code, error.message, error.detail));
     } else if ("ok" in result) {
       const payload = this.runtime.payload(result.ok);
+      const pending = this.claimPending(id, false);
       if (pending) pending.resolve(payload);
       else payload.close();
     } else throw new CordisError(2, "\u54CD\u5E94\u9700\u8981 ok \u6216 error");
