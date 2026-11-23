@@ -2,11 +2,13 @@
 
 use crate::config::{self, Overlay, Result, parameter};
 use cordis_up::{Limits, Value, WireError, payload};
+use parking_lot::Mutex;
 use std::{
-    collections::HashMap,
+    collections::{BTreeMap, HashMap},
     fs::{self, File, TryLockError},
     io::{Read, Write},
     path::{Path, PathBuf},
+    sync::Arc,
 };
 
 const OWNER: &str = "runtime.pid";
@@ -110,6 +112,145 @@ pub fn parse_state(bytes: &[u8]) -> Result<payload::State> {
 #[derive(Clone)]
 pub struct Store {
     pub directory: PathBuf,
+    checkpoints: Arc<Mutex<CheckpointCache>>,
+}
+
+const CHECKPOINT_CACHE_BYTES: usize = 16 * 1024 * 1024;
+const CHECKPOINT_CACHE_ENTRIES: usize = 256;
+
+struct PublishedCheckpoint {
+    state: Option<Arc<payload::State>>,
+    bytes: Arc<[u8]>,
+    age: u64,
+    charged: usize,
+}
+
+#[derive(Default)]
+struct CheckpointCache {
+    entries: HashMap<String, PublishedCheckpoint>,
+    order: BTreeMap<u64, String>,
+    bytes: usize,
+    next: u64,
+    #[cfg(test)]
+    encodes: usize,
+    #[cfg(test)]
+    reads: usize,
+    #[cfg(test)]
+    writes: usize,
+}
+
+impl CheckpointCache {
+    fn remove(&mut self, name: &str) {
+        if let Some(old) = self.entries.remove(name) {
+            self.order.remove(&old.age);
+            self.bytes -= old.charged;
+        }
+    }
+
+    fn clear(&mut self) {
+        self.entries.clear();
+        self.order.clear();
+        self.bytes = 0;
+    }
+
+    fn remember(&mut self, name: &str, state: Option<Arc<payload::State>>, bytes: Arc<[u8]>) {
+        self.remove(name);
+        // Charge every retained allocation even when the State Arc is shared.
+        // Index/Arc bookkeeping is charged conservatively; allocator fragmentation
+        // and process RSS remain independent measurements.
+        let charged = bytes
+            .len()
+            .saturating_add(512)
+            .saturating_add(name.len().saturating_mul(2))
+            .saturating_add(state.as_ref().map_or(0, |state| {
+                std::mem::size_of::<payload::State>()
+                    .saturating_add(128)
+                    .saturating_add(state.schema.capacity())
+                    .saturating_add(value_heap(&state.data))
+            }));
+        if charged > CHECKPOINT_CACHE_BYTES {
+            return;
+        }
+        while self.entries.len() >= CHECKPOINT_CACHE_ENTRIES
+            || self.bytes.saturating_add(charged) > CHECKPOINT_CACHE_BYTES
+        {
+            let (_, oldest) = self.order.first_key_value().expect("cache has an entry");
+            let oldest = oldest.clone();
+            self.remove(&oldest);
+        }
+        if self.next == u64::MAX {
+            self.clear();
+            self.next = 0;
+        }
+        let age = self.next;
+        self.next += 1;
+        self.bytes += charged;
+        self.order.insert(age, name.to_owned());
+        self.entries.insert(
+            name.to_owned(),
+            PublishedCheckpoint {
+                state,
+                bytes,
+                age,
+                charged,
+            },
+        );
+    }
+}
+
+fn value_heap(value: &Value) -> usize {
+    const ALLOCATION: usize = 64;
+    match value {
+        Value::Text(value) => value.capacity().saturating_add(ALLOCATION),
+        Value::Bytes(value) => value.capacity().saturating_add(ALLOCATION),
+        Value::Array(values) => values.iter().fold(
+            values
+                .capacity()
+                .saturating_mul(std::mem::size_of::<Value>())
+                .saturating_add(ALLOCATION),
+            |total, value| total.saturating_add(value_heap(value)),
+        ),
+        Value::Map(values) => values.iter().fold(
+            values
+                .capacity()
+                .saturating_mul(std::mem::size_of::<(Value, Value)>())
+                .saturating_add(ALLOCATION),
+            |total, (key, value)| {
+                total
+                    .saturating_add(value_heap(key))
+                    .saturating_add(value_heap(value))
+            },
+        ),
+        Value::Tag(_, value) => std::mem::size_of::<Value>()
+            .saturating_add(ALLOCATION)
+            .saturating_add(value_heap(value)),
+        _ => 0,
+    }
+}
+
+// Equality used to skip encoding preserves signed zero and floating bit patterns.
+fn same_value(left: &Value, right: &Value) -> bool {
+    match (left, right) {
+        (Value::Float(left), Value::Float(right)) => left.to_bits() == right.to_bits(),
+        (Value::Array(left), Value::Array(right)) => {
+            left.len() == right.len() && left.iter().zip(right).all(|(a, b)| same_value(a, b))
+        }
+        (Value::Map(left), Value::Map(right)) => {
+            left.len() == right.len()
+                && left
+                    .iter()
+                    .zip(right)
+                    .all(|((ak, av), (bk, bv))| same_value(ak, bk) && same_value(av, bv))
+        }
+        (Value::Tag(a, av), Value::Tag(b, bv)) => a == b && same_value(av, bv),
+        _ => left == right,
+    }
+}
+
+fn same_state(left: &payload::State, right: &payload::State) -> bool {
+    left.schema == right.schema
+        && left.version == right.version
+        && same_value(&left.data, &right.data)
 }
 
 #[derive(Debug)]
@@ -158,8 +299,7 @@ impl<'a> PreparedDeployment<'a> {
                 let bytes = state
                     .as_ref()
                     .map(|state| {
-                        let value = Value::serialized(state.borrow()).map_err(parameter)?;
-                        cordis_up::encode_value(&value, &Limits::DEFAULT).map_err(parameter)
+                        cordis_up::encode_state(state.borrow(), &Limits::DEFAULT).map_err(parameter)
                     })
                     .transpose()?;
                 Ok((name.clone(), bytes))
@@ -243,6 +383,7 @@ impl Store {
     /// 持有运行目录写锁时，把中断部署触及的文件恢复到提交前的版本。
     pub(crate) fn recover_deployment(&self) -> Result<()> {
         let _lock = self.lock_deployment()?;
+        self.checkpoints.lock().clear();
         self.restore_deployment_files()?;
         if let Err(problem) = self.clear_staging() {
             eprintln!("已恢复部署，暂存目录清理失败：{problem}");
@@ -280,6 +421,7 @@ impl Store {
     }
 
     fn restore_deployment_files(&self) -> Result<()> {
+        self.checkpoints.lock().clear();
         let journal = self.directory.join(".deployment-undo");
         if journal.try_exists().map_err(io_error)? {
             check_journal_format(&journal)?;
@@ -389,6 +531,7 @@ impl Store {
         &self,
         prepared: &PreparedDeployment<'_>,
     ) -> std::result::Result<Committed, CommitError> {
+        self.checkpoints.lock().clear();
         let result = (|| {
             write(&self.directory.join(BASE), prepared.base.as_bytes())?;
             for (name, bytes) in &prepared.states {
@@ -443,7 +586,10 @@ impl Store {
         fs::create_dir_all(directory.join("consumed")).map_err(io_error)?;
         fs::create_dir_all(directory.join("data")).map_err(io_error)?;
         let directory = directory.canonicalize().map_err(io_error)?;
-        Ok(Self { directory })
+        Ok(Self {
+            directory,
+            checkpoints: Arc::new(Mutex::new(CheckpointCache::default())),
+        })
     }
 
     /// DOC-15 §3.2：首次启动使用空叠加层，已有叠加层按配置契约解析。
@@ -475,25 +621,78 @@ impl Store {
         }
     }
 
-    /// CP-11：逐实例发布真实导出状态，写入失败交由运行时记录。
-    ///
-    /// 已发布文件与本次导出逐字节相同时跳过写入：检查点周期可以很短（例如 1 秒），
-    /// 每次都 `sync_all` 会让空闲实例持续刷盘。
+    /// CP-11：发布状态并复用最后成功发布的不可变编码。
+    /// 缓存属于持有状态目录写权的 Store；克隆共享缓存，部署恢复使其失效。
     pub fn checkpoint<S: std::borrow::Borrow<payload::State>>(
         &self,
         states: &HashMap<String, S>,
     ) -> Result<()> {
+        self.checkpoint_entries(
+            states
+                .iter()
+                .map(|(name, state)| (name, state.borrow(), None)),
+        )
+    }
+
+    /// Runtime 已持有 Arc<State>，内容未变时复用原编码及持久发布事实。
+    pub fn checkpoint_shared(&self, states: &HashMap<String, Arc<payload::State>>) -> Result<()> {
+        self.checkpoint_entries(
+            states
+                .iter()
+                .map(|(name, state)| (name, state.as_ref(), Some(state))),
+        )
+    }
+
+    fn checkpoint_entries<'a>(
+        &self,
+        states: impl Iterator<
+            Item = (
+                &'a String,
+                &'a payload::State,
+                Option<&'a Arc<payload::State>>,
+            ),
+        >,
+    ) -> Result<()> {
+        let _lock = self.lock_deployment()?;
+        let mut cache = self.checkpoints.lock();
         let mut failure = None;
-        for (name, state) in states {
-            let result = (|| {
+        for (name, state, shared) in states {
+            let result: Result<()> = (|| {
                 config::instance_name(name)?;
-                let value = Value::serialized(state.borrow()).map_err(parameter)?;
-                let bytes = cordis_up::encode_value(&value, &Limits::DEFAULT).map_err(parameter)?;
-                let path = self.directory.join(format!("{name}.state"));
-                if fs::read(&path).is_ok_and(|current| current == bytes) {
+                if let Some(published) = cache.entries.get(name)
+                    && let Some(previous) = &published.state
+                    && same_state(previous, state)
+                {
                     return Ok(());
                 }
-                write(&path, &bytes)
+                #[cfg(test)]
+                {
+                    cache.encodes += 1;
+                }
+                let bytes: Arc<[u8]> = cordis_up::encode_state(state, &Limits::DEFAULT)
+                    .map_err(parameter)?
+                    .into();
+                let path = self.directory.join(format!("{name}.state"));
+                let unchanged = match cache.entries.get(name) {
+                    Some(previous) => previous.bytes == bytes,
+                    None => {
+                        #[cfg(test)]
+                        {
+                            cache.reads += 1;
+                        }
+                        read(&path).is_ok_and(|current| current.as_slice() == bytes.as_ref())
+                    }
+                };
+                if !unchanged {
+                    cache.remove(name);
+                    #[cfg(test)]
+                    {
+                        cache.writes += 1;
+                    }
+                    write(&path, &bytes)?;
+                }
+                cache.remember(name, shared.cloned(), bytes);
+                Ok(())
             })();
             if let Err(problem) = result {
                 failure.get_or_insert_with(|| {
@@ -512,11 +711,13 @@ impl Store {
         &self,
         states: &HashMap<String, Option<S>>,
     ) -> Result<()> {
+        let _lock = self.lock_deployment()?;
+        self.checkpoints.lock().clear();
         for (name, state) in states {
             config::instance_name(name)?;
             if let Some(state) = state {
-                let value = Value::serialized(state.borrow()).map_err(parameter)?;
-                let bytes = cordis_up::encode_value(&value, &Limits::DEFAULT).map_err(parameter)?;
+                let bytes =
+                    cordis_up::encode_state(state.borrow(), &Limits::DEFAULT).map_err(parameter)?;
                 write(&self.directory.join(format!("{name}.state")), &bytes)?;
             } else {
                 remove_file(&self.directory.join(format!("{name}.state")))?;
@@ -547,6 +748,121 @@ fn remove_file(path: &Path) -> Result<()> {
 mod tests {
     use super::*;
     use cordis_testkit::cleanup::TestGuard;
+
+    fn snapshot(value: Value) -> Arc<payload::State> {
+        Arc::new(payload::State {
+            schema: "counter".into(),
+            version: 1,
+            data: value,
+        })
+    }
+
+    #[test]
+    fn checkpoint_shared_reuses_encoding_and_published_bytes() {
+        let case =
+            TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "checkpoint-cache");
+        let store = Store::create(case.directory("checkpoint-cache")).unwrap();
+        let original = snapshot(Value::Bytes(vec![17; 1024 * 1024]));
+        let states = HashMap::from([("panel".into(), original.clone())]);
+        store.checkpoint_shared(&states).unwrap();
+        let clone = store.clone();
+        // An independently exported but unchanged value also reuses the encoding.
+        let repeated = HashMap::from([("panel".into(), snapshot(original.data.clone()))]);
+        clone.checkpoint_shared(&repeated).unwrap();
+        {
+            let cache = store.checkpoints.lock();
+            assert_eq!((cache.encodes, cache.reads, cache.writes), (1, 1, 1));
+        }
+        let next = HashMap::from([("panel".into(), snapshot(42u64.into()))]);
+        clone.checkpoint_shared(&next).unwrap();
+        let cache = store.checkpoints.lock();
+        assert_eq!((cache.encodes, cache.reads, cache.writes), (2, 1, 2));
+        drop(cache);
+        assert_eq!(
+            store.load("panel").unwrap().unwrap().data,
+            Value::from(42u64)
+        );
+        case.success();
+    }
+
+    #[test]
+    fn checkpoint_cache_updates_only_after_success_and_invalidates_on_restore() {
+        let case = TestGuard::for_package(
+            Path::new(env!("CARGO_MANIFEST_DIR")),
+            "checkpoint-cache-retry",
+        );
+        let store = Store::create(case.directory("checkpoint-cache-retry")).unwrap();
+        let old = snapshot(1u64.into());
+        let new = snapshot(2u64.into());
+        store
+            .checkpoint_shared(&HashMap::from([("panel".into(), old.clone())]))
+            .unwrap();
+        let blocked = store.directory.join("panel.state.next");
+        fs::create_dir(&blocked).unwrap();
+        let changed = HashMap::from([("panel".into(), new.clone())]);
+        assert!(store.checkpoint_shared(&changed).is_err());
+        assert!(!store.checkpoints.lock().entries.contains_key("panel"));
+        fs::remove_dir(&blocked).unwrap();
+        store.checkpoint_shared(&changed).unwrap();
+        assert_eq!(store.load("panel").unwrap().unwrap().data, new.data);
+        store
+            .restore_states(&HashMap::from([("panel".into(), Some(old.clone()))]))
+            .unwrap();
+        store.checkpoint_shared(&changed).unwrap();
+        assert_eq!(store.load("panel").unwrap().unwrap().data, new.data);
+        // A committed deployment is another writer under the same Store owner.
+        store
+            .commit_deployment(
+                &config::parse(b"").unwrap(),
+                &Overlay::default(),
+                &HashMap::from([("panel".into(), Some(old))]),
+                b"{}",
+            )
+            .unwrap();
+        store.checkpoint_shared(&changed).unwrap();
+        assert_eq!(store.load("panel").unwrap().unwrap().data, new.data);
+        case.success();
+    }
+
+    #[test]
+    fn checkpoint_cache_preserves_signed_zero_and_bounds_encoded_retention() {
+        let case = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "checkpoint-zero");
+        let store = Store::create(case.directory("checkpoint-zero")).unwrap();
+        for value in [0.0f64, -0.0f64] {
+            store
+                .checkpoint_shared(&HashMap::from([(
+                    "panel".into(),
+                    snapshot(Value::Float(value)),
+                )]))
+                .unwrap();
+            let loaded = store.load("panel").unwrap().unwrap();
+            assert_eq!(loaded.data.as_float().unwrap().to_bits(), value.to_bits());
+        }
+        let mut cache = store.checkpoints.lock();
+        for n in 0..300 {
+            cache.remember(&format!("entry-{n}"), None, Arc::from([0u8]));
+        }
+        assert!(cache.entries.len() <= CHECKPOINT_CACHE_ENTRIES);
+        cache.remember(
+            "large",
+            None,
+            Arc::from(vec![0u8; CHECKPOINT_CACHE_BYTES / 2]),
+        );
+        assert!(cache.entries.contains_key("large"));
+        assert!(cache.bytes <= CHECKPOINT_CACHE_BYTES);
+        let mut sparse =
+            Vec::with_capacity(CHECKPOINT_CACHE_BYTES / std::mem::size_of::<Value>() + 1);
+        sparse.push(Value::Null);
+        cache.remember(
+            "tiny-encoding-large-capacity",
+            Some(snapshot(Value::Array(sparse))),
+            Arc::from([0u8]),
+        );
+        assert!(!cache.entries.contains_key("tiny-encoding-large-capacity"));
+        assert!(cache.bytes <= CHECKPOINT_CACHE_BYTES);
+        drop(cache);
+        case.success();
+    }
 
     #[test]
     fn previous_configuration_is_read_compatibly_and_persisted_as_program_identity() {
