@@ -24,6 +24,42 @@ pub struct BatchInstance {
     pub remount: bool,
 }
 
+/// Immutable indexes over a prepared batch; references keep the original order
+/// and views in the source vectors while identity matching uses direct lookup.
+struct BatchIndex<'a> {
+    by_name: HashMap<&'a str, &'a BatchInstance>,
+    groups: HashSet<&'a str>,
+}
+
+impl<'a> BatchIndex<'a> {
+    fn new(instances: &'a [BatchInstance]) -> Self {
+        let mut by_name = HashMap::with_capacity(instances.len());
+        let mut groups = HashSet::new();
+        for instance in instances {
+            by_name
+                .entry(instance.specification.name.as_str())
+                .or_insert(instance);
+            groups.insert(instance.specification.group.as_str());
+        }
+        Self { by_name, groups }
+    }
+
+    fn get(&self, name: &str) -> Option<&'a BatchInstance> {
+        #[cfg(test)]
+        MATCH_LOOKUPS.with(|count| count.set(count.get() + 1));
+        self.by_name.get(name).copied()
+    }
+
+    fn same_component(&self, old: &InstanceSpec) -> bool {
+        self.get(&old.name).is_some_and(|next| {
+            next.specification.plugin == old.plugin && next.specification.component == old.component
+        })
+    }
+}
+
+#[cfg(test)]
+thread_local! { static MATCH_LOOKUPS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) }; }
+
 /// ADR-0052 R-2：批次执行结果与核心形成的丢弃信息保持同一次操作的所有权。
 pub struct BatchCommit {
     original: SharedStates,
@@ -373,6 +409,8 @@ impl Manager {
         let (prepared, names) = self
             .prepare_batch_sources(replacements, &before, &mut target, permit_pending, source)
             .await?;
+        let before_index = BatchIndex::new(&before);
+        let target_index = BatchIndex::new(&target);
         let restoring = matches!(source, TargetSource::Restoration);
         let recovering = matches!(source, TargetSource::Recovery(_));
         let mut transition = if restoring {
@@ -390,9 +428,16 @@ impl Manager {
             }
         }
         let applied = {
-            let inherited = batch_inherited(&transition, &before, &target, states);
-            self.apply_batch(&prepared, &before, &target, &inherited, false)
-                .await
+            let inherited = batch_inherited(&transition, &before_index, &target, states);
+            self.apply_batch(
+                &prepared,
+                &before,
+                &target,
+                &target_index,
+                &inherited,
+                false,
+            )
+            .await
         };
         let accepted = match applied {
             Ok(()) if restoring => Ok((started.elapsed(), 0)),
@@ -432,12 +477,7 @@ impl Manager {
                 let mut states = self.capture_deployment(&names).await;
                 for old in &before {
                     let old = &old.specification;
-                    if !target.iter().any(|item| {
-                        let new = &item.specification;
-                        new.name == old.name
-                            && new.plugin == old.plugin
-                            && new.component == old.component
-                    }) {
+                    if !target_index.same_component(old) {
                         states.entry(old.name.clone()).or_insert(None);
                     }
                 }
@@ -489,7 +529,7 @@ impl Manager {
             original,
             cleanup: committed
                 .and(
-                    self.retire_batch(&prepared, &before, &target, recovering)
+                    self.retire_batch(&prepared, &before, &target_index, recovering)
                         .await,
                 )
                 .err(),
@@ -638,7 +678,14 @@ impl Manager {
     ) -> BatchFailure {
         let discarded = self.confirmation_discard(&transition);
         let restored = match self
-            .apply_batch(&prepared, target, before, &transition.inherited, true)
+            .apply_batch(
+                &prepared,
+                target,
+                before,
+                &BatchIndex::new(before),
+                &transition.inherited,
+                true,
+            )
             .await
         {
             Ok(()) => self
@@ -870,6 +917,10 @@ impl Manager {
         if permit_pending {
             return Ok(affected);
         }
+        let before_names: HashSet<_> = before
+            .iter()
+            .map(|item| item.specification.name.as_str())
+            .collect();
         let mut provided = HashMap::new();
         for item in target.iter() {
             for interface in &components[&item.specification.name].provides {
@@ -890,7 +941,7 @@ impl Manager {
                     item,
                     &components[&item.specification.name],
                     &provided,
-                    before,
+                    &before_names,
                 )?;
             }
         }
@@ -903,7 +954,7 @@ impl Manager {
         item: &BatchInstance,
         component: &RemoteComponent,
         provided: &HashMap<(String, cordis::Realm), u32>,
-        before: &[BatchInstance],
+        before: &HashSet<&str>,
     ) -> Result<()> {
         for (interface, required) in &component.inject {
             if !required {
@@ -922,11 +973,10 @@ impl Manager {
                 .and_then(|value| value.downcast_ref::<Binding>())
                 .is_some_and(|binding| {
                     binding.interface.minor >= interface.minor
-                        && binding.generation.as_ref().is_none_or(|source| {
-                            !before
-                                .iter()
-                                .any(|old| old.specification.name == source.instance.name)
-                        })
+                        && binding
+                            .generation
+                            .as_ref()
+                            .is_none_or(|source| !before.contains(source.instance.name.as_str()))
                 });
             if !external {
                 return Err(error(
@@ -947,6 +997,7 @@ impl Manager {
         prepared: &BTreeMap<String, PreparedGroup>,
         before: &[BatchInstance],
         target: &[BatchInstance],
+        target_index: &BatchIndex<'_>,
         states: &SharedStates,
         rollback: bool,
     ) -> Result<()> {
@@ -977,7 +1028,7 @@ impl Manager {
             }
         }
         self.inherit(states);
-        self.remove_batch_instances(before, target).await?;
+        self.remove_batch_instances(before, target_index).await?;
         for group in prepared.values() {
             let version = if rollback {
                 group.previous.clone()
@@ -1057,14 +1108,13 @@ impl Manager {
     async fn remove_batch_instances(
         &self,
         before: &[BatchInstance],
-        target: &[BatchInstance],
+        target: &BatchIndex<'_>,
     ) -> Result<()> {
         let removed = before
             .iter()
             .filter(|old| {
                 target
-                    .iter()
-                    .find(|next| next.specification.name == old.specification.name)
+                    .get(&old.specification.name)
                     .is_none_or(|next| remount(old, next))
             })
             .collect::<Vec<_>>();
@@ -1146,7 +1196,7 @@ impl Manager {
         &self,
         prepared: &BTreeMap<String, PreparedGroup>,
         before: &[BatchInstance],
-        target: &[BatchInstance],
+        target: &BatchIndex<'_>,
         recovering: bool,
     ) -> Result<()> {
         let mut failure = None;
@@ -1172,7 +1222,7 @@ impl Manager {
         let removed = before
             .iter()
             .map(|item| item.specification.group.clone())
-            .filter(|group| !target.iter().any(|item| item.specification.group == *group))
+            .filter(|group| !target.groups.contains(group.as_str()))
             .collect::<HashSet<_>>();
         for name in removed {
             if !self.group_instances(&name).is_empty() {
@@ -1446,20 +1496,16 @@ fn batch_affected(
 /// DOC-11 §5：同逻辑组件沿原状态继承，配置更换组件时使用目标组件初值。
 fn batch_inherited<'a>(
     transition: &'a lifecycle::Transition,
-    before: &[BatchInstance],
+    before: &BatchIndex<'_>,
     target: &[BatchInstance],
     overrides: HashMap<String, Option<payload::State>>,
 ) -> Cow<'a, SharedStates> {
     let mut inherited = Cow::Borrowed(&transition.inherited);
     for item in target {
-        if before
-            .iter()
-            .find(|old| old.specification.name == item.specification.name)
-            .is_some_and(|old| {
-                old.specification.plugin != item.specification.plugin
-                    || old.specification.component != item.specification.component
-            })
-        {
+        if before.get(&item.specification.name).is_some_and(|old| {
+            old.specification.plugin != item.specification.plugin
+                || old.specification.component != item.specification.component
+        }) {
             inherited
                 .to_mut()
                 .insert(item.specification.name.clone(), None);
@@ -1473,4 +1519,50 @@ fn batch_inherited<'a>(
         );
     }
     inherited
+}
+
+#[cfg(test)]
+mod index_tests {
+    use super::*;
+    use cordis_testkit::TestExecutor;
+
+    #[test]
+    fn component_matching_and_inheritance_visit_each_target_once() {
+        let context = Context::new(Arc::new(TestExecutor::default()));
+        for count in [100, 1_000, 10_000] {
+            let before: Vec<_> = (0..count)
+                .map(|index| BatchInstance {
+                    specification: InstanceSpec {
+                        name: format!("instance-{index}"),
+                        group: format!("group-{}", index % 4),
+                        plugin: "plugin".into(),
+                        component: "component".into(),
+                        config: Value::Null,
+                    },
+                    version: "1.0.0".into(),
+                    view: context.clone(),
+                    remount: false,
+                })
+                .collect();
+            let mut target = before.clone();
+            target.reverse();
+            target[0].specification.component = "replacement".into();
+            target.pop();
+            let old = BatchIndex::new(&before);
+            let next = BatchIndex::new(&target);
+            MATCH_LOOKUPS.with(|lookups| lookups.set(0));
+            let changed: Vec<_> = before
+                .iter()
+                .filter(|item| !next.same_component(&item.specification))
+                .collect();
+            assert_eq!(changed.len(), 2);
+            let transition = lifecycle::Transition::default();
+            let inherited = batch_inherited(&transition, &old, &target, HashMap::new());
+            assert_eq!(inherited.len(), 1);
+            assert!(inherited.contains_key(&target[0].specification.name));
+            let lookups = MATCH_LOOKUPS.with(|lookups| lookups.get());
+            assert_eq!(lookups, before.len() + target.len());
+            eprintln!("deployment-index instances={count} identity_lookups={lookups}");
+        }
+    }
 }

@@ -108,7 +108,6 @@ impl SourceBindings {
         overlay: &Overlay,
         mounted: impl Iterator<Item = (&'a String, &'a InstanceSettings, &'a Package)>,
     ) {
-        let entries = configuration.entries(overlay);
         self.pending = mounted
             .map(|(name, settings, package)| {
                 (
@@ -128,7 +127,8 @@ impl SourceBindings {
             .filter(|(name, source)| self.confirmed.get(name) != Some(source))
             .collect();
         let previous = self.confirmed.len();
-        self.confirmed.retain(|name, _| entries.contains_key(name));
+        self.confirmed
+            .retain(|name, _| configuration.contains_entry(overlay, name));
         self.dirty |= self.confirmed.len() != previous;
     }
 
