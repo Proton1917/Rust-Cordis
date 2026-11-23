@@ -22,6 +22,53 @@ impl ServiceKey for Dynamic {
     type Meta = ();
 }
 
+#[test]
+fn transient_name_kind_is_held_across_realms_until_last_provision_releases() {
+    let host = TestExecutor::new();
+    let root = Context::new(host.clone());
+    let other = root.isolate_named(Dynamic::NAME, cordis::Realm::new());
+    let third = root.isolate_named(Dynamic::NAME, cordis::Realm::new());
+    let first = root
+        .provide_transient_named(Dynamic::NAME, Arc::new(1usize))
+        .unwrap();
+    let second = other
+        .provide_transient_named(Dynamic::NAME, Arc::new(2usize))
+        .unwrap();
+    assert!(third.provide::<Dynamic>(Arc::new(3)).is_err());
+    host.finish(first.dispose()).unwrap();
+    assert!(third.provide::<Dynamic>(Arc::new(3)).is_err());
+    host.finish(second.dispose()).unwrap();
+    let typed = root.provide::<Dynamic>(Arc::new(3)).unwrap();
+    host.finish(typed.dispose()).unwrap();
+    // A normal public registration permanently fixes its kind.
+    assert!(
+        other
+            .provide_transient_named(Dynamic::NAME, Arc::new(4usize))
+            .is_err()
+    );
+    host.finish(root.fiber().dispose()).unwrap();
+}
+
+#[test]
+fn public_named_registration_promotes_transient_reservation_permanently() {
+    let host = TestExecutor::new();
+    let root = Context::new(host.clone());
+    let other = root.isolate_named(Dynamic::NAME, cordis::Realm::new());
+    let transient = root
+        .provide_transient_named(Dynamic::NAME, Arc::new(1usize))
+        .unwrap();
+    let permanent = other
+        .provide_named(Dynamic::NAME, Arc::new(2usize))
+        .unwrap();
+    host.finish(transient.dispose()).unwrap();
+    host.finish(permanent.dispose()).unwrap();
+    assert!(root.provide::<Dynamic>(Arc::new(3)).is_err());
+    let named = root.provide_named(Dynamic::NAME, Arc::new(4usize)).unwrap();
+    host.finish(named.dispose()).unwrap();
+    assert!(root.provide::<Dynamic>(Arc::new(5)).is_err());
+    host.finish(root.fiber().dispose()).unwrap();
+}
+
 // K-1、K-2：运行时名称由宿主持有，命名依赖读取类型化提供的实际擦除表示。
 #[test]
 fn owned_names_and_mixed_dependency_registration() {

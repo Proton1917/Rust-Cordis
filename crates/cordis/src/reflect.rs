@@ -95,6 +95,7 @@ pub(crate) struct ImplData {
     pub uid: u64,
     pub notification_revision: u64,
     pub key: Arc<str>,
+    transient_name: bool,
     pub realm: Realm,
     pub scope: Arc<Scope>,
     pub value: AnyArc,
@@ -154,6 +155,7 @@ impl Context {
                 Some(TypeId::of::<K>()),
                 Arc::new(value),
                 check,
+                false,
             )?,
             marker: PhantomData,
         })
@@ -167,7 +169,22 @@ impl Context {
         name: impl Into<Arc<str>>,
         value: AnyArc,
     ) -> Result<NamedProvision> {
-        self.provide_value(name.into(), None, value, None)
+        self.provide_value(name.into(), None, value, None, false)
+    }
+
+    /// Provide a framework-owned presence name whose reservation lasts until
+    /// every transient provision and its committed consumers have been released.
+    /// Public named or typed registrations retain their permanent kind reservation.
+    /// The value, dependency, isolation and service-notification contracts are shared
+    /// with `provide_named`.
+    #[doc(hidden)]
+    #[track_caller]
+    pub fn provide_transient_named(
+        &self,
+        name: impl Into<Arc<str>>,
+        value: AnyArc,
+    ) -> Result<NamedProvision> {
+        self.provide_value(name.into(), None, value, None, true)
     }
 
     #[track_caller]
@@ -177,6 +194,7 @@ impl Context {
         kind: Option<TypeId>,
         value: AnyArc,
         check: Option<Check>,
+        transient_name: bool,
     ) -> Result<NamedProvision> {
         let realm = self.resolve_realm(&key);
         let name = key.clone();
@@ -189,7 +207,9 @@ impl Context {
         let effect = self.effect(format!("ctx.provide(\"{}\")", key), move |fx| {
             let (id, active) = {
                 let mut state = kernel.state.lock();
-                if state.names.get(&key).is_some_and(|old| *old != kind) {
+                if state.names.get(&key).is_some_and(|old| *old != kind)
+                    || (kind.is_some() && state.transient_names.contains_key(&key))
+                {
                     return Err(Error::new(format!(
                         "service name \"{}\" belongs to another key",
                         key
@@ -205,13 +225,18 @@ impl Context {
                     ))
                     .at(location));
                 }
-                state.names.insert(key.clone(), kind);
+                if transient_name {
+                    *state.transient_names.entry(key.clone()).or_default() += 1;
+                } else {
+                    state.names.insert(key.clone(), kind);
+                }
                 state.impl_counter += 1;
                 let uid = state.impl_counter;
                 let id = state.impls.insert(ImplData {
                     uid,
                     notification_revision: 0,
                     key: key.clone(),
+                    transient_name,
                     realm,
                     scope,
                     value,
@@ -522,7 +547,20 @@ fn withdraw(kernel: &Arc<Kernel>, id: ImplId) -> Task {
             }
             let provider = binding.scope.fiber;
             state.fibers[provider].provisions.retain(|old| *old != id);
-            state.impls.remove(id)
+            let removed = state.impls.remove(id);
+            if let Some(binding) = &removed
+                && binding.transient_name
+            {
+                let count = state
+                    .transient_names
+                    .get_mut(&binding.key)
+                    .expect("live transient name");
+                *count -= 1;
+                if *count == 0 {
+                    state.transient_names.remove(&binding.key);
+                }
+            }
+            removed
         };
         drop(removed);
         Poll::Ready(())
@@ -823,6 +861,25 @@ mod tests {
         fn sleep(&self, duration: Duration) -> crate::Task {
             Box::pin(tokio::time::sleep(duration))
         }
+    }
+
+    #[tokio::test]
+    async fn transient_presence_names_are_bounded_by_live_provisions() {
+        let root = Context::new(Arc::new(Host(Instant::now())));
+        let before = root.kernel.state.lock().names.len();
+        for page in 0..512 {
+            let name = format!("cordis.instance.page-{page}");
+            let provision = root.provide_transient_named(name, Arc::new(())).unwrap();
+            assert_eq!(root.kernel.state.lock().transient_names.len(), 1);
+            provision.dispose().await.unwrap();
+        }
+        let state = root.kernel.state.lock();
+        assert_eq!(state.names.len(), before);
+        assert!(state.transient_names.is_empty());
+        assert!(state.store.is_empty());
+        println!("transient presence: 512 historical names, 0 retained names, 0 active provisions");
+        drop(state);
+        root.fiber().dispose().await.unwrap();
     }
 
     struct ObserveDrop {

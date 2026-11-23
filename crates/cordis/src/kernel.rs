@@ -70,6 +70,7 @@ pub(crate) struct State {
     pub impls: SlotMap<ImplId, ImplData>,
     pub store: HashMap<(Arc<str>, Realm), ImplId>,
     pub names: HashMap<Arc<str>, Option<TypeId>>,
+    pub transient_names: HashMap<Arc<str>, usize>,
     pub impl_counter: u64,
 }
 
@@ -124,6 +125,7 @@ impl Kernel {
                     impls: SlotMap::with_key(),
                     store: HashMap::new(),
                     names: HashMap::new(),
+                    transient_names: HashMap::new(),
                     impl_counter: 0,
                 }),
                 spawner: host.clone(),

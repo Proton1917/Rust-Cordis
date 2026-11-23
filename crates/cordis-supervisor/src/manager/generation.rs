@@ -310,7 +310,7 @@ impl Manager {
         });
         *generation.instance.error.lock() = None;
         // ADR-0041：网页 Owner 经内核依赖跟随实际后端加载纪元。
-        context.provide_named(
+        context.provide_transient_named(
             format!("cordis.instance.{}", generation.instance.name),
             Arc::new(()),
         )?;
