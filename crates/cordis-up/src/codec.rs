@@ -178,6 +178,21 @@ pub fn encode_value(value: &Value, limits: &Limits) -> Result<Vec<u8>, CodecErro
     write_limited(value, limits)
 }
 
+/// Encode a borrowed persistent state without constructing a second value tree.
+/// The state map has three entries and six nodes around its data value.
+pub fn encode_state(state: &crate::payload::State, limits: &Limits) -> Result<Vec<u8>, CodecError> {
+    limits.validate()?;
+    if limits.max_collection < 3 {
+        return Err(LimitExceeded::error(
+            "max_collection",
+            limits.max_collection,
+            Some(3),
+        ));
+    }
+    validate_value_counted(&state.data, limits, 1, 6)?;
+    write_limited(state, limits)
+}
+
 /// CP-2：按帧上限序列化；写入器越界时报告 max_frame，其余失败保留 CBOR 原因。
 fn write_limited<T: serde::Serialize>(value: &T, limits: &Limits) -> Result<Vec<u8>, CodecError> {
     write_prefixed(value, limits, 0)
@@ -236,8 +251,16 @@ fn envelope(message: &Message) -> Result<(), CodecError> {
 
 /// CP-8：编码前按实际值图计量；overhead计入所属消息包络的嵌套层级。
 fn validate_value(value: &Value, limits: &Limits, overhead: usize) -> Result<(), CodecError> {
+    validate_value_counted(value, limits, overhead, 0)
+}
+
+fn validate_value_counted(
+    value: &Value,
+    limits: &Limits,
+    overhead: usize,
+    mut count: usize,
+) -> Result<(), CodecError> {
     let mut pending = vec![(value, overhead)];
-    let mut count = 0;
     while let Some((value, depth)) = pending.pop() {
         count += 1;
         if count > limits.max_values {

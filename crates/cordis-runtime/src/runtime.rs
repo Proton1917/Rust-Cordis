@@ -294,7 +294,7 @@ async fn dispatch_loop(
                         .manager
                         .checkpoint_instance(name)
                         .await
-                        .and_then(|states| controller.store.checkpoint(&states));
+                        .and_then(|states| controller.store.checkpoint_shared(&states));
                     if let Err(problem) = result {
                         controller
                             .logs
@@ -388,7 +388,7 @@ async fn finish(
             .manager
             .export_shutdown()
             .await
-            .and_then(|states| controller.store.checkpoint(&states)),
+            .and_then(|states| controller.store.checkpoint_shared(&states)),
     };
     // 此时实例仍在目录中，停机后的离线查询可取得最后一次 Active 绑定。
     let sources = controller.confirm_sources();
