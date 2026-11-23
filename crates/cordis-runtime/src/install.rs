@@ -5,6 +5,7 @@ use crate::{
     storage::io_error,
 };
 use std::{
+    collections::BTreeSet,
     fs::{self, File},
     io::Read,
     path::{Path, PathBuf},
@@ -22,6 +23,7 @@ pub fn install(source: &Path, project: &Path, data: &Path, plugins: &Path) -> Re
     if source.is_dir() && plugins.starts_with(&source) {
         return Err(parameter("安装目录需要与插件存储目录分离"));
     }
+    cordis_artifact::validate(&source, &BTreeSet::new(), &[]).map_err(artifact_error)?;
     // 不同状态目录可以共用插件目录。锁覆盖编号分配、复制及验证凭据发布。
     let ownership = File::options()
         .read(true)
@@ -74,7 +76,8 @@ fn copy_receipt(source: &Path, destination: &Path) -> Result<()> {
     };
     let source = receipt_path(source);
     match fs::symlink_metadata(&source) {
-        Ok(_) => {}
+        Ok(metadata) if metadata.is_file() => {}
+        Ok(_) => return Err(parameter("验证凭据需要普通文件")),
         Err(problem) if problem.kind() == std::io::ErrorKind::NotFound => return Ok(()),
         Err(problem) => return Err(io_error(problem)),
     }
@@ -115,7 +118,9 @@ fn installed_reference(source: &Path, plugins: &Path) -> Result<(Option<String>,
 
 /// DOC-15 §3.2：复制完整来源后发布引用，失败只清理该次暂存路径。
 fn publish_copy(source: &Path, staged: &Path, destination: &Path) -> Result<()> {
-    if let Err(problem) = copy(source, staged) {
+    if let Err(problem) = copy(source, staged).and_then(|()| {
+        cordis_artifact::validate(staged, &BTreeSet::new(), &[]).map_err(artifact_error)
+    }) {
         let cleanup = if staged.is_dir() {
             fs::remove_dir_all(staged)
         } else {
@@ -166,10 +171,22 @@ fn sync_tree(path: &Path) -> Result<()> {
         for child in children(path)? {
             sync_tree(&child)?;
         }
+    } else if kind.is_symlink() {
+        // The containing directory synchronizes this entry; its target is another
+        // validated member whose contents are synchronized by the regular walk.
+        return Ok(());
     } else if !kind.is_file() {
-        return Err(parameter("插件安装来源应由普通文件与目录组成"));
+        return Err(parameter("插件安装来源包含特殊文件"));
     }
     sync_path(path)
+}
+
+fn artifact_error(problem: std::io::Error) -> cordis_up::WireError {
+    if problem.kind() == std::io::ErrorKind::InvalidInput {
+        parameter(problem)
+    } else {
+        io_error(problem)
+    }
 }
 
 /// DOC-15 §3.2：目录条目排序用于确定性复制和同名内容比较。
@@ -182,8 +199,23 @@ fn children(path: &Path) -> Result<Vec<PathBuf>> {
     Ok(entries)
 }
 
-/// DOC-15 §3.2：安装副本由普通文件及目录组成，链接和特殊文件在边界返回错误。
+/// The root is a regular source; internal links use the shared relocatable policy.
 fn copy(source: &Path, destination: &Path) -> Result<()> {
+    if fs::symlink_metadata(source)
+        .map_err(io_error)?
+        .file_type()
+        .is_symlink()
+    {
+        return Err(parameter("安装根或验证凭据需要普通文件或目录"));
+    }
+    copy_entry(
+        source,
+        destination,
+        &source.canonicalize().map_err(io_error)?,
+    )
+}
+
+fn copy_entry(source: &Path, destination: &Path, root: &Path) -> Result<()> {
     let kind = fs::symlink_metadata(source).map_err(io_error)?.file_type();
     if kind.is_file() {
         fs::copy(source, destination).map_err(io_error)?;
@@ -191,20 +223,30 @@ fn copy(source: &Path, destination: &Path) -> Result<()> {
     } else if kind.is_dir() {
         fs::create_dir(destination).map_err(io_error)?;
         for child in children(source)? {
-            copy(
+            copy_entry(
                 &child,
                 &destination.join(child.file_name().expect("directory entry name")),
+                root,
             )?;
         }
         sync_path(destination)?;
+    } else if kind.is_symlink() {
+        let target = cordis_artifact::relative_link(source, root).map_err(artifact_error)?;
+        std::os::unix::fs::symlink(target, destination).map_err(io_error)?;
     } else {
-        return Err(parameter("插件安装来源应由普通文件与目录组成"));
+        return Err(parameter("插件安装来源包含特殊文件"));
     }
     Ok(())
 }
 
 /// DOC-15 §3.2：按名称递归并分块比较全部字节，读取失败保留文件系统原因。
 pub fn equal(left: &Path, right: &Path) -> Result<bool> {
+    let left_root = left.canonicalize().map_err(io_error)?;
+    let right_root = right.canonicalize().map_err(io_error)?;
+    equal_entry(left, right, &left_root, &right_root)
+}
+
+fn equal_entry(left: &Path, right: &Path, left_root: &Path, right_root: &Path) -> Result<bool> {
     let left_kind = fs::symlink_metadata(left).map_err(io_error)?.file_type();
     let right_kind = fs::symlink_metadata(right).map_err(io_error)?.file_type();
     if left_kind.is_file() && right_kind.is_file() {
@@ -235,14 +277,19 @@ pub fn equal(left: &Path, right: &Path) -> Result<bool> {
             return Ok(false);
         }
         for (left, right) in left.iter().zip(&right) {
-            if left.file_name() != right.file_name() || !equal(left, right)? {
+            if left.file_name() != right.file_name()
+                || !equal_entry(left, right, left_root, right_root)?
+            {
                 return Ok(false);
             }
         }
         return Ok(true);
     }
-    if left_kind.is_symlink() || right_kind.is_symlink() {
-        return Err(parameter("插件安装来源应由普通文件与目录组成"));
+    if left_kind.is_symlink() && right_kind.is_symlink() {
+        return Ok(
+            cordis_artifact::link_target(left, left_root).map_err(artifact_error)?
+                == cordis_artifact::link_target(right, right_root).map_err(artifact_error)?,
+        );
     }
     Ok(false)
 }
@@ -252,6 +299,38 @@ mod tests {
     use super::*;
     use cordis_testkit::cleanup::TestGuard;
     use std::sync::Barrier;
+
+    #[test]
+    fn internal_file_and_directory_links_keep_identity_after_install_and_reuse() {
+        use std::os::unix::fs::symlink;
+        let case = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "install-links");
+        let root = case.directory("install-links");
+        fs::create_dir_all(root.join("source/data")).unwrap();
+        fs::create_dir(root.join("plugins")).unwrap();
+        let root = root.canonicalize().unwrap();
+        let source = root.join("source");
+        let plugins = root.join("plugins");
+        fs::write(source.join("data/first"), b"one").unwrap();
+        fs::write(source.join("data/second"), b"two").unwrap();
+        symlink(source.join("data/first"), source.join("alias")).unwrap();
+        symlink("data", source.join("directory")).unwrap();
+        let first = install(&source, &root, &root, &plugins).unwrap();
+        let installed = plugins.join(&first);
+        assert_eq!(
+            fs::read_link(installed.join("alias")).unwrap(),
+            Path::new("data/first")
+        );
+        assert_eq!(fs::read(installed.join("directory/first")).unwrap(), b"one");
+        assert!(equal(&source, &installed).unwrap());
+        assert_eq!(install(&source, &root, &root, &plugins).unwrap(), first);
+        fs::remove_file(source.join("alias")).unwrap();
+        symlink("data/second", source.join("alias")).unwrap();
+        assert!(!equal(&source, &installed).unwrap());
+        assert_ne!(install(&source, &root, &root, &plugins).unwrap(), first);
+        symlink("..", source.join("data/cycle")).unwrap();
+        assert!(install(&source, &root, &root, &plugins).is_err());
+        case.success();
+    }
 
     #[test]
     fn artifact_sync_failures_never_return_a_reference_and_can_retry() {
