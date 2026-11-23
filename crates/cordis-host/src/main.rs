@@ -38,6 +38,10 @@ struct Arguments {
     verified_dirs: Vec<PathBuf>,
     #[arg(long, default_value_t = 2)]
     native_workers: usize,
+    #[arg(long, default_value_t = 64)]
+    max_active_callbacks: usize,
+    #[arg(long, default_value_t = 64 * 1024 * 1024)]
+    max_callback_bytes: usize,
     #[arg(long, default_value_t = 30_000)]
     request_timeout_ms: u64,
     #[arg(long, default_value_t = 64)]
@@ -80,6 +84,8 @@ async fn run(args: Arguments) -> cordis_host::Result<i32> {
             },
             request_timeout: timeout,
             native_workers: args.native_workers,
+            max_active_callbacks: args.max_active_callbacks,
+            max_callback_bytes: args.max_callback_bytes,
         },
         tokio::runtime::Handle::current(),
     )?;

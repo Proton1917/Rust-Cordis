@@ -21,6 +21,8 @@ class Runtime:
         self.imports = weakref.WeakValueDictionary()
         self.contexts = {}
         self.events = {}
+        self._active_callbacks = 0
+        self._callback_bytes = 0
         self.next_object = 1
         self.connection = Connection(self, **limits)
 
@@ -188,7 +190,12 @@ class Runtime:
             exporter.frozen.frozen = False
             raise
 
-    async def notification(self, method, params):
+    @property
+    def callback_usage(self):
+        """当前异步回调数与其原始 CBOR 通知正文字节，持续到实际执行结束。"""
+        return self._active_callbacks, self._callback_bytes
+
+    async def notification(self, method, params, wire_bytes=None):
         if method == "release":
             self.release_exports(params["objects"])
         elif method == "cancel":
@@ -202,10 +209,44 @@ class Runtime:
                 task.cancel()
         elif method == "callback":
             payload = self.payload(params)
-            task = asyncio.create_task(self._event(payload))
-            tasks = self.events.setdefault(params["context"], set())
+            number = params.get("context") if isinstance(params, dict) else None
+            if type(number) is not int or not 0 < number < 1 << 64:
+                payload.close()
+                raise CordisError(2, "回调上下文编号需要正 u64")
+            # Direct callers have no reader measurement; charge one maximum frame.
+            size = self.connection.max_frame if wire_bytes is None else wire_bytes
+            if type(size) is not int or not 0 < size <= self.connection.max_frame:
+                payload.close()
+                raise CordisError(2, "回调载荷长度无效")
+            if (self._active_callbacks >= self.connection.max_active_callbacks
+                    or size > self.connection.max_callback_bytes - self._callback_bytes):
+                payload.close()
+                raise CordisError(8, "活跃回调额度耗尽")
+            self._active_callbacks += 1
+            self._callback_bytes += size
+            event = self._event(payload)
+            try:
+                task = asyncio.create_task(event)
+            except BaseException:
+                event.close()
+                self._active_callbacks -= 1
+                self._callback_bytes -= size
+                payload.close()
+                raise
+            tasks = self.events.setdefault(number, set())
             tasks.add(task)
-            task.add_done_callback(tasks.discard)
+
+            def completed(task):
+                # A task cancelled before its first poll never enters _event's finally.
+                payload.close()
+                self._active_callbacks -= 1
+                self._callback_bytes -= size
+                tasks.discard(task)
+                if not tasks and self.events.get(number) is tasks:
+                    self.events.pop(number)
+                self.connection._notification_done(task)
+
+            task.add_done_callback(completed)
         else:
             raise CordisError(3, f"通知方法缺席：{method}")
 
@@ -221,13 +262,12 @@ class Runtime:
                     "message": str(problem),
                 },
             )
-        finally:
-            payload.close()
 
     def close(self):
         for tasks in self.events.values():
             for task in tasks:
                 task.cancel()
+        self.events.clear()
         self.release_exports(list(self.exports))
         self.contexts.clear()
         self.imports.clear()
