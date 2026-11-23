@@ -112,7 +112,7 @@ impl Session {
     /// ADR-0017：套件先交回当前 apply，再进行状态迁移；完成通知只结束当前验证。
     async fn run_phases(&self, controller: &mut Controller) -> Result<()> {
         loop {
-            self.check_instances(&controller.manager)?;
+            self.check_instances(controller)?;
             match self.decision() {
                 Decision::Wait => self.0.changed.notified().await,
                 Decision::Finish => {
@@ -152,7 +152,7 @@ impl Session {
         controller.confirm_sources()?;
         let watched = [&self.0.plan.subject, &self.0.plan.suite]
             .into_iter()
-            .map(|name| controller.manager.instance_fiber(name))
+            .map(|name| controller.instance_fiber(name))
             .collect::<Result<Vec<_>>>()?;
         let mut state = self.0.state.lock();
         state.watched = watched;
@@ -161,29 +161,20 @@ impl Session {
     }
 
     /// CP-6：运行故障以真实实例状态结束验证，依赖等待状态保留错误原因。
-    fn check_instances(&self, manager: &Manager) -> Result<()> {
+    fn check_instances(&self, controller: &Controller) -> Result<()> {
         if let Some(problem) = &self.0.state.lock().failure {
             return Err(problem.clone());
         }
-        let snapshot = manager.snapshot();
         for name in [&self.0.plan.subject, &self.0.plan.suite] {
-            let instance = snapshot
-                .instances
-                .iter()
-                .find(|instance| &instance.name == name)
-                .ok_or_else(|| parameter(format!("验证实例 {name} 缺席")))?;
-            if instance.state != "active" {
+            let fiber = controller.instance_fiber(name)?;
+            let state = fiber.state();
+            if state != cordis::FiberState::Active {
+                let detail = controller
+                    .instance_failure(name)
+                    .unwrap_or_else(|| "等待声明依赖或生命周期结束".into());
                 return Err(WireError::new(
                     4,
-                    format!(
-                        "验证实例 {name} 状态 {}：{}",
-                        instance.state,
-                        instance
-                            .error
-                            .as_ref()
-                            .map(|error| error.message.as_str())
-                            .unwrap_or("等待声明依赖或生命周期结束")
-                    ),
+                    format!("验证实例 {name} 状态 {state:?}：{detail}"),
                 ));
             }
         }

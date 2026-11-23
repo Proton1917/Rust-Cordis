@@ -5,21 +5,7 @@ use super::*;
 impl Controller {
     /// ADR-0017：指定实例交回 apply 并进入 Active 后，契约会话推进下一阶段。
     pub(crate) async fn contract_settle(&self, name: &str) -> Result<()> {
-        let mounted = self.mounted.get(name).ok_or_else(|| {
-            let problem = self
-                .diagnostics
-                .lock()
-                .instance_errors
-                .get(name)
-                .cloned()
-                .unwrap_or_else(|| format!("验证实例 {name} 缺席"));
-            WireError::new(4, problem)
-        })?;
-        let fiber = if matches!(mounted.package.entry, Entry::Web) {
-            self.web.instance_fiber(name)?
-        } else {
-            self.manager.instance_fiber(name)?
-        };
+        let fiber = self.instance_fiber(name)?;
         tokio::time::timeout(
             Duration::from_millis(self.runtime.lifecycle_timeout_ms),
             fiber.settled(),

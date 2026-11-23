@@ -47,7 +47,11 @@ impl Controller {
         }
         self.refresh()?;
         if target.migrated || self.store.accepted_base()?.is_none() {
-            self.sources.observe(&self.manager);
+            self.sources.observe(&InstanceOwners {
+                mounted: &self.mounted,
+                manager: &self.manager,
+                web: &self.web,
+            });
             let decision = self.sources.commit(
                 &self.store,
                 &self.configuration,
@@ -178,12 +182,7 @@ impl Controller {
                     old.settings == item.settings
                         && old.package.reference == item.package.reference
                         && Arc::ptr_eq(&old.scope, &item.scope)
-                }) && (if matches!(item.package.entry, Entry::Web) {
-                    self.web.instance_fiber(name)
-                } else {
-                    self.manager.instance_fiber(name)
-                })
-                .is_ok_and(|fiber| {
+                }) && self.instance_fiber(name).is_ok_and(|fiber| {
                     fiber.is_settled()
                         && matches!(
                             fiber.state(),
@@ -643,7 +642,11 @@ impl Controller {
                 .iter()
                 .map(|(name, item)| (name, &item.settings, &item.package)),
         );
-        next.observe(&self.manager);
+        next.observe(&InstanceOwners {
+            mounted: &target.instances,
+            manager: &self.manager,
+            web: &self.web,
+        });
         let decision = next.commit(&self.store, &target.configuration, &target.overlay, states);
         self.record_decision(decision)?;
         self.sources = next;

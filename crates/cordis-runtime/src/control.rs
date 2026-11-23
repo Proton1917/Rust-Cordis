@@ -38,6 +38,27 @@ struct Mounted {
     scope: Arc<MountScope>,
 }
 
+/// A mounted declaration selects one actual lifecycle owner. Resolve the current
+/// fiber through that owner so a generation change never leaves a cached old fiber.
+struct InstanceOwners<'a> {
+    mounted: &'a BTreeMap<String, Mounted>,
+    manager: &'a Manager,
+    web: &'a cordis_web_deployment::Deployment,
+}
+
+impl InstanceOwners<'_> {
+    fn fiber(&self, name: &str) -> Result<cordis::Fiber> {
+        let mounted = self
+            .mounted
+            .get(name)
+            .ok_or_else(|| WireError::new(4, format!("部署实例 {name} 缺席")))?;
+        match mounted.package.entry {
+            Entry::Web => self.web.instance_fiber(name),
+            _ => self.manager.instance_fiber(name),
+        }
+    }
+}
+
 struct MountScope {
     view: Context,
     manage: Option<Effect>,
@@ -154,7 +175,8 @@ impl Controller {
         if let Some(candidate) = candidate
             && let Err(problem) = self.reload_configuration(candidate).await
         {
-            self.logs.emit(0, "runtime", &format!("启动配置应用失败：{problem}"));
+            self.logs
+                .emit(0, "runtime", &format!("启动配置应用失败：{problem}"));
         }
         Ok(())
     }
@@ -179,7 +201,48 @@ impl Controller {
         if let Some(problem) = &self.recovery_required {
             return Err(problem.clone());
         }
-        self.sources.confirm(&self.manager)
+        self.sources.confirm(&InstanceOwners {
+            mounted: &self.mounted,
+            manager: &self.manager,
+            web: &self.web,
+        })
+    }
+
+    pub(crate) fn instance_fiber(&self, name: &str) -> Result<cordis::Fiber> {
+        InstanceOwners {
+            mounted: &self.mounted,
+            manager: &self.manager,
+            web: &self.web,
+        }
+        .fiber(name)
+        .map_err(|problem| {
+            self.diagnostics
+                .lock()
+                .instance_errors
+                .get(name)
+                .map(|message| WireError::new(problem.code, message.clone()))
+                .unwrap_or(problem)
+        })
+    }
+
+    /// Failure details come from the same owners used by the public status view.
+    /// The full snapshots are needed only on a failed contract check.
+    pub(crate) fn instance_failure(&self, name: &str) -> Option<String> {
+        self.diagnostics
+            .lock()
+            .instance_errors
+            .get(name)
+            .cloned()
+            .or_else(|| {
+                self.manager
+                    .snapshot()
+                    .instances
+                    .into_iter()
+                    .chain(self.web.snapshot())
+                    .find(|instance| instance.name == name)
+                    .and_then(|instance| instance.error)
+                    .map(|error| error.message)
+            })
     }
 
     fn record_decision(
@@ -592,7 +655,8 @@ impl Controller {
     async fn reload_configuration(&mut self, configuration: Result<Configuration>) -> Result<()> {
         let result = match configuration {
             Ok(configuration) => {
-                self.commit_configuration(configuration, self.overlay.clone()).await
+                self.commit_configuration(configuration, self.overlay.clone())
+                    .await
             }
             Err(problem) => Err(problem),
         };

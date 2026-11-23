@@ -133,10 +133,10 @@ impl SourceBindings {
     }
 
     /// DOC-11 §10、CP-11：真实 Active 状态确认代码引用，多项变化共用一次原子写入。
-    pub(super) fn observe(&mut self, manager: &Manager) {
+    pub(super) fn observe(&mut self, owners: &InstanceOwners<'_>) {
         self.pending.retain(|name, source| {
-            if manager
-                .instance_fiber(name)
+            if owners
+                .fiber(name)
                 .is_ok_and(|fiber| fiber.state() == cordis::FiberState::Active)
             {
                 self.confirmed.insert(name.clone(), source.clone());
@@ -167,8 +167,8 @@ impl SourceBindings {
         Ok(committed)
     }
 
-    pub(super) fn confirm(&mut self, manager: &Manager) -> Result<()> {
-        self.observe(manager);
+    pub(super) fn confirm(&mut self, owners: &InstanceOwners<'_>) -> Result<()> {
+        self.observe(owners);
         if self.dirty {
             crate::storage::write(&self.path, &self.encoded()?)?;
             self.dirty = false;
