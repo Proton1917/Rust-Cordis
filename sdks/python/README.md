@@ -45,3 +45,14 @@ await context.isolate(interface, realm) 派生隔离视图；realm 缺省时分�
 CordisError(code, message, detail) 保留 UP/1 错误通道和业务详情。请求截止时间与在途数量在 run 的 timeout、max_inflight 参数中设置，max_frame 控制单帧长度。invoke 支持调用取消；apply、效应体和清理按核心生命周期完成。
 
 [Python 提供方示例](../../plugins/kv-py) · [部署和程序版本](../../docs/guide.md)
+
+## UP/1 值图预算
+
+`Runtime` 与 `run` 接受 `max_frame`、`max_depth`、`max_collection`、`max_values`。
+默认值分别为 16777216 字节、64 层、65536 个元素和 262144 个节点。
+深度包含消息包络；集合与节点分别按参数、成功结果或错误 detail 的值图计量。
+输入在构造 CBOR 集合前检查声明规模，输出在编码前检查值图，编码缓冲按帧额度增长。
+超限返回 code 8，detail 给出 `limit` 与 `maximum`；本次出口引用随编码失败归还。
+
+共享边界向量位于 `tests/up1/value-budgets.tsv`。Python、TypeScript 和 Rust codec
+分别通过 `test_budgets.py`、`shared-budgets.mjs` 和 `shared_budgets.rs` 使用同一输入。
