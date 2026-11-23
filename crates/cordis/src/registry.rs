@@ -1,5 +1,8 @@
 //! 组件定义、配置解析与运行时登记。
 
+mod members;
+use members::Members;
+
 use crate::context::{Layer, Scope};
 use crate::fiber::FiberData;
 use crate::kernel::{FiberId, State};
@@ -297,7 +300,7 @@ impl ComponentDef {
 
 pub(crate) struct RuntimeData {
     pub component: ComponentDef,
-    pub fibers: Vec<FiberId>,
+    fibers: Members,
 }
 
 /// S-REG-4：实例改用新定义及规格后、重新检查依赖之前发送的同步通知。
@@ -452,7 +455,7 @@ impl Registry {
                     .entry(next.id)
                     .or_insert_with(|| RuntimeData {
                         component: next.clone(),
-                        fibers: Vec::new(),
+                        fibers: Members::default(),
                     });
             }
             let mut previous = Vec::new();
@@ -558,7 +561,7 @@ impl Context {
                 .entry(component.id)
                 .or_insert_with(|| RuntimeData {
                     component: component.clone(),
-                    fibers: Vec::new(),
+                    fibers: Members::default(),
                 })
                 .fibers
                 .push(id);
@@ -607,7 +610,7 @@ pub(crate) fn unregister(state: &mut State, id: FiberId) -> Option<RuntimeData> 
     let component = state.fibers[id].component.as_ref()?;
     let key = component.id;
     if let Some(runtime) = state.runtimes.get_mut(&key) {
-        runtime.fibers.retain(|current| *current != id);
+        runtime.fibers.remove(id);
         if runtime.fibers.is_empty() {
             return state.runtimes.remove(&key);
         }
