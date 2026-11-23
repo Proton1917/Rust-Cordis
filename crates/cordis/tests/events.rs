@@ -704,6 +704,111 @@ fn waterfall_nesting_and_short_circuit() {
     assert_eq!(*values.lock().unwrap(), [1, 2, 3]);
 }
 
+#[test]
+fn waterfall_observer_can_add_listener_to_current_dispatch() {
+    let (root, host, _) = setup();
+    let context = root.clone();
+    root.once::<InternalDispatch>(move |dispatch| {
+        assert!(dispatch.is::<Water>());
+        assert_eq!(dispatch.mode, DispatchMode::Waterfall);
+        assert_eq!(dispatch.name.as_ref(), Water::NAME);
+        assert_eq!(dispatch.args::<Water>(), Some(&3));
+        context
+            .once_waterfall::<Water>(
+                |value, next| Ok(value + next.run()?),
+                EventOptions::default(),
+            )
+            .unwrap();
+        None
+    })
+    .unwrap();
+
+    assert_eq!(root.listener_count::<Water>(), 0);
+    assert_eq!(root.waterfall::<Water>(3, || Ok(7)).unwrap(), 10);
+    assert_eq!(root.listener_count::<Water>(), 0);
+    assert_eq!(root.waterfall::<Water>(3, || Ok(7)).unwrap(), 7);
+    host.finish(root.fiber().dispose()).unwrap();
+}
+
+#[test]
+fn waterfall_filtered_out_once_listener_preserves_terminal_error() {
+    let (root, host, _) = setup();
+    root.once_waterfall::<Water>(
+        |value, next| Ok(value + next.run()?),
+        EventOptions::default(),
+    )
+    .unwrap();
+    let filtered = AtomicUsize::new(0);
+    let calls = Arc::new(AtomicUsize::new(0));
+    let terminal_calls = calls.clone();
+    let error = root
+        .waterfall_filtered::<Water>(
+            3,
+            move || {
+                terminal_calls.fetch_add(1, Ordering::SeqCst);
+                Err(Error::new("terminal failure"))
+            },
+            Some(&|_| {
+                filtered.fetch_add(1, Ordering::SeqCst);
+                false
+            }),
+        )
+        .unwrap_err();
+
+    assert_eq!(error.message.as_ref(), "terminal failure");
+    assert_eq!(filtered.load(Ordering::SeqCst), 1);
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+    assert_eq!(root.listener_count::<Water>(), 1);
+    assert_eq!(root.waterfall::<Water>(3, || Ok(7)).unwrap(), 10);
+    assert_eq!(root.listener_count::<Water>(), 0);
+    host.finish(root.fiber().dispose()).unwrap();
+}
+
+#[test]
+fn empty_waterfall_drops_args_before_terminal_captures() {
+    #[derive(Clone)]
+    struct Tracked(&'static str, Arc<Mutex<Vec<&'static str>>>);
+    impl Drop for Tracked {
+        fn drop(&mut self) {
+            self.1.lock().unwrap().push(self.0);
+        }
+    }
+    struct TrackedWater;
+    impl Event for TrackedWater {
+        const NAME: &'static str = "test/tracked-waterfall";
+        type Args = Tracked;
+        type Output = ();
+        type Kind = WaterfallKind;
+    }
+
+    let (root, host, _) = setup();
+    for outcome in ["ok", "error", "panic"] {
+        let dropped = Arc::new(Mutex::new(Vec::new()));
+        let args = Tracked("args", dropped.clone());
+        let capture = Tracked("terminal", dropped.clone());
+        let result = catch_unwind(AssertUnwindSafe(|| {
+            root.waterfall::<TrackedWater>(args, move || {
+                std::hint::black_box(&capture);
+                match outcome {
+                    "ok" => Ok(()),
+                    "error" => Err(Error::new("terminal failure")),
+                    _ => panic!("terminal panic"),
+                }
+            })
+        }));
+        match outcome {
+            "ok" => result.unwrap().unwrap(),
+            "error" => assert_eq!(
+                result.unwrap().unwrap_err().message.as_ref(),
+                "terminal failure"
+            ),
+            _ => assert!(result.is_err()),
+        }
+        assert_eq!(*dropped.lock().unwrap(), ["args", "terminal"], "{outcome}");
+    }
+    host.finish(root.fiber().dispose()).unwrap();
+}
+
 // EVT-24、S-EVT-8。
 #[test]
 fn waterfall_rejects_duplicate_next() {
