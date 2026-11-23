@@ -17,13 +17,51 @@ pub(super) struct Frozen {
     pub(super) failure: Option<WireError>,
 }
 
-/// ADR-0041：网页部署持有冻结状态及导出器，跨后端与页面步骤统一决定解冻或释放。
+/// ADR-0041：状态与冻结许可共享寿命；最后一个接收者归还许可时由管理队列解冻。
 #[derive(Clone)]
-pub struct FrozenSnapshot(Arc<Frozen>);
+pub struct FrozenSnapshot(Arc<SnapshotLease>);
+
+struct SnapshotLease {
+    frozen: Arc<Frozen>,
+    owner: Weak<Core>,
+    returned: AtomicBool,
+}
+
+impl Drop for SnapshotLease {
+    fn drop(&mut self) {
+        if self.returned.load(Ordering::Acquire) {
+            return;
+        }
+        let Some(owner) = self.owner.upgrade() else {
+            return;
+        };
+        // Shutdown consumes every outstanding freeze by retiring its instance.
+        if owner.stopping.load(Ordering::Acquire) {
+            return;
+        }
+        if owner.commands.lock().sender.is_closed() {
+            // A failed worker cannot accept cleanup. The connection owner closes
+            // the affected instances instead of leaving their writers paused.
+            for (_, exporter) in &self.frozen.held {
+                exporter.object.peer().terminate("冻结快照的管理任务已结束");
+            }
+            return;
+        }
+        let mut returned = owner.abandoned_snapshots.lock();
+        // Synchronize with the final shutdown drain: a late return either joins
+        // that drain or observes retirement already owning the freeze.
+        if owner.stopping.load(Ordering::Acquire) {
+            return;
+        }
+        returned.push(self.frozen.clone());
+        drop(returned);
+        owner.snapshot_returned.notify_one();
+    }
+}
 
 impl FrozenSnapshot {
     pub fn states(&self) -> &HashMap<String, Arc<payload::State>> {
-        &self.0.states
+        &self.0.frozen.states
     }
 }
 
@@ -65,16 +103,55 @@ impl Manager {
                 manager.thaw(&frozen).await?;
                 return Err(problem);
             }
-            Ok(FrozenSnapshot(Arc::new(frozen)))
+            Ok(FrozenSnapshot(Arc::new(SnapshotLease {
+                frozen: Arc::new(frozen),
+                owner: Arc::downgrade(&manager.0),
+                returned: AtomicBool::new(false),
+            })))
         })
         .await
     }
 
     /// DOC-11 SW-5：回退决议解冻原导出器，成功路径在旧页面清理后释放快照句柄。
     pub async fn thaw_snapshot(&self, snapshot: &FrozenSnapshot) -> Result<()> {
-        let frozen = snapshot.0.clone();
-        self.transaction(move |manager| async move { manager.thaw(&frozen).await })
-            .await
+        if !Weak::ptr_eq(&snapshot.0.owner, &Arc::downgrade(&self.0)) {
+            return Err(error(2, "冻结快照属于其他管理器"));
+        }
+        let lease = snapshot.0.clone();
+        self.transaction(move |manager| async move {
+            if lease.returned.swap(true, Ordering::AcqRel) {
+                return Ok(());
+            }
+            manager.thaw_snapshot_contents(&lease.frozen).await
+        })
+        .await
+    }
+
+    async fn thaw_snapshot_contents(&self, frozen: &Frozen) -> Result<()> {
+        // Successful replacement consumes the old generation's freeze. Only a
+        // surviving generation needs its write permission returned.
+        let live = Frozen {
+            held: frozen
+                .held
+                .iter()
+                .filter(|(generation, _)| generation.is_current())
+                .cloned()
+                .collect(),
+            ..Frozen::default()
+        };
+        self.thaw(&live).await
+    }
+
+    pub(super) async fn thaw_abandoned_snapshots(&self) {
+        let returned = std::mem::take(&mut *self.0.abandoned_snapshots.lock());
+        for frozen in returned {
+            if let Err(problem) = self.thaw_snapshot_contents(&frozen).await {
+                self.0
+                    .context
+                    .logger()
+                    .error(saved_error(&problem).to_string());
+            }
+        }
     }
 
     /// SW-5：取得可逆冻结与原快照；任一导出失败时解冻已经访问的导出器。
@@ -1492,6 +1569,7 @@ impl Manager {
         }
         let discarded = std::mem::take(&mut self.0.catalog.lock().instances);
         drop(discarded);
+        self.0.abandoned_snapshots.lock().clear();
         failure.map_or(Ok(()), Err)
     }
 }
