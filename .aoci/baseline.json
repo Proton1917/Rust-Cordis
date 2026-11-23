@@ -1,7 +1,7 @@
 {
   "version": 1,
   "created_at": "2026-11-19T12:29:42Z",
-  "updated_at": "2026-11-23T06:49:07Z",
+  "updated_at": "2026-11-23T10:51:17Z",
   "files": {
     ".gitattributes": {
       "role": "index",
@@ -53,9 +53,9 @@
     },
     "aoci.code.txt": {
       "role": "index",
-      "sha256": "7d7dd596508fc7c364f57193bff724d885cb627b6709fa071ca03c995e4b44dd",
-      "size": 128376,
-      "normalized_sha256": "7d7dd596508fc7c364f57193bff724d885cb627b6709fa071ca03c995e4b44dd"
+      "sha256": "383eff5d010a7f907d75d93ae02dcc81055c66655c741c1a0146cbd5726395ab",
+      "size": 139098,
+      "normalized_sha256": "383eff5d010a7f907d75d93ae02dcc81055c66655c741c1a0146cbd5726395ab"
     },
     "aoci.meta.txt": {
       "role": "index",
@@ -80,6 +80,18 @@
       "sha256": "3710de2530b20335811d2cf1e98ffad0687e02fb162c606d9920aadb959d7546",
       "size": 6093,
       "normalized_sha256": "3710de2530b20335811d2cf1e98ffad0687e02fb162c606d9920aadb959d7546"
+    },
+    "benchmarks/deployment/replacement.py": {
+      "role": "index",
+      "sha256": "e28960f2fa241ed77d2789510a5ce800b5cf21982df2bc08e85cbd84a1fd33bf",
+      "size": 13775,
+      "normalized_sha256": "e28960f2fa241ed77d2789510a5ce800b5cf21982df2bc08e85cbd84a1fd33bf"
+    },
+    "benchmarks/deployment/rpc.py": {
+      "role": "index",
+      "sha256": "0a21ac821b8c5c743f5358ac802b7db6361aedaf5ee3d520df5c25b109a7e061",
+      "size": 12263,
+      "normalized_sha256": "0a21ac821b8c5c743f5358ac802b7db6361aedaf5ee3d520df5c25b109a7e061"
     },
     "benchmarks/deployment/summary.py": {
       "role": "index",
@@ -209,9 +221,9 @@
     },
     "benchmarks/multilanguage/README.md": {
       "role": "index",
-      "sha256": "7d0118203ae428cf2985138b22682bc65bb7553e32db54101b31c2e035cf2cf3",
-      "size": 2622,
-      "normalized_sha256": "7d0118203ae428cf2985138b22682bc65bb7553e32db54101b31c2e035cf2cf3"
+      "sha256": "c05158bd13015b8d15d137a55e0837c1fc8283c501f443f79074d388a1d6bb87",
+      "size": 5129,
+      "normalized_sha256": "c05158bd13015b8d15d137a55e0837c1fc8283c501f443f79074d388a1d6bb87"
     },
     "benchmarks/multilanguage/driver/Cargo.lock": {
       "role": "observe",
@@ -233,9 +245,9 @@
     },
     "benchmarks/multilanguage/measure.py": {
       "role": "index",
-      "sha256": "3f3983d9829351f43652df46ea6eb3d9a961f04b0ba0485ca1990480c959ec56",
-      "size": 12365,
-      "normalized_sha256": "3f3983d9829351f43652df46ea6eb3d9a961f04b0ba0485ca1990480c959ec56"
+      "sha256": "9d1760016b9bf74124d28bdc1aee65e811312c981024a7660108980e58025dca",
+      "size": 12427,
+      "normalized_sha256": "9d1760016b9bf74124d28bdc1aee65e811312c981024a7660108980e58025dca"
     },
     "benchmarks/multilanguage/prepare_sources.py": {
       "role": "index",
@@ -257,9 +269,9 @@
     },
     "benchmarks/multilanguage/probe/src/lib.rs": {
       "role": "index",
-      "sha256": "f493e638a79afcb9eb0b3be13a8de539e65d1608914b84ee285cc815d267297d",
-      "size": 4064,
-      "normalized_sha256": "f493e638a79afcb9eb0b3be13a8de539e65d1608914b84ee285cc815d267297d"
+      "sha256": "ae1f567b5ce3ed0c6a856c26e54b1383605d42e2f7cb4412a0ef4373606768a2",
+      "size": 8779,
+      "normalized_sha256": "ae1f567b5ce3ed0c6a856c26e54b1383605d42e2f7cb4412a0ef4373606768a2"
     },
     "crates/cordis-abi/Cargo.toml": {
       "role": "index",
@@ -677,9 +689,9 @@
     },
     "crates/cordis-host/src/host.rs": {
       "role": "index",
-      "sha256": "27868ae15e9b13403e40ab85dc342e786ea92bb31adbfc2517f16fa0624f9370",
-      "size": 38353,
-      "normalized_sha256": "27868ae15e9b13403e40ab85dc342e786ea92bb31adbfc2517f16fa0624f9370"
+      "sha256": "9acbe1d6ea5b62ef8cd9ba623c731a7bcd416240a847d42eb6e2a55acc4e7fab",
+      "size": 38435,
+      "normalized_sha256": "9acbe1d6ea5b62ef8cd9ba623c731a7bcd416240a847d42eb6e2a55acc4e7fab"
     },
     "crates/cordis-host/src/jobs.rs": {
       "role": "index",
@@ -707,9 +719,9 @@
     },
     "crates/cordis-host/src/main.rs": {
       "role": "index",
-      "sha256": "72c087e9bd6a7557cfddd88f185105e29e28219a7466ebe1e333e9e4a174ea45",
-      "size": 3578,
-      "normalized_sha256": "72c087e9bd6a7557cfddd88f185105e29e28219a7466ebe1e333e9e4a174ea45"
+      "sha256": "d07bc38b626ad1a517fec8320ab7201dcbbce2c5f1782894114a42586215c4aa",
+      "size": 3666,
+      "normalized_sha256": "d07bc38b626ad1a517fec8320ab7201dcbbce2c5f1782894114a42586215c4aa"
     },
     "crates/cordis-host/src/native.rs": {
       "role": "index",
@@ -737,9 +749,9 @@
     },
     "crates/cordis-host/src/wire.rs": {
       "role": "index",
-      "sha256": "442e2abfa568d906ed62d98779fcbe4a67f316cc7f5103f4c46b91231db75580",
-      "size": 6724,
-      "normalized_sha256": "442e2abfa568d906ed62d98779fcbe4a67f316cc7f5103f4c46b91231db75580"
+      "sha256": "0d138d64c597ec35ab8f5682f7a7e33f8b0bc7cedd299df80de1e794fec73083",
+      "size": 6757,
+      "normalized_sha256": "0d138d64c597ec35ab8f5682f7a7e33f8b0bc7cedd299df80de1e794fec73083"
     },
     "crates/cordis-host/tests/driver/Cargo.lock": {
       "role": "observe",
@@ -941,9 +953,9 @@
     },
     "crates/cordis-routing/src/transfer.rs": {
       "role": "index",
-      "sha256": "38b26781b66dbc68daa144d4f6513660b20f99723ffee6a39779ad6d5f7f4404",
-      "size": 4823,
-      "normalized_sha256": "38b26781b66dbc68daa144d4f6513660b20f99723ffee6a39779ad6d5f7f4404"
+      "sha256": "945bcf8eb9c8f22cff40f2cb5334b609bfde9be120ba24f13718178586a3dc6f",
+      "size": 9940,
+      "normalized_sha256": "945bcf8eb9c8f22cff40f2cb5334b609bfde9be120ba24f13718178586a3dc6f"
     },
     "crates/cordis-runtime/Cargo.toml": {
       "role": "index",
@@ -1451,9 +1463,9 @@
     },
     "crates/cordis-supervisor/src/manager/handlers.rs": {
       "role": "index",
-      "sha256": "e333189400e9dbef706835e8f8b5cde67825f44df530db992ab5862a2ceb3d50",
-      "size": 21210,
-      "normalized_sha256": "e333189400e9dbef706835e8f8b5cde67825f44df530db992ab5862a2ceb3d50"
+      "sha256": "d39a771f2bd7143eb596d4704b5a7cca676ed9b75645d2285a6997cd3af88d9a",
+      "size": 21551,
+      "normalized_sha256": "d39a771f2bd7143eb596d4704b5a7cca676ed9b75645d2285a6997cd3af88d9a"
     },
     "crates/cordis-supervisor/src/manager/lifecycle.rs": {
       "role": "index",
@@ -1481,9 +1493,9 @@
     },
     "crates/cordis-supervisor/src/manager/routing.rs": {
       "role": "index",
-      "sha256": "33b5d640f5878ad1cc22a487a6b380794707a475b5ecbe9a7e8b1e8470155306",
-      "size": 16972,
-      "normalized_sha256": "33b5d640f5878ad1cc22a487a6b380794707a475b5ecbe9a7e8b1e8470155306"
+      "sha256": "e3036c4526195dbb36876ddb0656d048de46d4f713ef30608faee95df244b4ba",
+      "size": 17318,
+      "normalized_sha256": "e3036c4526195dbb36876ddb0656d048de46d4f713ef30608faee95df244b4ba"
     },
     "crates/cordis-supervisor/src/manager/transition.rs": {
       "role": "index",
@@ -1613,9 +1625,9 @@
     },
     "crates/cordis-up/src/codec.rs": {
       "role": "index",
-      "sha256": "2419b245fb788b99063753833a9f8bedcb94c28d41c1c266e380b6d0884a8a87",
-      "size": 16916,
-      "normalized_sha256": "2419b245fb788b99063753833a9f8bedcb94c28d41c1c266e380b6d0884a8a87"
+      "sha256": "97a669859cd8eaf61d7dd2e2d09c3b2bf2d36e61c92bc179f46d04028e44ebcc",
+      "size": 23529,
+      "normalized_sha256": "97a669859cd8eaf61d7dd2e2d09c3b2bf2d36e61c92bc179f46d04028e44ebcc"
     },
     "crates/cordis-up/src/lib.rs": {
       "role": "index",
@@ -1631,15 +1643,15 @@
     },
     "crates/cordis-up/src/payload.rs": {
       "role": "index",
-      "sha256": "6e5ce7ab861f82f9ca2f673e1dc26f83c413fe9cfbdbea7b4eb2aeb4a1c65293",
-      "size": 11048,
-      "normalized_sha256": "6e5ce7ab861f82f9ca2f673e1dc26f83c413fe9cfbdbea7b4eb2aeb4a1c65293"
+      "sha256": "76710608ffa80a7d92489ceffbdfd415e6224ba87640ddbc3b6e97a2f783f5b5",
+      "size": 15440,
+      "normalized_sha256": "76710608ffa80a7d92489ceffbdfd415e6224ba87640ddbc3b6e97a2f783f5b5"
     },
     "crates/cordis-up/src/rpc.rs": {
       "role": "index",
-      "sha256": "020499c526304f0d9c74d83947a961f333ed881fa676efdb24deeabf06fbb2ac",
-      "size": 31016,
-      "normalized_sha256": "020499c526304f0d9c74d83947a961f333ed881fa676efdb24deeabf06fbb2ac"
+      "sha256": "12f827fc8d96e338a06b593d1518fd78009a0a3749aca61e9c9a7d460df1c6d5",
+      "size": 33167,
+      "normalized_sha256": "12f827fc8d96e338a06b593d1518fd78009a0a3749aca61e9c9a7d460df1c6d5"
     },
     "crates/cordis-up/tests/codec.rs": {
       "role": "observe",
@@ -1647,11 +1659,35 @@
       "size": 9250,
       "normalized_sha256": "2fd406ff059bf58e5e30dd679fb03d3f8eb928f90522aa3166cf96c73165ba8a"
     },
+    "crates/cordis-up/tests/payload_owned.rs": {
+      "role": "observe",
+      "sha256": "13563bab4a5354377e00ddf79968d5e70654f09752b58085902e84f899aeb60b",
+      "size": 12092,
+      "normalized_sha256": "13563bab4a5354377e00ddf79968d5e70654f09752b58085902e84f899aeb60b"
+    },
+    "crates/cordis-up/tests/payload_performance.rs": {
+      "role": "observe",
+      "sha256": "6bf1025764464e02b336a4c444edc539563612996bb7dac7575f7140c9d9e8c2",
+      "size": 9628,
+      "normalized_sha256": "6bf1025764464e02b336a4c444edc539563612996bb7dac7575f7140c9d9e8c2"
+    },
     "crates/cordis-up/tests/rpc.rs": {
       "role": "observe",
       "sha256": "094f60324b39282d1288960f4c6a6276e4af9daa6e091d7288c26f4885dcd949",
       "size": 10262,
       "normalized_sha256": "094f60324b39282d1288960f4c6a6276e4af9daa6e091d7288c26f4885dcd949"
+    },
+    "crates/cordis-up/tests/rpc_deadlines.rs": {
+      "role": "observe",
+      "sha256": "79bedf62c06fb8e68abfd9b9c99db195748e6c0a6d88c36ff0e8902d3248a70e",
+      "size": 7636,
+      "normalized_sha256": "79bedf62c06fb8e68abfd9b9c99db195748e6c0a6d88c36ff0e8902d3248a70e"
+    },
+    "crates/cordis-up/tests/rpc_ownership.rs": {
+      "role": "observe",
+      "sha256": "cdaeb2a1e67ea343baca1d736a407bed252f518506381b0eceb59cd4bac47e29",
+      "size": 10557,
+      "normalized_sha256": "cdaeb2a1e67ea343baca1d736a407bed252f518506381b0eceb59cd4bac47e29"
     },
     "crates/cordis-web-deployment/Cargo.toml": {
       "role": "index",
@@ -1715,9 +1751,9 @@
     },
     "crates/cordis/src/effect.rs": {
       "role": "index",
-      "sha256": "fd43bcde7bb362ca16abc275033b52bee51c24d7c57ab7d1f3c6d44a7065191f",
-      "size": 17926,
-      "normalized_sha256": "fd43bcde7bb362ca16abc275033b52bee51c24d7c57ab7d1f3c6d44a7065191f"
+      "sha256": "f2ed3085600ba9435eb12390fe7edce300891f757304d93709d395a0bb56abad",
+      "size": 18223,
+      "normalized_sha256": "f2ed3085600ba9435eb12390fe7edce300891f757304d93709d395a0bb56abad"
     },
     "crates/cordis/src/error.rs": {
       "role": "index",
@@ -1733,15 +1769,15 @@
     },
     "crates/cordis/src/fiber.rs": {
       "role": "index",
-      "sha256": "a81ada75fb713a646a790d99d5759f71ec6b340a39334e46ac3346ebd4e24323",
-      "size": 36934,
-      "normalized_sha256": "a81ada75fb713a646a790d99d5759f71ec6b340a39334e46ac3346ebd4e24323"
+      "sha256": "7de6ecf66cfd5031a000fa1b1102c27dd8ee689f4ae4078f495eb69291e16c28",
+      "size": 37282,
+      "normalized_sha256": "7de6ecf66cfd5031a000fa1b1102c27dd8ee689f4ae4078f495eb69291e16c28"
     },
     "crates/cordis/src/kernel.rs": {
       "role": "index",
-      "sha256": "86d96bcda64f8270c45058817e550baa1e628828dc37ea549d79235b23aaa46c",
-      "size": 4276,
-      "normalized_sha256": "86d96bcda64f8270c45058817e550baa1e628828dc37ea549d79235b23aaa46c"
+      "sha256": "5641ee96a9be06c9ee98c6c46622ecb55401d0ae69679a81bf66533577e194a7",
+      "size": 4462,
+      "normalized_sha256": "5641ee96a9be06c9ee98c6c46622ecb55401d0ae69679a81bf66533577e194a7"
     },
     "crates/cordis/src/lib.rs": {
       "role": "index",
@@ -1769,9 +1805,9 @@
     },
     "crates/cordis/src/registry.rs": {
       "role": "index",
-      "sha256": "9fde504de6b9c14d2be2b5e82583deed38f2778614340df845524cf567dce7c9",
-      "size": 23072,
-      "normalized_sha256": "9fde504de6b9c14d2be2b5e82583deed38f2778614340df845524cf567dce7c9"
+      "sha256": "6136523c99c1b370466a29874c137bbfa920c2c713c09f3f518fc09100b83a2e",
+      "size": 23155,
+      "normalized_sha256": "6136523c99c1b370466a29874c137bbfa920c2c713c09f3f518fc09100b83a2e"
     },
     "crates/cordis/src/service.rs": {
       "role": "index",
@@ -1793,9 +1829,9 @@
     },
     "crates/cordis/tests/concurrency.rs": {
       "role": "observe",
-      "sha256": "09f829985bf71f4f5bfdaa42d79cd617d91e07cffbe8ae21e1fb6d64ba68d9a2",
-      "size": 11513,
-      "normalized_sha256": "09f829985bf71f4f5bfdaa42d79cd617d91e07cffbe8ae21e1fb6d64ba68d9a2"
+      "sha256": "118fd807c000bfced3eee26f7309e6b4ce5ce7c9bd0b3b5b1b0aab15b6c97605",
+      "size": 13739,
+      "normalized_sha256": "118fd807c000bfced3eee26f7309e6b4ce5ce7c9bd0b3b5b1b0aab15b6c97605"
     },
     "crates/cordis/tests/context.rs": {
       "role": "observe",
@@ -1883,9 +1919,15 @@
     },
     "crates/cordis/tests/replace.rs": {
       "role": "observe",
-      "sha256": "1232b1912da72e732c62fd20b87bfac07486a61310d7d83c140f6aa55a40f642",
-      "size": 15433,
-      "normalized_sha256": "1232b1912da72e732c62fd20b87bfac07486a61310d7d83c140f6aa55a40f642"
+      "sha256": "c31295c2375f2c2cecb609f82a8a2d70a88f219aee179407e2cbd80659be6112",
+      "size": 16802,
+      "normalized_sha256": "c31295c2375f2c2cecb609f82a8a2d70a88f219aee179407e2cbd80659be6112"
+    },
+    "crates/cordis/tests/replacement_scaling.rs": {
+      "role": "observe",
+      "sha256": "326dd9da9c1cda00d3b4d8dd75c585e4f2137f9a8598a352fa516f950c58dc66",
+      "size": 4102,
+      "normalized_sha256": "326dd9da9c1cda00d3b4d8dd75c585e4f2137f9a8598a352fa516f950c58dc66"
     },
     "crates/cordis/tests/service.rs": {
       "role": "observe",
@@ -1931,9 +1973,9 @@
     },
     "docs/02-architecture.md": {
       "role": "index",
-      "sha256": "745311bb138e22cf97f2ebdb7ec6ae13cc7f8a5249867f3452402cd7aa0b3898",
-      "size": 3558,
-      "normalized_sha256": "745311bb138e22cf97f2ebdb7ec6ae13cc7f8a5249867f3452402cd7aa0b3898"
+      "sha256": "9255a6d14ff341c466fdd97198acb808c2119081c2b456c6dd7eac01c7f765f7",
+      "size": 3947,
+      "normalized_sha256": "9255a6d14ff341c466fdd97198acb808c2119081c2b456c6dd7eac01c7f765f7"
     },
     "docs/03-roadmap.md": {
       "role": "index",
@@ -1967,9 +2009,9 @@
     },
     "docs/13-runtime-architecture.md": {
       "role": "index",
-      "sha256": "47a373c0cd01f346be7edbc546e214fcba28deeda8b7aeb41e2bb89576a314b9",
-      "size": 8645,
-      "normalized_sha256": "47a373c0cd01f346be7edbc546e214fcba28deeda8b7aeb41e2bb89576a314b9"
+      "sha256": "4b9a19e02ca2a4ef30adcc8e50211ea2c26ad447295bdd3c36c2bb30b9629ad3",
+      "size": 9394,
+      "normalized_sha256": "4b9a19e02ca2a4ef30adcc8e50211ea2c26ad447295bdd3c36c2bb30b9629ad3"
     },
     "docs/14-roadmap-phase2.md": {
       "role": "index",
@@ -3005,6 +3047,192 @@
       "size": 3549,
       "normalized_sha256": "d747d76a1e53ec206191c1fd644f9f406d8447bf27ea78953548ba0d25837967"
     },
+    "docs/measurements/runtime-efficiency.md": {
+      "role": "index",
+      "sha256": "6111449f000302be37345224fb585971ae92f9e21caa0e56981a4aa1cac7a12d",
+      "size": 13945,
+      "normalized_sha256": "6111449f000302be37345224fb585971ae92f9e21caa0e56981a4aa1cac7a12d"
+    },
+    "docs/measurements/runtime-efficiency/concurrent-large/inputs.json": {
+      "role": "index",
+      "sha256": "5821cca41cdf9d84173a0cbbd1d25b42bdf3fe35309ffd4a0429e9d5e7c55d41",
+      "size": 2759,
+      "normalized_sha256": "5821cca41cdf9d84173a0cbbd1d25b42bdf3fe35309ffd4a0429e9d5e7c55d41"
+    },
+    "docs/measurements/runtime-efficiency/concurrent-large/rpc.jsonl": {
+      "role": "index",
+      "sha256": "83616b679c8a07705d5a65ad46ffba300c07bc51d3073c9809a2a09a0010865d",
+      "size": 142833,
+      "normalized_sha256": "83616b679c8a07705d5a65ad46ffba300c07bc51d3073c9809a2a09a0010865d"
+    },
+    "docs/measurements/runtime-efficiency/concurrent/inputs.json": {
+      "role": "index",
+      "sha256": "f69715ce873f81be7d487ec859bc455fe025dea4e986ff08e3b5ae89e34ef727",
+      "size": 2767,
+      "normalized_sha256": "f69715ce873f81be7d487ec859bc455fe025dea4e986ff08e3b5ae89e34ef727"
+    },
+    "docs/measurements/runtime-efficiency/concurrent/rpc.jsonl": {
+      "role": "index",
+      "sha256": "86652a67cc3dfef7fabfee2af883af324df18aae57129640ea29fd14b4c7d47d",
+      "size": 693102,
+      "normalized_sha256": "86652a67cc3dfef7fabfee2af883af324df18aae57129640ea29fd14b4c7d47d"
+    },
+    "docs/measurements/runtime-efficiency/driver-hashes.json": {
+      "role": "index",
+      "sha256": "7f84bb17117206c90ab4fc778c7590def651123ba9a0555baac3ee41463440ed",
+      "size": 429,
+      "normalized_sha256": "7f84bb17117206c90ab4fc778c7590def651123ba9a0555baac3ee41463440ed"
+    },
+    "docs/measurements/runtime-efficiency/idle-memory.jsonl": {
+      "role": "index",
+      "sha256": "5a6f73b9990be0bc53eca7d005cd3c138d9a5d42817b6857434f2cca9c5c9679",
+      "size": 19465,
+      "normalized_sha256": "5a6f73b9990be0bc53eca7d005cd3c138d9a5d42817b6857434f2cca9c5c9679"
+    },
+    "docs/measurements/runtime-efficiency/measurement-commands.json": {
+      "role": "index",
+      "sha256": "e45725915a825776cad8c09407111a77ca927c89a5242abafda7db728cca9409",
+      "size": 5927,
+      "normalized_sha256": "e45725915a825776cad8c09407111a77ca927c89a5242abafda7db728cca9409"
+    },
+    "docs/measurements/runtime-efficiency/payload-summary.json": {
+      "role": "index",
+      "sha256": "b920618a3199042f0ae331ba3e16673590f9a5126abb4acb7683649db4c3ad4c",
+      "size": 3258,
+      "normalized_sha256": "b920618a3199042f0ae331ba3e16673590f9a5126abb4acb7683649db4c3ad4c"
+    },
+    "docs/measurements/runtime-efficiency/payload.jsonl": {
+      "role": "index",
+      "sha256": "2148b5d0fc5b52fc2d1fa8e4de301c8bee2c709e285729728676a37b68586fd2",
+      "size": 30312,
+      "normalized_sha256": "2148b5d0fc5b52fc2d1fa8e4de301c8bee2c709e285729728676a37b68586fd2"
+    },
+    "docs/measurements/runtime-efficiency/protocol-ablation/build.json": {
+      "role": "index",
+      "sha256": "2d03b8b9216fe8913ec9762854ae7fcf90d3a03840c9cf6667624f338441f091",
+      "size": 673,
+      "normalized_sha256": "2d03b8b9216fe8913ec9762854ae7fcf90d3a03840c9cf6667624f338441f091"
+    },
+    "docs/measurements/runtime-efficiency/protocol-ablation/inputs.json": {
+      "role": "index",
+      "sha256": "dd52f49bce468b7ca2b1456823e7a3878593e444ab689b8efd75e534d3787881",
+      "size": 2772,
+      "normalized_sha256": "dd52f49bce468b7ca2b1456823e7a3878593e444ab689b8efd75e534d3787881"
+    },
+    "docs/measurements/runtime-efficiency/protocol-ablation/main.patch": {
+      "role": "index",
+      "sha256": "66a378845e6cdf0fa2ee4c58a796b216dd25a34b9644dd876c7de431f429d5cf",
+      "size": 427,
+      "normalized_sha256": "66a378845e6cdf0fa2ee4c58a796b216dd25a34b9644dd876c7de431f429d5cf"
+    },
+    "docs/measurements/runtime-efficiency/protocol-ablation/rpc.jsonl": {
+      "role": "index",
+      "sha256": "415412b329898b9b48e736f02e43adf557ef882f64e6c9bc2ea38bdcd678f55c",
+      "size": 372944,
+      "normalized_sha256": "415412b329898b9b48e736f02e43adf557ef882f64e6c9bc2ea38bdcd678f55c"
+    },
+    "docs/measurements/runtime-efficiency/protocol-ablation/summary.json": {
+      "role": "index",
+      "sha256": "00d2f30de6ac9f437b25720a298014139f45dfc32aa10da49a0eaf45ab429b9d",
+      "size": 11777,
+      "normalized_sha256": "00d2f30de6ac9f437b25720a298014139f45dfc32aa10da49a0eaf45ab429b9d"
+    },
+    "docs/measurements/runtime-efficiency/replacement/metadata.json": {
+      "role": "index",
+      "sha256": "39e700b27b5d04075added10fb2371bc221940862361b199e2b729a70e494737",
+      "size": 5730,
+      "normalized_sha256": "39e700b27b5d04075added10fb2371bc221940862361b199e2b729a70e494737"
+    },
+    "docs/measurements/runtime-efficiency/replacement/samples.jsonl": {
+      "role": "index",
+      "sha256": "f77a6d6a99230ecdb1fd52775f38c73f5547ceba7df1092fa38db61f01e6f861",
+      "size": 10622,
+      "normalized_sha256": "f77a6d6a99230ecdb1fd52775f38c73f5547ceba7df1092fa38db61f01e6f861"
+    },
+    "docs/measurements/runtime-efficiency/replacement/summary.json": {
+      "role": "index",
+      "sha256": "50f6395c346690cd26e0d366c4b9d1599a0ea500fbba8983187d33c02c72254b",
+      "size": 4448,
+      "normalized_sha256": "50f6395c346690cd26e0d366c4b9d1599a0ea500fbba8983187d33c02c72254b"
+    },
+    "docs/measurements/runtime-efficiency/rpc-memory-summary.json": {
+      "role": "index",
+      "sha256": "fe3c98b2ffe0993c8c25bcc9fd04e232d57d2c7b3afff7617c206d66db8c57ed",
+      "size": 103955,
+      "normalized_sha256": "fe3c98b2ffe0993c8c25bcc9fd04e232d57d2c7b3afff7617c206d66db8c57ed"
+    },
+    "docs/measurements/runtime-efficiency/serial-large/inputs.json": {
+      "role": "index",
+      "sha256": "d5bd924952c5cd411b44191f728cf30578ac79928618618e588c68a82888abcc",
+      "size": 2624,
+      "normalized_sha256": "d5bd924952c5cd411b44191f728cf30578ac79928618618e588c68a82888abcc"
+    },
+    "docs/measurements/runtime-efficiency/serial-large/rpc.jsonl": {
+      "role": "index",
+      "sha256": "942272a21ff905dff1264a28ec330ffcbb7d2b8195765989514a1cc962b566ab",
+      "size": 141190,
+      "normalized_sha256": "942272a21ff905dff1264a28ec330ffcbb7d2b8195765989514a1cc962b566ab"
+    },
+    "docs/measurements/runtime-efficiency/serial/inputs.json": {
+      "role": "index",
+      "sha256": "1bc4bc229af996d5d760da8a316d9a3ad8c4a74660b28a77e3595955894d699b",
+      "size": 2632,
+      "normalized_sha256": "1bc4bc229af996d5d760da8a316d9a3ad8c4a74660b28a77e3595955894d699b"
+    },
+    "docs/measurements/runtime-efficiency/serial/rpc.jsonl": {
+      "role": "index",
+      "sha256": "ce0349a7922d09d8aebcdd61a230dd492860ed460098e15fb15989a33749a677",
+      "size": 495287,
+      "normalized_sha256": "ce0349a7922d09d8aebcdd61a230dd492860ed460098e15fb15989a33749a677"
+    },
+    "docs/measurements/runtime-efficiency/source-manifest.json": {
+      "role": "index",
+      "sha256": "b867e15a394321654184cac738b8bcc275cb638fb6fb02efaf0500b0b0ddcaa7",
+      "size": 53184,
+      "normalized_sha256": "b867e15a394321654184cac738b8bcc275cb638fb6fb02efaf0500b0b0ddcaa7"
+    },
+    "docs/measurements/runtime-efficiency/validation/language-binaries.json": {
+      "role": "index",
+      "sha256": "c8e02980bd362ec666da3d30b58d9e5598ed89e415460c071e263687b83b597d",
+      "size": 1067,
+      "normalized_sha256": "c8e02980bd362ec666da3d30b58d9e5598ed89e415460c071e263687b83b597d"
+    },
+    "docs/measurements/runtime-efficiency/validation/language-commands.json": {
+      "role": "index",
+      "sha256": "3dd7ee52f8d5c9086b9634496eabefb34d22bf346c2150a55a14e88f576b819f",
+      "size": 3015,
+      "normalized_sha256": "3dd7ee52f8d5c9086b9634496eabefb34d22bf346c2150a55a14e88f576b819f"
+    },
+    "docs/measurements/runtime-efficiency/validation/language-contracts.json": {
+      "role": "index",
+      "sha256": "5f6d26ad3041dac1dc1d2e127532e00a3cd73f9f046436da223a50b4da9448d3",
+      "size": 3911,
+      "normalized_sha256": "5f6d26ad3041dac1dc1d2e127532e00a3cd73f9f046436da223a50b4da9448d3"
+    },
+    "docs/measurements/runtime-efficiency/validation/language-cross.json": {
+      "role": "index",
+      "sha256": "a29abaa8c0bb6811c5d4a38c41e94a0c14d59a012fb5e18cbd68c0ad2de8a6a9",
+      "size": 4998,
+      "normalized_sha256": "a29abaa8c0bb6811c5d4a38c41e94a0c14d59a012fb5e18cbd68c0ad2de8a6a9"
+    },
+    "docs/measurements/runtime-efficiency/validation/language-migration.json": {
+      "role": "index",
+      "sha256": "a35815ebd4f3461c5f241b590963bb2ac858efe1eb44e5f17e81b1e65312602e",
+      "size": 72370,
+      "normalized_sha256": "a35815ebd4f3461c5f241b590963bb2ac858efe1eb44e5f17e81b1e65312602e"
+    },
+    "docs/measurements/runtime-efficiency/validation/log-provenance.json": {
+      "role": "index",
+      "sha256": "840300a76246765379d7cdd8261a265867b066b927c777c24c0ab3874b85d029",
+      "size": 7062,
+      "normalized_sha256": "840300a76246765379d7cdd8261a265867b066b927c777c24c0ab3874b85d029"
+    },
+    "docs/measurements/runtime-efficiency/validation/summary.json": {
+      "role": "index",
+      "sha256": "1b6be5d4500f75363ae634858a469ceac630f781898d814348150f044bce9eb4",
+      "size": 2029,
+      "normalized_sha256": "1b6be5d4500f75363ae634858a469ceac630f781898d814348150f044bce9eb4"
+    },
     "docs/measurements/test-evidence-pruning.json": {
       "role": "index",
       "sha256": "838c3be24fc4c1dd19df393d418068f5209fe996e2d8af8a4d6e73d6aa53e578",
@@ -3625,9 +3853,9 @@
     },
     "plugins/watch/src/lib.rs": {
       "role": "index",
-      "sha256": "b83ad2e2ad62651d4fbe7ca7c84946cb4a2338c85f38a06a1c823da37a4e2161",
-      "size": 22329,
-      "normalized_sha256": "b83ad2e2ad62651d4fbe7ca7c84946cb4a2338c85f38a06a1c823da37a4e2161"
+      "sha256": "602a9b3204c609e2fa08f06a23903517c5c85b6c66dd05d2669280753cf118e4",
+      "size": 30305,
+      "normalized_sha256": "602a9b3204c609e2fa08f06a23903517c5c85b6c66dd05d2669280753cf118e4"
     },
     "plugins/web-api/Cargo.toml": {
       "role": "index",
