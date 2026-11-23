@@ -363,7 +363,7 @@ impl Controller {
         config: &toml::Table,
     ) -> Result<()> {
         config::instance_name(name)?;
-        if self.configuration.entries(&self.overlay).contains_key(name) {
+        if self.configuration.contains_entry(&self.overlay, name) {
             return Err(parameter("实例名称已经存在"));
         }
         let settings = InstanceSettings {
@@ -394,8 +394,7 @@ impl Controller {
     /// DOC-15 §3.2：按部署叠加规则取得管理操作的当前实例设置。
     fn current(&self, name: &str) -> Result<InstanceSettings> {
         self.configuration
-            .entries(&self.overlay)
-            .remove(name)
+            .entry(&self.overlay, name)
             .ok_or_else(|| WireError::new(4, format!("实例 {name} 缺席")))
     }
 
@@ -429,8 +428,15 @@ impl Controller {
                 }
             }
         }
+        self.installed.retain(|reference, package| {
+            reference == &package.reference
+                && reference.starts_with("installed-")
+                && catalog
+                    .packages
+                    .get(reference)
+                    .is_some_and(|current| current.source == package.source)
+        });
         self.catalog = catalog;
-        self.installed.clear();
         let mut diagnostics = self.diagnostics.lock();
         diagnostics.sources = self.catalog.packages.values().cloned().collect();
         diagnostics.plugin_errors = errors;
@@ -505,20 +511,22 @@ impl Controller {
                 .map(|(name, mounted)| (name, &mounted.settings, &mounted.package)),
         );
         let snapshot = self.manager.snapshot();
+        let descriptors: HashMap<_, _> = snapshot
+            .groups
+            .iter()
+            .flat_map(|group| {
+                group
+                    .plugins
+                    .iter()
+                    .map(move |plugin| ((group.name.as_str(), plugin.name.as_str()), plugin))
+            })
+            .collect();
         for mounted in self.mounted.values() {
-            if let Some(descriptor) = snapshot
-                .groups
-                .iter()
-                .find(|group| group.name == mounted.group)
-                .and_then(|group| {
-                    group
-                        .plugins
-                        .iter()
-                        .find(|plugin| plugin.name == mounted.package.name)
-                })
+            if let Some(descriptor) =
+                descriptors.get(&(mounted.group.as_str(), mounted.package.name.as_str()))
                 && let Some(package) = self.catalog.packages.get_mut(&mounted.package.reference)
             {
-                package.descriptor = Some(descriptor.clone());
+                package.descriptor = Some((*descriptor).clone());
             }
         }
         let mut diagnostics = self.diagnostics.lock();

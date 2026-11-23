@@ -108,3 +108,33 @@ fn managed_member_preserves_future_ancestor_metadata_changes() {
     );
     assert!(overlay.instance["reader"].isolate.is_empty());
 }
+
+#[test]
+fn point_lookup_matches_complete_member_expansion_and_preserves_authority() {
+    let mut configuration = parse(GROUPED.as_bytes()).unwrap();
+    let base = configuration.instance.get_mut("reader").unwrap();
+    base.grants.insert("service@1".into(), vec!["read".into()]);
+    base.forwarder = true;
+    let mut overlay = Overlay::default();
+    let mut member = configuration.entry(&overlay, "reader").unwrap();
+    member.plugin = "replacement".into();
+    overlay
+        .instance
+        .insert("reader".into(), OverlayEntry::from(&member));
+    overlay
+        .instance
+        .insert("added".into(), OverlayEntry::from(&member));
+    overlay.removed.insert("store".into());
+    let all = configuration.entries(&overlay);
+    for name in ["reader", "added", "store", "off", "missing"] {
+        assert_eq!(
+            configuration.contains_entry(&overlay, name),
+            all.contains_key(name)
+        );
+        assert_eq!(configuration.entry(&overlay, name).as_ref(), all.get(name));
+    }
+    assert_eq!(all["reader"].grants["service@1"], ["read"]);
+    assert!(all["reader"].forwarder);
+    assert!(all["added"].grants.is_empty());
+    assert!(!all["added"].forwarder);
+}
