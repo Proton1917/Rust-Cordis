@@ -182,6 +182,63 @@ fn rejected_effect_cleanup_resumes_original_future_on_dispose() {
 }
 
 #[test]
+fn independent_rejected_cleanups_remain_visible_until_each_resumes() {
+    let host = fallible_host();
+    let root = Context::new(host.clone());
+    let healthy = root.inject(Inject::new(), |_| async { Ok(()) }).unwrap();
+    host.executor.finish(healthy.settled()).unwrap();
+    let owners: Vec<_> = (0..2)
+        .map(|_| {
+            let owner = root.inject(Inject::new(), |_| async { Ok(()) }).unwrap();
+            host.executor.finish(owner.settled()).unwrap();
+            owner
+        })
+        .collect();
+    let released = Arc::new(AtomicUsize::new(0));
+    let effects: Vec<_> = owners
+        .iter()
+        .map(|owner| {
+            let clock = root.clone();
+            let released = released.clone();
+            owner
+                .context()
+                .effect("independent cleanup", move |fx| {
+                    fx.defer_async(move || async move {
+                        clock.sleep(Duration::from_millis(1)).await;
+                        released.fetch_add(1, Ordering::SeqCst);
+                        Ok(())
+                    })
+                })
+                .unwrap()
+        })
+        .collect();
+
+    for effect in &effects {
+        host.reject.store(2, Ordering::SeqCst);
+        assert!(host.executor.finish(effect.dispose()).is_err());
+    }
+    assert!(host.executor.finish(root.fiber().settled()).is_err());
+    host.executor.finish(healthy.settled()).unwrap();
+
+    // 再次拒收同一清理后，两个独立暂停任务仍需分别恢复。
+    host.reject.store(2, Ordering::SeqCst);
+    assert!(host.executor.finish(effects[0].dispose()).is_err());
+    for (index, effect) in effects.iter().enumerate() {
+        let resumed = effect.dispose();
+        host.executor.run_until_stalled();
+        host.executor.advance(Duration::from_millis(1));
+        host.executor.finish(resumed).unwrap();
+        assert_eq!(released.load(Ordering::SeqCst), index + 1);
+        host.executor.finish(healthy.settled()).unwrap();
+        if index == 0 {
+            assert!(host.executor.finish(root.fiber().settled()).is_err());
+        }
+    }
+    host.executor.finish(root.fiber().settled()).unwrap();
+    host.executor.finish(root.fiber().dispose()).unwrap();
+}
+
+#[test]
 fn rejected_fiber_cleanup_resumes_original_transition_on_dispose() {
     let host = fallible_host();
     let root = Context::new(host.clone());

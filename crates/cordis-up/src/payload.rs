@@ -240,11 +240,133 @@ pub struct Invoke {
     pub args: Vec<Value>,
     pub refs: Vec<u64>,
 }
+
+impl Invoke {
+    /// DOC-16 §6：转移参数值的所有权，保留既有协议字段和顺序。
+    pub fn into_value(self) -> Value {
+        Value::Map(vec![
+            ("object".into(), self.object.into()),
+            ("method".into(), Value::Text(self.method)),
+            ("args".into(), Value::Array(self.args)),
+            ("refs".into(), reference_values(self.refs)),
+        ])
+    }
+
+    /// 普通协议形状直接转移参数缓冲；其他形状沿用 Serde 的兼容性和错误。
+    pub fn from_value_owned(value: Value) -> Result<Self, ciborium::value::Error> {
+        let names = ["object", "method", "args", "refs"];
+        let indices = plain_fields(&value, &names, true).filter(|indices| {
+            let fields = value.as_map().expect("plain map");
+            unsigned(&fields[indices[0]].1).is_some()
+                && fields[indices[1]].1.as_text().is_some()
+                && fields[indices[2]].1.as_array().is_some()
+                && plain_references(&fields[indices[3]].1)
+        });
+        let Some([object, method, args, refs]) = indices else {
+            return value.deserialized();
+        };
+        let mut fields = value.into_map().expect("plain map");
+        Ok(Self {
+            object: unsigned(&fields[object].1).expect("plain u64"),
+            method: take_field(&mut fields, method)
+                .into_text()
+                .expect("plain text"),
+            args: take_field(&mut fields, args)
+                .into_array()
+                .expect("plain array"),
+            refs: take_references(take_field(&mut fields, refs)),
+        })
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct InvokeResult {
     pub value: Value,
     pub refs: Vec<u64>,
 }
+
+impl InvokeResult {
+    /// DOC-16 §6：转移返回值的所有权，资源提交仍由发送方的守卫负责。
+    pub fn into_value(self) -> Value {
+        Value::Map(vec![
+            ("value".into(), self.value),
+            ("refs".into(), reference_values(self.refs)),
+        ])
+    }
+
+    /// 普通协议形状直接转移返回值缓冲；其他形状沿用 Serde 的兼容性和错误。
+    pub fn from_value_owned(value: Value) -> Result<Self, ciborium::value::Error> {
+        let indices = plain_fields(&value, &["value", "refs"], false)
+            .filter(|indices| plain_references(&value.as_map().expect("plain map")[indices[1]].1));
+        let Some([result, refs]) = indices else {
+            return value.deserialized();
+        };
+        let mut fields = value.into_map().expect("plain map");
+        Ok(Self {
+            value: take_field(&mut fields, result),
+            refs: take_references(take_field(&mut fields, refs)),
+        })
+    }
+}
+
+// The fast path covers the ordinary field representation emitted above. Tagged
+// fields, extended records and malformed input retain the existing deserializer.
+// The negotiated invocation budget is an ignored extension of the Invoke DTO.
+fn plain_fields<const N: usize>(
+    value: &Value,
+    names: &[&str; N],
+    invoke_budget: bool,
+) -> Option<[usize; N]> {
+    let fields = value.as_map()?;
+    let mut indices = [usize::MAX; N];
+    for (index, (key, value)) in fields.iter().enumerate() {
+        let name = key.as_text()?;
+        if let Some(field) = names.iter().position(|expected| *expected == name) {
+            if indices[field] != usize::MAX {
+                return None;
+            }
+            indices[field] = index;
+        } else if invoke_budget && name == "budget_ms" {
+            value.deserialized::<serde::de::IgnoredAny>().ok()?;
+        } else {
+            return None;
+        }
+    }
+    indices
+        .iter()
+        .all(|index| *index != usize::MAX)
+        .then_some(indices)
+}
+
+fn unsigned(value: &Value) -> Option<u64> {
+    value
+        .as_integer()
+        .and_then(|integer| u64::try_from(integer).ok())
+}
+
+fn plain_references(value: &Value) -> bool {
+    value
+        .as_array()
+        .is_some_and(|values| values.iter().all(|value| unsigned(value).is_some()))
+}
+
+fn take_field(fields: &mut [(Value, Value)], index: usize) -> Value {
+    std::mem::replace(&mut fields[index].1, Value::Null)
+}
+
+fn reference_values(refs: Vec<u64>) -> Value {
+    Value::Array(refs.into_iter().map(Value::from).collect())
+}
+
+fn take_references(value: Value) -> Vec<u64> {
+    value
+        .into_array()
+        .expect("plain reference array")
+        .into_iter()
+        .map(|value| unsigned(&value).expect("plain u64"))
+        .collect()
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Effect {
     pub context: u64,

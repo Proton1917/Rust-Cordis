@@ -1,0 +1,18 @@
+{
+  "purpose": "Protocol-runtime ablation: identical optimized code; two protocol workers vs main-thread current_thread.",
+  "original_main_sha256": "d07bc38b626ad1a517fec8320ab7201dcbbce2c5f1782894114a42586215c4aa",
+  "variant_main_sha256": "72c087e9bd6a7557cfddd88f185105e29e28219a7466ebe1e333e9e4a174ea45",
+  "command": [
+    "cargo",
+    "build",
+    "--release",
+    "--locked",
+    "--offline",
+    "-p",
+    "cordis-host"
+  ],
+  "exit_code": 0,
+  "host_sha256": "be9f3367413036c55fb1cc2c097dde9a92cba2a50c0c154217692261cef55d96",
+  "restored_main_sha256": "d07bc38b626ad1a517fec8320ab7201dcbbce2c5f1782894114a42586215c4aa",
+  "elapsed_seconds": 10.138262450000184
+}

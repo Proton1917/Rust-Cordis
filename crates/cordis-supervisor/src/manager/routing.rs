@@ -114,19 +114,23 @@ impl Manager {
         for argument in &args {
             payload::persistent_value(argument).map_err(|problem| error(2, problem.to_string()))?;
         }
-        let response = route
-            .during(object.peer().request(
-                "invoke",
-                value(&payload::Invoke {
-                    object: object.id(),
-                    method: method.into(),
-                    args,
-                    refs: Vec::new(),
-                })?,
-                self.0.options.invoke_timeout,
-            ))
+        let mut response = route
+            .during(
+                object.peer().request(
+                    "invoke",
+                    payload::Invoke {
+                        object: object.id(),
+                        method: method.into(),
+                        args,
+                        refs: Vec::new(),
+                    }
+                    .into_value(),
+                    self.0.options.invoke_timeout,
+                ),
+            )
             .await?;
-        let result: payload::InvokeResult = decode(response.value())?;
+        let result = payload::InvokeResult::from_value_owned(response.take_value())
+            .map_err(|problem| error(2, problem.to_string()))?;
         payload::persistent_value(&result.value)
             .map_err(|problem| error(2, problem.to_string()))?;
         Ok(result.value)
@@ -356,20 +360,24 @@ impl Manager {
         object: &RemoteObject,
         meta: &Value,
     ) -> Result<Arc<Route>> {
-        let output = binding
+        let mut output = binding
             .route
-            .during(object.peer().request(
-                "invoke",
-                value(&payload::Invoke {
-                    object: object.id(),
-                    method: "cordis.scope".into(),
-                    args: vec![meta.clone()],
-                    refs: Vec::new(),
-                })?,
-                self.0.options.invoke_timeout,
-            ))
+            .during(
+                object.peer().request(
+                    "invoke",
+                    payload::Invoke {
+                        object: object.id(),
+                        method: "cordis.scope".into(),
+                        args: vec![meta.clone()],
+                        refs: Vec::new(),
+                    }
+                    .into_value(),
+                    self.0.options.invoke_timeout,
+                ),
+            )
             .await?;
-        let result: payload::InvokeResult = decode(output.value())?;
+        let result = payload::InvokeResult::from_value_owned(output.take_value())
+            .map_err(|problem| error(2, problem.to_string()))?;
         let reference: payload::ObjectRef = decode(&result.value)?;
         let scoped = Route::remote(
             output.import(reference.0)?,

@@ -1,0 +1,146 @@
+{
+  "rust": {
+    "finished": true,
+    "passed": true,
+    "stage": 1,
+    "assertions": [
+      {
+        "name": "suite.get.missing",
+        "passed": true,
+        "message": "预期 None，实际 None"
+      },
+      {
+        "name": "suite.put.bytes",
+        "passed": true,
+        "message": "预期 Some([0, 127, 255])，实际 Some([0, 127, 255])"
+      },
+      {
+        "name": "suite.put.overwrite",
+        "passed": true,
+        "message": "预期 Some([2])，实际 Some([2])"
+      },
+      {
+        "name": "suite.keys.sorted",
+        "passed": true,
+        "message": "预期 [\"alpha\", \"beta\"]，实际 [\"alpha\", \"beta\"]"
+      },
+      {
+        "name": "suite.flush.read",
+        "passed": true,
+        "message": "预期 Some([0, 127, 255])，实际 Some([0, 127, 255])"
+      },
+      {
+        "name": "suite.state.values",
+        "passed": true,
+        "message": "预期 Some([0, 127, 255])，实际 Some([0, 127, 255])"
+      },
+      {
+        "name": "suite.state.overwrite",
+        "passed": true,
+        "message": "预期 Some([2])，实际 Some([2])"
+      },
+      {
+        "name": "suite.state.keys",
+        "passed": true,
+        "message": "预期 [\"alpha\", \"beta\"]，实际 [\"alpha\", \"beta\"]"
+      }
+    ],
+    "error": null
+  },
+  "python": {
+    "finished": true,
+    "passed": true,
+    "stage": 1,
+    "assertions": [
+      {
+        "name": "suite.get.missing",
+        "passed": true,
+        "message": "预期 None，实际 None"
+      },
+      {
+        "name": "suite.put.bytes",
+        "passed": true,
+        "message": "预期 Some([0, 127, 255])，实际 Some([0, 127, 255])"
+      },
+      {
+        "name": "suite.put.overwrite",
+        "passed": true,
+        "message": "预期 Some([2])，实际 Some([2])"
+      },
+      {
+        "name": "suite.keys.sorted",
+        "passed": true,
+        "message": "预期 [\"alpha\", \"beta\"]，实际 [\"alpha\", \"beta\"]"
+      },
+      {
+        "name": "suite.flush.read",
+        "passed": true,
+        "message": "预期 Some([0, 127, 255])，实际 Some([0, 127, 255])"
+      },
+      {
+        "name": "suite.state.values",
+        "passed": true,
+        "message": "预期 Some([0, 127, 255])，实际 Some([0, 127, 255])"
+      },
+      {
+        "name": "suite.state.overwrite",
+        "passed": true,
+        "message": "预期 Some([2])，实际 Some([2])"
+      },
+      {
+        "name": "suite.state.keys",
+        "passed": true,
+        "message": "预期 [\"alpha\", \"beta\"]，实际 [\"alpha\", \"beta\"]"
+      }
+    ],
+    "error": null
+  },
+  "typescript": {
+    "finished": true,
+    "passed": true,
+    "stage": 1,
+    "assertions": [
+      {
+        "name": "suite.get.missing",
+        "passed": true,
+        "message": "预期 None，实际 None"
+      },
+      {
+        "name": "suite.put.bytes",
+        "passed": true,
+        "message": "预期 Some([0, 127, 255])，实际 Some([0, 127, 255])"
+      },
+      {
+        "name": "suite.put.overwrite",
+        "passed": true,
+        "message": "预期 Some([2])，实际 Some([2])"
+      },
+      {
+        "name": "suite.keys.sorted",
+        "passed": true,
+        "message": "预期 [\"alpha\", \"beta\"]，实际 [\"alpha\", \"beta\"]"
+      },
+      {
+        "name": "suite.flush.read",
+        "passed": true,
+        "message": "预期 Some([0, 127, 255])，实际 Some([0, 127, 255])"
+      },
+      {
+        "name": "suite.state.values",
+        "passed": true,
+        "message": "预期 Some([0, 127, 255])，实际 Some([0, 127, 255])"
+      },
+      {
+        "name": "suite.state.overwrite",
+        "passed": true,
+        "message": "预期 Some([2])，实际 Some([2])"
+      },
+      {
+        "name": "suite.state.keys",
+        "passed": true,
+        "message": "预期 [\"alpha\", \"beta\"]，实际 [\"alpha\", \"beta\"]"
+      }
+    ],
+    "error": null
+  }
+}

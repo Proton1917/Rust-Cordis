@@ -1,0 +1,8 @@
+diff --git a/crates/cordis-host/src/main.rs b/crates/cordis-host/src/main.rs
+index 6bc9db7..af47044 100644
+--- a/crates/cordis-host/src/main.rs
++++ b/crates/cordis-host/src/main.rs
+@@ -53 +53,2 @@ struct Arguments {
+-#[tokio::main(flavor = "multi_thread", worker_threads = 2)]
++// 协议任务在主线程推进；插件执行、同步等待和析构由独立原生线程池承载。
++#[tokio::main(flavor = "current_thread")]

@@ -50,7 +50,8 @@ struct Arguments {
     max_frame: usize,
 }
 
-#[tokio::main(flavor = "multi_thread", worker_threads = 2)]
+// 协议任务在主线程推进；插件执行、同步等待和析构由独立原生线程池承载。
+#[tokio::main(flavor = "current_thread")]
 async fn main() {
     let code = match run(Arguments::parse()).await {
         Ok(code) => code,

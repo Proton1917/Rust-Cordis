@@ -363,6 +363,9 @@ impl Effect {
     }
 
     fn dispatch_error(&self, state: &State) -> Option<Error> {
+        if state.suspended_cleanups == 0 {
+            return None;
+        }
         let mut pending = vec![self.id];
         while let Some(id) = pending.pop() {
             if let Some(data) = state.effects.get(id) {
@@ -473,6 +476,9 @@ impl Effect {
         };
         let waiters = {
             let mut state = self.kernel.state.lock();
+            if state.effects[self.id].dispatch_error.is_none() {
+                state.suspended_cleanups += 1;
+            }
             let data = &mut state.effects[self.id];
             data.suspended = Some(task);
             data.dispatch_error = Some(failure.error);
@@ -494,8 +500,10 @@ impl Effect {
     pub(crate) fn resume_cleanup(&self) {
         let task = {
             let mut state = self.kernel.state.lock();
+            if state.effects[self.id].dispatch_error.take().is_some() {
+                state.suspended_cleanups -= 1;
+            }
             let data = &mut state.effects[self.id];
-            data.dispatch_error = None;
             data.suspended.take()
         };
         if let Some(task) = task {

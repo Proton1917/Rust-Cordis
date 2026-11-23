@@ -1,0 +1,116 @@
+[
+  {
+    "path": "payload.stdout.log",
+    "original_sha256": "20f3fd77e0686e384ad799d4edb5bac7c4705f6e9f50eaa62511f2599ec97ba3",
+    "stored_sha256": "8de5010af319470d53807494ff00f6d381557880151680231d5e4a58f720730d",
+    "normalization": "Trim trailing horizontal whitespace and empty lines at EOF; preserve all log messages and JSON values."
+  },
+  {
+    "path": "replacement/measured-001-baseline.stderr.log",
+    "original_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stored_sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+    "normalization": "Trim trailing horizontal whitespace and empty lines at EOF; preserve all log messages and JSON values."
+  },
+  {
+    "path": "replacement/measured-001-baseline.stdout.log",
+    "original_sha256": "1380b7f5073f5a7629af3c2cbe647460de31fc659413445e2484329312b130e2",
+    "stored_sha256": "61980c4c57e2d1bd500a461747e6aea2db9303fa0a82bf67f6984bff59b15a7c",
+    "normalization": "Trim trailing horizontal whitespace and empty lines at EOF; preserve all log messages and JSON values."
+  },
+  {
+    "path": "replacement/measured-001-candidate.stderr.log",
+    "original_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stored_sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+    "normalization": "Trim trailing horizontal whitespace and empty lines at EOF; preserve all log messages and JSON values."
+  },
+  {
+    "path": "replacement/measured-001-candidate.stdout.log",
+    "original_sha256": "12107ceb6dfa59720e818105ce560b418ccadf11a0a209be606ba67f59799273",
+    "stored_sha256": "ec6ff80187a7487a27b745f1ccd8286403a2c36bb83beb0d6f31220086f92184",
+    "normalization": "Trim trailing horizontal whitespace and empty lines at EOF; preserve all log messages and JSON values."
+  },
+  {
+    "path": "replacement/measured-002-baseline.stderr.log",
+    "original_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stored_sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+    "normalization": "Trim trailing horizontal whitespace and empty lines at EOF; preserve all log messages and JSON values."
+  },
+  {
+    "path": "replacement/measured-002-baseline.stdout.log",
+    "original_sha256": "0de1bb4694cb817be4d79ce93059f73da9087f016e54a85ce25a4ba256c280b7",
+    "stored_sha256": "c33e01e355ac72c427b72889f6de39dcf471970dac78d38d64010cbab69925ae",
+    "normalization": "Trim trailing horizontal whitespace and empty lines at EOF; preserve all log messages and JSON values."
+  },
+  {
+    "path": "replacement/measured-002-candidate.stderr.log",
+    "original_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stored_sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+    "normalization": "Trim trailing horizontal whitespace and empty lines at EOF; preserve all log messages and JSON values."
+  },
+  {
+    "path": "replacement/measured-002-candidate.stdout.log",
+    "original_sha256": "a721c9f7248bf287f85c7f5b0734b6dda9184e61cb1f81e03d292bb21a7561d9",
+    "stored_sha256": "ca08d96d092e751c6a241ccee6f1bb640cac9fcdc002b06248888377864e8033",
+    "normalization": "Trim trailing horizontal whitespace and empty lines at EOF; preserve all log messages and JSON values."
+  },
+  {
+    "path": "replacement/measured-003-baseline.stderr.log",
+    "original_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stored_sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+    "normalization": "Trim trailing horizontal whitespace and empty lines at EOF; preserve all log messages and JSON values."
+  },
+  {
+    "path": "replacement/measured-003-baseline.stdout.log",
+    "original_sha256": "3c47112d9752c1936dd4354dc758973532268e79c13087380062d757e1d7d04c",
+    "stored_sha256": "401709a966742e28fa9bffd4345596c21a96f863732af2be0da3356f245f772e",
+    "normalization": "Trim trailing horizontal whitespace and empty lines at EOF; preserve all log messages and JSON values."
+  },
+  {
+    "path": "replacement/measured-003-candidate.stderr.log",
+    "original_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stored_sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+    "normalization": "Trim trailing horizontal whitespace and empty lines at EOF; preserve all log messages and JSON values."
+  },
+  {
+    "path": "replacement/measured-003-candidate.stdout.log",
+    "original_sha256": "354094c979ca6e4272a3e10c481cccc79a1dd4806a2339395eb74ab7ddc41780",
+    "stored_sha256": "78207e810b7cece589eee883568b8d130944863eb0b88c2e0e3562ee9e625181",
+    "normalization": "Trim trailing horizontal whitespace and empty lines at EOF; preserve all log messages and JSON values."
+  },
+  {
+    "path": "replacement/warmup-001-baseline.stderr.log",
+    "original_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stored_sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+    "normalization": "Trim trailing horizontal whitespace and empty lines at EOF; preserve all log messages and JSON values."
+  },
+  {
+    "path": "replacement/warmup-001-baseline.stdout.log",
+    "original_sha256": "9d48f3522388ecc9ed52a228d0435674a9e8153264642ce1e7deaa62647a6041",
+    "stored_sha256": "fa6c3386eb4bb9328a9b93fbd6b67678f00ce4d6b6fd6a61b7c690ba56890b39",
+    "normalization": "Trim trailing horizontal whitespace and empty lines at EOF; preserve all log messages and JSON values."
+  },
+  {
+    "path": "replacement/warmup-001-candidate.stderr.log",
+    "original_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stored_sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+    "normalization": "Trim trailing horizontal whitespace and empty lines at EOF; preserve all log messages and JSON values."
+  },
+  {
+    "path": "replacement/warmup-001-candidate.stdout.log",
+    "original_sha256": "93c9baf2063e34f784b55f09752e7e479259aabd8aac6404294517edef6680fc",
+    "stored_sha256": "070d6bd9ef403ccb708ebd4869bad6e969bbe21d7ae728656fb5ec3baa0646ca",
+    "normalization": "Trim trailing horizontal whitespace and empty lines at EOF; preserve all log messages and JSON values."
+  },
+  {
+    "path": "validation/correctness.log",
+    "original_sha256": "70070dae3fe30cb53ec0e54b2eb052f3996dada6a06d515e697d37379344ddb7",
+    "stored_sha256": "3f33c1a419b6b8a7ca84fd32216c9554fa4f8402ad420b77b35af54623e4756b",
+    "normalization": "Trim trailing horizontal whitespace and empty lines at EOF; preserve all log messages and JSON values."
+  },
+  {
+    "path": "validation/runtime.log",
+    "original_sha256": "e7843f5d2200580ba0ac4e1aeec82268b363a3348f620b069f667a6dc9552577",
+    "stored_sha256": "37b4832e7e3bd6d3351f58e43cf48e3e76ca2abb990b907f1a75b6f8c8cd9d31",
+    "normalization": "Trim trailing horizontal whitespace and empty lines at EOF; preserve all log messages and JSON values."
+  }
+]

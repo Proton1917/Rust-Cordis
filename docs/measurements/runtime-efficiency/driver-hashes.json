@@ -1,0 +1,6 @@
+{
+  "benchmarks/deployment/rpc.py": "0a21ac821b8c5c743f5358ac802b7db6361aedaf5ee3d520df5c25b109a7e061",
+  "benchmarks/deployment/replacement.py": "e28960f2fa241ed77d2789510a5ce800b5cf21982df2bc08e85cbd84a1fd33bf",
+  "benchmarks/deployment/memory.py": "3710de2530b20335811d2cf1e98ffad0687e02fb162c606d9920aadb959d7546",
+  "benchmarks/multilanguage/measure.py": "9d1760016b9bf74124d28bdc1aee65e811312c981024a7660108980e58025dca"
+}

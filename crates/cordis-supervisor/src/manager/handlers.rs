@@ -40,12 +40,14 @@ impl Handler for Manager {
         &self,
         connection: Connection,
         method: String,
-        params: Payload,
+        mut params: Payload,
     ) -> HandlerFuture<'_, Result<Outgoing>> {
         Box::pin(async move {
             let output = match method.as_str() {
                 "provide" | "get" | "invoke" | "object_info" => {
-                    return self.service_request(&connection, &method, &params).await;
+                    return self
+                        .service_request(&connection, &method, &mut params)
+                        .await;
                 }
                 "effect" | "defer" | "effect_settled" | "effect_dispose" | "effect_release" => {
                     return self.effect_request(&connection, &method, &params).await;
@@ -123,7 +125,7 @@ impl Manager {
         &self,
         connection: &Connection,
         method: &str,
-        params: &Payload,
+        params: &mut Payload,
     ) -> Result<Outgoing> {
         let output = match method {
             "provide" => {
@@ -148,8 +150,13 @@ impl Manager {
             }
             "invoke" => {
                 return cordis_up::rpc::bound_invocation(self.0.options.invoke_timeout, async {
-                    self.invoke(connection, request(connection, params)?, params)
-                        .await
+                    let request = payload::Invoke::from_value_owned(params.take_value()).map_err(
+                        |problem| {
+                            connection.terminate("UP/1方法参数结构错误");
+                            error(2, problem.to_string())
+                        },
+                    )?;
+                    self.invoke(connection, request, params).await
                 })
                 .await;
             }

@@ -22,6 +22,11 @@ type Ended = watch::Receiver<Option<String>>;
 type Notification = (Connection, String, Payload);
 pub type HandlerFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
+struct PendingReply {
+    sender: Reply,
+    owns_deadline: bool,
+}
+
 const INVOKE_BUDGET_CAPABILITY: &str = "invoke_budget_v1";
 const INVOKE_BUDGET_FIELD: &str = "budget_ms";
 
@@ -160,7 +165,7 @@ struct Inner {
     id: u64,
     options: ConnectionOptions,
     send: mpsc::Sender<Outbound>,
-    pending: Mutex<HashMap<u64, Reply>>,
+    pending: Mutex<HashMap<u64, PendingReply>>,
     inbound: Mutex<HashMap<u64, Option<oneshot::Sender<()>>>>,
     next: AtomicU64,
     alive: AtomicBool,
@@ -171,6 +176,29 @@ struct Inner {
 }
 
 impl Inner {
+    // Claim and account for completion under the same pending lock. None means
+    // cancellation without a health outcome; callers terminate only after return.
+    fn claim_pending(&self, id: u64, timed_out: Option<bool>) -> (Option<PendingReply>, bool) {
+        let mut pending = self.pending.lock();
+        let Some(reply) = pending.remove(&id) else {
+            return (None, false);
+        };
+        let stop = match timed_out {
+            Some(timed_out) if !timed_out || reply.owns_deadline => {
+                let mut count = self.timeouts.lock();
+                if timed_out {
+                    *count = count.saturating_add(1);
+                    *count >= self.options.consecutive_timeouts
+                } else {
+                    *count = 0;
+                    false
+                }
+            }
+            _ => false,
+        };
+        (Some(reply), stop)
+    }
+
     fn fail(&self, reason: impl Into<String>) {
         if !self.alive.swap(false, Ordering::AcqRel) {
             return;
@@ -180,7 +208,7 @@ impl Inner {
         let inbound = std::mem::take(&mut *self.inbound.lock());
         drop(inbound);
         for (_, reply) in pending {
-            let _receiver = reply.send(Err(error(4, reason.clone())));
+            let _receiver = reply.sender.send(Err(error(4, reason.clone())));
         }
         self.permits.close();
         self.ended.send_replace(Some(reason));
@@ -198,6 +226,7 @@ pub struct Outgoing {
 }
 
 struct Outbound {
+    // 帧头与消息体共用缓冲，写端按完整帧推进部分写入。
     bytes: Vec<u8>,
     after_write: Option<Box<dyn FnOnce() + Send>>,
 }
@@ -281,6 +310,12 @@ impl Payload {
 
     pub fn value(&self) -> &Value {
         &self.value
+    }
+
+    /// 转交业务值，引用租约仍由本载荷和已导入的对象持有。
+    /// 调用方在完成资源导入前保留本载荷；再次取值返回 `Value::Null`。
+    pub fn take_value(&mut self) -> Value {
+        std::mem::replace(&mut self.value, Value::Null)
     }
 
     pub fn import(&self, id: u64) -> Result<RemoteObject> {
@@ -380,8 +415,10 @@ impl Connection {
     }
 
     async fn send(&self, message: Message, outgoing: Outgoing) -> Result<()> {
-        let bytes = crate::encode(&message, &self.0.options.limits)
+        let bytes = crate::codec::encode_frame(&message, &self.0.options.limits)
             .map_err(|problem| encoding_error(problem, &describe(&message)))?;
+        // 等待发送容量时只保留编码结果，业务值的生命周期止于编码完成。
+        drop(message);
         self.send_bytes(bytes, outgoing).await
     }
 
@@ -404,7 +441,9 @@ impl Connection {
             Err(problem) => (Err(problem), Outgoing::new(Value::Null)),
         };
         let message = Message::Response { id, result };
-        match crate::encode(&message, &self.0.options.limits) {
+        let encoded = crate::codec::encode_frame(&message, &self.0.options.limits);
+        drop(message);
+        match encoded {
             Ok(bytes) => self.send_bytes(bytes, outgoing).await,
             Err(problem) => {
                 drop(outgoing);
@@ -460,7 +499,7 @@ impl Connection {
                     Value::from(u64::try_from(remaining.max(1)).unwrap_or(u64::MAX)),
                 );
             }
-            let bytes = crate::encode(
+            let bytes = crate::codec::encode_frame(
                 &Message::Request {
                     id,
                     method: method.into(),
@@ -478,15 +517,25 @@ impl Connection {
                 if !self.is_alive() {
                     return Err(error(4, "插件进程已结束"));
                 }
-                pending.insert(id, send);
+                pending.insert(
+                    id,
+                    PendingReply {
+                        sender: send,
+                        owns_deadline: deadline == own_deadline,
+                    },
+                );
             }
             let _pending = Pending { peer: self, id };
             permit.send(outgoing.sent(bytes));
-            receive.await.map_err(|_| error(4, "插件请求已结束"))?
+            // 本地排队或编码错误不作为远端响应重置连续超时计数。
+            receive.await.map_err(|_| error(4, "插件请求已结束"))
         };
-        let result = timeout_at(deadline, operation).await;
+        // Keep the operation alive until timeout processing claims its pending
+        // entry. Response reception and local expiry then count each request once.
+        let mut operation = std::pin::pin!(operation);
+        let result = timeout_at(deadline, &mut operation).await;
         match result {
-            Ok(result) => {
+            Ok(Ok(result)) => {
                 if method == "hello"
                     && result.as_ref().is_ok_and(|reply| {
                         parameter_field(reply.value(), INVOKE_BUDGET_CAPABILITY)
@@ -497,18 +546,26 @@ impl Connection {
                 }
                 result
             }
+            Ok(Err(problem)) => Err(problem),
             Err(_) => {
-                let stop = deadline == own_deadline && {
-                    let mut count = self.0.timeouts.lock();
-                    *count += 1;
-                    *count >= self.0.options.consecutive_timeouts
-                };
-                if stop {
-                    self.0.fail("插件连续请求超时");
-                }
+                self.cancel_pending(id, true);
                 Err(error(6, "插件请求超过截止时间"))
             }
         }
+    }
+
+    fn cancel_pending(&self, id: u64, timed_out: bool) {
+        let (removed, stop) = self.0.claim_pending(id, timed_out.then_some(true));
+        if stop {
+            self.0.fail("插件连续请求超时");
+        }
+        if removed.is_none() {
+            return;
+        }
+        let _closed = self.try_notify(
+            "cancel",
+            Value::Map(vec![(Value::Text("id".into()), Value::Integer(id.into()))]),
+        );
     }
 
     pub async fn notify(&self, method: &str, params: impl Into<Outgoing>) -> Result<()> {
@@ -529,7 +586,7 @@ impl Connection {
         if !self.is_alive() {
             return Err(error(4, "插件进程已结束"));
         }
-        let bytes = crate::encode(
+        let bytes = crate::codec::encode_frame(
             &Message::Notification {
                 method: method.into(),
                 params: outgoing.take_value(),
@@ -565,9 +622,6 @@ async fn write_frames<W: AsyncWrite + Unpin>(
             frame = outbound.recv() => match frame { Some(frame) => frame, None => break },
         };
         let write = async {
-            output
-                .write_all(&(frame.bytes.len() as u32).to_be_bytes())
-                .await?;
             output.write_all(&frame.bytes).await?;
             output.flush().await
         };
@@ -714,10 +768,17 @@ fn receive_response(peer: &Connection, id: u64, result: Result<Value>) -> bool {
         },
         Err(problem) => Err(problem),
     };
-    let sender = peer.0.pending.lock().remove(&id);
-    if let Some(sender) = sender {
-        *peer.0.timeouts.lock() = 0;
-        let _receiver = sender.send(result);
+    // Account for the wire response before waking its caller. A caller may
+    // defer polling without hiding a healthy response from connection health.
+    let (reply, stop) = peer.0.claim_pending(
+        id,
+        Some(result.as_ref().is_err_and(|problem| problem.code == 6)),
+    );
+    if stop {
+        peer.0.fail("插件连续请求超时");
+    }
+    if let Some(reply) = reply {
+        let _receiver = reply.sender.send(result);
     }
     true
 }
@@ -914,16 +975,7 @@ struct Pending<'a> {
 
 impl Drop for Pending<'_> {
     fn drop(&mut self) {
-        let removed = self.peer.0.pending.lock().remove(&self.id);
-        if removed.is_some() {
-            let _closed = self.peer.try_notify(
-                "cancel",
-                Value::Map(vec![(
-                    Value::Text("id".into()),
-                    Value::Integer(self.id.into()),
-                )]),
-            );
-        }
+        self.peer.cancel_pending(self.id, false);
     }
 }
 
