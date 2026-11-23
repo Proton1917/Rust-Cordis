@@ -1,4 +1,6 @@
-//! DOC-15 §3.2：以序号复制插件来源，按完整字节比较复用已安装副本。
+//! DOC-15 §3.2：内容索引定位候选，完整字节比较决定安装引用的复用。
+
+mod index;
 
 use crate::{
     config::{Result, parameter},
@@ -33,16 +35,18 @@ pub fn install(source: &Path, project: &Path, data: &Path, plugins: &Path) -> Re
         .open(plugins.join(".install.lock"))
         .map_err(io_error)?;
     ownership.lock().map_err(io_error)?;
-    let (existing, sequence) = installed_reference(&source, plugins)?;
-    if let Some(reference) = existing {
+    let mut inventory = index::Inventory::open(plugins)?;
+    if let Some(reference) = inventory.find(&source, plugins)? {
         let installed = plugins.join(&reference);
         // A copy found after an interrupted publication may be readable but not durable.
         sync_tree(&installed)?;
         sync_path(plugins)?;
         copy_receipt(&source, &installed)?;
+        inventory.save(plugins)?;
         return Ok(reference);
     }
-    let next = sequence
+    let next = inventory
+        .sequence
         .checked_add(1)
         .ok_or_else(|| parameter("插件安装序号已耗尽"))?;
     let suffix = if source.is_file() {
@@ -61,6 +65,8 @@ pub fn install(source: &Path, project: &Path, data: &Path, plugins: &Path) -> Re
         &plugins.join(&reference),
     )?;
     copy_receipt(&source, &plugins.join(&reference))?;
+    inventory.insert(&reference, plugins)?;
+    inventory.save(plugins)?;
     Ok(reference)
 }
 
@@ -87,33 +93,6 @@ fn copy_receipt(source: &Path, destination: &Path) -> Result<()> {
         return sync_path(destination.parent().expect("receipt parent"));
     }
     publish_copy(&source, &destination.with_extension("next"), &destination)
-}
-
-/// DOC-15 §3.2：接续既有安装序号，并按完整内容查找可复用的安装引用。
-fn installed_reference(source: &Path, plugins: &Path) -> Result<(Option<String>, u64)> {
-    let mut sequence = 0u64;
-    for entry in fs::read_dir(plugins).map_err(io_error)? {
-        let entry = entry.map_err(io_error)?;
-        let name = entry.file_name();
-        let Some(name) = name.to_str() else {
-            continue;
-        };
-        let installed = name.strip_prefix("installed-");
-        let Some(number) = installed
-            .or_else(|| name.strip_prefix(".install-"))
-            .and_then(|name| name.split('.').next())
-        else {
-            continue;
-        };
-        let Ok(number) = number.parse::<u64>() else {
-            continue;
-        };
-        sequence = sequence.max(number);
-        if installed.is_some() && equal(source, &entry.path())? {
-            return Ok((Some(name.to_owned()), sequence));
-        }
-    }
-    Ok((None, sequence))
 }
 
 /// DOC-15 §3.2：复制完整来源后发布引用，失败只清理该次暂存路径。
@@ -149,6 +128,8 @@ fn publish_copy(source: &Path, staged: &Path, destination: &Path) -> Result<()> 
 #[cfg(test)]
 thread_local! {
     static SYNC_FAILURE: std::cell::RefCell<Option<PathBuf>> = const { std::cell::RefCell::new(None) };
+    static COMPARED_BYTES: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+    static COMPARED_FILES: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
 }
 
 fn sync_path(path: &Path) -> Result<()> {
@@ -250,6 +231,8 @@ fn equal_entry(left: &Path, right: &Path, left_root: &Path, right_root: &Path) -
     let left_kind = fs::symlink_metadata(left).map_err(io_error)?.file_type();
     let right_kind = fs::symlink_metadata(right).map_err(io_error)?.file_type();
     if left_kind.is_file() && right_kind.is_file() {
+        #[cfg(test)]
+        COMPARED_FILES.with(|count| count.set(count.get() + 2));
         let mut left = File::open(left).map_err(io_error)?;
         let mut right = File::open(right).map_err(io_error)?;
         if left.metadata().map_err(io_error)?.len() != right.metadata().map_err(io_error)?.len() {
@@ -265,6 +248,8 @@ fn equal_entry(left: &Path, right: &Path, left_root: &Path, right_root: &Path) -
             right
                 .read_exact(&mut right_bytes[..count])
                 .map_err(io_error)?;
+            #[cfg(test)]
+            COMPARED_BYTES.with(|total| total.set(total.get() + 2 * count as u64));
             if left_bytes[..count] != right_bytes[..count] {
                 return Ok(false);
             }
@@ -410,26 +395,52 @@ mod tests {
         let root = root.canonicalize().unwrap();
         let plugins = root.join("plugins");
         fs::create_dir(&plugins).unwrap();
-        let sources = [root.join("first.so"), root.join("second.so")];
-        for path in &sources {
-            fs::write(path, path.file_name().unwrap().as_encoded_bytes()).unwrap();
-        }
+        let project = root.join("project");
+        let data = [root.join("first-state"), root.join("second-state")];
+        fs::create_dir(&project).unwrap();
+        let sources = data.each_ref().map(|directory| {
+            fs::create_dir(directory).unwrap();
+            let source = directory.join("plugin.so");
+            fs::write(&source, directory.file_name().unwrap().as_encoded_bytes()).unwrap();
+            source
+        });
         let start = Barrier::new(sources.len());
-        std::thread::scope(|scope| {
+        let references = std::thread::scope(|scope| {
             let jobs: Vec<_> = sources
                 .iter()
-                .map(|path| {
+                .zip(&data)
+                .map(|(path, data)| {
                     scope.spawn(|| {
                         start.wait();
-                        install(path, &root, &root, &plugins).unwrap()
+                        install(path, &project, data, &plugins).unwrap()
                     })
                 })
                 .collect();
-            for (job, source) in jobs.into_iter().zip(&sources) {
-                let installed = plugins.join(job.join().unwrap());
-                assert_eq!(fs::read(installed).unwrap(), fs::read(source).unwrap());
-            }
+            jobs.into_iter()
+                .map(|job| job.join().unwrap())
+                .collect::<Vec<_>>()
         });
+        for (reference, source) in references.iter().zip(&sources) {
+            assert_eq!(
+                fs::read(plugins.join(reference)).unwrap(),
+                fs::read(source).unwrap()
+            );
+        }
+        fs::write(&sources[0], b"new-first-state").unwrap();
+        let replacement = install(&sources[0], &project, &data[0], &plugins).unwrap();
+        assert_ne!(replacement, references[0]);
+        assert_eq!(
+            fs::read(plugins.join(&references[0])).unwrap(),
+            b"first-state"
+        );
+        assert_eq!(
+            fs::read(plugins.join(&references[1])).unwrap(),
+            b"second-state"
+        );
+        assert_eq!(
+            install(&sources[1], &project, &data[1], &plugins).unwrap(),
+            references[1]
+        );
         case.success();
     }
 }
