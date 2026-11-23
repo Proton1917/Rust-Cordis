@@ -2,12 +2,13 @@ use crate::{Limits, Message, Value, WireError};
 use parking_lot::Mutex;
 use std::{
     collections::HashMap,
-    future::Future,
+    future::{Future, poll_fn},
     pin::Pin,
     sync::{
         Arc, Weak,
         atomic::{AtomicBool, AtomicU64, Ordering},
     },
+    task::{Poll, Waker},
     time::Duration,
 };
 use tokio::{
@@ -25,6 +26,40 @@ pub type HandlerFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 struct PendingReply {
     sender: Reply,
     owns_deadline: bool,
+    write: Arc<RequestWrite>,
+}
+
+struct RequestWrite {
+    state: Mutex<RequestWriteState>,
+}
+
+struct RequestWriteState {
+    started: bool,
+    cancelled: bool,
+    commit: Option<Box<dyn FnOnce() + Send>>,
+    waiter: Option<Waker>,
+}
+
+impl RequestWrite {
+    // The same lock covers the first successful poll_write and cancellation.
+    // Only a frame that has transferred bytes needs a following cancel message.
+    fn cancel(&self) -> bool {
+        let (started, commit, waiter) = {
+            let mut state = self.state.lock();
+            state.cancelled = true;
+            let commit = if state.started {
+                None
+            } else {
+                state.commit.take()
+            };
+            (state.started, commit, state.waiter.take())
+        };
+        drop(commit);
+        if let Some(waiter) = waiter {
+            waiter.wake();
+        }
+        started
+    }
 }
 
 const INVOKE_BUDGET_CAPABILITY: &str = "invoke_budget_v1";
@@ -208,6 +243,7 @@ impl Inner {
         let inbound = std::mem::take(&mut *self.inbound.lock());
         drop(inbound);
         for (_, reply) in pending {
+            reply.write.cancel();
             let _receiver = reply.sender.send(Err(error(4, reason.clone())));
         }
         self.permits.close();
@@ -218,7 +254,7 @@ impl Inner {
 #[derive(Clone)]
 pub struct Connection(Arc<Inner>);
 
-/// UP/1：提交回调捕获发送引用的 RAII 守卫，成功入队后转交引用所有权。
+/// UP/1：提交回调捕获出口引用的 RAII 守卫；可撤回请求在首字节写出时转交引用。
 pub struct Outgoing {
     value: Value,
     commit: Option<Box<dyn FnOnce() + Send>>,
@@ -229,6 +265,14 @@ struct Outbound {
     // 帧头与消息体共用缓冲，写端按完整帧推进部分写入。
     bytes: Vec<u8>,
     after_write: Option<Box<dyn FnOnce() + Send>>,
+    request: Option<QueuedRequest>,
+}
+
+struct QueuedRequest {
+    id: u64,
+    deadline: Instant,
+    budget_offset: Option<usize>,
+    write: Arc<RequestWrite>,
 }
 
 impl Outgoing {
@@ -260,6 +304,7 @@ impl Outgoing {
         Outbound {
             bytes,
             after_write: self.after_write.take(),
+            request: None,
         }
     }
 }
@@ -489,16 +534,19 @@ impl Connection {
                 .reserve()
                 .await
                 .map_err(|_| error(4, "插件管道已关闭"))?;
-            if method == "invoke" && self.0.peer_budget.load(Ordering::Acquire) {
-                let remaining = deadline
-                    .saturating_duration_since(Instant::now())
-                    .as_millis();
-                set_parameter(
-                    &mut params,
-                    INVOKE_BUDGET_FIELD,
-                    Value::from(u64::try_from(remaining.max(1)).unwrap_or(u64::MAX)),
-                );
-            }
+            let budget = if method == "invoke"
+                && self.0.peer_budget.load(Ordering::Acquire)
+                && let Value::Map(fields) = &mut params
+            {
+                // Keep the negotiated budget last so the writer can replace its
+                // CBOR integer in place without retaining or cloning the value tree.
+                let remaining = remaining_budget(deadline);
+                fields.retain(|(key, _)| key.as_text() != Some(INVOKE_BUDGET_FIELD));
+                fields.push((INVOKE_BUDGET_FIELD.into(), Value::from(remaining)));
+                Some(remaining)
+            } else {
+                None
+            };
             let bytes = crate::codec::encode_frame(
                 &Message::Request {
                     id,
@@ -511,6 +559,15 @@ impl Connection {
             if Instant::now() >= deadline {
                 return Err(error(6, "插件请求在入队前超过截止时间"));
             }
+            let budget_offset = budget.map(|remaining| bytes.len() - integer_width(remaining));
+            let write = Arc::new(RequestWrite {
+                state: Mutex::new(RequestWriteState {
+                    started: false,
+                    cancelled: false,
+                    commit: outgoing.commit.take(),
+                    waiter: None,
+                }),
+            });
             let (send, receive) = oneshot::channel();
             {
                 let mut pending = self.0.pending.lock();
@@ -522,11 +579,21 @@ impl Connection {
                     PendingReply {
                         sender: send,
                         owns_deadline: deadline == own_deadline,
+                        write: write.clone(),
                     },
                 );
             }
             let _pending = Pending { peer: self, id };
-            permit.send(outgoing.sent(bytes));
+            permit.send(Outbound {
+                bytes,
+                after_write: outgoing.after_write.take(),
+                request: Some(QueuedRequest {
+                    id,
+                    deadline,
+                    budget_offset,
+                    write,
+                }),
+            });
             // 本地排队或编码错误不作为远端响应重置连续超时计数。
             receive.await.map_err(|_| error(4, "插件请求已结束"))
         };
@@ -559,13 +626,17 @@ impl Connection {
         if stop {
             self.0.fail("插件连续请求超时");
         }
-        if removed.is_none() {
-            return;
+        let Some(removed) = removed else { return };
+        let started = removed.write.cancel();
+        if timed_out {
+            let _receiver = removed.sender.send(Err(error(6, "插件请求超过截止时间")));
         }
-        let _closed = self.try_notify(
-            "cancel",
-            Value::Map(vec![(Value::Text("id".into()), Value::Integer(id.into()))]),
-        );
+        if started {
+            let _closed = self.try_notify(
+                "cancel",
+                Value::Map(vec![(Value::Text("id".into()), Value::Integer(id.into()))]),
+            );
+        }
     }
 
     pub async fn notify(&self, method: &str, params: impl Into<Outgoing>) -> Result<()> {
@@ -609,6 +680,52 @@ impl Connection {
     }
 }
 
+fn remaining_budget(deadline: Instant) -> u64 {
+    u64::try_from(
+        deadline
+            .saturating_duration_since(Instant::now())
+            .as_millis()
+            .max(1),
+    )
+    .unwrap_or(u64::MAX)
+}
+
+fn integer_width(value: u64) -> usize {
+    match value {
+        0..=23 => 1,
+        24..=255 => 2,
+        256..=65535 => 3,
+        65536..=4294967295 => 5,
+        _ => 9,
+    }
+}
+
+fn update_budget(bytes: &mut Vec<u8>, offset: usize, value: u64) {
+    let width = integer_width(value);
+    bytes.truncate(offset);
+    match width {
+        1 => bytes.push(value as u8),
+        2 => {
+            bytes.push(24);
+            bytes.push(value as u8);
+        }
+        3 => {
+            bytes.push(25);
+            bytes.extend_from_slice(&(value as u16).to_be_bytes());
+        }
+        5 => {
+            bytes.push(26);
+            bytes.extend_from_slice(&(value as u32).to_be_bytes());
+        }
+        _ => {
+            bytes.push(27);
+            bytes.extend_from_slice(&value.to_be_bytes());
+        }
+    }
+    let length = (bytes.len() - 4) as u32;
+    bytes[..4].copy_from_slice(&length.to_be_bytes());
+}
+
 /// DOC-16 §2、ADR-0024：帧头、消息体与flush完成后执行管理响应钩子。
 async fn write_frames<W: AsyncWrite + Unpin>(
     mut output: W,
@@ -622,16 +739,76 @@ async fn write_frames<W: AsyncWrite + Unpin>(
             frame = outbound.recv() => match frame { Some(frame) => frame, None => break },
         };
         let write = async {
-            output.write_all(&frame.bytes).await?;
-            output.flush().await
+            let start = if let Some(request) = &frame.request {
+                let mut expired = false;
+                let first = poll_fn(|cx| {
+                    let mut state = request.write.state.lock();
+                    if state.cancelled {
+                        return Poll::Ready(Ok(None));
+                    }
+                    if Instant::now() >= request.deadline {
+                        expired = true;
+                        return Poll::Ready(Ok(None));
+                    }
+                    if let Some(offset) = request.budget_offset {
+                        update_budget(&mut frame.bytes, offset, remaining_budget(request.deadline));
+                    }
+                    match Pin::new(&mut output).poll_write(cx, &frame.bytes) {
+                        Poll::Pending => {
+                            state.waiter = Some(cx.waker().clone());
+                            Poll::Pending
+                        }
+                        Poll::Ready(Ok(0)) => Poll::Ready(Err(std::io::Error::new(
+                            std::io::ErrorKind::WriteZero,
+                            "UP/1 frame write returned zero",
+                        ))),
+                        Poll::Ready(Ok(count)) => {
+                            state.started = true;
+                            state.waiter = None;
+                            let commit = state.commit.take();
+                            drop(state);
+                            if let Some(commit) = commit {
+                                commit();
+                            }
+                            Poll::Ready(Ok(Some(count)))
+                        }
+                        Poll::Ready(Err(problem)) => Poll::Ready(Err(problem)),
+                    }
+                });
+                match timeout_at(request.deadline, first).await {
+                    Ok(Ok(Some(count))) => count,
+                    Ok(Ok(None)) => {
+                        if expired && let Some(inner) = peer.upgrade() {
+                            Connection(inner).cancel_pending(request.id, true);
+                        }
+                        return Ok(false);
+                    }
+                    Ok(Err(problem)) => return Err(problem),
+                    Err(_) => {
+                        if let Some(inner) = peer.upgrade() {
+                            Connection(inner).cancel_pending(request.id, true);
+                        }
+                        return Ok(false);
+                    }
+                }
+            } else {
+                0
+            };
+            output.write_all(&frame.bytes[start..]).await?;
+            output.flush().await?;
+            Ok(true)
         };
         let result = tokio::select! {
             _ = ended.changed() => break,
             result = write => result,
         };
-        if let Err(problem) = result {
-            fail(&peer, problem.to_string());
-            break;
+        match result {
+            Err(problem) => {
+                fail(&peer, problem.to_string());
+                break;
+            }
+            Ok(false) => continue,
+            Ok(true) => {}
         }
         if let Some(action) = frame.after_write.take() {
             action();
@@ -778,6 +955,7 @@ fn receive_response(peer: &Connection, id: u64, result: Result<Value>) -> bool {
         peer.0.fail("插件连续请求超时");
     }
     if let Some(reply) = reply {
+        reply.write.cancel();
         let _receiver = reply.sender.send(result);
     }
     true
