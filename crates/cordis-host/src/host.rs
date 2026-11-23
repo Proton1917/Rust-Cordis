@@ -283,6 +283,7 @@ impl Host {
         payload::LibraryStatus {
             libraries,
             retired_images: lease::retired_images(),
+            retirement: Some(lease::retirement_status(true)),
         }
     }
 
@@ -321,6 +322,9 @@ impl Host {
         lease.quiet().await;
         lease.reap();
         lease::reap_ready();
+        if lease.closed() {
+            self.trim_closed_history();
+        }
         self.prune_cache().await;
         lease.descriptor_result().map_err(|problem| {
             Error::new(
@@ -334,7 +338,25 @@ impl Host {
             closed: lease.closed(),
             quiescence_ms: Some(started.elapsed().as_millis() as u64),
             retired_images: lease::retired_images(),
+            retirement: Some(lease::retirement_status(false)),
         })
+    }
+
+    fn trim_closed_history(&self) {
+        const CLOSED_HISTORY: usize = 256;
+        let mut retired = self.0.retired.lock();
+        if retired.len() <= CLOSED_HISTORY {
+            return;
+        }
+        let mut closed: Vec<_> = retired
+            .iter()
+            .filter_map(|(id, entry)| entry.lease.closed().then_some(*id))
+            .collect();
+        closed.sort_unstable();
+        let discard = closed.len().saturating_sub(CLOSED_HISTORY);
+        for id in closed.into_iter().take(discard) {
+            retired.remove(&id);
+        }
     }
 
     async fn request(&self, method: &str, params: impl Into<Outgoing>) -> Result<Payload> {

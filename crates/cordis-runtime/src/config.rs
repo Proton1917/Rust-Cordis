@@ -66,6 +66,7 @@ pub struct RuntimeSettings {
     pub restart_max: u32,
     pub restart_backoff_ms: u64,
     pub retired_image_limit: usize,
+    pub retired_image_basis: cordis_supervisor::manager::RetiredImageBasis,
     pub unload: Unload,
 }
 
@@ -91,6 +92,7 @@ impl Default for RuntimeSettings {
             restart_max: 5,
             restart_backoff_ms: 500,
             retired_image_limit: 20,
+            retired_image_basis: cordis_supervisor::manager::RetiredImageBasis::Cumulative,
             unload: Unload::Never,
         }
     }

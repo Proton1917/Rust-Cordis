@@ -19,7 +19,7 @@ pub use cordis_routing::{Arguments, CallContext, LocalReply, LocalService};
 pub use lifecycle::FrozenSnapshot;
 pub use model::{
     Failure, GroupSnapshot, GroupSpec, InstanceSnapshot, InstanceSpec, LogOrigin, LogRecord,
-    LogSink, ManagerOptions, ReplaceReport, RestartPolicy, Snapshot,
+    LogSink, ManagerOptions, ReplaceReport, RestartPolicy, RetiredImageBasis, Snapshot,
 };
 
 use crate::Peer;

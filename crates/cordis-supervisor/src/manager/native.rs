@@ -8,6 +8,16 @@ use futures_util::future::join_all;
 use std::path::{Path, PathBuf};
 
 impl Manager {
+    /// Native host retirement counters and optional physical mapping observation.
+    /// Older hosts return None and retain the cumulative recovery fallback.
+    pub async fn library_retirement(
+        &self,
+        group: &str,
+    ) -> Result<Option<payload::LibraryRetirement>> {
+        let group = self.group(group)?;
+        let current = group.current.lock().clone();
+        Ok(self.library_status(&current.connection).await?.retirement)
+    }
     /// DOC-15 §11.3、ADR-0041：在既有页面连接登记新的逻辑插件，保留原组件定义身份。
     pub async fn add_library(&self, group: String, path: PathBuf) -> Result<payload::Plugin> {
         self.submit(
@@ -323,6 +333,32 @@ impl Manager {
         &self,
         specification: Option<LaunchPlan>,
         retired_images: u64,
+        retirement: Option<&payload::LibraryRetirement>,
+    ) -> Result<Option<ReplaceReport>> {
+        let pressure = if self.0.options.retired_image_basis != RetiredImageBasis::MappedImages {
+            self.0
+                .options
+                .retired_image_basis
+                .pressure(retired_images, retirement)
+        } else if let Some(plan) = &specification {
+            let group = self.group(&plan.name)?;
+            let current = group.current.lock().clone();
+            let status = self.library_status(&current.connection).await?;
+            self.0
+                .options
+                .retired_image_basis
+                .pressure(status.retired_images, status.retirement.as_ref())
+        } else {
+            retired_images
+        };
+        self.restart_for_image_pressure(specification, pressure)
+            .await
+    }
+
+    async fn restart_for_image_pressure(
+        &self,
+        specification: Option<LaunchPlan>,
+        retired_images: u64,
     ) -> Result<Option<ReplaceReport>> {
         if retired_images > self.0.options.retired_image_limit
             && let Some(specification) = specification
@@ -360,8 +396,12 @@ impl Manager {
             }
             let recovery = async {
                 let status = self.library_status(&current.connection).await?;
-                self.enforce_image_limit(Some(plan), status.retired_images)
-                    .await
+                let pressure = self
+                    .0
+                    .options
+                    .retired_image_basis
+                    .pressure(status.retired_images, status.retirement.as_ref());
+                self.restart_for_image_pressure(Some(plan), pressure).await
             }
             .await;
             if let Err(error) = recovery {

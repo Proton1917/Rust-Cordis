@@ -100,6 +100,7 @@ async fn create_controller(
         swap_timeout: lifecycle,
         confirm: Duration::from_millis(settings.confirm_ms),
         retired_image_limit: settings.retired_image_limit as u64,
+        retired_image_basis: settings.retired_image_basis,
         ..ManagerOptions::default()
     };
     let manager = Arc::new(Manager::new(root.clone(), options).await?);

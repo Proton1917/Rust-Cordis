@@ -4,6 +4,7 @@ mod allocation;
 mod blocking_wait;
 mod native_cache;
 mod replacement_state;
+mod retirement;
 mod tokio_context;
 
 use clap::Parser;
@@ -1165,6 +1166,7 @@ async fn main() -> Result<()> {
             "swap" => swaps(&artifacts, false).await?,
             "confirmation-state" => replacement_state::run(&artifacts).await?,
             "threshold" => swaps(&artifacts, true).await?,
+            "retirement-metrics" => retirement::run(&artifacts).await?,
             "allocation" => allocation::run(&artifacts).await?,
             "cache-bounded" => native_cache::bounded(&artifacts).await?,
             "cache-recovery" => native_cache::recovery(&artifacts).await?,

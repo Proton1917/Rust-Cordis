@@ -1193,6 +1193,7 @@ impl Manager {
     async fn retire_batch_libraries(&self, group: &PreparedGroup) -> Result<()> {
         let mut failure = None;
         let mut retired_images = 0;
+        let mut retirement = None;
         for library in &group.libraries {
             let result = self
                 .library_command::<payload::LibraryRetired>(
@@ -1203,6 +1204,7 @@ impl Manager {
                 .await
                 .and_then(|retired| {
                     retired_images = retired_images.max(retired.retired_images);
+                    retirement = retired.retirement;
                     if retired.leases == 0 {
                         Ok(retired.quiescence_ms)
                     } else {
@@ -1230,7 +1232,11 @@ impl Manager {
                 .await);
         }
         let restarted = self
-            .enforce_image_limit(group.specification.clone(), retired_images)
+            .enforce_image_limit(
+                group.specification.clone(),
+                retired_images,
+                retirement.as_ref(),
+            )
             .await;
         self.record_image_restart(group, &restarted);
         restarted.map(|_| ())

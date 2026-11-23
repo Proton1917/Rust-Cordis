@@ -126,7 +126,12 @@ UP/1 连接核心与一个原生宿主、脚本进程或网页转发通道。同
 |---|---|---|---|
 | `library_prepare` | C→H request | `path: String` | `{library: u64, plugin: Plugin}` |
 | `library_activate` | C→H request | `library: u64` | `null` |
-| `library_retire` | C→H request | `library: u64` | `{leases: u64, closed: bool, quiescence_ms: Option<u64>, retired_images: u64}` |
+| `library_retire` | C→H request | `library: u64` | `{leases: u64, closed: bool, quiescence_ms: Option<u64>, retired_images: u64, retirement: Option<LibraryRetirement>}` |
+| `library_status` | C→H request | `null` | `{libraries: Vec<LibraryInfo>, retired_images: u64, retirement: Option<LibraryRetirement>}` |
+
+`retired_images` 继续表示累计退役次数。可选的 `LibraryRetirement` 分别包含累计退役数 `retired_total`、归还库句柄数 `closed_total`、仍持有的退役库句柄 `open_retired_handles`、实际退役租约 `retired_leases`、退役文件租约 `retired_cache_pins` 和可选映射数 `mapped_retired_images`。`library_status` 在 Linux 上按设备号和 inode 读取实际映射；其他平台、观测失败或身份不完整时，映射数为空。`library_retire` 返回轻量所有权计数，映射数为空。
+
+库清单保留活动库、仍持有句柄的退役库和最近 256 条已关闭库的诊断记录。累计计数和物理映射记录具有独立寿命。恢复策略默认使用累计数，显式配置可选择持有句柄或映射数；旧宿主和缺少物理观测时沿用累计数。[原生退役计量与恢复依据](adr/0058-native-retirement-metrics.md)
 
 ### 11 转发通道
 
