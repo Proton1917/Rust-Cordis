@@ -138,15 +138,56 @@ pub fn encode(message: &Message, limits: &Limits) -> Result<Vec<u8>, CodecError>
     write_limited(message, limits)
 }
 
-/// DOC-16 §2：在同一缓冲中编码帧头和正文，帧预算只统计正文。
-pub(crate) fn encode_frame(message: &Message, limits: &Limits) -> Result<Vec<u8>, CodecError> {
+/// Encode once into a connection-owned, capacity-admitted buffer. The caller
+/// patches the reserved frame header after serialization finishes.
+pub(crate) fn encode_frame_to<W: Write>(
+    message: &Message,
+    limits: &Limits,
+    output: &mut W,
+) -> Result<(), CodecError> {
     validate_message(message, limits)?;
-    let mut bytes = write_prefixed(message, limits, 4)?;
-    // limits.validate() 将正文预算限制在 u32 范围内。
-    let length = u32::try_from(bytes.len() - 4)
-        .map_err(|_| CodecError::Schema("UP/1 frame length exceeds u32".into()))?;
-    bytes[..4].copy_from_slice(&length.to_be_bytes());
-    Ok(bytes)
+    output
+        .write_all(&[0; 4])
+        .map_err(|problem| CodecError::Cbor(problem.to_string()))?;
+    write_to(message, limits, output)
+}
+
+fn write_to<T: serde::Serialize, W: Write>(
+    value: &T,
+    limits: &Limits,
+    output: &mut W,
+) -> Result<(), CodecError> {
+    struct Bounded<'a, W> {
+        output: &'a mut W,
+        length: usize,
+        maximum: usize,
+        exceeded: bool,
+    }
+    impl<W: Write> Write for Bounded<'_, W> {
+        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+            if bytes.len() > self.maximum.saturating_sub(self.length) {
+                self.exceeded = true;
+                return Err(std::io::Error::other("max_frame"));
+            }
+            self.output.write_all(bytes)?;
+            self.length += bytes.len();
+            Ok(bytes.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            self.output.flush()
+        }
+    }
+    let mut writer = Bounded {
+        output,
+        length: 0,
+        maximum: limits.max_frame,
+        exceeded: false,
+    };
+    match ciborium::ser::into_writer(value, &mut writer) {
+        Ok(()) => Ok(()),
+        Err(_) if writer.exceeded => Err(LimitExceeded::error("max_frame", limits.max_frame, None)),
+        Err(problem) => Err(CodecError::Cbor(problem.to_string())),
+    }
 }
 
 fn validate_message(message: &Message, limits: &Limits) -> Result<(), CodecError> {
@@ -180,33 +221,9 @@ pub fn encode_value(value: &Value, limits: &Limits) -> Result<Vec<u8>, CodecErro
 
 /// CP-2：按帧上限序列化；写入器越界时报告 max_frame，其余失败保留 CBOR 原因。
 fn write_limited<T: serde::Serialize>(value: &T, limits: &Limits) -> Result<Vec<u8>, CodecError> {
-    write_prefixed(value, limits, 0)
-}
-
-fn write_prefixed<T: serde::Serialize>(
-    value: &T,
-    limits: &Limits,
-    prefix: usize,
-) -> Result<Vec<u8>, CodecError> {
-    let bytes = if prefix == 0 {
-        Vec::new()
-    } else {
-        // prefix 仅取 0 或 4；小预留避免按最大帧预算预分配。
-        let mut bytes = Vec::with_capacity(prefix + limits.max_frame.min(128));
-        bytes.resize(prefix, 0);
-        bytes
-    };
-    let mut writer = LimitedWriter {
-        bytes,
-        prefix,
-        limit: limits.max_frame,
-        exceeded: false,
-    };
-    match ciborium::ser::into_writer(value, &mut writer) {
-        Ok(()) => Ok(writer.bytes),
-        Err(_) if writer.exceeded => Err(LimitExceeded::error("max_frame", limits.max_frame, None)),
-        Err(problem) => Err(CodecError::Cbor(problem.to_string())),
-    }
+    let mut bytes = Vec::new();
+    write_to(value, limits, &mut bytes)?;
+    Ok(bytes)
 }
 
 fn standalone_value<'de, D: de::Deserializer<'de>>(deserializer: D) -> Result<Value, D::Error> {
@@ -284,42 +301,6 @@ fn validate_value(value: &Value, limits: &Limits, overhead: usize) -> Result<(),
         }
     }
     Ok(())
-}
-
-/// CP-2：序列化写入过程中执行字节上限，避免先产生完整超额缓冲。
-struct LimitedWriter {
-    bytes: Vec<u8>,
-    prefix: usize,
-    limit: usize,
-    exceeded: bool,
-}
-impl Write for LimitedWriter {
-    fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
-        let body_length = self.bytes.len() - self.prefix;
-        if bytes.len() > self.limit.saturating_sub(body_length) {
-            self.exceeded = true;
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "max_frame",
-            ));
-        }
-        if self
-            .bytes
-            .len()
-            .checked_add(bytes.len())
-            .is_none_or(|length| length > isize::MAX as usize)
-        {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "encoded buffer exceeds addressable capacity",
-            ));
-        }
-        self.bytes.extend_from_slice(bytes);
-        Ok(bytes.len())
-    }
-    fn flush(&mut self) -> std::io::Result<()> {
-        Ok(())
-    }
 }
 
 pub(crate) fn params<'de, D: de::Deserializer<'de>>(deserializer: D) -> Result<Value, D::Error> {
@@ -547,6 +528,15 @@ fn resource_tag(tag: u64, value: &Value) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn encode_frame(message: &Message, limits: &Limits) -> Result<Vec<u8>, CodecError> {
+        let mut bytes = Vec::new();
+        encode_frame_to(message, limits, &mut bytes)?;
+        let length = (bytes.len() - 4) as u32;
+        bytes[..4].copy_from_slice(&length.to_be_bytes());
+        Ok(bytes)
+    }
+
     use crate::WireError;
 
     #[test]
