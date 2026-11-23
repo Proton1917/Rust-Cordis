@@ -1,0 +1,66 @@
+{
+  "rust": {
+    "command_groups": [
+      {
+        "log": "correctness.log",
+        "passed": 302,
+        "failed": 0,
+        "ignored": 3
+      },
+      {
+        "log": "runtime.log",
+        "passed": 38,
+        "failed": 0,
+        "ignored": 0
+      }
+    ],
+    "total_passed": 340,
+    "total_failed": 0,
+    "ignored": [
+      "event timing",
+      "replacement scaling",
+      "payload timing"
+    ],
+    "explicit_measurements": [
+      "replacement scaling",
+      "payload timing"
+    ],
+    "platform_gap": "watch_compat.rs is macOS-only; 0 tests selected on Linux"
+  },
+  "languages": {
+    "scenarios": 3,
+    "scenario_failures": 0,
+    "contract_assertions": 24,
+    "contract_failures": 0,
+    "python": "3.12.14",
+    "cbor2": "5.6.5",
+    "node": "24.22.3",
+    "typescript": "5.9.3",
+    "cbor_x": "1.6.0",
+    "invocation": "tests/phase3/run.py invoked directly with the installed Python runtime; Rust test wrapper requires unavailable Conda; SDKs and fixtures unchanged"
+  },
+  "clippy": {
+    "normal_status": "passed_with_existing_warnings",
+    "existing_unique_warnings": 4,
+    "strict_warnings_status": "existing warnings remain",
+    "log": "clippy.log",
+    "warnings": [
+      "cordis_up::serve_request: too_many_arguments",
+      "cordis_supervisor::execute_deployment_batch: too_many_arguments",
+      "cordis_runtime::execute_batch_target: too_many_arguments",
+      "cordis_runtime::Work: large_enum_variant"
+    ]
+  },
+  "formatting": {
+    "changed_rust_files": 22,
+    "rustfmt": "passed",
+    "python_compile": "passed",
+    "git_diff_check": "passed"
+  },
+  "aoci": {
+    "status": "maintenance_tool_unavailable",
+    "instruction_source": "AGENTS.md",
+    "evidence": "No aoci_rules/aoci_overview/aoci_maintain tools exposed; no repository .mcp.json or local AOCI executable found. Existing formal index left unchanged."
+  },
+  "log_provenance": "log-provenance.json records whitespace normalization and both original and stored hashes; raw benchmark JSONL rows are unchanged."
+}

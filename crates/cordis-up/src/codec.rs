@@ -124,9 +124,8 @@ fn read_limited<T: de::DeserializeOwned>(bytes: &[u8], limits: &Limits) -> Resul
     }
     let _scope = DecodeScope::enter(*limits);
     let mut reader = Cursor::new(bytes);
-    let value =
-        ciborium::de::from_reader_with_recursion_limit(&mut reader, limits.max_depth)
-            .map_err(|error| CodecError::Cbor(error.to_string()))?;
+    let value = ciborium::de::from_reader_with_recursion_limit(&mut reader, limits.max_depth)
+        .map_err(|error| CodecError::Cbor(error.to_string()))?;
     if reader.position() as usize != bytes.len() {
         return Err(CodecError::TrailingBytes);
     }
@@ -135,6 +134,22 @@ fn read_limited<T: de::DeserializeOwned>(bytes: &[u8], limits: &Limits) -> Resul
 
 /// 输出CBOR消息体，写入时执行帧长度限制。
 pub fn encode(message: &Message, limits: &Limits) -> Result<Vec<u8>, CodecError> {
+    validate_message(message, limits)?;
+    write_limited(message, limits)
+}
+
+/// DOC-16 §2：在同一缓冲中编码帧头和正文，帧预算只统计正文。
+pub(crate) fn encode_frame(message: &Message, limits: &Limits) -> Result<Vec<u8>, CodecError> {
+    validate_message(message, limits)?;
+    let mut bytes = write_prefixed(message, limits, 4)?;
+    // limits.validate() 将正文预算限制在 u32 范围内。
+    let length = u32::try_from(bytes.len() - 4)
+        .map_err(|_| CodecError::Schema("UP/1 frame length exceeds u32".into()))?;
+    bytes[..4].copy_from_slice(&length.to_be_bytes());
+    Ok(bytes)
+}
+
+fn validate_message(message: &Message, limits: &Limits) -> Result<(), CodecError> {
     limits.validate()?;
     envelope(message)?;
     let (value, overhead) = match message {
@@ -146,8 +161,7 @@ pub fn encode(message: &Message, limits: &Limits) -> Result<Vec<u8>, CodecError>
             result: Err(error), ..
         } => (&error.detail, 4),
     };
-    validate_value(value, limits, overhead)?;
-    write_limited(message, limits)
+    validate_value(value, limits, overhead)
 }
 
 /// CP-8：持久状态和接口值复用同一集合、深度与节点预算。
@@ -166,8 +180,25 @@ pub fn encode_value(value: &Value, limits: &Limits) -> Result<Vec<u8>, CodecErro
 
 /// CP-2：按帧上限序列化；写入器越界时报告 max_frame，其余失败保留 CBOR 原因。
 fn write_limited<T: serde::Serialize>(value: &T, limits: &Limits) -> Result<Vec<u8>, CodecError> {
+    write_prefixed(value, limits, 0)
+}
+
+fn write_prefixed<T: serde::Serialize>(
+    value: &T,
+    limits: &Limits,
+    prefix: usize,
+) -> Result<Vec<u8>, CodecError> {
+    let bytes = if prefix == 0 {
+        Vec::new()
+    } else {
+        // prefix 仅取 0 或 4；小预留避免按最大帧预算预分配。
+        let mut bytes = Vec::with_capacity(prefix + limits.max_frame.min(128));
+        bytes.resize(prefix, 0);
+        bytes
+    };
     let mut writer = LimitedWriter {
-        bytes: Vec::new(),
+        bytes,
+        prefix,
         limit: limits.max_frame,
         exceeded: false,
     };
@@ -258,16 +289,29 @@ fn validate_value(value: &Value, limits: &Limits, overhead: usize) -> Result<(),
 /// CP-2：序列化写入过程中执行字节上限，避免先产生完整超额缓冲。
 struct LimitedWriter {
     bytes: Vec<u8>,
+    prefix: usize,
     limit: usize,
     exceeded: bool,
 }
 impl Write for LimitedWriter {
     fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
-        if bytes.len() > self.limit.saturating_sub(self.bytes.len()) {
+        let body_length = self.bytes.len() - self.prefix;
+        if bytes.len() > self.limit.saturating_sub(body_length) {
             self.exceeded = true;
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 "max_frame",
+            ));
+        }
+        if self
+            .bytes
+            .len()
+            .checked_add(bytes.len())
+            .is_none_or(|length| length > isize::MAX as usize)
+        {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "encoded buffer exceeds addressable capacity",
             ));
         }
         self.bytes.extend_from_slice(bytes);
@@ -497,5 +541,165 @@ fn resource_tag(tag: u64, value: &Value) -> Result<(), String> {
         Err("resource tag requires a nonzero u64".into())
     } else {
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::WireError;
+
+    #[test]
+    fn framed_encoding_preserves_body_and_length() {
+        let messages = [
+            Message::Request {
+                id: 1,
+                method: "invoke".into(),
+                params: Value::Map(vec![
+                    (
+                        "args".into(),
+                        Value::Array(vec![Value::Bytes(vec![7; 4096])]),
+                    ),
+                    (
+                        "object".into(),
+                        Value::Tag(OBJECT_TAG, Box::new(1_u64.into())),
+                    ),
+                ]),
+            },
+            Message::Response {
+                id: 2,
+                result: Ok(Value::Bytes(vec![9; 1024])),
+            },
+            Message::Response {
+                id: 3,
+                result: Err(WireError::new(2, "invalid argument")),
+            },
+            Message::Notification {
+                method: "release".into(),
+                params: Value::Array(vec![1_u64.into(), 2_u64.into()]),
+            },
+        ];
+        for message in messages {
+            let body = encode(&message, &Limits::DEFAULT).unwrap();
+            let frame = encode_frame(&message, &Limits::DEFAULT).unwrap();
+            assert_eq!(
+                u32::from_be_bytes(frame[..4].try_into().unwrap()) as usize,
+                body.len()
+            );
+            assert_eq!(&frame[4..], body);
+            assert_eq!(decode(&frame[4..], &Limits::DEFAULT).unwrap(), message);
+        }
+    }
+
+    #[test]
+    fn frame_prefix_is_outside_the_body_budget() {
+        let message = Message::Notification {
+            method: "data".into(),
+            params: Value::Bytes(vec![1; 128]),
+        };
+        let body = encode(&message, &Limits::DEFAULT).unwrap();
+        let limits = Limits {
+            max_frame: body.len(),
+            ..Limits::DEFAULT
+        };
+        assert_eq!(
+            encode_frame(&message, &limits).unwrap().len(),
+            body.len() + 4
+        );
+        let limits = Limits {
+            max_frame: body.len() - 1,
+            ..limits
+        };
+        assert_eq!(
+            encode_frame(&message, &limits).unwrap_err().to_string(),
+            encode(&message, &limits).unwrap_err().to_string()
+        );
+        // 32 位平台也只按实际正文计算长度，避免将 u32::MAX 与帧头相加。
+        let limits = Limits {
+            max_frame: u32::MAX as usize,
+            ..Limits::DEFAULT
+        };
+        assert_eq!(&encode_frame(&message, &limits).unwrap()[4..], body);
+    }
+
+    #[test]
+    fn framed_encoding_preserves_validation_errors() {
+        let cases = [
+            (
+                Message::Request {
+                    id: 0,
+                    method: "invoke".into(),
+                    params: Value::Null,
+                },
+                Limits::DEFAULT,
+            ),
+            (
+                Message::Notification {
+                    method: String::new(),
+                    params: Value::Null,
+                },
+                Limits::DEFAULT,
+            ),
+            (
+                Message::Notification {
+                    method: "data".into(),
+                    params: Value::Tag(OBJECT_TAG, Box::new(0_u64.into())),
+                },
+                Limits::DEFAULT,
+            ),
+            (
+                Message::Notification {
+                    method: "data".into(),
+                    params: Value::Array(vec![Value::Array(vec![Value::Array(vec![Value::Null])])]),
+                },
+                Limits {
+                    max_depth: 4,
+                    ..Limits::DEFAULT
+                },
+            ),
+            (
+                Message::Notification {
+                    method: "data".into(),
+                    params: Value::Array(vec![Value::Null, Value::Null]),
+                },
+                Limits {
+                    max_collection: 1,
+                    ..Limits::DEFAULT
+                },
+            ),
+            (
+                Message::Notification {
+                    method: "data".into(),
+                    params: Value::Array(vec![Value::Null]),
+                },
+                Limits {
+                    max_values: 1,
+                    ..Limits::DEFAULT
+                },
+            ),
+            (
+                Message::Response {
+                    id: 1,
+                    result: Err(WireError::new(0, "invalid error")),
+                },
+                Limits::DEFAULT,
+            ),
+            (
+                Message::Response {
+                    id: 1,
+                    result: Ok(Value::Null),
+                },
+                Limits {
+                    max_frame: 0,
+                    ..Limits::DEFAULT
+                },
+            ),
+        ];
+        for (message, limits) in cases {
+            assert_eq!(
+                encode_frame(&message, &limits).unwrap_err().to_string(),
+                encode(&message, &limits).unwrap_err().to_string()
+            );
+        }
     }
 }

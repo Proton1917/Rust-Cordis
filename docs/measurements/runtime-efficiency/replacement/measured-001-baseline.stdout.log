@@ -1,0 +1,11 @@
+
+running 1 test
+test replacement_scaling ... {"scenario":"replacement_scaling","source_instances":100,"target_instances":0,"round":0,"synchronous_replace_ns":45728,"replace_to_settled_ns":188910}
+{"scenario":"replacement_scaling","source_instances":100,"target_instances":100,"round":0,"synchronous_replace_ns":54991,"replace_to_settled_ns":245715}
+{"scenario":"replacement_scaling","source_instances":1000,"target_instances":0,"round":0,"synchronous_replace_ns":574744,"replace_to_settled_ns":6277193}
+{"scenario":"replacement_scaling","source_instances":1000,"target_instances":1000,"round":0,"synchronous_replace_ns":933376,"replace_to_settled_ns":11301986}
+{"scenario":"replacement_scaling","source_instances":10000,"target_instances":0,"round":0,"synchronous_replace_ns":22575152,"replace_to_settled_ns":898538520}
+{"scenario":"replacement_scaling","source_instances":10000,"target_instances":10000,"round":0,"synchronous_replace_ns":52671792,"replace_to_settled_ns":2057423584}
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 16.49s

@@ -272,6 +272,44 @@ fn replacement_merges_existing_runtime_instances() {
     host.finish(root.fiber().dispose()).unwrap();
 }
 
+#[test]
+fn repeated_replacement_preserves_unique_instance_order() {
+    let host = TestExecutor::new();
+    let root = Context::new(host.clone());
+    let old = plain("old");
+    let next = plain("next");
+    let source = (0_usize..3)
+        .map(|config| root.mount_with(&old, config).unwrap())
+        .collect::<Vec<_>>();
+    let mut expected = (3_usize..5)
+        .map(|config| root.mount_with(&next, config).unwrap())
+        .collect::<Vec<_>>();
+    expected.extend(source.iter().cloned());
+    for fiber in &expected {
+        host.finish(fiber.settled()).unwrap();
+    }
+
+    assert_eq!(root.registry().replace(&old, &next), source);
+    for fiber in &expected {
+        host.finish(fiber.settled()).unwrap();
+    }
+    assert_eq!(root.registry().fibers(&next), expected);
+    for component in [&old, &next] {
+        assert_eq!(root.registry().replace(component, &next), expected);
+        for fiber in &expected {
+            host.finish(fiber.settled()).unwrap();
+            assert_eq!(fiber.component_id(), Some(next.id()));
+        }
+        assert_eq!(root.registry().fibers(&next), expected);
+        assert_eq!(root.registry().len(), 1);
+    }
+
+    host.finish(root.fiber().dispose()).unwrap();
+    assert!(root.registry().is_empty());
+    assert!(root.registry().fibers(&old).is_empty());
+    assert!(root.registry().fibers(&next).is_empty());
+}
+
 // RPL-10：替换清除原实现的失败状态。
 #[test]
 fn replacement_recovers_failed_fiber() {

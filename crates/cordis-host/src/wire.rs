@@ -33,18 +33,18 @@ impl Bridge {
             exports.rewrite(argument)?;
         }
         params.refs = exports.refs().to_vec();
-        let outgoing =
-            Outgoing::with_commit(cordis_abi::to_value(&params)?, move || exports.commit());
+        let outgoing = Outgoing::with_commit(params.into_value(), move || exports.commit());
         let bridge = self.clone();
         let object = object.clone();
         let task = self.executor.start(
             cordis_up::rpc::inherit_invocation(async move {
-                let response = object
+                let mut response = object
                     .peer()
                     .request("invoke", outgoing, bridge.timeout)
                     .await
                     .map_err(from_wire)?;
-                let result: payload::InvokeResult = cordis_abi::from_value(response.value())?;
+                let result = payload::InvokeResult::from_value_owned(response.take_value())
+                    .map_err(|problem| Error::new(2, problem.to_string()))?;
                 bridge.incoming(&response, result.value).await
             }),
             true,
@@ -60,10 +60,9 @@ impl Bridge {
             value,
             refs: exports.refs().to_vec(),
         };
-        Ok(Outgoing::with_commit(
-            cordis_abi::to_value(&result)?,
-            move || exports.commit(),
-        ))
+        Ok(Outgoing::with_commit(result.into_value(), move || {
+            exports.commit()
+        }))
     }
 
     /// DOC-16 资源协议：同一资源编号复用一次导入，ABI 缓冲区持有全部导入对象。

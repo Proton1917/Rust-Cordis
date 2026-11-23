@@ -1,0 +1,75 @@
+{
+  "platform": "Linux-6.18.57-x86_64-with-glibc2.41",
+  "machine": "x86_64",
+  "cpu_count": 9,
+  "cpu_affinity": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8
+  ],
+  "pairs": 5,
+  "warmup_pairs": 1,
+  "sizes": [
+    4194304
+  ],
+  "samples_64B": 4000,
+  "warmup_64B": 200,
+  "samples_large": 128,
+  "warmup_large": 32,
+  "concurrency": 4,
+  "binaries": {
+    "baseline": {
+      "cordis": {
+        "path": "/workspace/scratch/d556412a6783/bench-binaries/baseline/cordis",
+        "bytes": 12730112,
+        "mtime_ns": 1795419195850662246,
+        "sha256": "9fb0c7f88e5ebb92381745d58b66fdbaf6ee06e83e20d0c4f5f4f53fc662d15c"
+      },
+      "cordis-host": {
+        "path": "/workspace/scratch/d556412a6783/bench-binaries/baseline/cordis-host",
+        "bytes": 4162984,
+        "mtime_ns": 1795419182482558654,
+        "sha256": "3f4aedd35809a0c3ae3e9d56827111ba5e246d0e9beefd293eac0b65904b794e"
+      }
+    },
+    "candidate": {
+      "cordis": {
+        "path": "/workspace/scratch/d556412a6783/bench-binaries/candidate/cordis",
+        "bytes": 12748576,
+        "mtime_ns": 1795419566624397792,
+        "sha256": "1193986f20768bf75ebc0fed23ed26abc44869ccbeb1b1e1c0dbed5fc00c13b8"
+      },
+      "cordis-host": {
+        "path": "/workspace/scratch/d556412a6783/bench-binaries/candidate/cordis-host",
+        "bytes": 4196376,
+        "mtime_ns": 1795419550300315664,
+        "sha256": "2b7bb28b4dc64b845418a54aeb13d35008ec8ed53b0a0f77ae0ba3ca33857ccc"
+      }
+    }
+  },
+  "shared_plugins": {
+    "probe": {
+      "path": "/workspace/scratch/d556412a6783/build-probe/release/libcordis_latency_probe.so",
+      "bytes": 1271624,
+      "mtime_ns": 1795419275847014534,
+      "sha256": "2599be2564efc273419b6f3c5b039af96173f0cfe026f8905984d602de8c708d"
+    },
+    "provider": {
+      "path": "/workspace/scratch/d556412a6783/bench-binaries/baseline/libkv_mem.so",
+      "bytes": 951528,
+      "mtime_ns": 1795419171561854254,
+      "sha256": "4718fb315f83e0cb61b2708ae9a3625117d3fd0525eb7c42956f79191527fd03"
+    }
+  },
+  "timing": "concurrent synchronous Service<Kv>::get through caller host, core and provider host; each sample includes full-byte result verification and Vec destruction",
+  "wall_ns": "shared worker release through last worker completion, including per-call timer, verification and sample-vector push; excludes thread creation, serial warmup, joins and sample merging",
+  "memory": "per-process bytes sampled after report; Linux peak_rss is VmHWM since process start, including startup, setup and report publication",
+  "pss": "proportional resident memory at sampling; rss counts shared pages in every process",
+  "comparison": "process memory observations are separate from DTO requested-heap allocation counters"
+}

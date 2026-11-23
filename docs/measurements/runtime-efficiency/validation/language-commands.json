@@ -1,0 +1,79 @@
+{
+  "started_utc": "2026-11-23T07:40:24.738746+00:00",
+  "python": "3.12.14 (main, Aug 25 2026, 14:00:49) [Clang 22.1.3 ]",
+  "scenarios": [
+    {
+      "scenario": "cross",
+      "command": [
+        "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/bin/python",
+        "/workspace/scratch/d556412a6783/Rust-Cordis/tests/phase3/run.py",
+        "--workspace",
+        "/workspace/scratch/d556412a6783/Rust-Cordis",
+        "--tools",
+        "/workspace/scratch/d556412a6783/language-tools-final",
+        "--dependencies",
+        "/workspace/scratch/d556412a6783/language-dependencies",
+        "--evidence",
+        "/workspace/scratch/d556412a6783/languages-cross-final",
+        "--scenario",
+        "cross"
+      ],
+      "log": "/workspace/scratch/d556412a6783/language-cross-final.log",
+      "evidence": "/workspace/scratch/d556412a6783/languages-cross-final",
+      "started_utc": "2026-11-23T07:40:24.738810+00:00",
+      "exit_code": 0,
+      "status": "passed",
+      "cleanup_members": [],
+      "elapsed_seconds": 1.592321799000274
+    },
+    {
+      "scenario": "migration",
+      "command": [
+        "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/bin/python",
+        "/workspace/scratch/d556412a6783/Rust-Cordis/tests/phase3/run.py",
+        "--workspace",
+        "/workspace/scratch/d556412a6783/Rust-Cordis",
+        "--tools",
+        "/workspace/scratch/d556412a6783/language-tools-final",
+        "--dependencies",
+        "/workspace/scratch/d556412a6783/language-dependencies",
+        "--evidence",
+        "/workspace/scratch/d556412a6783/languages-migration-final",
+        "--scenario",
+        "migration"
+      ],
+      "log": "/workspace/scratch/d556412a6783/language-migration-final.log",
+      "evidence": "/workspace/scratch/d556412a6783/languages-migration-final",
+      "started_utc": "2026-11-23T07:40:26.331775+00:00",
+      "exit_code": 0,
+      "status": "passed",
+      "cleanup_members": [],
+      "elapsed_seconds": 1.874971025999912
+    },
+    {
+      "scenario": "contracts",
+      "command": [
+        "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/bin/python",
+        "/workspace/scratch/d556412a6783/Rust-Cordis/tests/phase3/run.py",
+        "--workspace",
+        "/workspace/scratch/d556412a6783/Rust-Cordis",
+        "--tools",
+        "/workspace/scratch/d556412a6783/language-tools-final",
+        "--dependencies",
+        "/workspace/scratch/d556412a6783/language-dependencies",
+        "--evidence",
+        "/workspace/scratch/d556412a6783/languages-contracts-final",
+        "--scenario",
+        "contracts"
+      ],
+      "log": "/workspace/scratch/d556412a6783/language-contracts-final.log",
+      "evidence": "/workspace/scratch/d556412a6783/languages-contracts-final",
+      "started_utc": "2026-11-23T07:40:28.207382+00:00",
+      "exit_code": 0,
+      "status": "passed",
+      "cleanup_members": [],
+      "elapsed_seconds": 30.971560563999446
+    }
+  ],
+  "elapsed_seconds": 34.440240838001046
+}

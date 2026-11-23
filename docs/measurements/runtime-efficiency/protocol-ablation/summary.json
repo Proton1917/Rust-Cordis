@@ -1,0 +1,450 @@
+{
+  "status": "passed",
+  "input_rows": 24,
+  "formal_rows": 20,
+  "formal_pairs_per_payload": 5,
+  "concurrency": 4,
+  "calls_per_run": 512,
+  "warmup_calls": 32,
+  "baseline_label": "optimized current_thread",
+  "candidate_label": "same optimized code with multi_thread worker_threads=2",
+  "source_variant_verified": true,
+  "source_variant_scope": "Tokio main attribute and adjacent single-thread comment removed",
+  "core_binary_identical": true,
+  "all_binary_plugin_hashes_verified": true,
+  "all_quantiles_throughput_cleanup_verified": true,
+  "source_restored": true,
+  "cases": [
+    {
+      "payload_bytes": 1048576,
+      "statistics": {
+        "median_ns": {
+          "current_thread": {
+            "median": 5547580.5,
+            "range": [
+              5120060.0,
+              8049681.5
+            ]
+          },
+          "multi_thread_2": {
+            "median": 6423560.5,
+            "range": [
+              5692740.5,
+              9627957.0
+            ]
+          },
+          "paired_multi_over_current": {
+            "median": 1.0896732097060653,
+            "range": [
+              0.937831980807148,
+              1.2545869579653364
+            ],
+            "ratios": [
+              1.0261663620744215,
+              1.2545869579653364,
+              1.1960668257495655,
+              0.937831980807148,
+              1.0896732097060653
+            ]
+          }
+        },
+        "p99_ns": {
+          "current_thread": {
+            "median": 15948381,
+            "range": [
+              7604995,
+              60067578
+            ]
+          },
+          "multi_thread_2": {
+            "median": 14983808,
+            "range": [
+              10022447,
+              72169616
+            ]
+          },
+          "paired_multi_over_current": {
+            "median": 1.282443150554028,
+            "range": [
+              0.24494720550237062,
+              4.5252001441400225
+            ],
+            "ratios": [
+              0.24494720550237062,
+              1.6732936708045172,
+              4.5252001441400225,
+              1.282443150554028,
+              0.3304296703955668
+            ]
+          }
+        },
+        "calls_per_second": {
+          "current_thread": {
+            "median": 533.0081467286647,
+            "range": [
+              469.2575863994135,
+              759.7173908284923
+            ]
+          },
+          "multi_thread_2": {
+            "median": 600.0354538917153,
+            "range": [
+              351.6333004872576,
+              664.0559660869004
+            ]
+          },
+          "paired_multi_over_current": {
+            "median": 0.9777645217650558,
+            "range": [
+              0.7493396178958335,
+              1.2052175821460023
+            ],
+            "ratios": [
+              1.2052175821460023,
+              0.7898140297109172,
+              0.7493396178958335,
+              0.9777645217650558,
+              1.1459482372768477
+            ]
+          }
+        },
+        "total_pss": {
+          "current_thread": {
+            "median": 50200576,
+            "range": [
+              45658112,
+              59518976
+            ]
+          },
+          "multi_thread_2": {
+            "median": 60859392,
+            "range": [
+              54726656,
+              69234688
+            ]
+          },
+          "paired_multi_over_current": {
+            "median": 1.0901599216710183,
+            "range": [
+              1.0384006606565275,
+              1.4094054865338115
+            ],
+            "ratios": [
+              1.4094054865338115,
+              1.2847627164259443,
+              1.0901599216710183,
+              1.0384006606565275,
+              1.059147449834266
+            ]
+          }
+        },
+        "host_threads": {
+          "current_thread": {
+            "median": 18,
+            "range": [
+              17,
+              18
+            ]
+          },
+          "multi_thread_2": {
+            "median": 21,
+            "range": [
+              20,
+              22
+            ]
+          },
+          "paired_multi_over_current": {
+            "median": 1.1666666666666667,
+            "range": [
+              1.1111111111111112,
+              1.2941176470588236
+            ],
+            "ratios": [
+              1.1666666666666667,
+              1.2222222222222223,
+              1.1111111111111112,
+              1.1666666666666667,
+              1.2941176470588236
+            ]
+          }
+        },
+        "consumer_pss": {
+          "current_thread": {
+            "median": 17664000,
+            "range": [
+              16652288,
+              23080960
+            ]
+          },
+          "multi_thread_2": {
+            "median": 21012480,
+            "range": [
+              20953088,
+              24041472
+            ]
+          },
+          "paired_multi_over_current": {
+            "median": 1.2532404010760576,
+            "range": [
+              1.0002661934338952,
+              1.35257518147252
+            ],
+            "ratios": [
+              1.35257518147252,
+              1.2582708153978601,
+              1.1895652173913043,
+              1.0002661934338952,
+              1.2532404010760576
+            ]
+          }
+        },
+        "store_pss": {
+          "current_thread": {
+            "median": 15175680,
+            "range": [
+              14125056,
+              16246784
+            ]
+          },
+          "multi_thread_2": {
+            "median": 18410496,
+            "range": [
+              13263872,
+              19603456
+            ]
+          },
+          "paired_multi_over_current": {
+            "median": 1.220016152914255,
+            "range": [
+              0.8163998487331401,
+              1.2921166306695464
+            ],
+            "ratios": [
+              1.220016152914255,
+              1.2335798173118748,
+              0.8163998487331401,
+              1.2131578947368422,
+              1.2921166306695464
+            ]
+          }
+        }
+      }
+    },
+    {
+      "payload_bytes": 4194304,
+      "statistics": {
+        "median_ns": {
+          "current_thread": {
+            "median": 28257092.0,
+            "range": [
+              25933536.0,
+              30330110.0
+            ]
+          },
+          "multi_thread_2": {
+            "median": 30052304.5,
+            "range": [
+              28554412.0,
+              32035612.0
+            ]
+          },
+          "paired_multi_over_current": {
+            "median": 1.0562313160090748,
+            "range": [
+              0.9906209628350598,
+              1.1606457754160482
+            ],
+            "ratios": [
+              1.0314513478431244,
+              1.0635313959412385,
+              1.0562313160090748,
+              1.1606457754160482,
+              0.9906209628350598
+            ]
+          }
+        },
+        "p99_ns": {
+          "current_thread": {
+            "median": 91461600,
+            "range": [
+              61729586,
+              113819838
+            ]
+          },
+          "multi_thread_2": {
+            "median": 97827023,
+            "range": [
+              58582487,
+              103728486
+            ]
+          },
+          "paired_multi_over_current": {
+            "median": 1.1237439318796085,
+            "range": [
+              0.5146948724351549,
+              1.2425140677275885
+            ],
+            "ratios": [
+              0.8822932020329022,
+              1.1237439318796085,
+              1.221114243397202,
+              1.2425140677275885,
+              0.5146948724351549
+            ]
+          }
+        },
+        "calls_per_second": {
+          "current_thread": {
+            "median": 131.46672505151858,
+            "range": [
+              124.09442397072267,
+              142.82044214785404
+            ]
+          },
+          "multi_thread_2": {
+            "median": 124.81655735553147,
+            "range": [
+              115.97128410752725,
+              130.8941221845132
+            ]
+          },
+          "paired_multi_over_current": {
+            "median": 0.9494155825865361,
+            "range": [
+              0.8572349891674805,
+              1.0547945507639793
+            ],
+            "ratios": [
+              0.9766584265816604,
+              0.9494155825865361,
+              0.9284515656482593,
+              0.8572349891674805,
+              1.0547945507639793
+            ]
+          }
+        },
+        "total_pss": {
+          "current_thread": {
+            "median": 148631552,
+            "range": [
+              140230656,
+              177963008
+            ]
+          },
+          "multi_thread_2": {
+            "median": 182137856,
+            "range": [
+              145339392,
+              232399872
+            ]
+          },
+          "paired_multi_over_current": {
+            "median": 1.2440194532071505,
+            "range": [
+              0.950045516613564,
+              1.5658526996330595
+            ],
+            "ratios": [
+              1.2440194532071505,
+              1.5658526996330595,
+              0.950045516613564,
+              1.0234590775179524,
+              1.5635971560062834
+            ]
+          }
+        },
+        "host_threads": {
+          "current_thread": {
+            "median": 18,
+            "range": [
+              17,
+              20
+            ]
+          },
+          "multi_thread_2": {
+            "median": 22,
+            "range": [
+              22,
+              23
+            ]
+          },
+          "paired_multi_over_current": {
+            "median": 1.2222222222222223,
+            "range": [
+              1.1,
+              1.3529411764705883
+            ],
+            "ratios": [
+              1.2222222222222223,
+              1.2941176470588236,
+              1.1578947368421053,
+              1.3529411764705883,
+              1.1
+            ]
+          }
+        },
+        "consumer_pss": {
+          "current_thread": {
+            "median": 55418880,
+            "range": [
+              51273728,
+              68003840
+            ]
+          },
+          "multi_thread_2": {
+            "median": 72468480,
+            "range": [
+              68171776,
+              84877312
+            ]
+          },
+          "paired_multi_over_current": {
+            "median": 1.307649667405765,
+            "range": [
+              1.0645083571751242,
+              1.655376258188209
+            ],
+            "ratios": [
+              1.307649667405765,
+              1.4924544873842223,
+              1.0680206628806108,
+              1.0645083571751242,
+              1.655376258188209
+            ]
+          }
+        },
+        "store_pss": {
+          "current_thread": {
+            "median": 46817280,
+            "range": [
+              42600448,
+              50925568
+            ]
+          },
+          "multi_thread_2": {
+            "median": 51116032,
+            "range": [
+              46895104,
+              63643648
+            ]
+          },
+          "paired_multi_over_current": {
+            "median": 1.0910561286938276,
+            "range": [
+              0.9208557870184187,
+              1.3594050743657042
+            ],
+            "ratios": [
+              0.9208557870184187,
+              1.3594050743657042,
+              1.0075860556895417,
+              1.2960915340608625,
+              1.0910561286938276
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "conclusion": "The controlled comparison gives no consistent benefit from restoring two protocol workers; median paired ratios favor current_thread for latency, P99 and throughput at both payload sizes. Individual pairs retain substantial tail variability, so this supports retaining the measured thread reduction without proving universal tail-latency dominance."
+}

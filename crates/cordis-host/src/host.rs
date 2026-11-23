@@ -843,8 +843,9 @@ impl Host {
     }
 
     /// DOC-16 资源协议：参数导入和结果导出分别持有调用所需资源。
-    async fn invoke(&self, params: Payload) -> Result<Outgoing> {
-        let request: payload::Invoke = from_value(params.value())?;
+    async fn invoke(&self, mut params: Payload) -> Result<Outgoing> {
+        let request = payload::Invoke::from_value_owned(params.take_value())
+            .map_err(|problem| Error::new(2, problem.to_string()))?;
         let object = self.objects().borrow(request.object)?;
         let bridge = self.bridge()?;
         let arguments = bridge.incoming(&params, Value::Array(request.args)).await?;

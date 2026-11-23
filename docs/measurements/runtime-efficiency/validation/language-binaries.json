@@ -1,0 +1,35 @@
+{
+  "created_utc": "2026-11-23T07:40:07.457036+00:00",
+  "source": "/workspace/scratch/d556412a6783/build/shared/debug",
+  "files": {
+    "cordis": {
+      "sha256": "7496d026833dc6e05d1f4ccdbe520fe9b48bbb0397db71b1df244e3e41bc29a6",
+      "size": 22945408
+    },
+    "cordis-host": {
+      "sha256": "b1f4e9d93cbd0c403ce366d9ea8a95006c1369ef5bffe559d5418dcb39fe68f5",
+      "size": 10294352
+    },
+    "cordis-runtime-fixture": {
+      "sha256": "15abd52a964555c0e6309af9dfed6b3494c7e675705bcae121a230f4d9dbe949",
+      "size": 4357536
+    },
+    "libkv_mem.so": {
+      "sha256": "c0c934999ddd262797cdae1bf6f9d6df0221f251524ee6749578e446bdac8f29",
+      "size": 1803824
+    },
+    "libcounter.so": {
+      "sha256": "1c9d57cf44c5ba08c4d8a495f3c3370fef85e18f2ebec98b129f336aa6b6afec",
+      "size": 1580384
+    },
+    "libkv_contract.so": {
+      "sha256": "09675b277b5bdd18440b60784c3ba45b32a11251beaebf50d482e22f734b7417",
+      "size": 2661960
+    }
+  },
+  "python": "3.12",
+  "cbor2": "5.6.5",
+  "node": "24.22.3",
+  "typescript": "5.9.3",
+  "cbor_x": "1.6.0"
+}

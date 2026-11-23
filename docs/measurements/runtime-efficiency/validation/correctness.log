@@ -1,0 +1,690 @@
+   Compiling mio v1.2.4
+   Compiling parking_lot_core v0.10.0
+   Compiling semver v1.0.28
+   Compiling clap_derive v4.6.7
+   Compiling inotify-sys v0.1.8
+   Compiling notify-types v2.1.0
+   Compiling inotify v0.11.5
+   Compiling parking_lot v0.13.0
+   Compiling tokio v1.54.1
+   Compiling notify v8.2.0
+   Compiling cordis v0.1.2 (/workspace/scratch/d556412a6783/Rust-Cordis/crates/cordis)
+   Compiling clap v4.6.7
+   Compiling cordis-testkit v0.1.1 (/workspace/scratch/d556412a6783/Rust-Cordis/crates/cordis-testkit)
+   Compiling cordis-up v0.1.1 (/workspace/scratch/d556412a6783/Rust-Cordis/crates/cordis-up)
+   Compiling cordis-sdk v0.3.0 (/workspace/scratch/d556412a6783/Rust-Cordis/crates/cordis-sdk)
+   Compiling cordis-process v0.1.1 (/workspace/scratch/d556412a6783/Rust-Cordis/crates/cordis-process)
+   Compiling cordis-routing v0.1.2 (/workspace/scratch/d556412a6783/Rust-Cordis/crates/cordis-routing)
+   Compiling cordis-watch v0.1.3 (/workspace/scratch/d556412a6783/Rust-Cordis/plugins/watch)
+   Compiling cordis-host v0.1.5 (/workspace/scratch/d556412a6783/Rust-Cordis/crates/cordis-host)
+   Compiling cordis-supervisor v0.1.8 (/workspace/scratch/d556412a6783/Rust-Cordis/crates/cordis-supervisor)
+    Finished `test` profile [unoptimized] target(s) in 9.77s
+     Running unittests src/lib.rs (/workspace/scratch/d556412a6783/build/debug/deps/cordis-b42af843f8eaf14c)
+
+running 4 tests
+test list::tests::head_tail_and_handle_removal ... ok
+test reflect::tests::refresh_snapshot_predicate_drop_runs_outside_lock ... ok
+test reflect::tests::refresh_snapshot_value_drop_runs_outside_lock ... ok
+test fiber::tests::drain_panic_releases_ownership_and_resumes_restart ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/associate.rs (/workspace/scratch/d556412a6783/build/debug/deps/associate-8b262e1a80bfc9cf)
+
+running 5 tests
+test asc02_associated_property_update_uses_typed_service ... ok
+test asc01_associated_service_follows_binding_lifetime ... ok
+test asc04_session_accessor_uses_service_value_contract ... ok
+test asc03_associated_session_access_uses_declared_service ... ok
+test asc05_associated_dependency_uses_current_service_declaration ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/component.rs (/workspace/scratch/d556412a6783/build/debug/deps/component-38354b59a45a8189)
+
+running 9 tests
+test component_disposes_its_effect_once ... ok
+test disposed_context_rejects_new_registrations ... ok
+test component_disposal_restores_registration_snapshot ... ok
+test functional_component_receives_configuration ... ok
+test context_debug_uses_nearest_component_name ... ok
+test registry_tracks_runtime_instances ... ok
+test typed_component_receives_configuration ... ok
+test root_disposal_releases_children_and_remains_active ... ok
+test nested_components_release_their_event_handlers ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/concurrency.rs (/workspace/scratch/d556412a6783/build/debug/deps/concurrency-3e9b212dd16be046)
+
+running 8 tests
+test rejected_effect_cleanup_resumes_original_future_on_dispose ... ok
+test rejected_effect_execution_returns_recorded_error ... ok
+test accepted_submission_survives_host_panic_once ... ok
+test rejected_spawn_records_failure_and_preserves_reconciliation ... ok
+test rejected_fiber_cleanup_resumes_original_transition_on_dispose ... ok
+test independent_rejected_cleanups_remain_visible_until_each_resumes ... ok
+test restart_queued_behind_another_thread_must_not_settle_early ... ok
+test provider_settles_after_status_notification_reaches_consumer ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/context.rs (/workspace/scratch/d556412a6783/build/debug/deps/context-541204437024dbae)
+
+running 1 test
+test persistent_views ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/dependency_availability.rs (/workspace/scratch/d556412a6783/build/debug/deps/dependency_availability-606b7c5bd64d7385)
+
+running 6 tests
+test consumers_apply_distinct_minor_requirements ... ok
+test forget_retires_only_empty_canonical_definition ... ok
+test optional_dependency_tracks_present_and_absent_epochs ... ok
+test late_availability_check_preserves_newer_notification ... ok
+test dependency_predicate_runs_outside_kernel_lock ... ok
+test optional_consumer_releases_before_provider ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/dispose.rs (/workspace/scratch/d556412a6783/build/debug/deps/dispose-7073db1630a31867)
+
+running 6 tests
+test dispose_manually ... ok
+test return_with_error ... ok
+test yield_with_error ... ok
+test panic_recovers_registered_steps ... ok
+test yield_dispose ... ok
+test reentrant_cleanup_and_root_ownership ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/dispose_async.rs (/workspace/scratch/d556412a6783/build/debug/deps/dispose_async-a46908458636dd80)
+
+running 8 tests
+test async_return ... ok
+test async_yield_and_wait_for_execution ... ok
+test async_error_recovers_registered_steps ... ok
+test async_yield_cooperative_stop ... ok
+test disposing_pending_instance_releases_registered_listener ... ok
+test async_yield_finalization ... ok
+test async_cleanup_is_sequential_and_panic_safe ... ok
+test restart_waits_for_an_explicit_cleanup_already_in_progress ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/event_hot_paths.rs (/workspace/scratch/d556412a6783/build/debug/deps/event_hot_paths-d3cad621d48da912)
+
+running 4 tests
+test measure_event_hot_paths ... ignored, run explicitly in release mode for timing
+test empty_waterfall_has_no_allocations ... ok
+test unintercepted_service_read_allocation_budget ... ok
+test unobserved_empty_typed_dispatch_has_no_allocations ... ok
+
+test result: ok. 3 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/events.rs (/workspace/scratch/d556412a6783/build/debug/deps/events-7378965e8c4cc619)
+
+running 26 tests
+test all_modes_defer_added_listeners ... ok
+test internal_listener_takes_over_registration ... ok
+test internal_dispatch_observes_public_events ... ok
+test all_modes_skip_removed_listeners ... ok
+test on_and_explicit_disposal ... ok
+test empty_buckets_are_removed ... ok
+test once_and_explicit_disposal ... ok
+test once_across_concurrent_serial_dispatches ... ok
+test empty_waterfall_drops_args_before_terminal_captures ... ok
+test once_is_consumed_by_recursive_dispatch ... ok
+test parallel_labels_typed_event ... ok
+test parallel_filters_and_aggregates_errors ... ok
+test prepend_global_and_bail ... ok
+test serial_filtering_errors_and_bail_result ... ok
+test waterfall_filtered_out_once_listener_preserves_terminal_error ... ok
+test synchronous_filters_and_panic_propagation ... ok
+test typed_keys_across_dispatch_modes ... ok
+test waterfall_nesting_and_short_circuit ... ok
+test waterfall_observer_can_add_listener_to_current_dispatch ... ok
+test waterfall_recursion_consumes_once ... ok
+test waterfall_rejects_duplicate_after_await ... ok
+test waterfall_rejects_outer_continuation ... ok
+test waterfall_defers_added_listener ... ok
+test waterfall_rejects_duplicate_next ... ok
+test waterfall_supports_nested_async_calls ... ok
+test waterfall_skips_removed_listener ... ok
+
+test result: ok. 26 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/events_lifecycle.rs (/workspace/scratch/d556412a6783/build/debug/deps/events_lifecycle-bdaad5244f468fc6)
+
+running 6 tests
+test update_listener_can_be_disposed ... ok
+test serial_skips_listener_disposed_with_component ... ok
+test update_listeners_are_replaced_on_reload ... ok
+test update_skips_removed_fiber_listener ... ok
+test global_update_listener_survives_child_reload ... ok
+test update_prepended_listeners_run_first ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/fiber.rs (/workspace/scratch/d556412a6783/build/debug/deps/fiber-64b681d9453e9fdc)
+
+running 16 tests
+test cloned_handle_restarts_same_fiber ... ok
+test dropped_update_waiter_preserves_failure_state ... ok
+test active_fiber_disposal_status_sequence ... ok
+test cloned_handle_updates_shared_configuration ... ok
+test disposal_records_error_and_releases_other_effects ... ok
+test component_failure_cleans_partial_effects ... ok
+test failed_fiber_disposes_with_one_status_transition ... ok
+test handled_update_preserves_source_for_later_restart ... ok
+test invalid_initial_configuration_fails_before_apply ... ok
+test invalid_update_preserves_active_configuration ... ok
+test validation_error_preserves_issues_and_paths ... ok
+test update_listeners_receive_resolved_configuration ... ok
+test update_returns_failed_recovery ... ok
+test update_returns_failed_reload ... ok
+test update_waits_for_asynchronous_recovery ... ok
+test status_listener_panic_preserves_reconciliation ... ok
+
+test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/intercept.rs (/workspace/scratch/d556412a6783/build/debug/deps/intercept-25a64a37a33b0429)
+
+running 7 tests
+test icp04_isolation_stops_inherited_injection_metadata ... ok
+test icp05_own_provision_uses_its_own_intercepts ... ok
+test icp01_context_layers_merge_outer_to_inner ... ok
+test icp03_nearest_declaration_supplies_metadata ... ok
+test icp07_custom_metadata_merge_concatenates_tags ... ok
+test icp06_nested_dependency_uses_definition_metadata_and_caller_intercepts ... ok
+test icp02_injection_metadata_precedes_context_interception ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/invoke.rs (/workspace/scratch/d556412a6783/build/debug/deps/invoke-e84ce99877924fc9)
+
+running 2 tests
+test inv01_callable_extension_preserves_caller_metadata ... ok
+test inv02_callable_extension_preserves_definition_dependencies ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/isolate.rs (/workspace/scratch/d556412a6783/build/debug/deps/isolate-239e7c6c5cbe20e2)
+
+running 5 tests
+test iso05_service_event_filter_uses_isolation_realm ... ok
+test iso06_own_provisions_and_committed_dependency_remain_distinct ... ok
+test iso01_own_provisions_follow_their_realm ... ok
+test iso02_explicit_isolation_stops_ancestor_injection ... ok
+test iso03_iso04_independent_and_shared_realms ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/logger.rs (/workspace/scratch/d556412a6783/build/debug/deps/logger-c586bcee38d3114e)
+
+running 14 tests
+test log01_bounded_buffer_stays_chronological ... ok
+test log02_exporter_disposal_removes_its_own_registration ... ok
+test exporter_filter_precedence_and_reentrant_callback ... ok
+test log03_logger_defaults_to_current_fiber_name ... ok
+test log04_explicit_name_has_priority ... ok
+test completed_submission_panic_keeps_disposed_fiber_as_log_source ... ok
+test kernel_error_reporting_preserves_lifecycle_after_exporter_panic ... ok
+test log05_intercept_supplies_logger_name ... ok
+test log09_initialization_uses_component_name ... ok
+test log10_empty_aggregate_is_logged_as_itself ... ok
+test log07_outer_intercept_overrides_service_logger_name ... ok
+test log08_nested_service_restores_outer_logger_name ... ok
+test log11_aggregate_members_and_error_causes_keep_order ... ok
+test log06_service_method_uses_service_fiber_name ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/named.rs (/workspace/scratch/d556412a6783/build/debug/deps/named-366f42208116b5d5)
+
+running 10 tests
+test named_access_uses_service_interceptors ... ok
+test named_events_reenter_and_release_listeners ... ok
+test canonical_definition_survives_last_instance_for_alias_mount ... ok
+test named_async_dispatch_uses_snapshot_and_aggregates_failures ... ok
+test named_metadata_preserves_declaration_and_view_rules ... ok
+test named_replacement_reloads_only_its_realm ... ok
+test named_sync_dispatch_returns_listener_error ... ok
+test owned_names_and_mixed_dependency_registration ... ok
+test replacement_releases_each_retired_definition ... ok
+test typed_and_named_event_registration_conflict_both_ways ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/reflect.rs (/workspace/scratch/d556412a6783/build/debug/deps/reflect-93b7953c27800d88)
+
+running 8 tests
+test rfl01_context_extension_preserves_context_operations ... ok
+test rfl02_access_and_registration_contracts ... ok
+test rfl04_access_error_retains_call_location ... ok
+test rfl03_service_injection_and_inherited_extension ... ok
+test availability_check_reenters_kernel_and_updates_dependents ... ok
+test rfl06_disposed_during_notification_keeps_component_unexecuted ... ok
+test rfl05_disposed_injection_reports_inactive_access ... ok
+test internal_service_panic_preserves_provision_and_withdrawal ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/replace.rs (/workspace/scratch/d556412a6783/build/debug/deps/replace-9ce836773968da55)
+
+running 17 tests
+test disposal_unregisters_replacement_runtime ... ok
+test old_component_forwards_to_new_definition ... ok
+test replace_event_observes_moved_implementation ... ok
+test replaced_provider_reloads_its_consumer ... ok
+test replacement_can_switch_back_to_previous_component ... ok
+test replacement_failure_is_observable ... ok
+test repeated_replacement_preserves_unique_instance_order ... ok
+test replacement_adopts_new_dependency_specification ... ok
+test replacement_follows_alias_chain ... ok
+test replacement_merges_existing_runtime_instances ... ok
+test replacement_recovers_failed_fiber ... ok
+test replacement_removing_missing_dependency_activates_fiber ... ok
+test replacement_releases_dropped_dependency ... ok
+test replacement_uses_new_configuration_schema ... ok
+test replacement_to_available_dependency_activates_fiber ... ok
+test unregistered_component_can_be_forwarded ... ok
+test replacement_preserves_fiber_identity_and_configuration ... ok
+
+test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/replacement_scaling.rs (/workspace/scratch/d556412a6783/build/debug/deps/replacement_scaling-6704c61bbb65aa61)
+
+running 1 test
+test replacement_scaling ... ignored, release-mode component replacement measurement
+
+test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/service.rs (/workspace/scratch/d556412a6783/build/debug/deps/service-90b66f21cd1ecf3d)
+
+running 14 tests
+test cmp11_component_initialization_registers_release ... ok
+test fbr05_fbr06_failed_fiber_recovers_through_update ... ok
+test fbr03_active_consumer_returns_to_pending ... ok
+test fbr01_fbr02_inertial_loading_and_unloading ... ok
+test fbr12_pending_fiber_disposal_reaches_disposed ... ok
+test svc02_scoped_counter_effect_belongs_to_declaring_consumer ... ok
+test svc01_provider_initialization_gates_consumers ... ok
+test svc03_root_access_retains_root_effect_ownership ... ok
+test svc04_service_lifecycle_restores_registration_snapshot ... ok
+test fbr17_update_during_provider_reload_uses_latest_pair ... ok
+test upd08_pending_dependency_loads_latest_config ... ok
+test svc05_multiple_dependencies_and_cycles ... ok
+test upd01_concurrent_updates_with_dependency_coalesce ... ok
+test svc06_svc07_svc08_dependency_cleanup_precedes_provider ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/service_dispose.rs (/workspace/scratch/d556412a6783/build/debug/deps/service_dispose-345362686bd7effe)
+
+running 17 tests
+test svd07_releases_dependencies_after_cleanup_error ... ok
+test svd03_withdrawal_waits_for_its_own_binding ... ok
+test svd05_retains_transitive_dependencies ... ok
+test svd06_retains_dependencies_during_setup_and_rollback ... ok
+test svd08_provider_listener_receives_final_consumer_event ... ok
+test svd01_releases_dependency_after_same_name_in_another_realm ... ok
+test svd09_independent_providers_and_sibling_effects_drain_concurrently ... ok
+test svd02_withdrawal_waits_for_consumer_after_registry_removal ... ok
+test svd11_child_in_composed_effect_reads_inherited_provision ... ok
+test svd04_retains_resources_through_all_shutdown_orders ... ok
+test svd13_parent_provider_waits_for_explicit_child_dependency ... ok
+test svd10_composed_provider_effect_retains_resource ... ok
+test svd12_ancestor_injection_lives_through_child_cleanup ... ok
+test svd15_old_withdrawal_finishes_while_new_load_waits ... ok
+test svd17_binding_replacement_during_consumer_setup ... ok
+test svd14_same_name_bindings_in_distinct_realms ... ok
+test svd16_provider_waits_for_current_and_retired_bindings ... ok
+
+test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/shadow.rs (/workspace/scratch/d556412a6783/build/debug/deps/shadow-ace905f36ee6a840)
+
+running 8 tests
+test shd04_definition_binding_and_use_site_realm_are_independent ... ok
+test shd01_direct_caller_and_service_definition_stay_separate ... ok
+test shd03_captured_definition_resolves_self_and_dependencies ... ok
+test shd02_root_entry_enforces_service_dependency_declaration ... ok
+test shd06_plain_service_receives_explicit_caller ... ok
+test shd07_callable_service_receives_direct_service_caller ... ok
+test shd05_root_defined_service_keeps_root_access ... ok
+test shd08_service_created_components_use_callers_lifecycle ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/stress.rs (/workspace/scratch/d556412a6783/build/debug/deps/stress-2da470c93ef421c7)
+
+running 2 tests
+test declared_dependency_controls_method_effect ... ok
+test eight_workers_recover_one_thousand_rounds ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.51s
+
+     Running tests/update.rs (/workspace/scratch/d556412a6783/build/debug/deps/update-57ccb8edbb2ad313)
+
+running 8 tests
+test accepted_update_during_loading_preserves_current_load ... ok
+test cooperative_step_keeps_final_cleanup_and_stops_continuation ... ok
+test disposal_prevents_queued_configuration_load ... ok
+test concurrent_waiters_receive_latest_failure ... ok
+test restart_and_configuration_aba_supersede_loading ... ok
+test superseded_failure_preserves_latest_target ... ok
+test superseded_loads_are_skipped_before_apply ... ok
+test updates_coalesce_during_unloading ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (/workspace/scratch/d556412a6783/build/debug/deps/cordis_host-db32564104c755cc)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/main.rs (/workspace/scratch/d556412a6783/build/debug/deps/cordis_host-dfc090d305e6a313)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/native.rs (/workspace/scratch/d556412a6783/build/debug/deps/native-c18bbb88a608f766)
+
+running 23 tests
+   Compiling cordis-up v0.1.1 (/workspace/scratch/d556412a6783/Rust-Cordis/crates/cordis-up)
+   Compiling cordis-process v0.1.1 (/workspace/scratch/d556412a6783/Rust-Cordis/crates/cordis-process)
+   Compiling cordis-routing v0.1.2 (/workspace/scratch/d556412a6783/Rust-Cordis/crates/cordis-routing)
+   Compiling cordis-supervisor v0.1.8 (/workspace/scratch/d556412a6783/Rust-Cordis/crates/cordis-supervisor)
+   Compiling cordis-host-driver v0.1.0 (/workspace/scratch/d556412a6783/Rust-Cordis/crates/cordis-host/tests/driver)
+    Finished `dev` profile [unoptimized] target(s) in 6.11s
+     Running `/workspace/scratch/d556412a6783/build/shared/debug/cordis-host-driver --build-only --artifacts-dir /workspace/scratch/d556412a6783/Rust-Cordis/target/host-native/host-driver-1730-2 --host /workspace/scratch/d556412a6783/build/debug/cordis-host`
+用当前编译器构建提供方动态库
+   Compiling loader-fixture v0.1.0 (/workspace/scratch/d556412a6783/Rust-Cordis/crates/cordis-host/tests/fixtures/provider)
+    Finished `dev` profile [unoptimized] target(s) in 0.35s
+provider-v2
+   Compiling loader-fixture v0.1.0 (/workspace/scratch/d556412a6783/Rust-Cordis/crates/cordis-host/tests/fixtures/provider)
+    Finished `dev` profile [unoptimized] target(s) in 0.32s
+provider-fails
+   Compiling loader-fixture v0.1.0 (/workspace/scratch/d556412a6783/Rust-Cordis/crates/cordis-host/tests/fixtures/provider)
+    Finished `dev` profile [unoptimized] target(s) in 0.33s
+provider-incompatible
+   Compiling loader-fixture v0.1.0 (/workspace/scratch/d556412a6783/Rust-Cordis/crates/cordis-host/tests/fixtures/provider)
+    Finished `dev` profile [unoptimized] target(s) in 0.61s
+构建Scoped提供方动态库
+   Compiling loader-fixture v0.1.0 (/workspace/scratch/d556412a6783/Rust-Cordis/crates/cordis-host/tests/fixtures/provider)
+    Finished `dev` profile [unoptimized] target(s) in 0.35s
+用Rust 1.85.0构建使用方动态库
+   Compiling loader-fixture-consumer v0.1.0 (/workspace/scratch/d556412a6783/Rust-Cordis/crates/cordis-host/tests/fixtures/consumer)
+    Finished `dev` profile [unoptimized] target(s) in 1.61s
+同步等待场景分组 wait-storage PID=Some(2128)
+SIGKILL 释放宿主共享锁：无引用候选回收，核心引用保留到显式归还
+所选原生宿主验收场景全部通过
+test native_cache_reclaims_unowned_files_after_sigkill ... ok
+跨组原生宿主PID：Some(2129)、Some(2163)
+同步等待场景分组 wait-client PID=Some(2194)
+[stderr connection:3]
+[stderr connection:3] thread '<unnamed>' (2201) panicked at provider/src/lib.rs:205:13:
+[stderr connection:3] fixture apply panic
+[stderr connection:3] note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+原生故障隔离通过：apply-panic，核心继续运行，其他分组纪元保持
+所选原生宿主验收场景全部通过
+test apply_panic_reports_failure ... ok
+验证通过：typed=false，真实跨库调用100→102，状态导出102
+原生故障隔离通过：abort，核心继续运行，其他分组纪元保持
+所选原生宿主验收场景全部通过
+test cross_group_generic_calls ... ok
+所选原生宿主验收场景全部通过
+test abort_isolates_group ... ok
+所选原生宿主验收场景全部通过
+test plugin_code_uses_library_tokio_runtime ... ok
+原生确认期：写入142已应答，宿主退出后恢复137，丢弃报告包含两实例和2000ms窗口
+原生故障隔离通过：exit，核心继续运行，其他分组纪元保持
+所选原生宿主验收场景全部通过
+test process_exit_isolates_group ... ok
+所选原生宿主验收场景全部通过
+原生组合通过：typed=false，Scoped缓存/元数据、命名域、新域、子组件和视图清理
+test native_confirmation_restores_dependent_state ... ok
+所选原生宿主验收场景全部通过
+test cross_group_composition ... ok
+所选原生宿主验收场景全部通过
+test rejected_native_candidates_respect_image_limit ... ok
+同组原生宿主PID：Some(2506)
+验证通过：typed=true，真实跨库调用100→102，状态导出102
+所选原生宿主验收场景全部通过
+test same_group_typed_calls ... ok
+原生组合通过：typed=true，Scoped缓存/元数据、命名域、新域、子组件和视图清理
+同步等待场景分组 wait-storage PID=Some(2531)
+所选原生宿主验收场景全部通过
+test same_group_composition ... ok
+组内换库通过：真实v1→v2、清理次序、零租约、apply失败回滚和不兼容拒绝
+同步等待场景分组 wait-client PID=Some(2538)
+所选原生宿主验收场景全部通过
+test native_library_swap_and_rollback ... ok
+安全等待四路并发通过：elapsed_ms=7
+安全等待通过：nested
+安全等待通过：system_thread
+安全等待通过：task
+[stderr connection:2]
+[stderr connection:2] thread '<unnamed>' panicked at consumer/src/blocking_wait.rs:85:35:
+[stderr connection:2] 等待体 panic
+[stderr connection:2] note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+原生故障隔离通过：segfault，核心继续运行，其他分组纪元保持
+所选原生宿主验收场景全部通过
+test segmentation_fault_isolates_group ... ok
+所选原生宿主验收场景全部通过
+test sdk_wait_preserves_native_workers ... ok
+[stderr connection:3]
+[stderr connection:3] thread '<unnamed>' (2604) panicked at provider/src/lib.rs:109:30:
+[stderr connection:3] native service panic
+[stderr connection:3] note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+原生故障隔离通过：panic，核心继续运行，其他分组纪元保持
+目录序号通过：两个宿主取得8、9，扫描保护活动副本，退出后归还；历史副本7保留
+所选原生宿主验收场景全部通过
+test shared_directory_allocates_monotonic_copies ... ok
+所选原生宿主验收场景全部通过
+test service_panic_preserves_host ... ok
+[stderr connection:3]
+[stderr connection:3] thread 'cordis-native' (2651) has overflowed its stack
+[stderr connection:3] fatal runtime error: stack overflow, aborting
+原生故障隔离通过：stack，核心继续运行，其他分组纪元保持
+所选原生宿主验收场景全部通过
+test stack_overflow_isolates_group ... ok
+缓存恢复：删除原文件后SIGKILL，扫描保留重启来源并恢复137；并发扫描与换库成功
+所选原生宿主验收场景全部通过
+test native_cache_scan_preserves_restart_and_replacement ... ok
+[stderr connection:3] UP/1 连接结束：插件输出结束：early eof
+原生故障隔离通过：spin，核心继续运行，其他分组纪元保持
+所选原生宿主验收场景全部通过
+test endless_computation_isolates_group ... ok
+副本有界：8次描述均归零，4次启动各4次换库保持1份，关闭后归零
+所选原生宿主验收场景全部通过
+test native_cache_bounds_descriptions_starts_and_swaps ... ok
+阈值验收通过：21轮固定换库，前20轮无关纪元保持，第21轮分组重启并继承137
+所选原生宿主验收场景全部通过
+test retired_image_threshold_restarts_group ... ok
+两个同步等待：elapsed_ms=1001，结果=Err(WireError { code: 6, message: "插件请求超过截止时间", detail: Null }) / Err(WireError { code: 6, message: "插件请求超过截止时间", detail: Null })
+文件锁截止：两个来源任务300ms返回超时，核心保持服务，换库返回code6
+所选原生宿主验收场景全部通过
+test native_cache_lock_wait_has_a_deadline ... ok
+同步等待复现：两线程占满，三次code6后分组被回收
+所选原生宿主验收场景全部通过
+test concurrent_raw_wait_exhausts_native_workers ... ok
+
+test result: ok. 23 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 12.07s
+
+     Running unittests src/lib.rs (/workspace/scratch/d556412a6783/build/debug/deps/cordis_routing-9f6a71a64d55eb5a)
+
+running 3 tests
+test transfer::tests::rewrite_preserves_nested_allocations_and_resource_order ... ok
+test transfer::tests::rewrite_propagates_mapping_failure_and_stops_traversal ... ok
+test transfer::tests::rewrite_rejects_invalid_resource_ids_before_mapping ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (/workspace/scratch/d556412a6783/build/debug/deps/cordis_supervisor-74f5048e19c6c268)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/manager.rs (/workspace/scratch/d556412a6783/build/debug/deps/manager-dc83588e62bf0f21)
+
+running 24 tests
+test owner_closing_during_child_attachment_reclaims_catalog_entry ... ok
+test deployment_children_finish_before_parent_disposal ... ok
+test core_owner_tracks_backend_presence_and_releases_page ... ok
+test failed_group_replacement_rolls_back_state ... ok
+test late_parent_cleanup_preserves_reused_child_name ... ok
+test derived_scopes_cache_actual_binding_and_own_child_lifetime ... ok
+test named_realms_share_bindings_and_separate_other_instances ... ok
+test registration_and_metadata_quotas_recover_after_cleanup ... ok
+test released_view_registration_recycles_and_effect_keeps_its_context ... ok
+test selected_checkpoint_detach_and_shutdown_freeze_use_real_process_state ... ok
+test core_orders_same_group_cleanup_and_rebuilds_dependencies ... ok
+test state_transitions::batch_replacement_preserves_implicit_downstream_state ... ok
+test state_transitions::failed_update_releases_optional_consumers_original_exporter ... ok
+test state_transitions::confirmation_rollback_reports_discarded_dependent_state ... ok
+test state_transitions::deployment_captures_new_roots_and_named_dynamic_consumers_only ... ok
+test state_transitions::updating_provider_ends_inflight_call_before_deadline ... ok
+test state_transitions::updating_provider_interrupts_a_returned_byte_stream ... ok
+test state_transitions::upstream_configuration_update_preserves_downstream_state ... ok
+test state_transitions::upstream_group_replacement_preserves_latest_downstream_state ... ok
+test process_failure_releases_dependencies_and_restores_checkpoint ... ok
+test state_transitions::crashed_provider_uses_checkpoint_and_preserves_live_downstream ... ok
+test accepted_replacement_survives_waiter_cancellation ... ok
+test state_transitions::optional_dependent_keeps_writes_during_provider_restart ... ok
+test restart_limit_uses_backoff_and_latest_snapshot ... ok
+
+test result: ok. 24 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 19.24s
+
+     Running tests/process.rs (/workspace/scratch/d556412a6783/build/debug/deps/process-57ea335364ed9334)
+
+running 4 tests
+test capture_reports_output_limits_and_deadlines ... ok
+test natural_exit_reaps_the_group_and_its_descendants ... ok
+test requests_notifications_resources_and_orderly_exit ... ok
+test malformed_frames_timeouts_and_flood_leave_other_processes_responsive ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.52s
+
+     Running unittests src/lib.rs (/workspace/scratch/d556412a6783/build/debug/deps/cordis_up-4a981eb11e5ef0b2)
+
+running 3 tests
+test codec::tests::frame_prefix_is_outside_the_body_budget ... ok
+test codec::tests::framed_encoding_preserves_validation_errors ... ok
+test codec::tests::framed_encoding_preserves_body_and_length ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/codec.rs (/workspace/scratch/d556412a6783/build/debug/deps/codec-6e47010369dc6f33)
+
+running 9 tests
+test collections_and_declared_lengths_are_bounded ... ok
+test decoding_budget_scope_restores_after_failure ... ok
+test error_details_and_state_reject_resource_tags ... ok
+test envelope_and_resource_tags_survive_codec ... ok
+test frame_body_limit_truncation_and_trailing_data_are_rejected ... ok
+test nesting_and_aggregate_values_are_bounded ... ok
+test payload_reference_list_is_root_scoped_and_unique ... ok
+test value_limits_report_the_exceeded_budget ... ok
+test invalid_envelopes_and_resource_values_are_rejected ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/payload_owned.rs (/workspace/scratch/d556412a6783/build/debug/deps/payload_owned-7d2fbe97b32b2e51)
+
+running 6 tests
+test owned_encoding_preserves_nested_cbor_values ... ok
+test owned_conversion_preserves_nested_value_representation ... ok
+test owned_result_preserves_serde_acceptance_and_errors ... ok
+test owned_invoke_preserves_serde_acceptance_and_errors ... ok
+test owned_result_preserves_wire_bytes_and_nested_payload_buffer ... ok
+test owned_invoke_preserves_wire_bytes_and_payload_buffers ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/payload_performance.rs (/workspace/scratch/d556412a6783/build/debug/deps/payload_performance-dfc73b2e9408d8ae)
+
+running 1 test
+test measure_payload_roundtrips ... ignored, run explicitly in release mode with --nocapture for DTO measurements
+
+test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/rpc.rs (/workspace/scratch/d556412a6783/build/debug/deps/rpc-4aedd30e14a38fb0)
+
+running 4 tests
+test after_write_runs_after_the_complete_response ... ok
+test local_encoding_limit_preserves_the_connection ... ok
+test timeout_before_enqueue_preserves_the_connection ... ok
+test negotiated_invoke_forwards_remaining_budget_to_a_nested_peer ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/rpc_deadlines.rs (/workspace/scratch/d556412a6783/build/debug/deps/rpc_deadlines-768f440bbcbaad7a)
+
+running 7 tests
+test remote_timeout_responses_reach_the_connection_threshold ... ok
+test local_encoding_errors_do_not_reset_the_timeout_streak ... ok
+test non_timeout_error_replies_reset_the_timeout_streak ... ok
+test inherited_timeout_replies_do_not_count_or_reset_the_own_timeout_streak ... ok
+test received_success_resets_streak_before_the_caller_is_repolled ... ok
+test successful_replies_reset_the_timeout_streak ... ok
+test local_and_remote_timeouts_share_one_streak ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/rpc_ownership.rs (/workspace/scratch/d556412a6783/build/debug/deps/rpc_ownership-fa981e43c0c17ccc)
+
+running 2 tests
+test queued_notification_releases_value_before_waiting_and_cancels_its_commit ... ok
+test taking_received_value_preserves_imported_resource_lifetime ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (/workspace/scratch/d556412a6783/build/debug/deps/cordis_watch-94ad01cfe6405204)
+
+running 5 tests
+test tests::missing_installed_candidate_preserves_the_preparation_error ... ok
+test tests::installed_content_rechecks_rejection_with_the_same_source_count ... ok
+test tests::prepared_batch_reads_only_its_installed_plugins_and_preserves_config_content ... ok
+test tests::persisted_candidate_tracks_the_installed_copy_across_source_changes ... ok
+test tests::missing_legacy_rejection_copy_allows_reconsideration ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests cordis
+
+running 2 tests
+test crates/cordis/src/effect.rs - effect::EffectScope::defer (line 107) - compile fail ... ok
+test crates/cordis/src/registry.rs - registry::Context::mount (line 509) - compile fail ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+   Doc-tests cordis_host
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests cordis_routing
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests cordis_supervisor
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests cordis_up
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s

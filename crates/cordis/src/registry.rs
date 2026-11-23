@@ -461,7 +461,8 @@ impl Registry {
                     .runtimes
                     .get_mut(&next.id)
                     .expect("replacement runtime installed");
-                if !runtime.fibers.contains(&fiber.id) {
+                // 不同运行时的实例集合互斥；同一运行时已经持有这些实例。
+                if source != next.id {
                     runtime.fibers.push(fiber.id);
                 }
                 let data = &mut state.fibers[fiber.id];

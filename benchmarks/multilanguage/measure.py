@@ -45,7 +45,7 @@ def fixture(project, tools, role):
 
 
 class Running:
-    def __init__(self, project, tools, workspace, dependencies, python_paths=(), arguments=()):
+    def __init__(self, project, tools, workspace, dependencies, python_paths=(), arguments=(), start_new_session=False):
         self.project = project
         self.serial = 0
         environment = os.environ.copy()
@@ -57,7 +57,7 @@ class Running:
         environment["PYTHONPATH"] = os.pathsep.join(imports)
         environment["TMPDIR"] = str(project / "tmp")
         with (project / "stdout.log").open("w") as output, (project / "stderr.log").open("w") as error:
-            self.process = subprocess.Popen([str(tools / "cordis"), "run", *arguments], cwd=project, env=environment, stdout=output, stderr=error)
+            self.process = subprocess.Popen([str(tools / "cordis"), "run", *arguments], cwd=project, env=environment, stdout=output, stderr=error, start_new_session=start_new_session)
 
     def wait(self, observe, description, seconds=180):
         deadline = time.monotonic() + seconds

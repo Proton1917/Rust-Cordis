@@ -66,8 +66,7 @@ struct PendingBatch {
 struct BatchPlan {
     replacements: Vec<(String, String)>,
     reload: bool,
-    snapshot: RuntimeSnapshot,
-    sources: BTreeSet<PathBuf>,
+    sources: BTreeMap<PathBuf, PathBuf>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -82,6 +81,61 @@ impl Rejected {
             Self::Copy(path) => Ok(optional_image(path)?.is_some_and(|saved| saved == *candidate)),
             Self::Content(saved) => Ok(saved == candidate),
         }
+    }
+}
+
+/// ADR-0031：比较整批来源集合和完整内容，重复通知保持当前部署。
+fn unchanged(
+    previous: &BTreeMap<PathBuf, Rejected>,
+    candidates: &BTreeMap<PathBuf, Image>,
+) -> Result<bool> {
+    if candidates.len() != previous.len() {
+        return Ok(false);
+    }
+    for (path, candidate) in candidates {
+        let Some(previous) = previous.get(path) else {
+            return Ok(false);
+        };
+        if !previous.matches(candidate)? {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
+/// 安装跨越异步管理调用；本批比较和拒绝记录绑定返回引用的不可变副本。
+fn prepared_candidates(
+    observed: BTreeMap<PathBuf, Image>,
+    configuration: &Path,
+    installed: &BTreeMap<PathBuf, PathBuf>,
+    previous: &BTreeMap<PathBuf, Rejected>,
+) -> Result<Option<BTreeMap<PathBuf, Rejected>>> {
+    let mut candidates = BTreeMap::new();
+    for (source, observed) in observed {
+        if source == configuration {
+            candidates.insert(source, observed);
+        } else if let Some(copy) = installed.get(&source) {
+            candidates.insert(source, image(copy)?);
+        }
+    }
+    if unchanged(previous, &candidates)? {
+        Ok(None)
+    } else {
+        // 已安装候选的内容已经核对，直接保留本次安装返回的不可变路径。
+        // 配置仍保存观察到的字节；插件目录中的其他来源与本批判定无关。
+        Ok(Some(
+            candidates
+                .into_iter()
+                .map(|(source, candidate)| {
+                    let rejected = if source == configuration {
+                        Rejected::Content(candidate)
+                    } else {
+                        Rejected::Copy(installed[&source].clone())
+                    };
+                    (source, rejected)
+                })
+                .collect(),
+        ))
     }
 }
 
@@ -109,6 +163,162 @@ mod tests {
         assert!(rejected.matches(&candidate).unwrap());
         fs::remove_file(copy).unwrap();
         assert!(!rejected.matches(&candidate).unwrap());
+        case.success();
+    }
+
+    #[test]
+    fn persisted_candidate_tracks_the_installed_copy_across_source_changes() {
+        let case = cordis_testkit::cleanup::TestGuard::for_package(
+            Path::new(env!("CARGO_MANIFEST_DIR")),
+            "watch-installed-candidate",
+        );
+        let directory = case.directory("watch-installed-candidate");
+        fs::create_dir_all(&directory).unwrap();
+        let source = directory.join("libwatch.so");
+        let installed = directory.join("installed-1.so");
+        let state = directory.join("watch-rejected.cbor");
+        let configuration = directory.join("cordis.toml");
+
+        fs::write(&source, b"initial source").unwrap();
+        let observed = BTreeMap::from([(source.clone(), image(&source).unwrap())]);
+        // The author publishes while the management call is in flight. Install
+        // captures this version, and the author can publish again before reply.
+        fs::write(&source, b"installed candidate").unwrap();
+        fs::copy(&source, &installed).unwrap();
+        fs::write(&source, b"later source").unwrap();
+        let selected = BTreeMap::from([(source.clone(), installed.clone())]);
+        let candidates = prepared_candidates(observed, &configuration, &selected, &BTreeMap::new())
+            .unwrap()
+            .unwrap();
+        assert_eq!(candidates.len(), 1);
+        assert!(matches!(&candidates[&source], Rejected::Copy(path) if path == &installed));
+        assert!(
+            candidates[&source]
+                .matches(&image(&installed).unwrap())
+                .unwrap()
+        );
+        assert!(
+            !candidates[&source]
+                .matches(&image(&source).unwrap())
+                .unwrap()
+        );
+
+        let saved = Saved {
+            awaiting: Some(PendingBatch {
+                id: "installed-candidate".into(),
+                replacements: vec![("watch".into(), "installed-1.so".into())],
+                reload: false,
+                candidates,
+            }),
+            ..Saved::default()
+        };
+        save(&state, &saved).unwrap();
+        let mut resumed: Saved = cordis_sdk::decode(&fs::read(&state).unwrap()).unwrap();
+        resumed.rejected = resumed.awaiting.take().unwrap().candidates;
+        fs::copy(&installed, &source).unwrap();
+        let current = image(&source).unwrap();
+        let repeated = BTreeMap::from([(source, current)]);
+        assert!(unchanged(&resumed.rejected, &repeated).unwrap());
+        case.success();
+    }
+
+    #[test]
+    fn installed_content_rechecks_rejection_with_the_same_source_count() {
+        let case = cordis_testkit::cleanup::TestGuard::for_package(
+            Path::new(env!("CARGO_MANIFEST_DIR")),
+            "watch-installed-rejection",
+        );
+        let directory = case.directory("watch-installed-rejection");
+        fs::create_dir_all(&directory).unwrap();
+        let source = directory.join("libwatch.so");
+        let installed = directory.join("installed-1.so");
+        fs::write(&source, b"observed before install").unwrap();
+        fs::write(&installed, b"already rejected candidate").unwrap();
+        let observed = BTreeMap::from([(source.clone(), image(&source).unwrap())]);
+        let previous = BTreeMap::from([(source.clone(), Rejected::Copy(installed.clone()))]);
+        assert!(!unchanged(&previous, &observed).unwrap());
+        let selected = BTreeMap::from([(source, installed)]);
+        assert!(
+            prepared_candidates(
+                observed,
+                &directory.join("cordis.toml"),
+                &selected,
+                &previous,
+            )
+            .unwrap()
+            .is_none()
+        );
+        case.success();
+    }
+
+    #[test]
+    fn prepared_batch_reads_only_its_installed_plugins_and_preserves_config_content() {
+        let case = cordis_testkit::cleanup::TestGuard::for_package(
+            Path::new(env!("CARGO_MANIFEST_DIR")),
+            "watch-installed-selection",
+        );
+        let directory = case.directory("watch-installed-selection");
+        fs::create_dir_all(&directory).unwrap();
+        let source = directory.join("libwatch.so");
+        let installed = directory.join("installed-1.so");
+        let configuration = directory.join("cordis.toml");
+        fs::write(&source, b"plugin content").unwrap();
+        fs::copy(&source, &installed).unwrap();
+        fs::write(&configuration, b"observed configuration").unwrap();
+        let observed_config = image(&configuration).unwrap();
+        let observed = BTreeMap::from([
+            (source.clone(), image(&source).unwrap()),
+            (configuration.clone(), observed_config),
+        ]);
+        fs::write(&configuration, b"next configuration").unwrap();
+        let selected = BTreeMap::from([
+            (source.clone(), installed.clone()),
+            (
+                directory.join("unrelated.so"),
+                directory.join("missing-unrelated-installed.so"),
+            ),
+        ]);
+        let candidates = prepared_candidates(observed, &configuration, &selected, &BTreeMap::new())
+            .unwrap()
+            .unwrap();
+        assert_eq!(candidates.len(), 2);
+        assert!(matches!(&candidates[&source], Rejected::Copy(path) if path == &installed));
+        assert!(matches!(&candidates[&configuration], Rejected::Content(_)));
+        assert!(
+            !candidates[&configuration]
+                .matches(&image(&configuration).unwrap())
+                .unwrap()
+        );
+        fs::write(&configuration, b"observed configuration").unwrap();
+        assert!(
+            candidates[&configuration]
+                .matches(&image(&configuration).unwrap())
+                .unwrap()
+        );
+        case.success();
+    }
+
+    #[test]
+    fn missing_installed_candidate_preserves_the_preparation_error() {
+        let case = cordis_testkit::cleanup::TestGuard::for_package(
+            Path::new(env!("CARGO_MANIFEST_DIR")),
+            "watch-installed-missing",
+        );
+        let directory = case.directory("watch-installed-missing");
+        fs::create_dir_all(&directory).unwrap();
+        let source = directory.join("libwatch.so");
+        fs::write(&source, b"author source remains available").unwrap();
+        let observed = BTreeMap::from([(source.clone(), image(&source).unwrap())]);
+        let selected = BTreeMap::from([(source, directory.join("missing-installed.so"))]);
+        assert!(
+            prepared_candidates(
+                observed,
+                &directory.join("cordis.toml"),
+                &selected,
+                &BTreeMap::new(),
+            )
+            .is_err()
+        );
         case.success();
     }
 }
@@ -294,7 +504,7 @@ impl Session {
         Box::pin(async move {
             paths.extend(self.saved.rejected.keys().cloned());
             paths.extend(self.saved.pending.iter().cloned());
-            let mut candidates = match self.read_candidates(&paths) {
+            let candidates = match self.read_candidates(&paths) {
                 Ok(candidates) => candidates,
                 Err(error) => {
                     self.saved.pending = paths;
@@ -302,7 +512,7 @@ impl Session {
                     return Err(error);
                 }
             };
-            if candidates.is_empty() || self.unchanged(&candidates)? {
+            if candidates.is_empty() || unchanged(&self.saved.rejected, &candidates)? {
                 return Ok(());
             }
             let plan = match self.prepare_request(&candidates).await {
@@ -319,15 +529,20 @@ impl Session {
                     return Err(error);
                 }
             };
-            let collected = candidates.len();
-            candidates.retain(|path, _| path == &self.configuration || plan.sources.contains(path));
-            if candidates.len() != collected && self.unchanged(&candidates)? {
-                return Ok(());
-            }
-            let candidates = candidates
-                .into_iter()
-                .map(|(path, candidate)| Ok((path, rejected(&plan.snapshot, candidate)?)))
-                .collect::<Result<_>>()?;
+            let candidates = match prepared_candidates(
+                candidates,
+                &self.configuration,
+                &plan.sources,
+                &self.saved.rejected,
+            ) {
+                Ok(Some(candidates)) => candidates,
+                Ok(None) => return Ok(()),
+                Err(error) => {
+                    self.saved.pending = paths;
+                    save(&self.state, &self.saved)?;
+                    return Err(error);
+                }
+            };
             self.saved.awaiting = Some(PendingBatch {
                 id: uuid::Uuid::new_v4().to_string(),
                 replacements: plan.replacements,
@@ -438,22 +653,6 @@ impl Session {
         Ok(candidates)
     }
 
-    /// DOC-11 §7、ADR-0031：比较整批来源集合和完整内容，重复通知保持当前部署。
-    fn unchanged(&self, candidates: &BTreeMap<PathBuf, Image>) -> Result<bool> {
-        if candidates.len() != self.saved.rejected.len() {
-            return Ok(false);
-        }
-        for (path, candidate) in candidates {
-            let Some(previous) = self.saved.rejected.get(path) else {
-                return Ok(false);
-            };
-            if !previous.matches(candidate)? {
-                return Ok(false);
-            }
-        }
-        Ok(true)
-    }
-
     /// ADR-0031：安装完成后按逻辑插件与组去重，一次请求包含同窗配置变化。
     async fn prepare_request(
         &self,
@@ -471,7 +670,7 @@ impl Session {
         }
         let snapshot = self.runtime.snapshot()?;
         let mut targets = BTreeMap::<(String, String), (String, String)>::new();
-        let mut sources = BTreeSet::new();
+        let mut sources = BTreeMap::new();
         for (source, reference) in references {
             let plugin = snapshot
                 .available_plugins
@@ -495,7 +694,7 @@ impl Session {
                 targets
                     .entry(key)
                     .or_insert_with(|| (instance.name.clone(), reference.clone()));
-                sources.insert(source.clone());
+                sources.insert(source.clone(), plugin.path.clone());
             }
         }
         let reload = candidates.contains_key(&self.configuration);
@@ -505,7 +704,6 @@ impl Session {
         Ok(Some(BatchPlan {
             replacements: targets.into_values().collect(),
             reload,
-            snapshot,
             sources,
         }))
     }

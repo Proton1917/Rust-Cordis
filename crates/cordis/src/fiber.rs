@@ -873,6 +873,9 @@ fn submit_cleanup(fiber: &Fiber, task: Task) {
     };
     let old = {
         let mut state = fiber.kernel.state.lock();
+        if state.fibers[fiber.id].dispatch_error.is_none() {
+            state.suspended_cleanups += 1;
+        }
         let data = &mut state.fibers[fiber.id];
         data.suspended = Some(task);
         data.dispatch_error = Some(failure.error);
@@ -900,6 +903,9 @@ fn descendant(state: &State, mut id: FiberId, ancestor: FiberId) -> bool {
 }
 
 fn dispatch_error(state: &State, id: FiberId) -> Option<Error> {
+    if state.suspended_cleanups == 0 {
+        return None;
+    }
     state
         .fibers
         .iter()
@@ -937,6 +943,9 @@ pub(crate) fn wake_dispatch_waiters(kernel: &Arc<Kernel>) {
 pub(crate) fn resume_cleanup(kernel: &Arc<Kernel>, id: FiberId) {
     let (fibers, effects) = {
         let mut state = kernel.state.lock();
+        if state.suspended_cleanups == 0 {
+            return;
+        }
         let ids = state
             .fibers
             .iter()
@@ -948,9 +957,11 @@ pub(crate) fn resume_cleanup(kernel: &Arc<Kernel>, id: FiberId) {
             .into_iter()
             .map(|id| {
                 let fiber = Fiber::handle(kernel, id, &state);
+                if state.fibers[id].dispatch_error.take().is_some() {
+                    state.suspended_cleanups -= 1;
+                }
                 let data = &mut state.fibers[id];
                 let task = data.suspended.take().expect("suspended cleanup selected");
-                data.dispatch_error = None;
                 data.inertia = true;
                 let old = std::mem::replace(&mut data.state, FiberState::Unloading);
                 if old != data.state {

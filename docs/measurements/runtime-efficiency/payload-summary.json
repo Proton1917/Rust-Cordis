@@ -1,0 +1,116 @@
+[
+  {
+    "benchmark": "invoke_dto_roundtrip",
+    "payload_bytes": 64,
+    "rounds": 9,
+    "paths": {
+      "legacy": {
+        "median_ns_per_roundtrip": 229.62585,
+        "allocation_calls_per_roundtrip": 11.0,
+        "requested_bytes_per_roundtrip": 572.0,
+        "peak_additional_live_bytes": 572
+      },
+      "owned": {
+        "median_ns_per_roundtrip": 139.76112,
+        "allocation_calls_per_roundtrip": 5.0,
+        "requested_bytes_per_roundtrip": 276.0,
+        "peak_additional_live_bytes": 276
+      }
+    }
+  },
+  {
+    "benchmark": "invoke_dto_roundtrip",
+    "payload_bytes": 1048576,
+    "rounds": 9,
+    "paths": {
+      "legacy": {
+        "median_ns_per_roundtrip": 44347.171875,
+        "allocation_calls_per_roundtrip": 11.0,
+        "requested_bytes_per_roundtrip": 2097596.0,
+        "peak_additional_live_bytes": 2097596
+      },
+      "owned": {
+        "median_ns_per_roundtrip": 136.609375,
+        "allocation_calls_per_roundtrip": 5.0,
+        "requested_bytes_per_roundtrip": 276.0,
+        "peak_additional_live_bytes": 276
+      }
+    }
+  },
+  {
+    "benchmark": "invoke_dto_roundtrip",
+    "payload_bytes": 4194304,
+    "rounds": 9,
+    "paths": {
+      "legacy": {
+        "median_ns_per_roundtrip": 203054.0703125,
+        "allocation_calls_per_roundtrip": 11.0,
+        "requested_bytes_per_roundtrip": 8389052.0,
+        "peak_additional_live_bytes": 8389052
+      },
+      "owned": {
+        "median_ns_per_roundtrip": 137.0,
+        "allocation_calls_per_roundtrip": 5.0,
+        "requested_bytes_per_roundtrip": 276.0,
+        "peak_additional_live_bytes": 276
+      }
+    }
+  },
+  {
+    "benchmark": "result_dto_roundtrip",
+    "payload_bytes": 64,
+    "rounds": 9,
+    "paths": {
+      "legacy": {
+        "median_ns_per_roundtrip": 109.50618,
+        "allocation_calls_per_roundtrip": 5.0,
+        "requested_bytes_per_roundtrip": 265.0,
+        "peak_additional_live_bytes": 265
+      },
+      "owned": {
+        "median_ns_per_roundtrip": 90.80794,
+        "allocation_calls_per_roundtrip": 3.0,
+        "requested_bytes_per_roundtrip": 137.0,
+        "peak_additional_live_bytes": 137
+      }
+    }
+  },
+  {
+    "benchmark": "result_dto_roundtrip",
+    "payload_bytes": 1048576,
+    "rounds": 9,
+    "paths": {
+      "legacy": {
+        "median_ns_per_roundtrip": 44530.3359375,
+        "allocation_calls_per_roundtrip": 5.0,
+        "requested_bytes_per_roundtrip": 2097289.0,
+        "peak_additional_live_bytes": 2097289
+      },
+      "owned": {
+        "median_ns_per_roundtrip": 87.7109375,
+        "allocation_calls_per_roundtrip": 3.0,
+        "requested_bytes_per_roundtrip": 137.0,
+        "peak_additional_live_bytes": 137
+      }
+    }
+  },
+  {
+    "benchmark": "result_dto_roundtrip",
+    "payload_bytes": 4194304,
+    "rounds": 9,
+    "paths": {
+      "legacy": {
+        "median_ns_per_roundtrip": 202269.140625,
+        "allocation_calls_per_roundtrip": 5.0,
+        "requested_bytes_per_roundtrip": 8388745.0,
+        "peak_additional_live_bytes": 8388745
+      },
+      "owned": {
+        "median_ns_per_roundtrip": 89.0390625,
+        "allocation_calls_per_roundtrip": 3.0,
+        "requested_bytes_per_roundtrip": 137.0,
+        "peak_additional_live_bytes": 137
+      }
+    }
+  }
+]

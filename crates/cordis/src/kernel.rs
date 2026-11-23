@@ -55,6 +55,8 @@ pub(crate) struct Kernel {
 pub(crate) struct State {
     pub fibers: SlotMap<FiberId, FiberData>,
     pub effects: SlotMap<EffectId, EffectData>,
+    /// 当前保留派发错误的清理任务数，和任务的暂停、恢复在同一把锁内更新。
+    pub suspended_cleanups: usize,
     pub hooks: HashMap<EventId, Vec<Arc<Hook>>>,
     pub event_names: HashMap<Arc<str>, bool>,
     pub dirty: VecDeque<Arc<Scope>>,
@@ -108,6 +110,7 @@ impl Kernel {
                 state: Mutex::new(State {
                     fibers,
                     effects: SlotMap::with_key(),
+                    suspended_cleanups: 0,
                     hooks: HashMap::new(),
                     event_names: HashMap::new(),
                     dirty: VecDeque::new(),

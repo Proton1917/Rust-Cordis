@@ -29,8 +29,8 @@ Cargo.toml[FV3T]: F:声明直接调用测量驱动的隔离工作区与管理器
 main.rs[EP5S]: F:解析直接调用基准产物与输出路径，为各消费者创建独立宿主分组 | R:code:benchmarks/direct-call/latency.rs | A:--host,--provider,--settings,--output | S:每组使用独立动态库缓存，宿主异常退出时该基准实例不重启
 
 ===/<repository>/benchmarks/multilanguage/===
-README.md[SP4T]: F:说明跨进程读取、热替换停顿和同宿主调用三种基准的运行与样本解释 | R:code:benchmarks/multilanguage/driver/src/main.rs,code:benchmarks/multilanguage/measure.py | A:- | S:-
-measure.py[TP6M]: F:执行多语言 KV 读取与换代实验，分别记录受理、业务停顿和终态观察耗时 | R:code:benchmarks/multilanguage/probe/src/lib.rs,code:benchmarks/direct-call/latency.rs | A:rpc,replacement,direct | S:替换需取得票据终态并从新提供方读回写入值
+README.md[SP4T]: F:说明跨进程读取、换代停顿、同宿主调用和跨宿主 RPC 配对测量 | R:code:benchmarks/multilanguage/measure.py,code:benchmarks/deployment/rpc.py | A:- | S:并发读取的单次时延包括字节校验与释放
+measure.py[TP6M]: F:执行多语言 KV 读取与换代实验，为独立 RPC 基准提供核心启动与观测接口 | R:code:benchmarks/multilanguage/probe/src/lib.rs,code:benchmarks/deployment/rpc.py | A:Running,rpc,replacement,direct | S:替换等待票据终态并从新提供方读回写入值；独立会话由调用方按测量生命周期回收
 prepare_sources.py[XP4T]: F:复制 Python 及 TypeScript KV 和 SDK 运行文件到准备快照 | R:code:benchmarks/multilanguage/driver/src/main.rs | A:--workspace,--destination | S:TypeScript SDK 运行产物取自当前仓库的 SDK dist
 
 ===/<repository>/benchmarks/multilanguage/driver/===
@@ -43,7 +43,7 @@ main.rs[AP6M]: F:构建并保存真实程序、插件和解释器依赖快照，
 Cargo.toml[FV3T]: F:定义 Rust 跨进程时延探针的独立动态库构建 | R:code:benchmarks/multilanguage/probe/src/lib.rs,code:plugins/kv-api/Cargo.toml | A:crate-type=cdylib | S:-
 
 ===/<repository>/benchmarks/multilanguage/probe/src/===
-lib.rs[TP5S]: F:在真实原生消费者中测量 KV 读取延迟和校验继承状态的字节序列 | R:code:benchmarks/deployment/workload.py,code:plugins/kv-api/src/lib.rs | A:Latency,StateProbe | S:单次读取计时包括结果释放；探针成功后原子发布测量文件
+lib.rs[TP5M]: F:在真实原生消费者中测量串行和并发 KV 读取，验证继承状态的字节序列 | R:code:benchmarks/deployment/rpc.py,code:plugins/kv-api/src/lib.rs | A:Latency,StateProbe,concurrent_reads | S:并发线程统一放行且每次校验字节；计时包含结果释放，成功后原子发布报告
 
 ===/<repository>/crates/cordis-abi/===
 Cargo.toml[FV5T]: F:设置原生 ABI crate 0.1.5 的构建版本、序列化依赖与边界测试特性 | R:code:crates/cordis-abi/src/lib.rs | A:test-support | S:最低 Rust 版本为 1.85，回环测试后端按需启用
@@ -130,16 +130,16 @@ Cargo.toml[FV4T]: F:声明原生宿主 0.1.5 的动态装载、ABI 与传输依�
 ===/<repository>/crates/cordis-host/src/===
 abi.rs[IE7S]: F:安装原生宿主后端并将分版本 C 函数表转接到 Host | R:code:crates/cordis-host/src/host.rs,code:crates/cordis-abi/src/host.rs | A:install,environment | S:进程内宿主后端登记在 OnceLock，边界统一转换拥有错误
 forward.rs[IN6M]: F:解析宿主转发服务操作并把逻辑通道帧投递到接收器 | R:code:crates/cordis-channels/src/lib.rs,code:crates/cordis-host/src/wire.rs | A:object,Forwarders | S:从分配编号到打开应答期间串行，帧与关闭可以独立推进
-host.rs[RE8L]: F:装载原生组件，管理上下文、宿主调用、通知和关闭 | R:code:crates/cordis-host/src/abi.rs,code:crates/cordis-host/src/native.rs,code:crates/cordis-host/src/lease.rs | A:Host,HostOptions | S:回调登记和两类释放按接收顺序处理，业务回调由原生执行器运行；关闭阶段选出唯一清理者，基上下文退役覆盖其派生视图
+host.rs[RE8L]: F:装载原生组件并处理调用、上下文、通知与关闭 | R:code:crates/cordis-host/src/abi.rs,code:crates/cordis-host/src/native.rs,code:crates/cordis-host/src/wire.rs | A:Host,HostOptions | S:调用接管业务参数，完成导入前载荷继续持有资源；回调登记和释放按接收顺序处理，业务回调由原生执行器运行
 jobs.rs[RW6S]: F:把原生异步任务和系统线程登记成核心效应，并等待退出 | R:code:crates/cordis-host/src/host.rs,code:crates/cordis-host/src/native.rs | A:Host::spawn,Host::spawn_thread | S:-
 lease.rs[RE7M]: F:管理原生库引用与退役计数，归还缓存文件并记录描述符释放结果 | R:code:crates/cordis-host/src/library.rs,code:crates/cordis-process/src/cache.rs | A:Lease,UnloadPolicy | S:只收集退役且租约归零的待回收库；主动关闭还要求描述符释放成功，失败保留错误和映像
 lib.rs[RE5T]: F:导出原生宿主的库加载、对象目录和 ABI 执行模块 | R:code:crates/cordis-host/src/host.rs,code:crates/cordis-host/src/library.rs | A:- | S:-
 library.rs[RE8L]: F:装载与探测原生库，协商卸载策略并管理组件描述与库副本 | R:code:crates/cordis-host/src/lease.rs,code:crates/cordis-host/src/verification.rs | A:LibraryStore,NativeLibrary,NativeComponent | S:可选卸载协商在首次握手前进行，缺少入口则保留映像至宿主退出；描述符持有租约，验证准入比较装载字节
-main.rs[EE6S]: F:解析宿主启动参数并通过标准输入输出接入核心 UP/1 会话 | R:code:crates/cordis-host/src/host.rs | A:cordis-host | S:-
+main.rs[EE6S]: F:解析原生宿主命令行并在主线程推进标准流 UP/1 会话 | R:code:crates/cordis-host/src/host.rs,code:crates/cordis-host/src/native.rs | A:cordis-host | S:插件轮询、同步等待及析构由独立原生执行器承担
 native.rs[RP7S]: F:在独立原生执行器上调度调用、取消及受托对象析构 | R:code:crates/cordis-host/src/jobs.rs,code:crates/cordis-host/src/lease.rs | A:NativeExecutor,NativeTask,RuntimeOwner | S:协议读写使用独立运行环境；取消等待后同步代码的实际执行及析构仍持有对象
 objects.rs[RD7M]: F:配发宿主本地对象编号并管理响应发送前后的资源所有权 | R:code:crates/cordis-host/src/wire.rs,code:crates/cordis-host/src/native.rs | A:Objects,ObjectInfo | S:待发送拥有引用随成功响应提交，发送失败随守卫回收
 verification.rs[OQ6S]: F:打开原生库前校对验证副本，握手后核对契约覆盖 | R:code:crates/cordis-host/src/library.rs,code:crates/cordis-types/src/verification.rs | A:before_open,preserve | S:已接受的缓存库携带验证印记，分组重启仍走准入检查
-wire.rs[IN7S]: F:桥接原生对象与远端服务，编码参数、解析结果并移交资源引用 | R:code:crates/cordis-host/src/objects.rs,code:crates/cordis-abi/src/encoding.rs,code:crates/cordis-up/src/rpc.rs | A:Bridge | S:转交任务继承当前调用截止，各端持有自己导入的引用
+wire.rs[IN7S]: F:桥接原生服务和远端对象，把调用参数及返回值转交给拥有型 DTO | R:code:crates/cordis-host/src/objects.rs,code:crates/cordis-up/src/payload.rs,code:crates/cordis-up/src/rpc.rs | A:Bridge | S:原载荷持有导入前的引用，ABI 缓冲持有导入后对象；发送接纳时提交出口
 
 ===/<repository>/crates/cordis-idl/===
 Cargo.toml[FV3T]: F:声明 cordis-idl 0.1.1 的 WIT 解析、代码生成与命名依赖 | R:code:crates/cordis-idl/src/lib.rs | A:- | S:-
@@ -177,7 +177,7 @@ lib.rs[MN5T]: F:公开对象路由目录、生命周期与本地服务入口 | R
 lifetime.rs[MR6T]: F:让进行中的服务调用随提供方纪元退役而取消 | R:code:crates/cordis-routing/src/directory.rs | A:Retirement,RouteLifetime | S:-
 local.rs[LN5T]: F:定义本地服务的调用身份、导入参数资源和回复发送后动作 | R:code:crates/cordis-routing/src/transfer.rs | A:CallContext,Arguments,LocalService,LocalReply | S:-
 metadata.rs[MP6M]: F:对连接保留的描述、对象和诊断元数据实施共同字节预算 | R:code:crates/cordis-routing/src/description.rs | A:LOG_BYTES,clipped,saved_error | S:截断保留 UTF-8 边界；退役诊断保留错误码和有界文字
-transfer.rs[MN7S]: F:转交本地或远程服务调用，按目标连接改写参数和返回值的资源编号 | R:code:crates/cordis-routing/src/directory.rs,code:crates/cordis-routing/src/local.rs | A:Router::transfer,Router::invoke_remote,Router::invoke_local | S:只重写资源标签，其他值沿用原编码语义
+transfer.rs[MN7M]: F:路由本地或远程调用，在已有值树中按目标连接重写资源编号 | R:code:crates/cordis-routing/src/directory.rs,code:crates/cordis-routing/src/local.rs,code:crates/cordis-up/src/payload.rs | A:Router::transfer,Router::invoke_remote,Router::invoke_local | S:按值树顺序访问资源标签并为重复编号复用同一出口，部分映射失败由 Batch 回收
 
 ===/<repository>/crates/cordis-runtime/===
 Cargo.toml[FV5T]: F:声明核心程序 0.1.11 的运行依赖、自动票据的 UUID v4 特性及测试依赖 | R:code:crates/cordis-runtime/src/main.rs,code:crates/cordis-runtime/src/control/outcomes.rs | A:cordis | S:-
@@ -268,12 +268,12 @@ manager.rs[RE8L]: F:持有内核、连接、实例及检查点目录，并调度
 ===/<repository>/crates/cordis-supervisor/src/manager/===
 batch.rs[AW9L]: F:准备部署和重启目标，交接并确认候选，按照持久决定恢复或退役 | R:code:crates/cordis-runtime/src/control/batch.rs,code:crates/cordis-supervisor/src/manager/transition.rs,code:crates/cordis-supervisor/src/manager/lifecycle.rs | A:BatchInstance,BatchReplacement,BatchCommit,BatchFailure,DeploymentDecision | S:持久捕获取直接变化和影响闭包内的目标根，清除失效身份；持有旧组和冻结状态直至决定，恢复失败保留两代资源
 generation.rs[RE8L]: F:管理加载纪元、远端效应、上下文绑定与所属插件描述符 | R:code:crates/cordis-supervisor/src/manager/handlers.rs,code:crates/cordis-up/src/payload.rs | A:Generation,RemoteComponent,RemoteEffect | S:纪元持有共享的不可变配置及继承状态，发送 apply 时直接借用两者编码
-handlers.rs[IN8L]: F:分派来自连接的服务、效应、上下文与资源请求，执行调用时限边界 | R:code:crates/cordis-supervisor/src/manager/generation.rs,code:crates/cordis-up/src/rpc.rs | A:- | S:服务调用以本地时限和父截止中较早者结束，资源释放在读消息任务内处理
+handlers.rs[IN8L]: F:分派连接上的服务、效应、视图及资源操作，拥有式拆解调用参数 | R:code:crates/cordis-supervisor/src/manager/routing.rs,code:crates/cordis-up/src/rpc.rs | A:- | S:调用以本地时限和继承截止中较早者结束；无效请求结构终止连接，导入期保留收到的引用
 lifecycle.rs[RE9L]: F:管理进程、子实例、状态导出与最终停机，按实例归还检查点写权 | R:code:crates/cordis-supervisor/src/manager/batch.rs,code:crates/cordis-supervisor/src/manager/transition.rs | A:FrozenSnapshot,Manager::checkpoint_instance,Manager::export_shutdown | S:普通与部署确认后的检查点逐实例解冻，换代交接及停机维持批量冻结；退避等待在事务队列外
 metadata.rs[MP5T]: F:把连接的描述、对象和错误保留量交给路由元数据预算管理 | R:code:crates/cordis-routing/src/metadata.rs | A:- | S:保留错误超额时结束该连接并记录有界诊断
 model.rs[FC5T]: F:声明监管器的分组、重启策略、实例和部署报告数据 | R:code:crates/cordis-supervisor/src/manager.rs | A:GroupSpec,RestartPolicy | S:-
 native.rs[RE7M]: F:提供原生库准备、装载、缓存租约、按需重启和只读库采样 | R:code:crates/cordis-supervisor/src/manager/batch.rs,code:crates/cordis-host/src/host.rs | A:Manager::replace_library,Manager::sample_libraries | S:页面模块和单个原生库都由批次换代；采样错误单独返回，缓存租约覆盖重启计划
-routing.rs[MN8L]: F:解析服务路由、作用域视图与跨连接对象归属并执行转发 | R:code:crates/cordis-routing/src/directory.rs,code:crates/cordis-supervisor/src/manager/views.rs | A:- | S:路由锁保护编号与所有权，调用及释放在锁外；发送失败回收导出引用
+routing.rs[MN8L]: F:解析服务路由、作用域与对象归属，通过拥有型调用值执行转发 | R:code:crates/cordis-routing/src/directory.rs,code:crates/cordis-supervisor/src/manager/views.rs | A:- | S:路由锁保护编号与所有权，实际调用在锁外；拆出结果后从原载荷导入作用域返回的对象
 transition.rs[AW8M]: F:沿实际绑定、父子关系及同插件候选接口计算影响闭包并确认变更 | R:code:crates/cordis-supervisor/src/manager/batch.rs,code:crates/cordis-supervisor/src/manager/views.rs | A:select_instances,confirm_transition | S:动态子组件可能补足的依赖按接口版本、继承域和同一命名空间的已登记域匹配；继续原纪元的实例在确认前解冻
 trusted.rs[RI7T]: F:在核心上下文记录调用来源并让派生视图和子组件继承 | R:code:crates/cordis-supervisor/src/manager/views.rs,code:crates/cordis-sdk/src/metadata.rs | A:Manager::caller_context | S:业务拦截元数据与核心建立的来源分别持有
 views.rs[RE7M]: F:管理派生视图、命名隔离域和作用域租约，按父上下文挂载动态子组件 | R:code:crates/cordis-supervisor/src/manager/generation.rs,code:crates/cordis-supervisor/src/manager/lifecycle.rs | A:Manager::derive_context,Manager::page_context | S:命名域归属页面命名空间，子实例随真实父效应撤回
@@ -308,11 +308,11 @@ Cargo.toml[FQ3T]: F:登记 UP/1 解码的独立 cargo-fuzz 目标 | R:code:crate
 up1_decoder.rs[TN4T]: F:向 UP/1 解码入口投递任意输入并检查合法消息的资源和值处理 | R:code:crates/cordis-up/src/codec.rs,code:crates/cordis-up/src/payload.rs | A:- | S:-
 
 ===/<repository>/crates/cordis-up/src/===
-codec.rs[LN8L]: F:按统一帧读取边界和各自节点预算解码 UP/1 消息与独立 CBOR 值，并限制编码输出 | R:code:crates/cordis-up/src/message.rs,code:crates/cordis-up/src/payload.rs | A:Limits,decode,decode_value,encode | S:嵌套解码经作用域恢复原预算；完整输入后仍有字节时报告单独的尾随数据错误
+codec.rs[LN8L]: F:校验并编码 UP/1 消息与 CBOR 值，在同一缓冲写入完整帧 | R:code:crates/cordis-up/src/message.rs,code:crates/cordis-up/src/rpc.rs | A:Limits,encode,decode,encode_value,decode_value | S:帧的四字节头位于正文字节预算之外，节点与深度预算仍适用于同一消息；尾随输入单独报错
 lib.rs[LN5T]: F:公开 UP/1 消息、编解码器、资源编号与双向连接 | R:code:crates/cordis-up/src/codec.rs,code:crates/cordis-up/src/rpc.rs | A:- | S:-
 message.rs[LN6T]: F:定义 UP/1 请求、响应、通知与协议错误的线表示 | R:code:crates/cordis-up/src/codec.rs | A:Message,WireError | S:请求方向分别管理编号；错误详情是普通诊断数据
-payload.rs[LN7M]: F:声明 UP/1 方法参数、结果、组件描述和持久状态字段 | R:code:crates/cordis-up/src/rpc.rs,code:crates/cordis-up/src/message.rs | A:Apply,ObjectRef,OBJECT_TAG,payload_refs | S:apply 的配置和继承输入支持借用编码，资源引用使用根 refs 与专用标签
-rpc.rs[MN8L]: F:管理有界 UP/1 双向调用的排队、读写、取消、应答和嵌套时限传播 | R:code:crates/cordis-up/src/codec.rs,code:crates/cordis-up/src/payload.rs | A:Connection,Handler,Outgoing,Payload,inherit_invocation,bound_invocation | S:发送占位成功才登记取消责任；握手确认能力后 invoke 携带剩余预算，入队前的到期只结束对应请求
+payload.rs[LN7L]: F:定义 UP/1 载荷并用拥有型转换转交调用参数和结果的原有值树 | R:code:crates/cordis-up/src/rpc.rs,code:crates/cordis-up/src/message.rs | A:Apply,Invoke,InvokeResult,ObjectRef,payload_refs | S:拥有型外层结构保持既有 Serde 字段与字节语义；apply 的配置和继承输入以借用形式编码
+rpc.rs[MN8L]: F:管理有界双向调用、完整帧排队、应答、取消及嵌套时限 | R:code:crates/cordis-up/src/codec.rs,code:crates/cordis-up/src/payload.rs | A:Connection,Handler,Outgoing,Payload,inherit_invocation,bound_invocation | S:应答与本地到期共用待应答表的移除权，在同一临界区更新连接超时；值树编码后释放，导入租约随载荷独立保留
 
 ===/<repository>/crates/cordis-web-deployment/===
 Cargo.toml[FV3T]: F:定义网页部署库 0.1.1 的内核、监管器、通道和 URL 依赖 | R:code:crates/cordis-web-deployment/src/lib.rs | A:- | S:-
@@ -332,28 +332,28 @@ readme.rs[TB3T]: F:演示确定性宿主中的效应登记、反向清理与组�
 
 ===/<repository>/crates/cordis/src/===
 context.rs[RB8M]: F:建立共享内核的持久上下文视图，处理扩展、隔离和拦截层 | R:code:crates/cordis/src/kernel.rs,code:crates/cordis/src/reflect.rs | A:Context,Realm | S:同类型扩展由最近一层覆盖；拦截元数据在服务访问时合并
-effect.rs[RW9L]: F:管理组件可逆效应、嵌套清理、异步步骤和等待者 | R:code:crates/cordis/src/fiber.rs,code:crates/cordis/src/kernel.rs | A:Effect,EffectScope,EffectMeta | S:唯一逆操作开始后仍由实例持有到清理完成；任务拒收时保留原 Future 供拥有者继续清理
+effect.rs[RW9L]: F:管理组件的可逆效应、嵌套清理与异步等待者 | R:code:crates/cordis/src/fiber.rs,code:crates/cordis/src/kernel.rs | A:Effect,EffectScope,EffectMeta | S:逆操作由原效应拥有到清理完成；拒收时保留原 Future，派发错误增删在状态锁内同时更新挂起清理总数
 error.rs[CG5T]: F:提供可克隆的内核错误、登记位置及聚合原因 | R:code:crates/cordis/src/effect.rs | A:Error,Result | S:-
 events.rs[MM8L]: F:登记可释放监听器并从快照派发类型化及命名的同步、异步和瀑布事件 | R:code:crates/cordis/src/effect.rs,code:crates/cordis/src/kernel.rs | A:Event,EventOptions,Context::waterfall_filtered | S:一次性回调先消费登记；派发观察先于监听器取快照，静态事件名在生成观察记录时才转为 Arc；空瀑布在过滤后执行终点，正常返回和展开都先释放参数再释放终点闭包
-fiber.rs[RW9L]: F:按绑定和纪元调和组件加载与清理，提供挂载父视图和稳定状态查询 | R:code:crates/cordis/src/registry.rs,code:crates/cordis/src/effect.rs,code:crates/cordis/src/reflect.rs | A:Fiber,Epoch,FiberState,parent_context | S:等待判定与通知共用稳定条件；卸载过程中登记的新效应须结束后才切换纪元
-kernel.rs[RB8S]: F:持有内核纤程、效应、绑定与待处理工作，并移交任务给宿主执行器 | R:code:crates/cordis/src/fiber.rs,code:crates/cordis/src/context.rs | A:Clock,Spawn,Task | S:首次轮询从共享槽取走原 Future，宿主拒收时只在仍独占该槽时交还原任务
+fiber.rs[RW9L]: F:按绑定和纪元调和组件挂载、清理及稳定状态 | R:code:crates/cordis/src/registry.rs,code:crates/cordis/src/effect.rs,code:crates/cordis/src/reflect.rs | A:Fiber,Epoch,FiberState,parent_context | S:等待与通知共用稳定条件；挂起清理为零时跳过派发错误扫描，恢复只取得所选纤程树内的原清理任务
+kernel.rs[RB8S]: F:持有内核纤程、效应、绑定和待执行任务，并向宿主移交 Future | R:code:crates/cordis/src/fiber.rs,code:crates/cordis/src/effect.rs | A:Clock,Spawn,Task | S:同一把状态锁保护纤程和效应的派发错误以及挂起清理总数；宿主拒收时由仍持有共享任务槽的一方交还原任务
 lib.rs[RB6T]: F:公开内核的上下文、实例、效应、事件与服务接口 | R:code:crates/cordis/src/context.rs,code:crates/cordis/src/fiber.rs | A:- | S:-
 list.rs[CD3T]: F:实现支持前插、后插和按值移除的有序登记表 | R:code:crates/cordis/src/fiber.rs | A:- | S:-
 logger.rs[MO6L]: F:管理日志阈值、弱来源引用、有界缓冲和可释放导出器 | R:code:crates/cordis/src/context.rs,code:crates/cordis/src/effect.rs | A:Logger,LogMessage | S:导出器独立配置级别；消息保留序号、宿主时间及弱来源
 reflect.rs[RB9L]: F:维护隔离域中的绑定与服务授权，为类型化和命名服务选择活动实现并通知消费者 | R:code:crates/cordis/src/service.rs,code:crates/cordis/src/fiber.rs | A:Context::get,Context::provide,Context::lookup | S:可用性判定在锁外运行，写回时核对通知修订、谓词和值；运行纪元使用已接纳的绑定
-registry.rs[RB8L]: F:确定组件配置和依赖规格，维护挂载、转发别名及替换后的实例记录 | R:code:crates/cordis/src/fiber.rs,code:crates/cordis/src/context.rs | A:Inject,Component,ComponentDef,ValidationError | S:子实例的生命周期编号在父挂载效应体内登记；父级开始清理后其撤回结果不会被挂载尾部覆盖
+registry.rs[RB8L]: F:管理组件配置、依赖规格、挂载、转发别名及替换后的实例登记 | R:code:crates/cordis/src/fiber.rs,code:crates/cordis/src/context.rs | A:Inject,Component,ComponentDef,ValidationError | S:规范运行时的实例集合互斥，跨运行时迁移可直接追加；子实例编号随父挂载效应登记并随父撤回
 service.rs[LB7M]: F:定义服务键、提供方句柄和带上下文的类型化访问投影 | R:code:crates/cordis/src/reflect.rs,code:crates/cordis/src/context.rs | A:ServiceKey,Scoped,Provision,Merge | S:类型化读取与即时查询复用绑定投影；元数据依声明、外层、内层次序合并
 
 ===/<repository>/docs/===
 00-strategy.md[SB6T]: F:解释共享上下文下的时间与空间可组合性以及插件运行边界 | R:code:docs/01-semantics.md,code:docs/15-universal-socket.md | A:- | S:-
 01-semantics.md[SB8M]: F:规定效应可回退、依赖纪元、上下文及实例生命周期行为并链接验收条款 | R:code:docs/04-conformance.md,code:crates/cordis/src/fiber.rs | A:- | S:依赖方先于提供方清理，以便前者在清理时仍能使用原绑定
-02-architecture.md[SB7T]: F:规定单内核的对象状态、服务隔离、锁边界与串行调和规则 | R:code:crates/cordis/src/kernel.rs,code:docs/01-semantics.md | A:- | S:用户回调、Future 轮询及等待发生在状态锁外
+02-architecture.md[SB7T]: F:规定单内核状态、服务隔离、锁边界及串行调和规则 | R:code:crates/cordis/src/kernel.rs,code:docs/01-semantics.md | A:- | S:回调和 Future 轮询发生在状态锁外；挂起清理计数与派发错误在状态锁内同步，零计数允许跳过扫描
 03-roadmap.md[SQ4T]: F:列出内核从工作区建立到依赖重绑定和多线程运行的里程碑验收 | R:code:docs/14-roadmap-phase2.md | A:- | S:-
 04-conformance.md[SQ6M]: F:将上游 177 项组件行为映射到 Rust 测试、等价解释与适用范围 | R:code:docs/01-semantics.md | A:- | S:-
 10-evolution-strategy.md[SV5T]: F:解释机器接口、业务契约和状态独立演进及性能评价边界 | R:code:docs/11-plugin-model.md,code:docs/12-abi-v1.md | A:- | S:-
 11-plugin-model.md[SE7T]: F:规定组件服务、实例资源、周期检查点、状态继承与换代时序 | R:code:docs/15-universal-socket.md,code:crates/cordis-supervisor/src/manager/lifecycle.rs,code:crates/cordis-runtime/src/storage.rs | A:- | S:周期导出后逐实例解冻；旧版检查点在恢复中断部署后迁入根目录，同名时采用根目录中的版本
 12-abi-v1.md[SE8S]: F:说明原生 ABI 的数据和调用寿命、兼容期及下一代固定入口设计 | R:code:crates/cordis-abi/src/raw.rs,code:docs/abi/v1-layout.txt,code:docs/PROGRESS.md | A:- | S:Rust SDK 0.2.3 对含异步方法的表单独核对最终结果布局，与 0.2.2 混用时按名称调用
-13-runtime-architecture.md[SV6S]: F:说明运行时与构建工具的责任，定义源码工作区、部署清单、产物选择与恢复记录 | R:code:crates/cordis-dev/src/pack/artifacts.rs,code:crates/cordis-runtime/src/control/batch.rs,code:docs/guide.md | A:- | S:格式 2 的构建位置相对部署文件，实际产物以 Cargo 包与目标身份选择
+13-runtime-architecture.md[SV6S]: F:说明运行时分工、部署装配与宿主协议执行、传输所有权 | R:code:crates/cordis-dev/src/pack/artifacts.rs,code:crates/cordis-runtime/src/control/batch.rs,code:crates/cordis-up/src/rpc.rs | A:- | S:宿主协议在主线程推进，原生执行器独立；请求完成权和连续超时计数由同一临界区决定
 14-roadmap-phase2.md[SQ5T]: F:定义共享宿主、原生契约、大结果和独立应用交付的验收场景 | R:code:docs/04-conformance.md,code:docs/PROGRESS.md | A:- | S:-
 15-universal-socket.md[SE7T]: F:说明核心、原生宿主与独立插件的职责、调用路径及分组演进 | R:code:docs/12-abi-v1.md,code:docs/16-up1-protocol.md | A:- | S:共享默认组属于新格式的设计，现行清单沿用原有分组语义
 16-up1-protocol.md[SN8S]: F:规定 UP/1 的帧、请求、资源、错误、容量与调用预算协商契约 | R:code:crates/cordis-up/src/rpc.rs,code:crates/cordis-up/src/codec.rs | A:- | S:握手成功后支持方才传递嵌套调用的剩余预算，原生执行的实际租约和生命周期时限各有独立寿命
@@ -508,6 +508,7 @@ v0.2.8-review.md[SQ6T]: F:记录 v0.2.8 的十六项修复、测试范围、热�
 deployment-revision.md[SP6S]: F:汇总部署修订的源码成本、配对性能测量、分配次数及跨模块业务验收证据 | R:code:benchmarks/deployment/workload.py,code:benchmarks/deployment/apply_decode_allocations.rs,code:tools/revision_lines.py | A:- | S:宿主优化与调用预算协商后的数据分别绑定对应构建；全口径与手写源码的净变化分别报告
 kernel-event-hot-paths.json[TP5L]: F:记录六类内核调用的配对原始样本、候选源码身份、环境及验证结果 | R:code:docs/measurements/kernel-event-hot-paths.md,code:benchmarks/kernel/README.md | A:summary,samples,validation | S:第零组为探索样本，正式统计取其余十组；计时和分配数据来自两个窗口
 kernel-event-hot-paths.md[SP5T]: F:报告同步事件、瀑布调用与服务读取的分配和耗时，说明配对实验与回归结果 | R:code:docs/measurements/kernel-event-hot-paths.json,code:benchmarks/kernel/README.md | A:- | S:耗时取批量平均调用成本的中位数，配对比值按同组候选耗时除以基线耗时
+runtime-efficiency.md[SP6S]: F:解释跨宿主调用、宿主内存、DTO 分配和内核换代的配对实验及验证 | R:code:docs/measurements/runtime-efficiency/rpc-memory-summary.json,code:docs/measurements/runtime-efficiency/replacement/summary.json,code:docs/measurements/runtime-efficiency/validation/summary.json | A:- | S:总 PSS 在结果发布后采样；内核换代窗口覆盖列表迁移和等待稳定，完整部署另有后端成本
 
 ===/<repository>/docs/measurements/m21-performance/===
 README.md[SP5T]: F:解释三类性能量测的条件、口径、历史样本和直接调用负载差异 | R:code:docs/measurements/m21-performance/summary.json | A:- | S:-
@@ -725,7 +726,7 @@ Cargo.toml[FV3T]: F:配置文件观察动态插件 0.1.3 的 SDK、监听与请�
 README.md[SE4T]: F:说明防抖、部署实例选择、网页投影和替换管理权限 | R:code:plugins/watch/src/lib.rs,code:docs/adr/0031-batch-replacement.md | A:- | S:-
 
 ===/<repository>/plugins/watch/src/===
-lib.rs[IW7L]: F:观察稳定的文件变更并安装候选，用管理票据提交批次和查询完成结果 | R:code:crates/cordis-sdk/src/builtin.rs,code:crates/cordis-runtime/src/control/outcomes.rs | A:Config | S:同一窗口重投沿用请求标识，能区分恢复、待恢复和提交后清理等终态
+lib.rs[IW7L]: F:观察文件发布、安装候选并以管理票据调度批次替换与重载 | R:code:crates/cordis-sdk/src/builtin.rs,code:crates/cordis-runtime/src/control/outcomes.rs | A:Config | S:拒绝身份取本次安装返回的副本，配置保留观察到的内容；请求重投沿用同一票据身份
 
 ===/<repository>/plugins/web-api/===
 Cargo.toml[FV3T]: F:声明网页入口接口的 SDK 和序列化依赖 | R:code:plugins/web-api/src/lib.rs | A:- | S:-
@@ -860,6 +861,8 @@ apply_decode_allocations.rs[TP5S]: F:用真实检查点比较原生加载请求�
 memory.py[TP5S]: F:交替启动基线与候选的真实原生部署，采集逐进程物理占用与线程数 | R:code:crates/cordis-runtime/src/status.rs | A:--pairs,--resume | S:每轮使用独立部署目录，探索样本的配对编号为零
 summary.py[XP4T]: F:按场景汇总配对样本的中位数、偏差和性能判据 | R:code:benchmarks/deployment/memory.py,code:benchmarks/deployment/workload.py | A:summarize | S:每个指标须有十组完整配对，各宿主的独立峰值分别报告
 workload.py[TP6S]: F:以真实 KV 检查点和原生探针驱动状态继承及跨宿主读取对照 | R:code:benchmarks/multilanguage/probe/src/lib.rs,code:benchmarks/multilanguage/measure.py | A:--scenario | S:基线生成的种子检查点供两版共同使用；业务值核对完成即停止恢复计时
+replacement.py[TP6M]: F:交替运行基线和候选的内核实例换代规模基准，记录环境、输入和逐轮结果 | R:code:docs/measurements/runtime-efficiency.md | A:main,resume | S:预计执行顺序与已记录样本匹配后才续跑，预热配对与正式配对分别记录
+rpc.py[TP6M]: F:用真实核心与跨宿主原生 KV 测量串行和并发调用的延迟、吞吐及进程内存 | R:code:benchmarks/multilanguage/measure.py,code:benchmarks/multilanguage/probe/src/lib.rs | A:run,validate,main | S:基线与候选共享探针和提供方二进制，逐对交替启动顺序；每轮独立进程会话拥有其宿主
 
 ===/<repository>/benchmarks/direct-call/fixed-entry/===
 README.md[SP4T]: F:规定固定入口与类型化标量调用的独立构建条件及发行门槛 | R:code:benchmarks/direct-call/fixed-entry/run.py | A:- | S:-
@@ -887,3 +890,49 @@ workload-inputs.json[FP4T]: F:保存配对工作负载的平台、探针及两�
 
 ===/<repository>/benchmarks/kernel/===
 README.md[SP5T]: F:说明内核事件与服务读取的分配预算、计时入口和配对复现方法 | R:code:docs/measurements/kernel-event-hot-paths.md | A:CORDIS_BENCH_ITERATIONS,CORDIS_BENCH_ROUNDS | S:分配计数与计时分开，比较修订时用相同测试源码和独立构建目录
+
+===/<repository>/docs/measurements/runtime-efficiency/concurrent-large/===
+inputs.json[TP4T]: F:记录 4 MiB 四路 RPC 对照所用二进制、共享插件、轮数与调用预算 | R:code:docs/measurements/runtime-efficiency/concurrent-large/rpc.jsonl | A:shared_plugins,concurrency,sizes | S:每版每轮正式 128 次调用
+rpc.jsonl[TP4T]: F:保存 4 MiB 四路 RPC 单轮原始耗时、吞吐、进程内存及退出结果 | R:code:docs/measurements/runtime-efficiency/concurrent-large/inputs.json,code:docs/measurements/runtime-efficiency/rpc-memory-summary.json | A:phase,measurement,after_report_process_memory_bytes | S:预热样本由 phase 区别
+
+===/<repository>/docs/measurements/runtime-efficiency/concurrent/===
+inputs.json[TP4T]: F:记录 64 B 与 1 MiB 四路 RPC 配对的环境、共享插件和执行参数 | R:code:docs/measurements/runtime-efficiency/concurrent/rpc.jsonl | A:shared_plugins,sizes,concurrency | S:64 B 正式每轮 4000 次，1 MiB 正式每轮 512 次
+rpc.jsonl[TP4T]: F:保存 64 B 和 1 MiB 四路 RPC 的测量样本、进程内存和停止结果 | R:code:docs/measurements/runtime-efficiency/concurrent/inputs.json,code:docs/measurements/runtime-efficiency/rpc-memory-summary.json | A:pair,phase,measurement | S:同载荷同编号的两版构成配对
+
+===/<repository>/docs/measurements/runtime-efficiency/===
+driver-hashes.json[TP4T]: F:记录 RPC、换代、内存及多语言测量驱动的 SHA-256 | R:code:docs/measurements/runtime-efficiency/measurement-commands.json | A:- | S:-
+idle-memory.jsonl[TP4T]: F:记录部署达到活动后核心和各宿主的内存、线程及启动观测 | R:code:benchmarks/deployment/memory.py,code:docs/measurements/runtime-efficiency/rpc-memory-summary.json | A:pair,scenario,core,hosts | S:汇总排除第零组
+measurement-commands.json[TP4S]: F:记录各测量命令、执行顺序、耗时和退出码 | R:code:docs/measurements/runtime-efficiency.md,code:docs/measurements/runtime-efficiency/driver-hashes.json | A:operations | S:-
+payload-summary.json[TP4S]: F:按调用 DTO、载荷大小和转换路径汇总分配字节、次数及耗时 | R:code:docs/measurements/runtime-efficiency/payload.jsonl | A:benchmark,paths,payload_bytes | S:额外分配统计对应转换窗口
+payload.jsonl[TP4S]: F:记录拥有型和原转换路径的 Invoke 与 InvokeResult 微基准原始输出 | R:code:docs/measurements/runtime-efficiency/payload-summary.json | A:requested_bytes,allocation_calls,elapsed_ns | S:分配与计时使用各自的迭代窗口
+rpc-memory-summary.json[TP6L]: F:汇总串行与四路 RPC 延迟、吞吐、内存和空闲场景的进程资源观测 | R:code:docs/measurements/runtime-efficiency.md,code:docs/measurements/runtime-efficiency/source-manifest.json | A:rpc,idle_memory,paired_candidate_over_baseline | S:各版每轮统计的中位数与同组候选基线比值分别计算，预热配对排除
+source-manifest.json[TP5L]: F:记录性能对照的基线提交、候选源码摘要、工具链和两版测量二进制身份 | R:code:docs/measurements/runtime-efficiency.md,code:docs/measurements/runtime-efficiency/rpc-memory-summary.json | A:base_commit,source_files,source_tree_digest,binaries | S:源码和二进制身份分别记录
+
+===/<repository>/docs/measurements/runtime-efficiency/protocol-ablation/===
+build.json[TP4T]: F:记录宿主协议执行器消融的构建命令、源码身份和宿主产物身份 | R:code:docs/measurements/runtime-efficiency/protocol-ablation/main.patch,code:docs/measurements/runtime-efficiency/protocol-ablation/summary.json | A:host_sha256,restored_main_sha256 | S:比较前后保留恢复的优化源码身份
+inputs.json[TP4T]: F:记录一线程与双工作线程宿主变体的四路大消息对照输入 | R:code:docs/measurements/runtime-efficiency/protocol-ablation/rpc.jsonl,code:docs/measurements/runtime-efficiency/protocol-ablation/build.json | A:shared_plugins,sizes,concurrency | S:两种大消息均以每轮 512 次正式调用比较
+main.patch[TP4T]: F:保存宿主协议运行时的 Tokio 属性及相邻说明的源码差异 | R:code:crates/cordis-host/src/main.rs,code:docs/measurements/runtime-efficiency/protocol-ablation/build.json | A:- | S:记录方向为双工作线程到主线程运行时
+rpc.jsonl[TP4T]: F:逐轮保存协议执行器消融中的大消息延迟、吞吐和进程状态 | R:code:docs/measurements/runtime-efficiency/protocol-ablation/inputs.json,code:docs/measurements/runtime-efficiency/protocol-ablation/summary.json | A:phase,measurement,cleanup | S:基线标签对应优化后的主线程宿主
+summary.json[TP5L]: F:汇总协议执行器消融的配对典型延迟、尾延迟和吞吐 | R:code:docs/measurements/runtime-efficiency/protocol-ablation/rpc.jsonl,code:docs/measurements/runtime-efficiency/protocol-ablation/build.json | A:cases,baseline_label,candidate_label | S:核心、探针和提供方保持同一产物，按每种载荷五对正式运行统计
+
+===/<repository>/docs/measurements/runtime-efficiency/replacement/===
+metadata.json[TP4S]: F:记录换代规模基准的机器、两个测试执行文件、配对顺序与退出结果 | R:code:benchmarks/deployment/replacement.py,code:docs/measurements/runtime-efficiency/replacement/samples.jsonl | A:builds,runs,environment_override | S:一对预热和三对正式运行分别标识
+samples.jsonl[TP4T]: F:保存各实例规模的同步替换耗时及替换后稳定耗时 | R:code:docs/measurements/runtime-efficiency/replacement/metadata.json,code:docs/measurements/runtime-efficiency/replacement/summary.json | A:source_instances,target_instances,replace_to_settled_ns | S:以 warmup_pair 标识预热数据
+summary.json[TP5M]: F:按源和目标实例规模汇总两版同步替换与稳定耗时 | R:code:docs/measurements/runtime-efficiency/replacement/samples.jsonl | A:source_instances,target_instances,builds | S:计时覆盖内核组件迁移及调和
+
+===/<repository>/docs/measurements/runtime-efficiency/serial-large/===
+inputs.json[TP4T]: F:记录 4 MiB 串行 RPC 对照的产物身份、环境和调用设置 | R:code:docs/measurements/runtime-efficiency/serial-large/rpc.jsonl | A:sizes,concurrency,shared_plugins | S:每轮正式 128 次调用
+rpc.jsonl[TP4T]: F:保留 4 MiB 串行 RPC 的逐轮调用、吞吐、内存与清理数据 | R:code:docs/measurements/runtime-efficiency/serial-large/inputs.json,code:docs/measurements/runtime-efficiency/rpc-memory-summary.json | A:measurement,phase,cleanup | S:内存在探针发布结果后采样
+
+===/<repository>/docs/measurements/runtime-efficiency/serial/===
+inputs.json[TP4T]: F:记录 64 B 与 1 MiB 串行 RPC 的固定输入、环境与配对参数 | R:code:docs/measurements/runtime-efficiency/serial/rpc.jsonl | A:sizes,shared_plugins,pairs | S:两种载荷每轮各使用 2000 和 512 次正式调用
+rpc.jsonl[TP4T]: F:保存 64 B 与 1 MiB 串行 RPC 的配对原始调用时延和进程资源观测 | R:code:docs/measurements/runtime-efficiency/serial/inputs.json,code:docs/measurements/runtime-efficiency/rpc-memory-summary.json | A:pair,measurement,after_report_process_memory_bytes | S:预热组随正式组归档并由 phase 区分
+
+===/<repository>/docs/measurements/runtime-efficiency/validation/===
+language-binaries.json[TN4T]: F:记录跨语言验证使用的核心、原生组件、解释器与编码依赖 | R:code:docs/measurements/runtime-efficiency/validation/language-commands.json | A:files,python,node | S:-
+language-commands.json[TN4T]: F:记录三组跨语言验证的实际命令、耗时、退出值和证据位置 | R:code:docs/measurements/runtime-efficiency/validation/summary.json | A:scenarios,elapsed_seconds | S:使用已安装解释器直接调用场景驱动
+language-contracts.json[TN4S]: F:记录 Rust、Python 和 TypeScript 提供方的接口契约断言和终态 | R:code:docs/measurements/runtime-efficiency/validation/summary.json | A:rust,python,typescript | S:每个提供方各记录八项断言
+language-cross.json[TN4S]: F:保存跨进程提供方身份、Python 与 TypeScript 双向字节调用及清理结果 | R:code:docs/measurements/runtime-efficiency/validation/language-commands.json | A:providers,directions,cleanup | S:-
+language-migration.json[TN4L]: F:保存 Rust、Python 与 TypeScript 逐代替换中的业务计数、票据和状态快照 | R:code:docs/measurements/runtime-efficiency/validation/language-commands.json | A:sequence,counts,replacements,snapshots | S:快照和计数对应同一场景中的实际迁移顺序
+log-provenance.json[TQ4S]: F:记录纳入性能资料的日志、规范化处理及原始和归档摘要 | R:code:docs/measurements/runtime-efficiency/validation/summary.json | A:path,normalization,original_sha256,stored_sha256 | S:-
+summary.json[TQ5T]: F:汇总 Rust 用例、跨语言契约、静态检查及验证平台约束 | R:code:docs/measurements/runtime-efficiency.md,code:docs/measurements/runtime-efficiency/validation/language-contracts.json | A:rust,languages,clippy | S:Linux 上的 macOS 专属 watch 用例选中零项；计时入口单独运行

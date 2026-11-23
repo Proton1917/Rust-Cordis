@@ -1,0 +1,189 @@
+{
+  "started_utc": "2026-11-23T07:48:28.457527+00:00",
+  "status": "passed",
+  "machine": {
+    "os": "Linux-6.18.57-x86_64-with-glibc2.41",
+    "architecture": "x86_64",
+    "cpu_model": "AMD EPYC 9V74 80-Core Processor",
+    "cpu_count": 9,
+    "cpu_affinity": [
+      0
+    ],
+    "python": "3.12.14"
+  },
+  "builds": {
+    "baseline": {
+      "path": "/workspace/scratch/d556412a6783/build-baseline/release/deps/replacement_scaling-bc49f7548fa782de",
+      "sha256": "672a3a198f6c614d09477ee407fba1e57ebde14ded19a2ff5d26936cea985824",
+      "size_bytes": 1906728,
+      "mtime_ns": 1795419299607145734
+    },
+    "candidate": {
+      "path": "/workspace/scratch/d556412a6783/build/release/deps/replacement_scaling-bc49f7548fa782de",
+      "sha256": "a0c2b9ea6ae7360f14cdfea765df628c9ceca76ca16a6bbdc35e6cd33f860986",
+      "size_bytes": 1907432,
+      "mtime_ns": 1795419464575949456
+    }
+  },
+  "pairs": 3,
+  "warmup_pairs": 1,
+  "process_timeout_seconds": 120,
+  "environment_override": {
+    "CORDIS_REPLACEMENT_ROUNDS": "1"
+  },
+  "runs": [
+    {
+      "build": "baseline",
+      "pair": 1,
+      "warmup_pair": true,
+      "attempt": 1,
+      "started_utc": "2026-11-23T07:48:28.459430+00:00",
+      "command": [
+        "/workspace/scratch/d556412a6783/build-baseline/release/deps/replacement_scaling-bc49f7548fa782de",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "status": "passed",
+      "stdout": "warmup-001-baseline.stdout.log",
+      "stderr": "warmup-001-baseline.stderr.log",
+      "returncode": 0,
+      "rows": 6,
+      "elapsed_seconds": 17.801112019000357
+    },
+    {
+      "build": "candidate",
+      "pair": 1,
+      "warmup_pair": true,
+      "attempt": 1,
+      "started_utc": "2026-11-23T07:48:46.262148+00:00",
+      "command": [
+        "/workspace/scratch/d556412a6783/build/release/deps/replacement_scaling-bc49f7548fa782de",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "status": "passed",
+      "stdout": "warmup-001-candidate.stdout.log",
+      "stderr": "warmup-001-candidate.stderr.log",
+      "returncode": 0,
+      "rows": 6,
+      "elapsed_seconds": 1.1206837949994224
+    },
+    {
+      "build": "candidate",
+      "pair": 1,
+      "warmup_pair": false,
+      "attempt": 1,
+      "started_utc": "2026-11-23T07:48:47.385165+00:00",
+      "command": [
+        "/workspace/scratch/d556412a6783/build/release/deps/replacement_scaling-bc49f7548fa782de",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "status": "passed",
+      "stdout": "measured-001-candidate.stdout.log",
+      "stderr": "measured-001-candidate.stderr.log",
+      "returncode": 0,
+      "rows": 6,
+      "elapsed_seconds": 1.2969447349987604
+    },
+    {
+      "build": "baseline",
+      "pair": 1,
+      "warmup_pair": false,
+      "attempt": 1,
+      "started_utc": "2026-11-23T07:48:48.684979+00:00",
+      "command": [
+        "/workspace/scratch/d556412a6783/build-baseline/release/deps/replacement_scaling-bc49f7548fa782de",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "status": "passed",
+      "stdout": "measured-001-baseline.stdout.log",
+      "stderr": "measured-001-baseline.stderr.log",
+      "returncode": 0,
+      "rows": 6,
+      "elapsed_seconds": 16.534977755
+    },
+    {
+      "build": "baseline",
+      "pair": 2,
+      "warmup_pair": false,
+      "attempt": 1,
+      "started_utc": "2026-11-23T07:49:05.221424+00:00",
+      "command": [
+        "/workspace/scratch/d556412a6783/build-baseline/release/deps/replacement_scaling-bc49f7548fa782de",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "status": "passed",
+      "stdout": "measured-002-baseline.stdout.log",
+      "stderr": "measured-002-baseline.stderr.log",
+      "returncode": 0,
+      "rows": 6,
+      "elapsed_seconds": 16.23766715200145
+    },
+    {
+      "build": "candidate",
+      "pair": 2,
+      "warmup_pair": false,
+      "attempt": 1,
+      "started_utc": "2026-11-23T07:49:21.461155+00:00",
+      "command": [
+        "/workspace/scratch/d556412a6783/build/release/deps/replacement_scaling-bc49f7548fa782de",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "status": "passed",
+      "stdout": "measured-002-candidate.stdout.log",
+      "stderr": "measured-002-candidate.stderr.log",
+      "returncode": 0,
+      "rows": 6,
+      "elapsed_seconds": 1.218199791999723
+    },
+    {
+      "build": "candidate",
+      "pair": 3,
+      "warmup_pair": false,
+      "attempt": 1,
+      "started_utc": "2026-11-23T07:49:22.680176+00:00",
+      "command": [
+        "/workspace/scratch/d556412a6783/build/release/deps/replacement_scaling-bc49f7548fa782de",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "status": "passed",
+      "stdout": "measured-003-candidate.stdout.log",
+      "stderr": "measured-003-candidate.stderr.log",
+      "returncode": 0,
+      "rows": 6,
+      "elapsed_seconds": 1.1227889870006038
+    },
+    {
+      "build": "baseline",
+      "pair": 3,
+      "warmup_pair": false,
+      "attempt": 1,
+      "started_utc": "2026-11-23T07:49:23.803847+00:00",
+      "command": [
+        "/workspace/scratch/d556412a6783/build-baseline/release/deps/replacement_scaling-bc49f7548fa782de",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "status": "passed",
+      "stdout": "measured-003-baseline.stdout.log",
+      "stderr": "measured-003-baseline.stderr.log",
+      "returncode": 0,
+      "rows": 6,
+      "elapsed_seconds": 16.46731480100061
+    }
+  ],
+  "finished_utc": "2026-11-23T07:49:40.276292+00:00"
+}

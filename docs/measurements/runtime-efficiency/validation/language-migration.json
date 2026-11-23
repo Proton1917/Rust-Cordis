@@ -1,0 +1,2336 @@
+{
+  "sequence": [
+    "Rust",
+    "Python",
+    "TypeScript"
+  ],
+  "counts": [
+    76,
+    89,
+    91,
+    109,
+    111
+  ],
+  "counter_contexts": [
+    [
+      9,
+      14
+    ],
+    [
+      14,
+      20
+    ]
+  ],
+  "replacements": [
+    {
+      "ok": true,
+      "code": null,
+      "value": null,
+      "detail": null,
+      "rpc_wall_us": 2928,
+      "ticket": {
+        "id": "4bba7f86-932e-4ca7-8b26-4496765c941c"
+      },
+      "outcome": {
+        "id": "4bba7f86-932e-4ca7-8b26-4496765c941c",
+        "caller": "admin",
+        "state": "succeeded",
+        "error": null
+      }
+    },
+    {
+      "ok": true,
+      "code": null,
+      "value": null,
+      "detail": null,
+      "rpc_wall_us": 1988,
+      "ticket": {
+        "id": "0bd9c1dd-56ce-4aa7-a144-3857cf5f7617"
+      },
+      "outcome": {
+        "id": "0bd9c1dd-56ce-4aa7-a144-3857cf5f7617",
+        "caller": "admin",
+        "state": "succeeded",
+        "error": null
+      }
+    }
+  ],
+  "snapshots": [
+    {
+      "last_batch": [],
+      "core_version": "0.1.11",
+      "pid": 59,
+      "groups": [
+        {
+          "name": "admin",
+          "connection": 1,
+          "pid": 85,
+          "state": "running",
+          "restarts": 0,
+          "plugins": [
+            {
+              "name": "fixture-admin",
+              "version": "0.1.0",
+              "sdk_version": "0.1.0",
+              "build_info": "real UP1 process",
+              "format": 2,
+              "library": null,
+              "components": [
+                {
+                  "name": "admin",
+                  "inject": [
+                    {
+                      "interface": "cordis.manage@2.0",
+                      "required": true
+                    },
+                    {
+                      "interface": "cordis.runtime@1.1",
+                      "required": true
+                    }
+                  ],
+                  "provides": [],
+                  "listens": [],
+                  "state_schema": "",
+                  "state_version_min": 1,
+                  "state_version_max": 1
+                }
+              ]
+            }
+          ],
+          "error": null
+        },
+        {
+          "name": "counter",
+          "connection": 2,
+          "pid": 90,
+          "state": "running",
+          "restarts": 0,
+          "plugins": [
+            {
+              "name": "counter",
+              "version": "0.1.1",
+              "sdk_version": "0.3.0",
+              "build_info": "rustc 1.96.0 (ac68faa20 2026-05-25) x86_64-unknown-linux-gnu",
+              "format": 1,
+              "library": 1,
+              "components": [
+                {
+                  "name": "counter",
+                  "inject": [
+                    {
+                      "interface": "kv@1.0",
+                      "required": true
+                    }
+                  ],
+                  "provides": [],
+                  "listens": [],
+                  "state_schema": "counter.state",
+                  "state_version_min": 1,
+                  "state_version_max": 1
+                }
+              ]
+            }
+          ],
+          "error": null
+        },
+        {
+          "name": "kv-client",
+          "connection": 3,
+          "pid": 96,
+          "state": "running",
+          "restarts": 0,
+          "plugins": [
+            {
+              "name": "fixture-kv-client",
+              "version": "0.1.0",
+              "sdk_version": "0.1.0",
+              "build_info": "real UP1 process",
+              "format": 2,
+              "library": null,
+              "components": [
+                {
+                  "name": "kv-client",
+                  "inject": [
+                    {
+                      "interface": "kv@1.0",
+                      "required": true
+                    }
+                  ],
+                  "provides": [],
+                  "listens": [],
+                  "state_schema": "",
+                  "state_version_min": 1,
+                  "state_version_max": 1
+                }
+              ]
+            }
+          ],
+          "error": null
+        },
+        {
+          "name": "store",
+          "connection": 4,
+          "pid": 101,
+          "state": "running",
+          "restarts": 0,
+          "plugins": [
+            {
+              "name": "kv",
+              "version": "0.1.1",
+              "sdk_version": "0.3.0",
+              "build_info": "rustc 1.96.0 (ac68faa20 2026-05-25) x86_64-unknown-linux-gnu",
+              "format": 1,
+              "library": 1,
+              "components": [
+                {
+                  "name": "kv-store",
+                  "inject": [],
+                  "provides": [
+                    "kv@1.0"
+                  ],
+                  "listens": [],
+                  "state_schema": "kv.snapshot",
+                  "state_version_min": 1,
+                  "state_version_max": 1
+                }
+              ]
+            }
+          ],
+          "error": null
+        }
+      ],
+      "instances": [
+        {
+          "name": "admin",
+          "plugin": "fixture-admin",
+          "component": "admin",
+          "state": "active",
+          "revision": 0,
+          "bindings": [
+            3,
+            2
+          ],
+          "error": null,
+          "group": "admin",
+          "context": 5,
+          "reference": "installed-1",
+          "page_of": null
+        },
+        {
+          "name": "counter",
+          "plugin": "counter",
+          "component": "counter",
+          "state": "active",
+          "revision": 0,
+          "bindings": [
+            6
+          ],
+          "error": null,
+          "group": "counter",
+          "context": 9,
+          "reference": "installed-2.so",
+          "page_of": null
+        },
+        {
+          "name": "kv-client",
+          "plugin": "fixture-kv-client",
+          "component": "kv-client",
+          "state": "active",
+          "revision": 0,
+          "bindings": [
+            6
+          ],
+          "error": null,
+          "group": "kv-client",
+          "context": 8,
+          "reference": "installed-3",
+          "page_of": null
+        },
+        {
+          "name": "store",
+          "plugin": "kv",
+          "component": "kv-store",
+          "state": "active",
+          "revision": 0,
+          "bindings": [],
+          "error": null,
+          "group": "store",
+          "context": 7,
+          "reference": "installed-4.so",
+          "page_of": null
+        }
+      ],
+      "last_replace": [],
+      "phase": "running",
+      "configuration_error": null,
+      "recovery_error": null,
+      "instance_errors": {},
+      "plugin_errors": {},
+      "overrides": [],
+      "sources": [
+        {
+          "reference": "admin",
+          "name": "fixture-admin",
+          "version": "0.1.0",
+          "source": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/admin",
+          "directory": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/admin",
+          "entry": {
+            "socket": "process",
+            "protocol": 1,
+            "command": [
+              "/workspace/scratch/d556412a6783/language-tools-final/cordis-runtime-fixture",
+              "admin",
+              "v1"
+            ],
+            "restart": {
+              "max": 5,
+              "backoff_ms": 500
+            }
+          },
+          "web": null,
+          "descriptor": null
+        },
+        {
+          "reference": "installed-1",
+          "name": "fixture-admin",
+          "version": "0.1.0",
+          "source": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/installed-1",
+          "directory": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/installed-1",
+          "entry": {
+            "socket": "process",
+            "protocol": 1,
+            "command": [
+              "/workspace/scratch/d556412a6783/language-tools-final/cordis-runtime-fixture",
+              "admin",
+              "v1"
+            ],
+            "restart": {
+              "max": 5,
+              "backoff_ms": 500
+            }
+          },
+          "web": null,
+          "descriptor": {
+            "name": "fixture-admin",
+            "version": "0.1.0",
+            "sdk_version": "0.1.0",
+            "build_info": "real UP1 process",
+            "format": 2,
+            "library": null,
+            "components": [
+              {
+                "name": "admin",
+                "inject": [
+                  {
+                    "interface": "cordis.manage@2.0",
+                    "required": true
+                  },
+                  {
+                    "interface": "cordis.runtime@1.1",
+                    "required": true
+                  }
+                ],
+                "provides": [],
+                "listens": [],
+                "state_schema": "",
+                "state_version_min": 1,
+                "state_version_max": 1
+              }
+            ]
+          }
+        },
+        {
+          "reference": "installed-2.so",
+          "name": "counter",
+          "version": "0.1.1",
+          "source": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/installed-2.so",
+          "directory": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins",
+          "entry": {
+            "socket": "native",
+            "library": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/installed-2.so"
+          },
+          "web": null,
+          "descriptor": {
+            "name": "counter",
+            "version": "0.1.1",
+            "sdk_version": "0.3.0",
+            "build_info": "rustc 1.96.0 (ac68faa20 2026-05-25) x86_64-unknown-linux-gnu",
+            "format": 1,
+            "library": 1,
+            "components": [
+              {
+                "name": "counter",
+                "inject": [
+                  {
+                    "interface": "kv@1.0",
+                    "required": true
+                  }
+                ],
+                "provides": [],
+                "listens": [],
+                "state_schema": "counter.state",
+                "state_version_min": 1,
+                "state_version_max": 1
+              }
+            ]
+          }
+        },
+        {
+          "reference": "installed-3",
+          "name": "fixture-kv-client",
+          "version": "0.1.0",
+          "source": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/installed-3",
+          "directory": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/installed-3",
+          "entry": {
+            "socket": "process",
+            "protocol": 1,
+            "command": [
+              "/workspace/scratch/d556412a6783/language-tools-final/cordis-runtime-fixture",
+              "kv-client",
+              "v1"
+            ],
+            "restart": {
+              "max": 5,
+              "backoff_ms": 500
+            }
+          },
+          "web": null,
+          "descriptor": {
+            "name": "fixture-kv-client",
+            "version": "0.1.0",
+            "sdk_version": "0.1.0",
+            "build_info": "real UP1 process",
+            "format": 2,
+            "library": null,
+            "components": [
+              {
+                "name": "kv-client",
+                "inject": [
+                  {
+                    "interface": "kv@1.0",
+                    "required": true
+                  }
+                ],
+                "provides": [],
+                "listens": [],
+                "state_schema": "",
+                "state_version_min": 1,
+                "state_version_max": 1
+              }
+            ]
+          }
+        },
+        {
+          "reference": "installed-4.so",
+          "name": "kv",
+          "version": "0.1.1",
+          "source": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/installed-4.so",
+          "directory": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins",
+          "entry": {
+            "socket": "native",
+            "library": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/installed-4.so"
+          },
+          "web": null,
+          "descriptor": {
+            "name": "kv",
+            "version": "0.1.1",
+            "sdk_version": "0.3.0",
+            "build_info": "rustc 1.96.0 (ac68faa20 2026-05-25) x86_64-unknown-linux-gnu",
+            "format": 1,
+            "library": 1,
+            "components": [
+              {
+                "name": "kv-store",
+                "inject": [],
+                "provides": [
+                  "kv@1.0"
+                ],
+                "listens": [],
+                "state_schema": "kv.snapshot",
+                "state_version_min": 1,
+                "state_version_max": 1
+              }
+            ]
+          }
+        },
+        {
+          "reference": "kv-client",
+          "name": "fixture-kv-client",
+          "version": "0.1.0",
+          "source": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/kv-client",
+          "directory": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/kv-client",
+          "entry": {
+            "socket": "process",
+            "protocol": 1,
+            "command": [
+              "/workspace/scratch/d556412a6783/language-tools-final/cordis-runtime-fixture",
+              "kv-client",
+              "v1"
+            ],
+            "restart": {
+              "max": 5,
+              "backoff_ms": 500
+            }
+          },
+          "web": null,
+          "descriptor": null
+        },
+        {
+          "reference": "libcounter.so",
+          "name": "counter",
+          "version": "0.1.1",
+          "source": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/libcounter.so",
+          "directory": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins",
+          "entry": {
+            "socket": "native",
+            "library": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/libcounter.so"
+          },
+          "web": null,
+          "descriptor": {
+            "name": "counter",
+            "version": "0.1.1",
+            "sdk_version": "0.3.0",
+            "build_info": "rustc 1.96.0 (ac68faa20 2026-05-25) x86_64-unknown-linux-gnu",
+            "format": 1,
+            "library": null,
+            "components": [
+              {
+                "name": "counter",
+                "inject": [
+                  {
+                    "interface": "kv@1.0",
+                    "required": true
+                  }
+                ],
+                "provides": [],
+                "listens": [],
+                "state_schema": "counter.state",
+                "state_version_min": 1,
+                "state_version_max": 1
+              }
+            ]
+          }
+        },
+        {
+          "reference": "libkv_mem.so",
+          "name": "kv",
+          "version": "0.1.1",
+          "source": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/libkv_mem.so",
+          "directory": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins",
+          "entry": {
+            "socket": "native",
+            "library": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/libkv_mem.so"
+          },
+          "web": null,
+          "descriptor": {
+            "name": "kv",
+            "version": "0.1.1",
+            "sdk_version": "0.3.0",
+            "build_info": "rustc 1.96.0 (ac68faa20 2026-05-25) x86_64-unknown-linux-gnu",
+            "format": 1,
+            "library": null,
+            "components": [
+              {
+                "name": "kv-store",
+                "inject": [],
+                "provides": [
+                  "kv@1.0"
+                ],
+                "listens": [],
+                "state_schema": "kv.snapshot",
+                "state_version_min": 1,
+                "state_version_max": 1
+              }
+            ]
+          }
+        }
+      ],
+      "libraries": [
+        {
+          "id": 1,
+          "name": "counter",
+          "version": "0.1.1",
+          "sdk_version": "0.3.0",
+          "build_info": "rustc 1.96.0 (ac68faa20 2026-05-25) x86_64-unknown-linux-gnu",
+          "sequence": 1,
+          "path": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/.cordis/lib/counter/counter-1.so",
+          "verified": false,
+          "leases": 4,
+          "quiescent": false,
+          "retired": false,
+          "closed": false,
+          "components": [
+            {
+              "name": "counter",
+              "inject": [
+                {
+                  "interface": "kv@1.0",
+                  "required": true
+                }
+              ],
+              "provides": [],
+              "listens": [],
+              "state_schema": "counter.state",
+              "state_version_min": 1,
+              "state_version_max": 1
+            }
+          ],
+          "group": "counter",
+          "connection": 2
+        },
+        {
+          "id": 2,
+          "name": "kv",
+          "version": "0.1.1",
+          "sdk_version": "0.3.0",
+          "build_info": "rustc 1.96.0 (ac68faa20 2026-05-25) x86_64-unknown-linux-gnu",
+          "sequence": 1,
+          "path": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/.cordis/lib/store/kv-1.so",
+          "verified": false,
+          "leases": 3,
+          "quiescent": false,
+          "retired": false,
+          "closed": false,
+          "components": [
+            {
+              "name": "kv-store",
+              "inject": [],
+              "provides": [
+                "kv@1.0"
+              ],
+              "listens": [],
+              "state_schema": "kv.snapshot",
+              "state_version_min": 1,
+              "state_version_max": 1
+            }
+          ],
+          "group": "store",
+          "connection": 4
+        }
+      ],
+      "last_swap": [],
+      "available_plugins": [
+        {
+          "reference": "admin",
+          "name": "fixture-admin",
+          "version": "0.1.0",
+          "path": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/admin",
+          "components": []
+        },
+        {
+          "reference": "installed-1",
+          "name": "fixture-admin",
+          "version": "0.1.0",
+          "path": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/installed-1",
+          "components": [
+            {
+              "name": "admin",
+              "inject": [
+                {
+                  "interface": "cordis.manage@2.0",
+                  "required": true
+                },
+                {
+                  "interface": "cordis.runtime@1.1",
+                  "required": true
+                }
+              ],
+              "provides": [],
+              "listens": [],
+              "state_schema": "",
+              "state_version_min": 1,
+              "state_version_max": 1
+            }
+          ]
+        },
+        {
+          "reference": "installed-2.so",
+          "name": "counter",
+          "version": "0.1.1",
+          "path": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/installed-2.so",
+          "components": [
+            {
+              "name": "counter",
+              "inject": [
+                {
+                  "interface": "kv@1.0",
+                  "required": true
+                }
+              ],
+              "provides": [],
+              "listens": [],
+              "state_schema": "counter.state",
+              "state_version_min": 1,
+              "state_version_max": 1
+            }
+          ]
+        },
+        {
+          "reference": "installed-3",
+          "name": "fixture-kv-client",
+          "version": "0.1.0",
+          "path": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/installed-3",
+          "components": [
+            {
+              "name": "kv-client",
+              "inject": [
+                {
+                  "interface": "kv@1.0",
+                  "required": true
+                }
+              ],
+              "provides": [],
+              "listens": [],
+              "state_schema": "",
+              "state_version_min": 1,
+              "state_version_max": 1
+            }
+          ]
+        },
+        {
+          "reference": "installed-4.so",
+          "name": "kv",
+          "version": "0.1.1",
+          "path": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/installed-4.so",
+          "components": [
+            {
+              "name": "kv-store",
+              "inject": [],
+              "provides": [
+                "kv@1.0"
+              ],
+              "listens": [],
+              "state_schema": "kv.snapshot",
+              "state_version_min": 1,
+              "state_version_max": 1
+            }
+          ]
+        },
+        {
+          "reference": "kv-client",
+          "name": "fixture-kv-client",
+          "version": "0.1.0",
+          "path": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/kv-client",
+          "components": []
+        },
+        {
+          "reference": "libcounter.so",
+          "name": "counter",
+          "version": "0.1.1",
+          "path": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/libcounter.so",
+          "components": [
+            {
+              "name": "counter",
+              "inject": [
+                {
+                  "interface": "kv@1.0",
+                  "required": true
+                }
+              ],
+              "provides": [],
+              "listens": [],
+              "state_schema": "counter.state",
+              "state_version_min": 1,
+              "state_version_max": 1
+            }
+          ]
+        },
+        {
+          "reference": "libkv_mem.so",
+          "name": "kv",
+          "version": "0.1.1",
+          "path": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/libkv_mem.so",
+          "components": [
+            {
+              "name": "kv-store",
+              "inject": [],
+              "provides": [
+                "kv@1.0"
+              ],
+              "listens": [],
+              "state_schema": "kv.snapshot",
+              "state_version_min": 1,
+              "state_version_max": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "last_batch": [
+        {
+          "id": "4bba7f86-932e-4ca7-8b26-4496765c941c",
+          "caller": "admin",
+          "state": "succeeded",
+          "error": null
+        }
+      ],
+      "core_version": "0.1.11",
+      "pid": 59,
+      "groups": [
+        {
+          "name": "admin",
+          "connection": 1,
+          "pid": 85,
+          "state": "running",
+          "restarts": 0,
+          "plugins": [
+            {
+              "name": "fixture-admin",
+              "version": "0.1.0",
+              "sdk_version": "0.1.0",
+              "build_info": "real UP1 process",
+              "format": 2,
+              "library": null,
+              "components": [
+                {
+                  "name": "admin",
+                  "inject": [
+                    {
+                      "interface": "cordis.manage@2.0",
+                      "required": true
+                    },
+                    {
+                      "interface": "cordis.runtime@1.1",
+                      "required": true
+                    }
+                  ],
+                  "provides": [],
+                  "listens": [],
+                  "state_schema": "",
+                  "state_version_min": 1,
+                  "state_version_max": 1
+                }
+              ]
+            }
+          ],
+          "error": null
+        },
+        {
+          "name": "counter",
+          "connection": 2,
+          "pid": 90,
+          "state": "running",
+          "restarts": 0,
+          "plugins": [
+            {
+              "name": "counter",
+              "version": "0.1.1",
+              "sdk_version": "0.3.0",
+              "build_info": "rustc 1.96.0 (ac68faa20 2026-05-25) x86_64-unknown-linux-gnu",
+              "format": 1,
+              "library": 1,
+              "components": [
+                {
+                  "name": "counter",
+                  "inject": [
+                    {
+                      "interface": "kv@1.0",
+                      "required": true
+                    }
+                  ],
+                  "provides": [],
+                  "listens": [],
+                  "state_schema": "counter.state",
+                  "state_version_min": 1,
+                  "state_version_max": 1
+                }
+              ]
+            }
+          ],
+          "error": null
+        },
+        {
+          "name": "kv-client",
+          "connection": 3,
+          "pid": 96,
+          "state": "running",
+          "restarts": 0,
+          "plugins": [
+            {
+              "name": "fixture-kv-client",
+              "version": "0.1.0",
+              "sdk_version": "0.1.0",
+              "build_info": "real UP1 process",
+              "format": 2,
+              "library": null,
+              "components": [
+                {
+                  "name": "kv-client",
+                  "inject": [
+                    {
+                      "interface": "kv@1.0",
+                      "required": true
+                    }
+                  ],
+                  "provides": [],
+                  "listens": [],
+                  "state_schema": "",
+                  "state_version_min": 1,
+                  "state_version_max": 1
+                }
+              ]
+            }
+          ],
+          "error": null
+        },
+        {
+          "name": "store",
+          "connection": 12,
+          "pid": 111,
+          "state": "running",
+          "restarts": 0,
+          "plugins": [
+            {
+              "name": "kv",
+              "version": "0.1.0",
+              "sdk_version": "0.1.4",
+              "build_info": "Python UP/1 SDK",
+              "format": 2,
+              "library": null,
+              "components": [
+                {
+                  "name": "kv-store",
+                  "inject": [],
+                  "provides": [
+                    "kv@1.0"
+                  ],
+                  "listens": [],
+                  "state_schema": "kv.snapshot",
+                  "state_version_min": 1,
+                  "state_version_max": 1
+                }
+              ]
+            }
+          ],
+          "error": null
+        }
+      ],
+      "instances": [
+        {
+          "name": "admin",
+          "plugin": "fixture-admin",
+          "component": "admin",
+          "state": "active",
+          "revision": 0,
+          "bindings": [
+            3,
+            2
+          ],
+          "error": null,
+          "group": "admin",
+          "context": 5,
+          "reference": "installed-1",
+          "page_of": null
+        },
+        {
+          "name": "counter",
+          "plugin": "counter",
+          "component": "counter",
+          "state": "active",
+          "revision": 0,
+          "bindings": [
+            10
+          ],
+          "error": null,
+          "group": "counter",
+          "context": 14,
+          "reference": "installed-2.so",
+          "page_of": null
+        },
+        {
+          "name": "kv-client",
+          "plugin": "fixture-kv-client",
+          "component": "kv-client",
+          "state": "active",
+          "revision": 0,
+          "bindings": [
+            10
+          ],
+          "error": null,
+          "group": "kv-client",
+          "context": 15,
+          "reference": "installed-3",
+          "page_of": null
+        },
+        {
+          "name": "store",
+          "plugin": "kv",
+          "component": "kv-store",
+          "state": "active",
+          "revision": 1,
+          "bindings": [],
+          "error": null,
+          "group": "store",
+          "context": 13,
+          "reference": "installed-5",
+          "page_of": null
+        }
+      ],
+      "last_replace": [
+        {
+          "group": "store",
+          "previous_connection": 4,
+          "candidate_connection": 12,
+          "affected_instances": 3,
+          "pause_ms": 76,
+          "committed": true,
+          "succeeded": true,
+          "rolled_back": false,
+          "failure": null
+        }
+      ],
+      "phase": "running",
+      "configuration_error": null,
+      "recovery_error": null,
+      "instance_errors": {},
+      "plugin_errors": {},
+      "overrides": [
+        "store"
+      ],
+      "sources": [
+        {
+          "reference": "admin",
+          "name": "fixture-admin",
+          "version": "0.1.0",
+          "source": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/admin",
+          "directory": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/admin",
+          "entry": {
+            "socket": "process",
+            "protocol": 1,
+            "command": [
+              "/workspace/scratch/d556412a6783/language-tools-final/cordis-runtime-fixture",
+              "admin",
+              "v1"
+            ],
+            "restart": {
+              "max": 5,
+              "backoff_ms": 500
+            }
+          },
+          "web": null,
+          "descriptor": null
+        },
+        {
+          "reference": "installed-1",
+          "name": "fixture-admin",
+          "version": "0.1.0",
+          "source": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/installed-1",
+          "directory": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/installed-1",
+          "entry": {
+            "socket": "process",
+            "protocol": 1,
+            "command": [
+              "/workspace/scratch/d556412a6783/language-tools-final/cordis-runtime-fixture",
+              "admin",
+              "v1"
+            ],
+            "restart": {
+              "max": 5,
+              "backoff_ms": 500
+            }
+          },
+          "web": null,
+          "descriptor": {
+            "name": "fixture-admin",
+            "version": "0.1.0",
+            "sdk_version": "0.1.0",
+            "build_info": "real UP1 process",
+            "format": 2,
+            "library": null,
+            "components": [
+              {
+                "name": "admin",
+                "inject": [
+                  {
+                    "interface": "cordis.manage@2.0",
+                    "required": true
+                  },
+                  {
+                    "interface": "cordis.runtime@1.1",
+                    "required": true
+                  }
+                ],
+                "provides": [],
+                "listens": [],
+                "state_schema": "",
+                "state_version_min": 1,
+                "state_version_max": 1
+              }
+            ]
+          }
+        },
+        {
+          "reference": "installed-2.so",
+          "name": "counter",
+          "version": "0.1.1",
+          "source": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/installed-2.so",
+          "directory": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins",
+          "entry": {
+            "socket": "native",
+            "library": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/installed-2.so"
+          },
+          "web": null,
+          "descriptor": {
+            "name": "counter",
+            "version": "0.1.1",
+            "sdk_version": "0.3.0",
+            "build_info": "rustc 1.96.0 (ac68faa20 2026-05-25) x86_64-unknown-linux-gnu",
+            "format": 1,
+            "library": 1,
+            "components": [
+              {
+                "name": "counter",
+                "inject": [
+                  {
+                    "interface": "kv@1.0",
+                    "required": true
+                  }
+                ],
+                "provides": [],
+                "listens": [],
+                "state_schema": "counter.state",
+                "state_version_min": 1,
+                "state_version_max": 1
+              }
+            ]
+          }
+        },
+        {
+          "reference": "installed-3",
+          "name": "fixture-kv-client",
+          "version": "0.1.0",
+          "source": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/installed-3",
+          "directory": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/installed-3",
+          "entry": {
+            "socket": "process",
+            "protocol": 1,
+            "command": [
+              "/workspace/scratch/d556412a6783/language-tools-final/cordis-runtime-fixture",
+              "kv-client",
+              "v1"
+            ],
+            "restart": {
+              "max": 5,
+              "backoff_ms": 500
+            }
+          },
+          "web": null,
+          "descriptor": {
+            "name": "fixture-kv-client",
+            "version": "0.1.0",
+            "sdk_version": "0.1.0",
+            "build_info": "real UP1 process",
+            "format": 2,
+            "library": null,
+            "components": [
+              {
+                "name": "kv-client",
+                "inject": [
+                  {
+                    "interface": "kv@1.0",
+                    "required": true
+                  }
+                ],
+                "provides": [],
+                "listens": [],
+                "state_schema": "",
+                "state_version_min": 1,
+                "state_version_max": 1
+              }
+            ]
+          }
+        },
+        {
+          "reference": "installed-4.so",
+          "name": "kv",
+          "version": "0.1.1",
+          "source": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/installed-4.so",
+          "directory": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins",
+          "entry": {
+            "socket": "native",
+            "library": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/installed-4.so"
+          },
+          "web": null,
+          "descriptor": {
+            "name": "kv",
+            "version": "0.1.1",
+            "sdk_version": "0.3.0",
+            "build_info": "rustc 1.96.0 (ac68faa20 2026-05-25) x86_64-unknown-linux-gnu",
+            "format": 1,
+            "library": 1,
+            "components": [
+              {
+                "name": "kv-store",
+                "inject": [],
+                "provides": [
+                  "kv@1.0"
+                ],
+                "listens": [],
+                "state_schema": "kv.snapshot",
+                "state_version_min": 1,
+                "state_version_max": 1
+              }
+            ]
+          }
+        },
+        {
+          "reference": "installed-5",
+          "name": "kv",
+          "version": "0.1.0",
+          "source": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/installed-5",
+          "directory": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/installed-5",
+          "entry": {
+            "socket": "process",
+            "protocol": 1,
+            "command": [
+              "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/bin/python",
+              "-B",
+              "-m",
+              "kv_py"
+            ],
+            "restart": {
+              "max": 5,
+              "backoff_ms": 500
+            }
+          },
+          "web": null,
+          "descriptor": {
+            "name": "kv",
+            "version": "0.1.0",
+            "sdk_version": "0.1.4",
+            "build_info": "Python UP/1 SDK",
+            "format": 2,
+            "library": null,
+            "components": [
+              {
+                "name": "kv-store",
+                "inject": [],
+                "provides": [
+                  "kv@1.0"
+                ],
+                "listens": [],
+                "state_schema": "kv.snapshot",
+                "state_version_min": 1,
+                "state_version_max": 1
+              }
+            ]
+          }
+        },
+        {
+          "reference": "kv-client",
+          "name": "fixture-kv-client",
+          "version": "0.1.0",
+          "source": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/kv-client",
+          "directory": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/kv-client",
+          "entry": {
+            "socket": "process",
+            "protocol": 1,
+            "command": [
+              "/workspace/scratch/d556412a6783/language-tools-final/cordis-runtime-fixture",
+              "kv-client",
+              "v1"
+            ],
+            "restart": {
+              "max": 5,
+              "backoff_ms": 500
+            }
+          },
+          "web": null,
+          "descriptor": null
+        },
+        {
+          "reference": "libcounter.so",
+          "name": "counter",
+          "version": "0.1.1",
+          "source": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/libcounter.so",
+          "directory": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins",
+          "entry": {
+            "socket": "native",
+            "library": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/libcounter.so"
+          },
+          "web": null,
+          "descriptor": {
+            "name": "counter",
+            "version": "0.1.1",
+            "sdk_version": "0.3.0",
+            "build_info": "rustc 1.96.0 (ac68faa20 2026-05-25) x86_64-unknown-linux-gnu",
+            "format": 1,
+            "library": null,
+            "components": [
+              {
+                "name": "counter",
+                "inject": [
+                  {
+                    "interface": "kv@1.0",
+                    "required": true
+                  }
+                ],
+                "provides": [],
+                "listens": [],
+                "state_schema": "counter.state",
+                "state_version_min": 1,
+                "state_version_max": 1
+              }
+            ]
+          }
+        },
+        {
+          "reference": "libkv_mem.so",
+          "name": "kv",
+          "version": "0.1.1",
+          "source": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/libkv_mem.so",
+          "directory": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins",
+          "entry": {
+            "socket": "native",
+            "library": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/libkv_mem.so"
+          },
+          "web": null,
+          "descriptor": {
+            "name": "kv",
+            "version": "0.1.1",
+            "sdk_version": "0.3.0",
+            "build_info": "rustc 1.96.0 (ac68faa20 2026-05-25) x86_64-unknown-linux-gnu",
+            "format": 1,
+            "library": null,
+            "components": [
+              {
+                "name": "kv-store",
+                "inject": [],
+                "provides": [
+                  "kv@1.0"
+                ],
+                "listens": [],
+                "state_schema": "kv.snapshot",
+                "state_version_min": 1,
+                "state_version_max": 1
+              }
+            ]
+          }
+        }
+      ],
+      "libraries": [
+        {
+          "id": 1,
+          "name": "counter",
+          "version": "0.1.1",
+          "sdk_version": "0.3.0",
+          "build_info": "rustc 1.96.0 (ac68faa20 2026-05-25) x86_64-unknown-linux-gnu",
+          "sequence": 1,
+          "path": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/.cordis/lib/counter/counter-1.so",
+          "verified": false,
+          "leases": 4,
+          "quiescent": false,
+          "retired": false,
+          "closed": false,
+          "components": [
+            {
+              "name": "counter",
+              "inject": [
+                {
+                  "interface": "kv@1.0",
+                  "required": true
+                }
+              ],
+              "provides": [],
+              "listens": [],
+              "state_schema": "counter.state",
+              "state_version_min": 1,
+              "state_version_max": 1
+            }
+          ],
+          "group": "counter",
+          "connection": 2
+        }
+      ],
+      "last_swap": [],
+      "available_plugins": [
+        {
+          "reference": "admin",
+          "name": "fixture-admin",
+          "version": "0.1.0",
+          "path": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/admin",
+          "components": []
+        },
+        {
+          "reference": "installed-1",
+          "name": "fixture-admin",
+          "version": "0.1.0",
+          "path": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/installed-1",
+          "components": [
+            {
+              "name": "admin",
+              "inject": [
+                {
+                  "interface": "cordis.manage@2.0",
+                  "required": true
+                },
+                {
+                  "interface": "cordis.runtime@1.1",
+                  "required": true
+                }
+              ],
+              "provides": [],
+              "listens": [],
+              "state_schema": "",
+              "state_version_min": 1,
+              "state_version_max": 1
+            }
+          ]
+        },
+        {
+          "reference": "installed-2.so",
+          "name": "counter",
+          "version": "0.1.1",
+          "path": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/installed-2.so",
+          "components": [
+            {
+              "name": "counter",
+              "inject": [
+                {
+                  "interface": "kv@1.0",
+                  "required": true
+                }
+              ],
+              "provides": [],
+              "listens": [],
+              "state_schema": "counter.state",
+              "state_version_min": 1,
+              "state_version_max": 1
+            }
+          ]
+        },
+        {
+          "reference": "installed-3",
+          "name": "fixture-kv-client",
+          "version": "0.1.0",
+          "path": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/installed-3",
+          "components": [
+            {
+              "name": "kv-client",
+              "inject": [
+                {
+                  "interface": "kv@1.0",
+                  "required": true
+                }
+              ],
+              "provides": [],
+              "listens": [],
+              "state_schema": "",
+              "state_version_min": 1,
+              "state_version_max": 1
+            }
+          ]
+        },
+        {
+          "reference": "installed-4.so",
+          "name": "kv",
+          "version": "0.1.1",
+          "path": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/installed-4.so",
+          "components": [
+            {
+              "name": "kv-store",
+              "inject": [],
+              "provides": [
+                "kv@1.0"
+              ],
+              "listens": [],
+              "state_schema": "kv.snapshot",
+              "state_version_min": 1,
+              "state_version_max": 1
+            }
+          ]
+        },
+        {
+          "reference": "installed-5",
+          "name": "kv",
+          "version": "0.1.0",
+          "path": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/installed-5",
+          "components": [
+            {
+              "name": "kv-store",
+              "inject": [],
+              "provides": [
+                "kv@1.0"
+              ],
+              "listens": [],
+              "state_schema": "kv.snapshot",
+              "state_version_min": 1,
+              "state_version_max": 1
+            }
+          ]
+        },
+        {
+          "reference": "kv-client",
+          "name": "fixture-kv-client",
+          "version": "0.1.0",
+          "path": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/kv-client",
+          "components": []
+        },
+        {
+          "reference": "libcounter.so",
+          "name": "counter",
+          "version": "0.1.1",
+          "path": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/libcounter.so",
+          "components": [
+            {
+              "name": "counter",
+              "inject": [
+                {
+                  "interface": "kv@1.0",
+                  "required": true
+                }
+              ],
+              "provides": [],
+              "listens": [],
+              "state_schema": "counter.state",
+              "state_version_min": 1,
+              "state_version_max": 1
+            }
+          ]
+        },
+        {
+          "reference": "libkv_mem.so",
+          "name": "kv",
+          "version": "0.1.1",
+          "path": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/libkv_mem.so",
+          "components": [
+            {
+              "name": "kv-store",
+              "inject": [],
+              "provides": [
+                "kv@1.0"
+              ],
+              "listens": [],
+              "state_schema": "kv.snapshot",
+              "state_version_min": 1,
+              "state_version_max": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "last_batch": [
+        {
+          "id": "0bd9c1dd-56ce-4aa7-a144-3857cf5f7617",
+          "caller": "admin",
+          "state": "succeeded",
+          "error": null
+        },
+        {
+          "id": "4bba7f86-932e-4ca7-8b26-4496765c941c",
+          "caller": "admin",
+          "state": "succeeded",
+          "error": null
+        }
+      ],
+      "core_version": "0.1.11",
+      "pid": 59,
+      "groups": [
+        {
+          "name": "admin",
+          "connection": 1,
+          "pid": 85,
+          "state": "running",
+          "restarts": 0,
+          "plugins": [
+            {
+              "name": "fixture-admin",
+              "version": "0.1.0",
+              "sdk_version": "0.1.0",
+              "build_info": "real UP1 process",
+              "format": 2,
+              "library": null,
+              "components": [
+                {
+                  "name": "admin",
+                  "inject": [
+                    {
+                      "interface": "cordis.manage@2.0",
+                      "required": true
+                    },
+                    {
+                      "interface": "cordis.runtime@1.1",
+                      "required": true
+                    }
+                  ],
+                  "provides": [],
+                  "listens": [],
+                  "state_schema": "",
+                  "state_version_min": 1,
+                  "state_version_max": 1
+                }
+              ]
+            }
+          ],
+          "error": null
+        },
+        {
+          "name": "counter",
+          "connection": 2,
+          "pid": 90,
+          "state": "running",
+          "restarts": 0,
+          "plugins": [
+            {
+              "name": "counter",
+              "version": "0.1.1",
+              "sdk_version": "0.3.0",
+              "build_info": "rustc 1.96.0 (ac68faa20 2026-05-25) x86_64-unknown-linux-gnu",
+              "format": 1,
+              "library": 1,
+              "components": [
+                {
+                  "name": "counter",
+                  "inject": [
+                    {
+                      "interface": "kv@1.0",
+                      "required": true
+                    }
+                  ],
+                  "provides": [],
+                  "listens": [],
+                  "state_schema": "counter.state",
+                  "state_version_min": 1,
+                  "state_version_max": 1
+                }
+              ]
+            }
+          ],
+          "error": null
+        },
+        {
+          "name": "kv-client",
+          "connection": 3,
+          "pid": 96,
+          "state": "running",
+          "restarts": 0,
+          "plugins": [
+            {
+              "name": "fixture-kv-client",
+              "version": "0.1.0",
+              "sdk_version": "0.1.0",
+              "build_info": "real UP1 process",
+              "format": 2,
+              "library": null,
+              "components": [
+                {
+                  "name": "kv-client",
+                  "inject": [
+                    {
+                      "interface": "kv@1.0",
+                      "required": true
+                    }
+                  ],
+                  "provides": [],
+                  "listens": [],
+                  "state_schema": "",
+                  "state_version_min": 1,
+                  "state_version_max": 1
+                }
+              ]
+            }
+          ],
+          "error": null
+        },
+        {
+          "name": "store",
+          "connection": 18,
+          "pid": 112,
+          "state": "running",
+          "restarts": 0,
+          "plugins": [
+            {
+              "name": "kv",
+              "version": "0.1.0",
+              "sdk_version": "0.2.3",
+              "build_info": "TypeScript UP/1 SDK",
+              "format": 2,
+              "library": null,
+              "components": [
+                {
+                  "name": "kv-store",
+                  "inject": [],
+                  "provides": [
+                    "kv@1.0"
+                  ],
+                  "listens": [],
+                  "state_schema": "kv.snapshot",
+                  "state_version_min": 1,
+                  "state_version_max": 1
+                }
+              ]
+            }
+          ],
+          "error": null
+        }
+      ],
+      "instances": [
+        {
+          "name": "admin",
+          "plugin": "fixture-admin",
+          "component": "admin",
+          "state": "active",
+          "revision": 0,
+          "bindings": [
+            3,
+            2
+          ],
+          "error": null,
+          "group": "admin",
+          "context": 5,
+          "reference": "installed-1",
+          "page_of": null
+        },
+        {
+          "name": "counter",
+          "plugin": "counter",
+          "component": "counter",
+          "state": "active",
+          "revision": 0,
+          "bindings": [
+            14
+          ],
+          "error": null,
+          "group": "counter",
+          "context": 20,
+          "reference": "installed-2.so",
+          "page_of": null
+        },
+        {
+          "name": "kv-client",
+          "plugin": "fixture-kv-client",
+          "component": "kv-client",
+          "state": "active",
+          "revision": 0,
+          "bindings": [
+            14
+          ],
+          "error": null,
+          "group": "kv-client",
+          "context": 21,
+          "reference": "installed-3",
+          "page_of": null
+        },
+        {
+          "name": "store",
+          "plugin": "kv",
+          "component": "kv-store",
+          "state": "active",
+          "revision": 2,
+          "bindings": [],
+          "error": null,
+          "group": "store",
+          "context": 19,
+          "reference": "installed-6",
+          "page_of": null
+        }
+      ],
+      "last_replace": [
+        {
+          "group": "store",
+          "previous_connection": 12,
+          "candidate_connection": 18,
+          "affected_instances": 3,
+          "pause_ms": 175,
+          "committed": true,
+          "succeeded": true,
+          "rolled_back": false,
+          "failure": null
+        }
+      ],
+      "phase": "running",
+      "configuration_error": null,
+      "recovery_error": null,
+      "instance_errors": {},
+      "plugin_errors": {},
+      "overrides": [
+        "store"
+      ],
+      "sources": [
+        {
+          "reference": "admin",
+          "name": "fixture-admin",
+          "version": "0.1.0",
+          "source": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/admin",
+          "directory": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/admin",
+          "entry": {
+            "socket": "process",
+            "protocol": 1,
+            "command": [
+              "/workspace/scratch/d556412a6783/language-tools-final/cordis-runtime-fixture",
+              "admin",
+              "v1"
+            ],
+            "restart": {
+              "max": 5,
+              "backoff_ms": 500
+            }
+          },
+          "web": null,
+          "descriptor": null
+        },
+        {
+          "reference": "installed-1",
+          "name": "fixture-admin",
+          "version": "0.1.0",
+          "source": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/installed-1",
+          "directory": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/installed-1",
+          "entry": {
+            "socket": "process",
+            "protocol": 1,
+            "command": [
+              "/workspace/scratch/d556412a6783/language-tools-final/cordis-runtime-fixture",
+              "admin",
+              "v1"
+            ],
+            "restart": {
+              "max": 5,
+              "backoff_ms": 500
+            }
+          },
+          "web": null,
+          "descriptor": {
+            "name": "fixture-admin",
+            "version": "0.1.0",
+            "sdk_version": "0.1.0",
+            "build_info": "real UP1 process",
+            "format": 2,
+            "library": null,
+            "components": [
+              {
+                "name": "admin",
+                "inject": [
+                  {
+                    "interface": "cordis.manage@2.0",
+                    "required": true
+                  },
+                  {
+                    "interface": "cordis.runtime@1.1",
+                    "required": true
+                  }
+                ],
+                "provides": [],
+                "listens": [],
+                "state_schema": "",
+                "state_version_min": 1,
+                "state_version_max": 1
+              }
+            ]
+          }
+        },
+        {
+          "reference": "installed-2.so",
+          "name": "counter",
+          "version": "0.1.1",
+          "source": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/installed-2.so",
+          "directory": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins",
+          "entry": {
+            "socket": "native",
+            "library": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/installed-2.so"
+          },
+          "web": null,
+          "descriptor": {
+            "name": "counter",
+            "version": "0.1.1",
+            "sdk_version": "0.3.0",
+            "build_info": "rustc 1.96.0 (ac68faa20 2026-05-25) x86_64-unknown-linux-gnu",
+            "format": 1,
+            "library": 1,
+            "components": [
+              {
+                "name": "counter",
+                "inject": [
+                  {
+                    "interface": "kv@1.0",
+                    "required": true
+                  }
+                ],
+                "provides": [],
+                "listens": [],
+                "state_schema": "counter.state",
+                "state_version_min": 1,
+                "state_version_max": 1
+              }
+            ]
+          }
+        },
+        {
+          "reference": "installed-3",
+          "name": "fixture-kv-client",
+          "version": "0.1.0",
+          "source": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/installed-3",
+          "directory": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/installed-3",
+          "entry": {
+            "socket": "process",
+            "protocol": 1,
+            "command": [
+              "/workspace/scratch/d556412a6783/language-tools-final/cordis-runtime-fixture",
+              "kv-client",
+              "v1"
+            ],
+            "restart": {
+              "max": 5,
+              "backoff_ms": 500
+            }
+          },
+          "web": null,
+          "descriptor": {
+            "name": "fixture-kv-client",
+            "version": "0.1.0",
+            "sdk_version": "0.1.0",
+            "build_info": "real UP1 process",
+            "format": 2,
+            "library": null,
+            "components": [
+              {
+                "name": "kv-client",
+                "inject": [
+                  {
+                    "interface": "kv@1.0",
+                    "required": true
+                  }
+                ],
+                "provides": [],
+                "listens": [],
+                "state_schema": "",
+                "state_version_min": 1,
+                "state_version_max": 1
+              }
+            ]
+          }
+        },
+        {
+          "reference": "installed-4.so",
+          "name": "kv",
+          "version": "0.1.1",
+          "source": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/installed-4.so",
+          "directory": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins",
+          "entry": {
+            "socket": "native",
+            "library": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/installed-4.so"
+          },
+          "web": null,
+          "descriptor": {
+            "name": "kv",
+            "version": "0.1.1",
+            "sdk_version": "0.3.0",
+            "build_info": "rustc 1.96.0 (ac68faa20 2026-05-25) x86_64-unknown-linux-gnu",
+            "format": 1,
+            "library": 1,
+            "components": [
+              {
+                "name": "kv-store",
+                "inject": [],
+                "provides": [
+                  "kv@1.0"
+                ],
+                "listens": [],
+                "state_schema": "kv.snapshot",
+                "state_version_min": 1,
+                "state_version_max": 1
+              }
+            ]
+          }
+        },
+        {
+          "reference": "installed-5",
+          "name": "kv",
+          "version": "0.1.0",
+          "source": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/installed-5",
+          "directory": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/installed-5",
+          "entry": {
+            "socket": "process",
+            "protocol": 1,
+            "command": [
+              "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/bin/python",
+              "-B",
+              "-m",
+              "kv_py"
+            ],
+            "restart": {
+              "max": 5,
+              "backoff_ms": 500
+            }
+          },
+          "web": null,
+          "descriptor": {
+            "name": "kv",
+            "version": "0.1.0",
+            "sdk_version": "0.1.4",
+            "build_info": "Python UP/1 SDK",
+            "format": 2,
+            "library": null,
+            "components": [
+              {
+                "name": "kv-store",
+                "inject": [],
+                "provides": [
+                  "kv@1.0"
+                ],
+                "listens": [],
+                "state_schema": "kv.snapshot",
+                "state_version_min": 1,
+                "state_version_max": 1
+              }
+            ]
+          }
+        },
+        {
+          "reference": "installed-6",
+          "name": "kv",
+          "version": "0.1.0",
+          "source": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/installed-6",
+          "directory": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/installed-6",
+          "entry": {
+            "socket": "process",
+            "protocol": 1,
+            "command": [
+              "node",
+              "/workspace/scratch/d556412a6783/Rust-Cordis/plugins/kv-ts/dist/main.js"
+            ],
+            "restart": {
+              "max": 5,
+              "backoff_ms": 500
+            }
+          },
+          "web": null,
+          "descriptor": {
+            "name": "kv",
+            "version": "0.1.0",
+            "sdk_version": "0.2.3",
+            "build_info": "TypeScript UP/1 SDK",
+            "format": 2,
+            "library": null,
+            "components": [
+              {
+                "name": "kv-store",
+                "inject": [],
+                "provides": [
+                  "kv@1.0"
+                ],
+                "listens": [],
+                "state_schema": "kv.snapshot",
+                "state_version_min": 1,
+                "state_version_max": 1
+              }
+            ]
+          }
+        },
+        {
+          "reference": "kv-client",
+          "name": "fixture-kv-client",
+          "version": "0.1.0",
+          "source": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/kv-client",
+          "directory": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/kv-client",
+          "entry": {
+            "socket": "process",
+            "protocol": 1,
+            "command": [
+              "/workspace/scratch/d556412a6783/language-tools-final/cordis-runtime-fixture",
+              "kv-client",
+              "v1"
+            ],
+            "restart": {
+              "max": 5,
+              "backoff_ms": 500
+            }
+          },
+          "web": null,
+          "descriptor": null
+        },
+        {
+          "reference": "libcounter.so",
+          "name": "counter",
+          "version": "0.1.1",
+          "source": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/libcounter.so",
+          "directory": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins",
+          "entry": {
+            "socket": "native",
+            "library": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/libcounter.so"
+          },
+          "web": null,
+          "descriptor": {
+            "name": "counter",
+            "version": "0.1.1",
+            "sdk_version": "0.3.0",
+            "build_info": "rustc 1.96.0 (ac68faa20 2026-05-25) x86_64-unknown-linux-gnu",
+            "format": 1,
+            "library": null,
+            "components": [
+              {
+                "name": "counter",
+                "inject": [
+                  {
+                    "interface": "kv@1.0",
+                    "required": true
+                  }
+                ],
+                "provides": [],
+                "listens": [],
+                "state_schema": "counter.state",
+                "state_version_min": 1,
+                "state_version_max": 1
+              }
+            ]
+          }
+        },
+        {
+          "reference": "libkv_mem.so",
+          "name": "kv",
+          "version": "0.1.1",
+          "source": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/libkv_mem.so",
+          "directory": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins",
+          "entry": {
+            "socket": "native",
+            "library": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/libkv_mem.so"
+          },
+          "web": null,
+          "descriptor": {
+            "name": "kv",
+            "version": "0.1.1",
+            "sdk_version": "0.3.0",
+            "build_info": "rustc 1.96.0 (ac68faa20 2026-05-25) x86_64-unknown-linux-gnu",
+            "format": 1,
+            "library": null,
+            "components": [
+              {
+                "name": "kv-store",
+                "inject": [],
+                "provides": [
+                  "kv@1.0"
+                ],
+                "listens": [],
+                "state_schema": "kv.snapshot",
+                "state_version_min": 1,
+                "state_version_max": 1
+              }
+            ]
+          }
+        }
+      ],
+      "libraries": [
+        {
+          "id": 1,
+          "name": "counter",
+          "version": "0.1.1",
+          "sdk_version": "0.3.0",
+          "build_info": "rustc 1.96.0 (ac68faa20 2026-05-25) x86_64-unknown-linux-gnu",
+          "sequence": 1,
+          "path": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/.cordis/lib/counter/counter-1.so",
+          "verified": false,
+          "leases": 4,
+          "quiescent": false,
+          "retired": false,
+          "closed": false,
+          "components": [
+            {
+              "name": "counter",
+              "inject": [
+                {
+                  "interface": "kv@1.0",
+                  "required": true
+                }
+              ],
+              "provides": [],
+              "listens": [],
+              "state_schema": "counter.state",
+              "state_version_min": 1,
+              "state_version_max": 1
+            }
+          ],
+          "group": "counter",
+          "connection": 2
+        }
+      ],
+      "last_swap": [],
+      "available_plugins": [
+        {
+          "reference": "admin",
+          "name": "fixture-admin",
+          "version": "0.1.0",
+          "path": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/admin",
+          "components": []
+        },
+        {
+          "reference": "installed-1",
+          "name": "fixture-admin",
+          "version": "0.1.0",
+          "path": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/installed-1",
+          "components": [
+            {
+              "name": "admin",
+              "inject": [
+                {
+                  "interface": "cordis.manage@2.0",
+                  "required": true
+                },
+                {
+                  "interface": "cordis.runtime@1.1",
+                  "required": true
+                }
+              ],
+              "provides": [],
+              "listens": [],
+              "state_schema": "",
+              "state_version_min": 1,
+              "state_version_max": 1
+            }
+          ]
+        },
+        {
+          "reference": "installed-2.so",
+          "name": "counter",
+          "version": "0.1.1",
+          "path": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/installed-2.so",
+          "components": [
+            {
+              "name": "counter",
+              "inject": [
+                {
+                  "interface": "kv@1.0",
+                  "required": true
+                }
+              ],
+              "provides": [],
+              "listens": [],
+              "state_schema": "counter.state",
+              "state_version_min": 1,
+              "state_version_max": 1
+            }
+          ]
+        },
+        {
+          "reference": "installed-3",
+          "name": "fixture-kv-client",
+          "version": "0.1.0",
+          "path": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/installed-3",
+          "components": [
+            {
+              "name": "kv-client",
+              "inject": [
+                {
+                  "interface": "kv@1.0",
+                  "required": true
+                }
+              ],
+              "provides": [],
+              "listens": [],
+              "state_schema": "",
+              "state_version_min": 1,
+              "state_version_max": 1
+            }
+          ]
+        },
+        {
+          "reference": "installed-4.so",
+          "name": "kv",
+          "version": "0.1.1",
+          "path": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/installed-4.so",
+          "components": [
+            {
+              "name": "kv-store",
+              "inject": [],
+              "provides": [
+                "kv@1.0"
+              ],
+              "listens": [],
+              "state_schema": "kv.snapshot",
+              "state_version_min": 1,
+              "state_version_max": 1
+            }
+          ]
+        },
+        {
+          "reference": "installed-5",
+          "name": "kv",
+          "version": "0.1.0",
+          "path": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/installed-5",
+          "components": [
+            {
+              "name": "kv-store",
+              "inject": [],
+              "provides": [
+                "kv@1.0"
+              ],
+              "listens": [],
+              "state_schema": "kv.snapshot",
+              "state_version_min": 1,
+              "state_version_max": 1
+            }
+          ]
+        },
+        {
+          "reference": "installed-6",
+          "name": "kv",
+          "version": "0.1.0",
+          "path": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/installed-6",
+          "components": [
+            {
+              "name": "kv-store",
+              "inject": [],
+              "provides": [
+                "kv@1.0"
+              ],
+              "listens": [],
+              "state_schema": "kv.snapshot",
+              "state_version_min": 1,
+              "state_version_max": 1
+            }
+          ]
+        },
+        {
+          "reference": "kv-client",
+          "name": "fixture-kv-client",
+          "version": "0.1.0",
+          "path": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/kv-client",
+          "components": []
+        },
+        {
+          "reference": "libcounter.so",
+          "name": "counter",
+          "version": "0.1.1",
+          "path": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/libcounter.so",
+          "components": [
+            {
+              "name": "counter",
+              "inject": [
+                {
+                  "interface": "kv@1.0",
+                  "required": true
+                }
+              ],
+              "provides": [],
+              "listens": [],
+              "state_schema": "counter.state",
+              "state_version_min": 1,
+              "state_version_max": 1
+            }
+          ]
+        },
+        {
+          "reference": "libkv_mem.so",
+          "name": "kv",
+          "version": "0.1.1",
+          "path": "/workspace/scratch/d556412a6783/languages-migration-final/three-language-migration/plugins/libkv_mem.so",
+          "components": [
+            {
+              "name": "kv-store",
+              "inject": [],
+              "provides": [
+                "kv@1.0"
+              ],
+              "listens": [],
+              "state_schema": "kv.snapshot",
+              "state_version_min": 1,
+              "state_version_max": 1
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "core_pid": 59,
+  "exit": 0
+}
