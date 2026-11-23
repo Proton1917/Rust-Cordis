@@ -539,10 +539,10 @@ impl Controller {
         entry.plugin = package.reference.clone();
         target.overlay.instance.insert(name.into(), entry);
         if let Some(previous) = self.mounted.get(name) {
-            let raw = self.configuration.entries(&self.overlay);
-            let mut previous_entry = OverlayEntry::from(&raw[name]);
-            previous_entry.plugin = previous.package.reference.clone();
-            target.overlay.previous.insert(name.into(), previous_entry);
+            target.overlay.previous.insert(
+                name.into(),
+                OverlayEntry::previous(previous.package.reference.clone()),
+            );
         }
     }
 

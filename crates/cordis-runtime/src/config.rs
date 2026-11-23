@@ -137,7 +137,7 @@ pub struct Overlay {
     pub instance: BTreeMap<String, OverlayEntry>,
     #[serde(default)]
     pub removed: BTreeSet<String>,
-    #[serde(default)]
+    #[serde(default, serialize_with = "serialize_previous")]
     pub previous: BTreeMap<String, OverlayEntry>,
 }
 
@@ -193,6 +193,44 @@ impl<'de> Deserialize<'de> for Isolation {
             Input::Named(name) => Ok(Self::Named(name)),
             Input::Fresh(true) => Ok(Self::Fresh),
             Input::Fresh(false) => Err(serde::de::Error::custom("隔离域使用名称或 true")),
+        }
+    }
+}
+
+// Rollback consumes the previous program identity and keeps the current instance settings.
+// Deserialize the old complete entries, but write only the identity used by rollback.
+fn serialize_previous<S: serde::Serializer>(
+    entries: &BTreeMap<String, OverlayEntry>,
+    serializer: S,
+) -> std::result::Result<S::Ok, S::Error> {
+    use serde::ser::SerializeMap;
+    #[derive(Serialize)]
+    struct Previous<'a> {
+        plugin: &'a str,
+    }
+    let mut map = serializer.serialize_map(Some(entries.len()))?;
+    for (name, entry) in entries {
+        map.serialize_entry(
+            name,
+            &Previous {
+                plugin: &entry.plugin,
+            },
+        )?;
+    }
+    map.end()
+}
+
+impl OverlayEntry {
+    pub(crate) fn previous(plugin: String) -> Self {
+        Self {
+            plugin,
+            component: None,
+            group: None,
+            scope: None,
+            disabled: false,
+            config: toml::Table::new(),
+            isolate: BTreeMap::new(),
+            intercept: BTreeMap::new(),
         }
     }
 }

@@ -130,6 +130,56 @@ pub(crate) struct Committed {
     pub cleanup_error: Option<WireError>,
 }
 
+/// All fallible serialization and size checks finish before the undo journal is published.
+struct PreparedDeployment<'a> {
+    base: String,
+    overlay: String,
+    states: HashMap<String, Option<Vec<u8>>>,
+    sources: &'a [u8],
+}
+
+impl<'a> PreparedDeployment<'a> {
+    fn encode<S: std::borrow::Borrow<payload::State>>(
+        base: &config::Configuration,
+        overlay: &Overlay,
+        states: &HashMap<String, Option<S>>,
+        sources: &'a [u8],
+    ) -> Result<Self> {
+        let base = toml::to_string(base).map_err(parameter)?;
+        config::text(base.as_bytes())?;
+        let overlay = encode_overlay(overlay)?;
+        if sources.len() > Limits::DEFAULT.max_frame {
+            return Err(parameter("来源记录超过 16 MiB"));
+        }
+        let states = states
+            .iter()
+            .map(|(name, state)| {
+                config::instance_name(name)?;
+                let bytes = state
+                    .as_ref()
+                    .map(|state| {
+                        let value = Value::serialized(state.borrow()).map_err(parameter)?;
+                        cordis_up::encode_value(&value, &Limits::DEFAULT).map_err(parameter)
+                    })
+                    .transpose()?;
+                Ok((name.clone(), bytes))
+            })
+            .collect::<Result<_>>()?;
+        Ok(Self {
+            base,
+            overlay,
+            states,
+            sources,
+        })
+    }
+}
+
+fn encode_overlay(overlay: &Overlay) -> Result<String> {
+    let bytes = toml::to_string_pretty(overlay).map_err(parameter)?;
+    config::text(bytes.as_bytes())?;
+    Ok(bytes)
+}
+
 const BASE: &str = "deployment-base-v1.toml";
 const JOURNAL_FORMAT: &str = ".format-version";
 const JOURNAL_VERSION: &[u8] = b"2\n";
@@ -327,27 +377,32 @@ impl Store {
         states: &HashMap<String, Option<S>>,
         sources: &[u8],
     ) -> std::result::Result<Committed, CommitError> {
+        let prepared = PreparedDeployment::encode(base, overlay, states, sources)?;
         let _lock = self.lock_deployment()?;
-        let bytes = toml::to_string(base).map_err(parameter)?;
-        config::text(bytes.as_bytes())?;
-        if let Err(problem) = self.prepare_deployment(states.keys()) {
+        if let Err(problem) = self.prepare_deployment(prepared.states.keys()) {
             return Err(self.reject_deployment(problem));
         }
-        self.commit_prepared(bytes.as_bytes(), overlay, states, sources)
+        self.commit_prepared(&prepared)
     }
 
-    fn commit_prepared<S: std::borrow::Borrow<payload::State>>(
+    fn commit_prepared(
         &self,
-        base: &[u8],
-        overlay: &Overlay,
-        states: &HashMap<String, Option<S>>,
-        sources: &[u8],
+        prepared: &PreparedDeployment<'_>,
     ) -> std::result::Result<Committed, CommitError> {
         let result = (|| {
-            write(&self.directory.join(BASE), base)?;
-            self.restore_states(states)?;
-            self.save_overlay(overlay)?;
-            write(&self.directory.join("sources.json"), sources)?;
+            write(&self.directory.join(BASE), prepared.base.as_bytes())?;
+            for (name, bytes) in &prepared.states {
+                let path = self.directory.join(format!("{name}.state"));
+                match bytes {
+                    Some(bytes) => write(&path, bytes)?,
+                    None => remove_file(&path)?,
+                }
+            }
+            write(
+                &self.directory.join("instances.toml"),
+                prepared.overlay.as_bytes(),
+            )?;
+            write(&self.directory.join("sources.json"), prepared.sources)?;
             sync_directory(&self.directory)?;
             self.move_decision_marker()
         })();
@@ -405,7 +460,7 @@ impl Store {
 
     /// DOC-15 §3.2：序列化已提交部署并原子发布 instances.toml。
     pub fn save_overlay(&self, overlay: &Overlay) -> Result<()> {
-        let bytes = toml::to_string_pretty(overlay).map_err(parameter)?;
+        let bytes = encode_overlay(overlay)?;
         write(&self.directory.join("instances.toml"), bytes.as_bytes())
     }
 
@@ -494,6 +549,98 @@ mod tests {
     use cordis_testkit::cleanup::TestGuard;
 
     #[test]
+    fn previous_configuration_is_read_compatibly_and_persisted_as_program_identity() {
+        let case =
+            TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "compact-previous");
+        let store = Store::create(case.directory("compact-previous")).unwrap();
+        let base = config::parse(b"[instance.panel]\nplugin='installed-1'\n").unwrap();
+        let legacy = config::parse_overlay(
+            b"[previous.panel]\nplugin='installed-1'\ngroup='old-group'\n[previous.panel.config]\nvalue=42\n",
+        ).unwrap();
+        assert_eq!(
+            legacy.previous["panel"].config["value"].as_integer(),
+            Some(42)
+        );
+        let mut settings = base.instance["panel"].clone();
+        settings.config.insert(
+            "blob".into(),
+            toml::Value::String("x".repeat(9 * 1024 * 1024)),
+        );
+        let mut overlay = Overlay::default();
+        overlay
+            .previous
+            .insert("panel".into(), config::OverlayEntry::from(&settings));
+        settings.plugin = "installed-2".into();
+        overlay
+            .instance
+            .insert("panel".into(), config::OverlayEntry::from(&settings));
+        store
+            .commit_deployment::<payload::State>(&base, &overlay, &HashMap::new(), b"{}")
+            .unwrap();
+        let recovered = store.overlay().unwrap();
+        assert_eq!(recovered.instance["panel"].config, settings.config);
+        assert_eq!(recovered.previous["panel"].plugin, "installed-1");
+        assert!(recovered.previous["panel"].config.is_empty());
+        assert!(
+            fs::metadata(store.directory.join("instances.toml"))
+                .unwrap()
+                .len()
+                < Limits::DEFAULT.max_frame as u64
+        );
+        case.success();
+    }
+
+    #[test]
+    fn deployment_preflight_rejects_unreadable_files_before_any_journal_or_write() {
+        let case = TestGuard::for_package(
+            Path::new(env!("CARGO_MANIFEST_DIR")),
+            "deployment-preflight",
+        );
+        let store = Store::create(case.directory("deployment-preflight")).unwrap();
+        let base = config::parse(b"[instance.panel]\nplugin='installed-1'\n").unwrap();
+        let overlay = Overlay::default();
+        store
+            .commit_deployment::<payload::State>(&base, &overlay, &HashMap::new(), b"old")
+            .unwrap();
+        let old_base = read(&store.directory.join(BASE)).unwrap();
+        let old_overlay = read(&store.directory.join("instances.toml")).unwrap();
+        let oversized = vec![b'x'; Limits::DEFAULT.max_frame + 1];
+        let sources =
+            store.commit_deployment::<payload::State>(&base, &overlay, &HashMap::new(), &oversized);
+        assert!(matches!(sources, Err(CommitError::NotCommitted(_))));
+        let mut settings = base.instance["panel"].clone();
+        settings.config.insert(
+            "blob".into(),
+            toml::Value::String(String::from_utf8(oversized).unwrap()),
+        );
+        let mut oversized_overlay = Overlay::default();
+        oversized_overlay
+            .instance
+            .insert("panel".into(), config::OverlayEntry::from(&settings));
+        let active = store.commit_deployment::<payload::State>(
+            &base,
+            &oversized_overlay,
+            &HashMap::new(),
+            b"new",
+        );
+        assert!(matches!(active, Err(CommitError::NotCommitted(_))));
+        let invalid_states = HashMap::from([("../bad".into(), None::<payload::State>)]);
+        assert!(matches!(
+            store.commit_deployment(&base, &overlay, &invalid_states, b"new"),
+            Err(CommitError::NotCommitted(_))
+        ));
+        assert_eq!(read(&store.directory.join(BASE)).unwrap(), old_base);
+        assert_eq!(
+            read(&store.directory.join("instances.toml")).unwrap(),
+            old_overlay
+        );
+        assert_eq!(read(&store.directory.join("sources.json")).unwrap(), b"old");
+        assert!(!store.directory.join(".deployment-undo").exists());
+        assert!(!store.directory.join(".deployment-staging").exists());
+        case.success();
+    }
+
+    #[test]
     fn write_and_marker_faults_preserve_the_previously_committed_deployment() {
         let case = TestGuard::for_package(
             Path::new(env!("CARGO_MANIFEST_DIR")),
@@ -528,7 +675,14 @@ mod tests {
             store.prepare_deployment(states.keys()).unwrap();
             fs::create_dir(&staging).unwrap();
             File::create(staging.join("reserved")).unwrap();
-            let failure = store.commit_prepared(new_base, &overlay, &states, b"new");
+            let prepared = PreparedDeployment::encode(
+                &config::parse(new_base).unwrap(),
+                &overlay,
+                &states,
+                b"new",
+            )
+            .unwrap();
+            let failure = store.commit_prepared(&prepared);
             assert!(
                 matches!(failure, Err(CommitError::RecoveryRequired(_))),
                 "{failure:?}"
