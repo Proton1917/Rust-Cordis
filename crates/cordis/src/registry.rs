@@ -457,6 +457,7 @@ impl Registry {
             }
             let mut previous = Vec::new();
             for fiber in &fibers {
+                crate::reflect::remove_consumer(&mut state, fiber.id);
                 let runtime = state
                     .runtimes
                     .get_mut(&next.id)
@@ -470,6 +471,7 @@ impl Registry {
                 let component = data.component.replace(next.clone());
                 let inject = std::mem::replace(&mut data.inject, next.inject.clone());
                 previous.push((component, inject));
+                crate::reflect::insert_consumer(&mut state, fiber.id);
             }
             (fibers, old_runtime, old_definitions, previous)
         };
@@ -553,6 +555,7 @@ impl Context {
             });
             state.fibers[id].canonical_scope = Arc::downgrade(&scope);
             state.fibers[id].scope = Some(scope);
+            crate::reflect::insert_consumer(&mut state, id);
             state
                 .runtimes
                 .entry(component.id)

@@ -541,6 +541,38 @@ pub(crate) fn notify_binding(kernel: &Arc<Kernel>, id: ImplId) {
     }
 }
 
+/// The kernel owns both declared keys and their immutable mount-scope realms.
+pub(crate) fn insert_consumer(state: &mut crate::kernel::State, id: FiberId) {
+    let fiber = &state.fibers[id];
+    if !fiber.alive {
+        return;
+    }
+    let scope = fiber.scope.as_ref().expect("fiber context initialized");
+    for entry in &fiber.inject.entries {
+        state
+            .consumers
+            .entry((entry.key.clone(), scope_realm(scope, &entry.key)))
+            .or_default()
+            .insert(id);
+    }
+}
+
+pub(crate) fn remove_consumer(state: &mut crate::kernel::State, id: FiberId) {
+    let fiber = &state.fibers[id];
+    let Some(scope) = fiber.scope.as_ref() else {
+        return;
+    };
+    for entry in &fiber.inject.entries {
+        let pair = (entry.key.clone(), scope_realm(scope, &entry.key));
+        if let Some(consumers) = state.consumers.get_mut(&pair) {
+            consumers.remove(&id);
+            if consumers.is_empty() {
+                state.consumers.remove(&pair);
+            }
+        }
+    }
+}
+
 /// T-COE-4、T-COE-5、S-SVC-5：只刷新同域内声明了变化键的纤程。
 fn notify(kernel: &Arc<Kernel>, key: &Arc<str>, realm: Realm) {
     let fibers = {
@@ -548,16 +580,21 @@ fn notify(kernel: &Arc<Kernel>, key: &Arc<str>, realm: Realm) {
         if let Some(id) = state.store.get(&(key.clone(), realm)).copied() {
             state.impls[id].notification_revision += 1;
         }
-        state
-            .fibers
-            .iter()
-            .filter_map(|(id, fiber)| {
-                let scope = fiber.scope.as_ref()?;
-                (fiber.inject.entries.iter().any(|entry| &entry.key == key)
-                    && scope_realm(scope, key) == realm)
-                    .then(|| (id, scope.clone()))
+        let fibers = state
+            .consumers
+            .get(&(key.clone(), realm))
+            .into_iter()
+            .flatten()
+            .filter_map(|id| {
+                let scope = state.fibers.get(*id)?.scope.as_ref()?;
+                Some((*id, scope.clone()))
             })
-            .collect::<Vec<_>>()
+            .collect::<Vec<_>>();
+        #[cfg(test)]
+        {
+            state.notification_candidates += fibers.len();
+        }
+        fibers
     };
     for (id, _scope) in fibers {
         refresh_keys(kernel, id, Some(key));
@@ -828,6 +865,73 @@ mod tests {
     struct ObserveDrop {
         kernel: Weak<Kernel>,
         observed: Arc<AtomicU8>,
+    }
+
+    #[tokio::test]
+    async fn service_notifications_visit_only_declared_consumers() {
+        let root = Context::new(Arc::new(Host(Instant::now())));
+        let empty = ComponentDef::new("empty", Inject::new(), |_, ()| async { Ok(()) });
+        let mut fibers = Vec::new();
+        for _ in 0..256 {
+            let fiber = root.mount_with(&empty, ()).unwrap();
+            fiber.settled().await.unwrap();
+            fibers.push(fiber);
+        }
+        for (index, fiber) in fibers.iter().enumerate() {
+            fiber
+                .context()
+                .provide_named(format!("instance.{index}"), Arc::new(()))
+                .unwrap();
+        }
+        assert_eq!(root.kernel.state.lock().notification_candidates, 0);
+        assert!(root.kernel.state.lock().consumers.is_empty());
+        root.fiber().dispose().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn consumer_index_follows_realms_replacement_and_disposal() {
+        let root = Context::new(Arc::new(Host(Instant::now())));
+        let isolated = root.isolate_named("shared", crate::Realm::new());
+        let old = ComponentDef::new(
+            "old",
+            Inject::new().with_named_options("shared", false, None),
+            |_, ()| async { Ok(()) },
+        );
+        let first = root.mount_with(&old, ()).unwrap();
+        let second = isolated.mount_with(&old, ()).unwrap();
+        first.settled().await.unwrap();
+        second.settled().await.unwrap();
+        root.kernel.state.lock().notification_candidates = 0;
+        let outer = root.provide_named("shared", Arc::new(())).unwrap();
+        assert_eq!(root.kernel.state.lock().notification_candidates, 1);
+        let inner = isolated.provide_named("shared", Arc::new(())).unwrap();
+        assert_eq!(root.kernel.state.lock().notification_candidates, 2);
+        let empty = ComponentDef::new("empty", Inject::new(), |_, ()| async { Ok(()) });
+        root.registry().replace(&old, &empty);
+        first.settled().await.unwrap();
+        second.settled().await.unwrap();
+        root.kernel.state.lock().notification_candidates = 0;
+        outer.notify();
+        inner.notify();
+        assert_eq!(root.kernel.state.lock().notification_candidates, 0);
+        let next = ComponentDef::new(
+            "next",
+            Inject::new().with_named_options("next", false, None),
+            |_, ()| async { Ok(()) },
+        );
+        root.registry().replace(&empty, &next);
+        let provision = root.provide_named("next", Arc::new(())).unwrap();
+        assert_eq!(root.kernel.state.lock().notification_candidates, 2);
+        first.dispose().await.unwrap();
+        root.kernel.state.lock().notification_candidates = 0;
+        provision.notify();
+        assert_eq!(root.kernel.state.lock().notification_candidates, 1);
+        second.dispose().await.unwrap();
+        root.kernel.state.lock().notification_candidates = 0;
+        provision.notify();
+        assert_eq!(root.kernel.state.lock().notification_candidates, 0);
+        assert!(root.kernel.state.lock().consumers.is_empty());
+        root.fiber().dispose().await.unwrap();
     }
 
     impl Drop for ObserveDrop {

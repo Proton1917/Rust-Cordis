@@ -14,7 +14,7 @@ use parking_lot::Mutex;
 use slotmap::{SlotMap, new_key_type};
 use std::{
     any::TypeId,
-    collections::{HashMap, VecDeque},
+    collections::{HashMap, HashSet, VecDeque},
     future::Future,
     panic::{AssertUnwindSafe, catch_unwind},
     pin::Pin,
@@ -69,6 +69,9 @@ pub(crate) struct State {
     pub definitions: HashMap<ComponentId, ComponentDef>,
     pub impls: SlotMap<ImplId, ImplData>,
     pub store: HashMap<(Arc<str>, Realm), ImplId>,
+    pub consumers: HashMap<(Arc<str>, Realm), HashSet<FiberId>>,
+    #[cfg(test)]
+    pub notification_candidates: usize,
     pub names: HashMap<Arc<str>, Option<TypeId>>,
     pub impl_counter: u64,
 }
@@ -123,6 +126,9 @@ impl Kernel {
                     definitions: HashMap::new(),
                     impls: SlotMap::with_key(),
                     store: HashMap::new(),
+                    consumers: HashMap::new(),
+                    #[cfg(test)]
+                    notification_candidates: 0,
                     names: HashMap::new(),
                     impl_counter: 0,
                 }),

@@ -488,6 +488,7 @@ impl Fiber {
     pub(crate) fn begin_dispose(&self) {
         let runtime = {
             let mut state = self.kernel.state.lock();
+            crate::reflect::remove_consumer(&mut state, self.id);
             state.fibers[self.id].alive = false;
             state.fibers[self.id].lifetime = None;
             enqueue_locked(&mut state, self.id);
