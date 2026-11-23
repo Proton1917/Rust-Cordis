@@ -22,6 +22,8 @@ export interface Limits extends ValueLimits {
     queueCapacity: number;
     timeoutMs: number;
     consecutiveTimeouts: number;
+    maxActiveCallbacks: number;
+    maxCallbackBytes: number;
 }
 export const DEFAULT_LIMITS: Limits = {
     maxFrame: 16777216,
@@ -32,6 +34,8 @@ export const DEFAULT_LIMITS: Limits = {
     maxDepth: 64,
     maxCollection: 65536,
     maxValues: 262144,
+    maxActiveCallbacks: 64,
+    maxCallbackBytes: 64 * 1024 * 1024,
 };
 
 export class Connection {
@@ -59,6 +63,9 @@ export class Connection {
         limits: Partial<Limits>,
     ) {
         this.limits = { ...DEFAULT_LIMITS, ...limits };
+        if (![this.limits.maxActiveCallbacks, this.limits.maxCallbackBytes]
+            .every((value) => Number.isSafeInteger(value) && value > 0))
+            throw new CordisError(2, "回调额度需要正安全整数");
         setSizeLimits({
             maxArraySize: this.limits.maxCollection + 1,
             maxMapSize: this.limits.maxCollection + 1,
@@ -229,7 +236,7 @@ export class Connection {
                     checkMessage(message, this.limits);
                     headerBytes = received = 0;
                     partial = undefined;
-                    this.receive(message);
+                    this.receive(message, length);
                 }
             }
             if (headerBytes) throw new CordisError(2, "输入帧被截断");
@@ -238,7 +245,7 @@ export class Connection {
         }
     }
 
-    private receive(message: unknown): void {
+    private receive(message: unknown, wireBytes: number): void {
         if (!(message instanceof Map) || message.size !== 1)
             throw new CordisError(2, "消息包络需要单键映射");
         const [kind, entry] = [...message][0];
@@ -247,7 +254,7 @@ export class Connection {
         else if (kind === "request") this.start(body);
         else if (kind === "notification") {
             void this.runtime
-                .notification(body.method, body.params)
+                .notification(body.method, body.params, wireBytes)
                 .catch((error) => this.fail(error));
         } else throw new CordisError(3, "消息类别无效");
     }

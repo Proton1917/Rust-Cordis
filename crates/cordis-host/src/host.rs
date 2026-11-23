@@ -33,6 +33,8 @@ pub struct HostOptions {
     pub library: LibraryOptions,
     pub request_timeout: Duration,
     pub native_workers: usize,
+    pub max_active_callbacks: usize,
+    pub max_callback_bytes: usize,
 }
 
 pub(crate) struct NotificationTask {
@@ -97,6 +99,7 @@ pub(crate) struct Inner {
     process: AtomicU64,
     group: OnceLock<String>,
     next_notification: AtomicU64,
+    callback_admission: Arc<crate::callback::Admission>,
     initialized: AtomicBool,
     contexts: Mutex<HashMap<u64, Arc<ContextRecord>>>,
     pub objects: Arc<Objects>,
@@ -119,6 +122,10 @@ impl Host {
 
     /// DOC-15 CP-1：初始化宿主数据和独立原生执行器，运行时构造错误直接返回。
     pub fn new(options: HostOptions, io: tokio::runtime::Handle) -> Result<Self> {
+        let callback_admission = crate::callback::Admission::new(
+            options.max_active_callbacks,
+            options.max_callback_bytes,
+        )?;
         let store = LibraryStore::new(options.library.clone(), &options.libraries)?;
         let native = RuntimeOwner::new(options.native_workers)?;
         let executor = NativeExecutor::new(native.handle(), io.clone());
@@ -133,6 +140,7 @@ impl Host {
             process: AtomicU64::new(0),
             group: OnceLock::new(),
             next_notification: AtomicU64::new(1),
+            callback_admission,
             initialized: AtomicBool::new(false),
             contexts: Mutex::new(HashMap::new()),
             objects: Arc::new(Objects::new(executor.clone())),
@@ -944,9 +952,10 @@ impl Host {
                 return Ok(());
             }
             let object = self.objects().borrow(request.object)?;
+            let permit = self.0.callback_admission.acquire(params.wire_bytes())?;
             let host = self.clone();
             let task = self.0.executor.start(
-                async move { host.callback(request, params, object).await },
+                permit.run(async move { host.callback(request, params, object).await }),
                 true,
             );
             let cancel = task.cancellation();

@@ -36,6 +36,8 @@ export class Runtime {
     readonly contexts = new Map<Identifier, Context>();
     readonly events = new Map<Identifier, Set<AbortController>>();
     private next = 1n;
+    private activeCallbacks = 0;
+    private callbackBytes = 0;
 
     constructor(
         readonly name: string,
@@ -204,7 +206,12 @@ export class Runtime {
         }
     }
 
-    async notification(method: string, value: unknown): Promise<void> {
+    /** Reader-measured CBOR notification bodies retained until actual callback completion. */
+    get callbackUsage(): Readonly<{ active: number; bytes: number }> {
+        return { active: this.activeCallbacks, bytes: this.callbackBytes };
+    }
+
+    async notification(method: string, value: unknown, wireBytes?: number): Promise<void> {
         const params = fields(value);
         if (method === "release") this.releaseExports(params.objects.map(identifier));
         else if (method === "cancel") {
@@ -216,13 +223,27 @@ export class Runtime {
             this.contexts.delete(id);
             for (const abort of this.events.get(id) ?? []) abort.abort();
             this.events.delete(id);
-        } else if (method === "callback") this.event(params, value);
+        } else if (method === "callback") this.event(params, value, wireBytes);
         else throw new CordisError(3, `通知方法缺席：${method}`);
     }
 
-    private event(params: Record<string, any>, value: unknown): void {
+    private event(params: Record<string, any>, value: unknown, wireBytes?: number): void {
         const payload = this.payload(value);
-        const id = identifier(params.context);
+        let id: Identifier;
+        const size = wireBytes ?? this.connection.limits.maxFrame;
+        try {
+            id = identifier(params.context);
+            if (!Number.isSafeInteger(size) || size <= 0 || size > this.connection.limits.maxFrame)
+                throw new CordisError(2, "回调载荷长度无效");
+            if (this.activeCallbacks >= this.connection.limits.maxActiveCallbacks ||
+                size > this.connection.limits.maxCallbackBytes - this.callbackBytes)
+                throw new CordisError(8, "活跃回调额度耗尽");
+        } catch (error) {
+            payload.close();
+            throw error;
+        }
+        this.activeCallbacks++;
+        this.callbackBytes += size;
         const abort = new AbortController();
         let events = this.events.get(id);
         if (!events) {
@@ -241,6 +262,9 @@ export class Runtime {
             .finally(() => {
                 events.delete(abort);
                 payload.close();
+                this.activeCallbacks--;
+                this.callbackBytes -= size;
+                if (!events.size && this.events.get(id) === events) this.events.delete(id);
             });
     }
 

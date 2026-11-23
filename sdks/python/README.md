@@ -56,3 +56,19 @@ CordisError(code, message, detail) 保留 UP/1 错误通道和业务详情。请
 
 共享边界向量位于 `tests/up1/value-budgets.tsv`。Python、TypeScript 和 Rust codec
 分别通过 `test_budgets.py`、`shared-budgets.mjs` 和 `shared_budgets.rs` 使用同一输入。
+
+## 异步通知回调容量
+
+`Runtime` 与 `run` 接受 `max_active_callbacks` 和 `max_callback_bytes`，默认分别为
+64 个与 67108864 字节。所有上下文的异步 callback 通知共享这两项连接级额度；请求式
+callback 沿 `max_inflight` 管理。字节取读帧入口测得的完整 CBOR 通知正文长度，包含包络，
+四字节帧头单独处理。该计量反映保留的线上载荷规模，Python 对象及用户另行复制的数据具有各自大小。
+
+准入发生在创建执行任务前。超过任一额度会产生 code 8 并终止当前连接，核心由连接生命周期
+回收其服务与效应。已接受通知沿接收顺序开始执行；异步完成顺序由回调决定。
+`release_context` 发出取消后，任务及其载荷继续持有额度，实际完成或析构时归还；
+首次执行前被取消的任务也完成相同清理。控制通知和反向调用响应可在额度占满时继续处理。
+`runtime.callback_usage` 返回当前 `(任务数, 字节数)`。
+
+直接调用 `Runtime.notification` 的嵌入方可传入第三个参数 `wire_bytes`，其值取自自身读帧入口；
+缺省时按 `max_frame` 收取该回调额度。标准 UP/1 路径始终传入实际长度。

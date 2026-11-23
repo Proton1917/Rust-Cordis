@@ -290,11 +290,12 @@ impl Drop for RemoteLease {
 /// UP/1：载荷持有接收到的引用，导入的对象分别延长所需引用的寿命。
 pub struct Payload {
     value: Value,
+    wire_bytes: usize,
     objects: HashMap<u64, Arc<RemoteLease>>,
 }
 
 impl Payload {
-    fn received(peer: &Connection, value: Value) -> Result<Self> {
+    fn received(peer: &Connection, value: Value, wire_bytes: usize) -> Result<Self> {
         let mut objects = HashMap::new();
         for id in crate::payload_refs(&value).map_err(|problem| error(2, problem.to_string()))? {
             objects.insert(
@@ -305,7 +306,16 @@ impl Payload {
                 }),
             );
         }
-        Ok(Self { value, objects })
+        Ok(Self {
+            value,
+            wire_bytes,
+            objects,
+        })
+    }
+
+    /// Original CBOR message body bytes, measured once at the connection reader.
+    pub fn wire_bytes(&self) -> usize {
+        self.wire_bytes
     }
 
     pub fn value(&self) -> &Value {
@@ -681,11 +691,12 @@ async fn read_frames<R: AsyncRead + Unpin>(
     notifications: mpsc::Sender<Notification>,
     mut ended: Ended,
 ) {
-    while let Some(message) = read_frame(&mut input, &peer, &mut ended).await {
+    while let Some((message, wire_bytes)) = read_frame(&mut input, &peer, &mut ended).await {
         let Some(inner) = peer.upgrade() else { break };
         if !dispatch_message(
             Connection(inner),
             message,
+            wire_bytes,
             &handler,
             &permits,
             &notifications,
@@ -702,7 +713,7 @@ async fn read_frame<R: AsyncRead + Unpin>(
     input: &mut R,
     peer: &Weak<Inner>,
     ended: &mut Ended,
-) -> Option<Message> {
+) -> Option<(Message, usize)> {
     let mut length = [0; 4];
     let read = tokio::select! {
         _ = ended.changed() => return None,
@@ -730,7 +741,7 @@ async fn read_frame<R: AsyncRead + Unpin>(
         return None;
     }
     match crate::decode(&bytes, &limits) {
-        Ok(message) => Some(message),
+        Ok(message) => Some((message, size)),
         Err(problem) => {
             fail(peer, problem.to_string());
             None
@@ -741,25 +752,26 @@ async fn read_frame<R: AsyncRead + Unpin>(
 async fn dispatch_message(
     peer: Connection,
     message: Message,
+    wire_bytes: usize,
     handler: &Arc<dyn Handler>,
     permits: &Arc<Semaphore>,
     notifications: &mpsc::Sender<Notification>,
 ) -> bool {
     match message {
-        Message::Response { id, result } => receive_response(&peer, id, result),
+        Message::Response { id, result } => receive_response(&peer, id, result, wire_bytes),
         Message::Request { id, method, params } => {
-            receive_request(peer, id, method, params, handler, permits).await
+            receive_request(peer, id, method, params, wire_bytes, handler, permits).await
         }
         Message::Notification { method, params } => {
-            receive_notification(peer, method, params, handler, notifications).await
+            receive_notification(peer, method, params, wire_bytes, handler, notifications).await
         }
     }
 }
 
 /// DOC-16 §6、§10：响应资源先建立拥有关系，迟到响应沿载荷析构归还引用。
-fn receive_response(peer: &Connection, id: u64, result: Result<Value>) -> bool {
+fn receive_response(peer: &Connection, id: u64, result: Result<Value>, wire_bytes: usize) -> bool {
     let result = match result {
-        Ok(value) => match Payload::received(peer, value) {
+        Ok(value) => match Payload::received(peer, value, wire_bytes) {
             Ok(value) => Ok(value),
             Err(problem) => {
                 peer.0.fail(problem.to_string());
@@ -789,10 +801,11 @@ async fn receive_request(
     id: u64,
     method: String,
     params: Value,
+    wire_bytes: usize,
     handler: &Arc<dyn Handler>,
     permits: &Arc<Semaphore>,
 ) -> bool {
-    let params = match Payload::received(&peer, params) {
+    let params = match Payload::received(&peer, params, wire_bytes) {
         Ok(params) => params,
         Err(problem) => {
             peer.0.fail(problem.to_string());
@@ -914,13 +927,14 @@ async fn receive_notification(
     peer: Connection,
     method: String,
     params: Value,
+    wire_bytes: usize,
     handler: &Arc<dyn Handler>,
     notifications: &mpsc::Sender<Notification>,
 ) -> bool {
     if method == "cancel" {
         return cancel_request(&peer, &params);
     }
-    let params = match Payload::received(&peer, params) {
+    let params = match Payload::received(&peer, params, wire_bytes) {
         Ok(params) => params,
         Err(problem) => {
             peer.0.fail(problem.to_string());

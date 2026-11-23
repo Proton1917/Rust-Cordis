@@ -2386,7 +2386,9 @@ var DEFAULT_LIMITS = {
   consecutiveTimeouts: 3,
   maxDepth: 64,
   maxCollection: 65536,
-  maxValues: 262144
+  maxValues: 262144,
+  maxActiveCallbacks: 64,
+  maxCallbackBytes: 64 * 1024 * 1024
 };
 var Connection = class {
   constructor(runtime, input, output, limits) {
@@ -2394,6 +2396,8 @@ var Connection = class {
     this.input = input;
     this.output = output;
     this.limits = { ...DEFAULT_LIMITS, ...limits };
+    if (![this.limits.maxActiveCallbacks, this.limits.maxCallbackBytes].every((value) => Number.isSafeInteger(value) && value > 0))
+      throw new CordisError(2, "\u56DE\u8C03\u989D\u5EA6\u9700\u8981\u6B63\u5B89\u5168\u6574\u6570");
     setSizeLimits({
       maxArraySize: this.limits.maxCollection + 1,
       maxMapSize: this.limits.maxCollection + 1,
@@ -2574,7 +2578,7 @@ var Connection = class {
           checkMessage(message, this.limits);
           headerBytes = received = 0;
           partial = void 0;
-          this.receive(message);
+          this.receive(message, length);
         }
       }
       if (headerBytes) throw new CordisError(2, "\u8F93\u5165\u5E27\u88AB\u622A\u65AD");
@@ -2582,7 +2586,7 @@ var Connection = class {
       this.fail(new CordisError(4, "\u6838\u5FC3\u8F93\u5165\u5DF2\u7ED3\u675F"), false);
     }
   }
-  receive(message) {
+  receive(message, wireBytes) {
     if (!(message instanceof Map) || message.size !== 1)
       throw new CordisError(2, "\u6D88\u606F\u5305\u7EDC\u9700\u8981\u5355\u952E\u6620\u5C04");
     const [kind, entry] = [...message][0];
@@ -2590,7 +2594,7 @@ var Connection = class {
     if (kind === "response") this.response(body);
     else if (kind === "request") this.start(body);
     else if (kind === "notification") {
-      void this.runtime.notification(body.method, body.params).catch((error) => this.fail(error));
+      void this.runtime.notification(body.method, body.params, wireBytes).catch((error) => this.fail(error));
     } else throw new CordisError(3, "\u6D88\u606F\u7C7B\u522B\u65E0\u6548");
   }
   /** DOC-16 §10：终态先消费等待项，再更新由本调用拥有的连接健康。 */
@@ -2705,9 +2709,15 @@ var Payload = class {
     this.runtime = runtime;
     this.value = value;
     if (!(value instanceof Map)) return;
-    for (const entry of value.get("refs") ?? []) {
+    const entries = value.get("refs");
+    if (entries == null || Array.isArray(entries) && !entries.length) return;
+    const numbers = /* @__PURE__ */ new Set();
+    for (const entry of entries) {
       const number = identifier(entry);
-      if (this.references.has(number)) throw new CordisError(2, "refs \u4E2D\u7684\u7F16\u53F7\u91CD\u590D");
+      if (numbers.has(number)) throw new CordisError(2, "refs \u4E2D\u7684\u7F16\u53F7\u91CD\u590D");
+      numbers.add(number);
+    }
+    for (const number of numbers) {
       this.references.set(number, runtime.reference(number).retain());
     }
   }
@@ -3173,6 +3183,8 @@ var Runtime = class {
   contexts = /* @__PURE__ */ new Map();
   events = /* @__PURE__ */ new Map();
   next = 1n;
+  activeCallbacks = 0;
+  callbackBytes = 0;
   description() {
     const components = [...this.components.values()].map((component) => ({
       name: component.name,
@@ -3312,7 +3324,11 @@ var Runtime = class {
       context.close();
     }
   }
-  async notification(method, value) {
+  /** Reader-measured CBOR notification bodies retained until actual callback completion. */
+  get callbackUsage() {
+    return { active: this.activeCallbacks, bytes: this.callbackBytes };
+  }
+  async notification(method, value, wireBytes) {
     const params = fields(value);
     if (method === "release") this.releaseExports(params.objects.map(identifier));
     else if (method === "cancel") {
@@ -3324,12 +3340,25 @@ var Runtime = class {
       this.contexts.delete(id);
       for (const abort of this.events.get(id) ?? []) abort.abort();
       this.events.delete(id);
-    } else if (method === "callback") this.event(params, value);
+    } else if (method === "callback") this.event(params, value, wireBytes);
     else throw new CordisError(3, `\u901A\u77E5\u65B9\u6CD5\u7F3A\u5E2D\uFF1A${method}`);
   }
-  event(params, value) {
+  event(params, value, wireBytes) {
     const payload = this.payload(value);
-    const id = identifier(params.context);
+    let id;
+    const size = wireBytes ?? this.connection.limits.maxFrame;
+    try {
+      id = identifier(params.context);
+      if (!Number.isSafeInteger(size) || size <= 0 || size > this.connection.limits.maxFrame)
+        throw new CordisError(2, "\u56DE\u8C03\u8F7D\u8377\u957F\u5EA6\u65E0\u6548");
+      if (this.activeCallbacks >= this.connection.limits.maxActiveCallbacks || size > this.connection.limits.maxCallbackBytes - this.callbackBytes)
+        throw new CordisError(8, "\u6D3B\u8DC3\u56DE\u8C03\u989D\u5EA6\u8017\u5C3D");
+    } catch (error) {
+      payload.close();
+      throw error;
+    }
+    this.activeCallbacks++;
+    this.callbackBytes += size;
     const abort = new AbortController();
     let events = this.events.get(id);
     if (!events) {
@@ -3346,6 +3375,9 @@ var Runtime = class {
     }).finally(() => {
       events.delete(abort);
       payload.close();
+      this.activeCallbacks--;
+      this.callbackBytes -= size;
+      if (!events.size && this.events.get(id) === events) this.events.delete(id);
     });
   }
   close() {

@@ -16,7 +16,8 @@ class Connection:
     """DOC-16 §2–6、§10：双向标准流连接，所有请求共享有界发送通道。"""
 
     def __init__(self, runtime, max_frame=16777216, max_inflight=64, timeout=30,
-                 max_depth=64, max_collection=65536, max_values=262144):
+                 max_depth=64, max_collection=65536, max_values=262144,
+                 max_active_callbacks=64, max_callback_bytes=64 * 1024 * 1024):
         self.runtime = runtime
         self.max_frame = max_frame
         self.max_inflight = max_inflight
@@ -24,10 +25,14 @@ class Connection:
         self.max_depth = max_depth
         self.max_collection = max_collection
         self.max_values = max_values
+        self.max_active_callbacks = max_active_callbacks
+        self.max_callback_bytes = max_callback_bytes
         if not (all(type(value) is int for value in
-                    (max_frame, max_depth, max_collection, max_values, max_inflight))
+                    (max_frame, max_depth, max_collection, max_values, max_inflight,
+                     max_active_callbacks, max_callback_bytes))
                 and 64 <= max_frame < 1 << 32 and 4 <= max_depth <= 128
-                and max_collection > 0 and max_values >= 4 and max_inflight > 0):
+                and max_collection > 0 and max_values >= 4 and max_inflight > 0
+                and max_active_callbacks > 0 and max_callback_bytes > 0):
             raise CordisError(2, "Invalid UP/1 connection limits")
         self.peer_budget = False
         self.pending = {}
@@ -195,7 +200,7 @@ class Connection:
             elif kind == "request":
                 self._request(body)
             elif kind == "notification":
-                await self.runtime.notification(body["method"], body["params"])
+                await self.runtime.notification(body["method"], body["params"], length)
             else:
                 raise CordisError(3, "消息类别错误")
 
