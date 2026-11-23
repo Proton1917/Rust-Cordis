@@ -11,6 +11,7 @@ members = [
     "crates/cordis-channels",
     "crates/cordis-web-deployment",
     "crates/cordis-types",
+    "crates/cordis-artifact",
     "crates/cordis-process",
     "crates/cordis-host",
     "crates/cordis-dev",
@@ -68,6 +69,7 @@ cordis-sdk = { path = "crates/cordis-sdk" }
 cordis-sdk-macros = { path = "crates/cordis-sdk-macros" }
 cordis-up = { path = "crates/cordis-up" }
 cordis-types = { path = "crates/cordis-types" }
+cordis-artifact = { path = "crates/cordis-artifact" }
 cordis-process = { path = "crates/cordis-process" }
 cordis-supervisor = { path = "crates/cordis-supervisor" }
 cordis-routing = { path = "crates/cordis-routing" }
