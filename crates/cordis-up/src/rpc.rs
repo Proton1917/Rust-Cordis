@@ -1,3 +1,5 @@
+mod buffer;
+
 use crate::{Limits, Message, Value, WireError};
 use parking_lot::Mutex;
 use std::{
@@ -13,7 +15,7 @@ use std::{
 };
 use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
-    sync::{Semaphore, mpsc, oneshot, watch},
+    sync::{OwnedSemaphorePermit, Semaphore, mpsc, oneshot, watch},
     time::{Instant, timeout, timeout_at},
 };
 
@@ -159,6 +161,12 @@ pub struct ConnectionOptions {
     pub limits: Limits,
     pub max_inflight: usize,
     pub queue_capacity: usize,
+    /// Capacity held from encoding through queued and partial writes.
+    pub max_buffered_bytes: usize,
+    /// Additional byte capacity available to responses and resource controls.
+    pub control_reserve_bytes: usize,
+    /// Reserved FIFO admission slots for responses, cancel and release.
+    pub control_queue_capacity: usize,
     pub request_timeout: Duration,
     pub consecutive_timeouts: u32,
 }
@@ -169,6 +177,9 @@ impl Default for ConnectionOptions {
             limits: Limits::default(),
             max_inflight: 64,
             queue_capacity: 64,
+            max_buffered_bytes: 64 * 1024 * 1024,
+            control_reserve_bytes: 64 * 1024,
+            control_queue_capacity: 64,
             request_timeout: Duration::from_secs(30),
             consecutive_timeouts: 3,
         }
@@ -180,6 +191,18 @@ impl ConnectionOptions {
     fn validate(&self) -> Result<()> {
         if self.max_inflight == 0
             || self.queue_capacity == 0
+            || self.control_queue_capacity == 0
+            || self.max_buffered_bytes < 64
+            || self.control_reserve_bytes < 64
+            || self
+                .max_buffered_bytes
+                .checked_add(self.control_reserve_bytes)
+                .is_none()
+            || self.limits.max_frame.checked_add(4).is_none()
+            || self
+                .queue_capacity
+                .checked_add(self.control_queue_capacity)
+                .is_none_or(|capacity| capacity > Semaphore::MAX_PERMITS)
             || self.limits.max_frame < 64
             || self.limits.max_collection == 0
             || self.limits.max_values < 4
@@ -200,6 +223,9 @@ struct Inner {
     id: u64,
     options: ConnectionOptions,
     send: mpsc::Sender<Outbound>,
+    data_slots: Arc<Semaphore>,
+    control_slots: Arc<Semaphore>,
+    bytes: Arc<buffer::Budget>,
     pending: Mutex<HashMap<u64, PendingReply>>,
     inbound: Mutex<HashMap<u64, Option<oneshot::Sender<()>>>>,
     next: AtomicU64,
@@ -247,6 +273,8 @@ impl Inner {
             let _receiver = reply.sender.send(Err(error(4, reason.clone())));
         }
         self.permits.close();
+        self.data_slots.close();
+        self.control_slots.close();
         self.ended.send_replace(Some(reason));
     }
 }
@@ -266,6 +294,8 @@ struct Outbound {
     bytes: Vec<u8>,
     after_write: Option<Box<dyn FnOnce() + Send>>,
     request: Option<QueuedRequest>,
+    _bytes: buffer::Lease,
+    queue_slot: Option<OwnedSemaphorePermit>,
 }
 
 struct QueuedRequest {
@@ -297,14 +327,16 @@ impl Outgoing {
     fn take_value(&mut self) -> Value {
         std::mem::replace(&mut self.value, Value::Null)
     }
-    fn sent(mut self, bytes: Vec<u8>) -> Outbound {
+    fn sent(mut self, encoded: buffer::Encoded, slot: OwnedSemaphorePermit) -> Outbound {
         if let Some(commit) = self.commit.take() {
             commit();
         }
         Outbound {
-            bytes,
+            bytes: encoded.bytes,
             after_write: self.after_write.take(),
             request: None,
+            _bytes: encoded.lease,
+            queue_slot: Some(slot),
         }
     }
 }
@@ -398,11 +430,15 @@ impl Connection {
         W: AsyncWrite + Unpin + Send + 'static,
     {
         options.validate()?;
-        let (send, outbound) = mpsc::channel(options.queue_capacity);
+        let (send, outbound) =
+            mpsc::channel(options.queue_capacity + options.control_queue_capacity);
         let (ended, _) = watch::channel(None);
         let peer = Self(Arc::new(Inner {
             id,
             permits: Arc::new(Semaphore::new(options.max_inflight)),
+            data_slots: Arc::new(Semaphore::new(options.queue_capacity)),
+            control_slots: Arc::new(Semaphore::new(options.control_queue_capacity)),
+            bytes: buffer::Budget::new(options.max_buffered_bytes, options.control_reserve_bytes),
             options,
             send,
             pending: Mutex::new(HashMap::new()),
@@ -459,23 +495,70 @@ impl Connection {
         self.0.fail(reason);
     }
 
+    /// Current encoded-buffer capacity, including queue waits and partial writes.
+    pub fn buffered_bytes(&self) -> usize {
+        self.0.bytes.bytes()
+    }
+
+    /// Peak encoded-buffer capacity since connection creation.
+    pub fn peak_buffered_bytes(&self) -> usize {
+        self.0.bytes.peak()
+    }
+
+    fn encode(
+        &self,
+        message: &Message,
+        retire_on_quota: bool,
+        response_label: Option<&str>,
+    ) -> Result<buffer::Encoded> {
+        let control = matches!(message, Message::Response { .. })
+            || matches!(message, Message::Notification { method, .. } if matches!(method.as_str(), "cancel" | "release"));
+        self.0
+            .bytes
+            .encode(message, &self.0.options.limits, control)
+            .map_err(|failure| {
+                let problem = if failure.exhausted {
+                    error(8, "连接发送缓冲字节额度耗尽")
+                } else {
+                    encoding_error(
+                        failure.problem,
+                        &response_label
+                            .map_or_else(|| describe(message), |label| format!("{label} 的返回值")),
+                    )
+                };
+                if failure.exhausted && retire_on_quota {
+                    self.0.fail(problem.to_string());
+                }
+                problem
+            })
+    }
+
     async fn send(&self, message: Message, outgoing: Outgoing) -> Result<()> {
-        let bytes = crate::codec::encode_frame(&message, &self.0.options.limits)
-            .map_err(|problem| encoding_error(problem, &describe(&message)))?;
+        let bytes = self.encode(&message, false, None)?;
         // 等待发送容量时只保留编码结果，业务值的生命周期止于编码完成。
         drop(message);
         self.send_bytes(bytes, outgoing).await
     }
 
-    async fn send_bytes(&self, bytes: Vec<u8>, outgoing: Outgoing) -> Result<()> {
+    async fn send_bytes(&self, bytes: buffer::Encoded, outgoing: Outgoing) -> Result<()> {
         if !self.is_alive() {
             return Err(error(4, "插件进程已结束"));
         }
-        let permit = timeout(self.0.options.request_timeout, self.0.send.reserve())
+        let deadline = deadline_after(self.0.options.request_timeout)?;
+        let slots = if bytes.control {
+            &self.0.control_slots
+        } else {
+            &self.0.data_slots
+        };
+        let slot = timeout_at(deadline, slots.clone().acquire_owned())
             .await
             .map_err(|_| error(6, "插件发送队列等待超时"))?
             .map_err(|_| error(4, "插件管道已关闭"))?;
-        permit.send(outgoing.sent(bytes));
+        let permit = timeout_at(deadline, self.0.send.reserve())
+            .await
+            .map_err(|_| error(6, "插件发送队列等待超时"))?
+            .map_err(|_| error(4, "插件管道已关闭"))?;
+        permit.send(outgoing.sent(bytes, slot));
         Ok(())
     }
 
@@ -486,13 +569,13 @@ impl Connection {
             Err(problem) => (Err(problem), Outgoing::new(Value::Null)),
         };
         let message = Message::Response { id, result };
-        let encoded = crate::codec::encode_frame(&message, &self.0.options.limits);
+        let encoded = self.encode(&message, false, Some(label));
         drop(message);
         match encoded {
             Ok(bytes) => self.send_bytes(bytes, outgoing).await,
             Err(problem) => {
                 drop(outgoing);
-                let failure = encoding_error(problem, &format!("{label} 的返回值"));
+                let failure = problem;
                 self.send(
                     Message::Response {
                         id,
@@ -526,8 +609,14 @@ impl Connection {
             .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |id| id.checked_add(1))
             .map_err(|_| error(8, "请求编号空间已耗尽"))?;
         let mut params = outgoing.take_value();
-        let label = call_label(method, &params);
         let operation = async {
+            let slot = self
+                .0
+                .data_slots
+                .clone()
+                .acquire_owned()
+                .await
+                .map_err(|_| error(4, "插件管道已关闭"))?;
             let permit = self
                 .0
                 .send
@@ -547,19 +636,20 @@ impl Connection {
             } else {
                 None
             };
-            let bytes = crate::codec::encode_frame(
+            let bytes = self.encode(
                 &Message::Request {
                     id,
                     method: method.into(),
                     params,
                 },
-                &self.0.options.limits,
-            )
-            .map_err(|problem| encoding_error(problem, &format!("{label} 的参数")))?;
+                false,
+                None,
+            )?;
             if Instant::now() >= deadline {
                 return Err(error(6, "插件请求在入队前超过截止时间"));
             }
-            let budget_offset = budget.map(|remaining| bytes.len() - integer_width(remaining));
+            let budget_offset =
+                budget.map(|remaining| bytes.bytes.len() - integer_width(remaining));
             let write = Arc::new(RequestWrite {
                 state: Mutex::new(RequestWriteState {
                     started: false,
@@ -585,7 +675,9 @@ impl Connection {
             }
             let _pending = Pending { peer: self, id };
             permit.send(Outbound {
-                bytes,
+                bytes: bytes.bytes,
+                _bytes: bytes.lease,
+                queue_slot: Some(slot),
                 after_write: outgoing.after_write.take(),
                 request: Some(QueuedRequest {
                     id,
@@ -657,22 +749,32 @@ impl Connection {
         if !self.is_alive() {
             return Err(error(4, "插件进程已结束"));
         }
-        let bytes = crate::codec::encode_frame(
+        let bytes = self.encode(
             &Message::Notification {
                 method: method.into(),
                 params: outgoing.take_value(),
             },
-            &self.0.options.limits,
-        )
-        .map_err(|problem| encoding_error(problem, &format!("通知 {method} 的参数")))?;
-        let result = self
-            .0
-            .send
-            .try_reserve()
-            .map(|permit| {
-                permit.send(outgoing.sent(bytes));
-            })
-            .map_err(|problem| error(8, problem.to_string()));
+            true,
+            None,
+        )?;
+        let slots = if bytes.control {
+            &self.0.control_slots
+        } else {
+            &self.0.data_slots
+        };
+        let result = slots
+            .clone()
+            .try_acquire_owned()
+            .map_err(|problem| error(8, problem.to_string()))
+            .and_then(|slot| {
+                self.0
+                    .send
+                    .try_reserve()
+                    .map(|permit| {
+                        permit.send(outgoing.sent(bytes, slot));
+                    })
+                    .map_err(|problem| error(8, problem.to_string()))
+            });
         if let Err(problem) = &result {
             self.0.fail(problem.to_string());
         }
@@ -738,6 +840,7 @@ async fn write_frames<W: AsyncWrite + Unpin>(
             _ = ended.changed() => break,
             frame = outbound.recv() => match frame { Some(frame) => frame, None => break },
         };
+        drop(frame.queue_slot.take());
         let write = async {
             let start = if let Some(request) = &frame.request {
                 let mut expired = false;
@@ -810,6 +913,8 @@ async fn write_frames<W: AsyncWrite + Unpin>(
             Ok(false) => continue,
             Ok(true) => {}
         }
+        drop(frame.bytes);
+        drop(frame._bytes);
         if let Some(action) = frame.after_write.take() {
             action();
         }
@@ -1084,7 +1189,9 @@ async fn serve_request(
     }
     let removed = peer.0.inbound.lock().remove(&id);
     drop(removed);
-    let _closed = peer.respond(id, &label, result).await;
+    if let Err(problem) = peer.respond(id, &label, result).await {
+        peer.0.fail(problem.to_string());
+    }
 }
 
 /// DOC-16 §6–§8：即时资源簿记先于后续帧，用户通知保持FIFO与等待期限。
@@ -1112,15 +1219,11 @@ async fn receive_notification(
         }
         return true;
     }
-    if !matches!(
-        timeout(
-            peer.0.options.request_timeout,
-            notifications.send((peer.clone(), method, params))
-        )
-        .await,
-        Ok(Ok(()))
-    ) {
-        peer.0.fail("插件通知队列超过等待时限或已经关闭");
+    if notifications
+        .try_send((peer.clone(), method, params))
+        .is_err()
+    {
+        peer.0.fail("插件通知队列额度耗尽或已经关闭");
         return false;
     }
     true
