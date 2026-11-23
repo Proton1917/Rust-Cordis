@@ -33,7 +33,11 @@ pub fn install(source: &Path, project: &Path, data: &Path, plugins: &Path) -> Re
     ownership.lock().map_err(io_error)?;
     let (existing, sequence) = installed_reference(&source, plugins)?;
     if let Some(reference) = existing {
-        copy_receipt(&source, &plugins.join(&reference))?;
+        let installed = plugins.join(&reference);
+        // A copy found after an interrupted publication may be readable but not durable.
+        sync_tree(&installed)?;
+        sync_path(plugins)?;
+        copy_receipt(&source, &installed)?;
         return Ok(reference);
     }
     let next = sequence
@@ -76,7 +80,8 @@ fn copy_receipt(source: &Path, destination: &Path) -> Result<()> {
     }
     let destination = receipt_path(destination);
     if destination.exists() && equal(&source, &destination)? {
-        return Ok(());
+        sync_tree(&destination)?;
+        return sync_path(destination.parent().expect("receipt parent"));
     }
     publish_copy(&source, &destination.with_extension("next"), &destination)
 }
@@ -123,7 +128,48 @@ fn publish_copy(source: &Path, staged: &Path, destination: &Path) -> Result<()> 
         }
         return Err(problem);
     }
-    fs::rename(staged, destination).map_err(io_error)
+    fs::rename(staged, destination).map_err(io_error)?;
+    let parent = destination
+        .parent()
+        .ok_or_else(|| parameter("安装产物缺少父目录"))?;
+    sync_path(parent)?;
+    if let Some(staged_parent) = staged.parent()
+        && staged_parent != parent
+    {
+        sync_path(staged_parent)?;
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+thread_local! {
+    static SYNC_FAILURE: std::cell::RefCell<Option<PathBuf>> = const { std::cell::RefCell::new(None) };
+}
+
+fn sync_path(path: &Path) -> Result<()> {
+    #[cfg(test)]
+    if SYNC_FAILURE.with(|failure| failure.borrow().as_deref() == Some(path)) {
+        SYNC_FAILURE.with(|failure| failure.borrow_mut().take());
+        return Err(io_error(std::io::Error::other(
+            "injected artifact sync failure",
+        )));
+    }
+    File::open(path)
+        .and_then(|file| file.sync_all())
+        .map_err(io_error)
+}
+
+/// Existing artifacts cross the same durable boundary as a newly copied tree.
+fn sync_tree(path: &Path) -> Result<()> {
+    let kind = fs::symlink_metadata(path).map_err(io_error)?.file_type();
+    if kind.is_dir() {
+        for child in children(path)? {
+            sync_tree(&child)?;
+        }
+    } else if !kind.is_file() {
+        return Err(parameter("插件安装来源应由普通文件与目录组成"));
+    }
+    sync_path(path)
 }
 
 /// DOC-15 §3.2：目录条目排序用于确定性复制和同名内容比较。
@@ -141,6 +187,7 @@ fn copy(source: &Path, destination: &Path) -> Result<()> {
     let kind = fs::symlink_metadata(source).map_err(io_error)?.file_type();
     if kind.is_file() {
         fs::copy(source, destination).map_err(io_error)?;
+        sync_path(destination)?;
     } else if kind.is_dir() {
         fs::create_dir(destination).map_err(io_error)?;
         for child in children(source)? {
@@ -149,6 +196,7 @@ fn copy(source: &Path, destination: &Path) -> Result<()> {
                 &destination.join(child.file_name().expect("directory entry name")),
             )?;
         }
+        sync_path(destination)?;
     } else {
         return Err(parameter("插件安装来源应由普通文件与目录组成"));
     }
@@ -204,6 +252,76 @@ mod tests {
     use super::*;
     use cordis_testkit::cleanup::TestGuard;
     use std::sync::Barrier;
+
+    #[test]
+    fn artifact_sync_failures_never_return_a_reference_and_can_retry() {
+        for cut in [
+            "file",
+            "child-directory",
+            "root-directory",
+            "publication-parent",
+        ] {
+            let case = TestGuard::for_package(
+                Path::new(env!("CARGO_MANIFEST_DIR")),
+                &format!("install-sync-{cut}"),
+            );
+            let root = case.directory("install-sync");
+            fs::create_dir_all(root.join("source/sub")).unwrap();
+            fs::create_dir(root.join("plugins")).unwrap();
+            let root = root.canonicalize().unwrap();
+            let source = root.join("source");
+            let plugins = root.join("plugins");
+            fs::write(source.join("sub/main.py"), b"ready").unwrap();
+            let failed = match cut {
+                "file" => plugins.join(".install-1/sub/main.py"),
+                "child-directory" => plugins.join(".install-1/sub"),
+                "root-directory" => plugins.join(".install-1"),
+                _ => plugins.clone(),
+            };
+            SYNC_FAILURE.with(|failure| *failure.borrow_mut() = Some(failed));
+            assert!(install(&source, &root, &root, &plugins).is_err());
+            assert!(SYNC_FAILURE.with(|failure| failure.borrow().is_none()));
+            let reference = install(&source, &root, &root, &plugins).unwrap();
+            assert_eq!(
+                fs::read(plugins.join(&reference).join("sub/main.py")).unwrap(),
+                b"ready"
+            );
+            // Reuse also synchronizes the selected artifact before returning its identity.
+            SYNC_FAILURE.with(|failure| {
+                *failure.borrow_mut() = Some(plugins.join(&reference).join("sub/main.py"))
+            });
+            assert!(install(&source, &root, &root, &plugins).is_err());
+            assert_eq!(install(&source, &root, &root, &plugins).unwrap(), reference);
+            case.success();
+        }
+    }
+
+    #[test]
+    fn verification_receipt_is_part_of_successful_publication() {
+        let case = TestGuard::for_package(
+            Path::new(env!("CARGO_MANIFEST_DIR")),
+            "install-receipt-sync",
+        );
+        let root = case.directory("install-receipt-sync");
+        fs::create_dir_all(root.join("plugins")).unwrap();
+        let root = root.canonicalize().unwrap();
+        let source = root.join("library.so");
+        let plugins = root.join("plugins");
+        fs::write(&source, b"library").unwrap();
+        fs::write(root.join("library.so.verified.json"), b"receipt").unwrap();
+        SYNC_FAILURE.with(|failure| {
+            *failure.borrow_mut() = Some(plugins.join("installed-1.so.verified.next"))
+        });
+        assert!(install(&source, &root, &root, &plugins).is_err());
+        assert!(SYNC_FAILURE.with(|failure| failure.borrow().is_none()));
+        let reference = install(&source, &root, &root, &plugins).unwrap();
+        assert_eq!(reference, "installed-1.so");
+        assert_eq!(
+            fs::read(plugins.join("installed-1.so.verified.json")).unwrap(),
+            b"receipt"
+        );
+        case.success();
+    }
 
     #[test]
     fn shared_install_directory_keeps_each_source() {
