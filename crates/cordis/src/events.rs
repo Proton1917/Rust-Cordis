@@ -553,7 +553,7 @@ impl Context {
     ) -> Vec<Arc<Hook>> {
         self.event_snapshot_key(
             EventId::of::<E>(),
-            E::NAME.into(),
+            E::NAME,
             mode,
             || Arc::new(args.clone()),
             filter,
@@ -563,12 +563,12 @@ impl Context {
     fn event_snapshot_key(
         &self,
         event: EventId,
-        name: Arc<str>,
+        name: impl AsRef<str> + Into<Arc<str>>,
         mode: DispatchMode,
         args: impl FnOnce() -> AnyArc,
         filter: Option<&dyn Fn(&Context) -> bool>,
     ) -> Vec<Arc<Hook>> {
-        if !name.starts_with("internal/") {
+        if !name.as_ref().starts_with("internal/") {
             let observed = self
                 .kernel
                 .state
@@ -578,7 +578,7 @@ impl Context {
             if observed {
                 self.emit::<InternalDispatch>(&Dispatch {
                     mode,
-                    name,
+                    name: name.into(),
                     context: self.clone(),
                     filtered: filter.is_some(),
                     args: args(),
@@ -772,8 +772,14 @@ impl Context {
         inner: impl Fn() -> Result<E::Output> + Send + Sync + 'static,
         filter: Option<&dyn Fn(&Context) -> bool>,
     ) -> Result<E::Output> {
+        let hooks = self.event_snapshot::<E>(DispatchMode::Waterfall, &args, filter);
+        if hooks.is_empty() {
+            // 与 WaterfallChain 保持相同的释放顺序，包括终点 panic 的路径。
+            let terminal = (args, inner);
+            return (terminal.1)();
+        }
         Arc::new(WaterfallChain::<E> {
-            hooks: self.event_snapshot::<E>(DispatchMode::Waterfall, &args, filter),
+            hooks,
             kernel: self.kernel.clone(),
             args,
             inner: Box::new(inner),

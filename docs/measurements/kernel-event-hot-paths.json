@@ -1,0 +1,1432 @@
+{
+  "baseline_commit": "fe1f6be53e4e053fb16eb3d7bacd2ee319e22672",
+  "candidate_base": "fe1f6be53e4e053fb16eb3d7bacd2ee319e22672",
+  "candidate_files_sha256": {
+    "crates/cordis/src/events.rs": "6b1d06a1f81d16c31406b32f828f60b70bf127a1349e8e0b1531d6ace0a69cc6",
+    "crates/cordis/tests/events.rs": "9c82fa49ec6e89f875995bbc0463d06d12a22badf0026da652f6ccc474fb087a",
+    "crates/cordis/tests/event_hot_paths.rs": "5b81c1ece0e05a94a429e14d38abbd17774b51486d02f58ffd7b1e155412ab5c"
+  },
+  "started_utc": "2026-11-23T05:59:29.753351+00:00",
+  "completed_utc": "2026-11-23T05:59:33.135941+00:00",
+  "environment": {
+    "platform": "Linux-6.18.57-x86_64-with-glibc2.41",
+    "cpu": "AMD EPYC 9V74 80-Core Processor",
+    "available_logical_cpus": 9,
+    "pinned_cpu": 0,
+    "rustc": "rustc 1.96.0 (ac68faa20 2026-05-25)\nbinary: rustc\ncommit-hash: ac68faa20c58cbccd01ee7208bf3b6e93a7d7f96\ncommit-date: 2026-05-25\nhost: x86_64-unknown-linux-gnu\nrelease: 1.96.0\nLLVM version: 22.1.2\n",
+    "profile": "release, default workspace settings",
+    "allocator": "System with thread-local allocation counter"
+  },
+  "method": {
+    "pairs": 10,
+    "excluded_exploration_pair": 0,
+    "iterations_per_scenario": 200000,
+    "warmup_per_scenario": 10000,
+    "allocation_iterations_per_scenario": 1000,
+    "order": "alternate baseline/candidate process order by pair",
+    "timing": "batch elapsed / iterations, allocation counting disabled during timing",
+    "scope": "in-process synchronous kernel calls; excludes ABI, IPC, plugin startup, and hot replacement",
+    "build_isolation": "separate worktrees and separate CARGO_TARGET_DIR values for baseline and candidate"
+  },
+  "summary": {
+    "emit_empty": {
+      "baseline_ns_per_call_median": 33.8592675,
+      "baseline_allocations_per_call": 1.0,
+      "candidate_ns_per_call_median": 19.8188,
+      "candidate_allocations_per_call": 0.0,
+      "paired_latency_ratio_median": 0.5921536487682277,
+      "paired_latency_ratio_min": 0.43076213566247545,
+      "paired_latency_ratio_max": 0.89900183978522
+    },
+    "emit_observed": {
+      "baseline_ns_per_call_median": 161.7506475,
+      "baseline_allocations_per_call": 5.0,
+      "candidate_ns_per_call_median": 150.944025,
+      "candidate_allocations_per_call": 4.0,
+      "paired_latency_ratio_median": 0.9261286176627619,
+      "paired_latency_ratio_min": 0.6477166739260788,
+      "paired_latency_ratio_max": 1.1706140446979767
+    },
+    "emit_one_listener": {
+      "baseline_ns_per_call_median": 85.15930750000001,
+      "baseline_allocations_per_call": 2.0,
+      "candidate_ns_per_call_median": 72.4233,
+      "candidate_allocations_per_call": 1.0,
+      "paired_latency_ratio_median": 0.8481432085994023,
+      "paired_latency_ratio_min": 0.773771706285158,
+      "paired_latency_ratio_max": 0.8785154727230756
+    },
+    "get_one_middleware": {
+      "baseline_ns_per_call_median": 237.72081,
+      "baseline_allocations_per_call": 7.0,
+      "candidate_ns_per_call_median": 225.6318875,
+      "candidate_allocations_per_call": 6.0,
+      "paired_latency_ratio_median": 0.9495661344041412,
+      "paired_latency_ratio_min": 0.6637745943594107,
+      "paired_latency_ratio_max": 1.0544491175520005
+    },
+    "get_unintercepted": {
+      "baseline_ns_per_call_median": 159.7854525,
+      "baseline_allocations_per_call": 4.0,
+      "candidate_ns_per_call_median": 127.250575,
+      "candidate_allocations_per_call": 1.0,
+      "paired_latency_ratio_median": 0.7974071899990345,
+      "paired_latency_ratio_min": 0.6799068849932134,
+      "paired_latency_ratio_max": 1.0950907939969836
+    },
+    "waterfall_empty": {
+      "baseline_ns_per_call_median": 61.609269999999995,
+      "baseline_allocations_per_call": 3.0,
+      "candidate_ns_per_call_median": 17.78831,
+      "candidate_allocations_per_call": 0.0,
+      "paired_latency_ratio_median": 0.2936791476518321,
+      "paired_latency_ratio_min": 0.21940760525212266,
+      "paired_latency_ratio_max": 0.3044885111903097
+    }
+  },
+  "samples": [
+    {
+      "pair": 0,
+      "build": "baseline",
+      "order": 1,
+      "scenario": "emit_empty",
+      "iterations": 200000,
+      "elapsed_ns": 6636843,
+      "allocation_iterations": 1000,
+      "allocations": 1000
+    },
+    {
+      "pair": 0,
+      "build": "baseline",
+      "order": 1,
+      "scenario": "waterfall_empty",
+      "iterations": 200000,
+      "elapsed_ns": 11637478,
+      "allocation_iterations": 1000,
+      "allocations": 3000
+    },
+    {
+      "pair": 0,
+      "build": "baseline",
+      "order": 1,
+      "scenario": "get_unintercepted",
+      "iterations": 200000,
+      "elapsed_ns": 31196736,
+      "allocation_iterations": 1000,
+      "allocations": 4000
+    },
+    {
+      "pair": 0,
+      "build": "baseline",
+      "order": 1,
+      "scenario": "emit_one_listener",
+      "iterations": 200000,
+      "elapsed_ns": 16675708,
+      "allocation_iterations": 1000,
+      "allocations": 2000
+    },
+    {
+      "pair": 0,
+      "build": "baseline",
+      "order": 1,
+      "scenario": "get_one_middleware",
+      "iterations": 200000,
+      "elapsed_ns": 47264962,
+      "allocation_iterations": 1000,
+      "allocations": 7000
+    },
+    {
+      "pair": 0,
+      "build": "baseline",
+      "order": 1,
+      "scenario": "emit_observed",
+      "iterations": 200000,
+      "elapsed_ns": 32866575,
+      "allocation_iterations": 1000,
+      "allocations": 5000
+    },
+    {
+      "pair": 0,
+      "build": "candidate",
+      "order": 2,
+      "scenario": "emit_empty",
+      "iterations": 200000,
+      "elapsed_ns": 3937936,
+      "allocation_iterations": 1000,
+      "allocations": 0
+    },
+    {
+      "pair": 0,
+      "build": "candidate",
+      "order": 2,
+      "scenario": "waterfall_empty",
+      "iterations": 200000,
+      "elapsed_ns": 3543932,
+      "allocation_iterations": 1000,
+      "allocations": 0
+    },
+    {
+      "pair": 0,
+      "build": "candidate",
+      "order": 2,
+      "scenario": "get_unintercepted",
+      "iterations": 200000,
+      "elapsed_ns": 25137611,
+      "allocation_iterations": 1000,
+      "allocations": 1000
+    },
+    {
+      "pair": 0,
+      "build": "candidate",
+      "order": 2,
+      "scenario": "emit_one_listener",
+      "iterations": 200000,
+      "elapsed_ns": 14184470,
+      "allocation_iterations": 1000,
+      "allocations": 1000
+    },
+    {
+      "pair": 0,
+      "build": "candidate",
+      "order": 2,
+      "scenario": "get_one_middleware",
+      "iterations": 200000,
+      "elapsed_ns": 44401592,
+      "allocation_iterations": 1000,
+      "allocations": 6000
+    },
+    {
+      "pair": 0,
+      "build": "candidate",
+      "order": 2,
+      "scenario": "emit_observed",
+      "iterations": 200000,
+      "elapsed_ns": 29453269,
+      "allocation_iterations": 1000,
+      "allocations": 4000
+    },
+    {
+      "pair": 1,
+      "build": "candidate",
+      "order": 1,
+      "scenario": "emit_empty",
+      "iterations": 200000,
+      "elapsed_ns": 3952248,
+      "allocation_iterations": 1000,
+      "allocations": 0
+    },
+    {
+      "pair": 1,
+      "build": "candidate",
+      "order": 1,
+      "scenario": "waterfall_empty",
+      "iterations": 200000,
+      "elapsed_ns": 3539615,
+      "allocation_iterations": 1000,
+      "allocations": 0
+    },
+    {
+      "pair": 1,
+      "build": "candidate",
+      "order": 1,
+      "scenario": "get_unintercepted",
+      "iterations": 200000,
+      "elapsed_ns": 34062832,
+      "allocation_iterations": 1000,
+      "allocations": 1000
+    },
+    {
+      "pair": 1,
+      "build": "candidate",
+      "order": 1,
+      "scenario": "emit_one_listener",
+      "iterations": 200000,
+      "elapsed_ns": 14154996,
+      "allocation_iterations": 1000,
+      "allocations": 1000
+    },
+    {
+      "pair": 1,
+      "build": "candidate",
+      "order": 1,
+      "scenario": "get_one_middleware",
+      "iterations": 200000,
+      "elapsed_ns": 48060894,
+      "allocation_iterations": 1000,
+      "allocations": 6000
+    },
+    {
+      "pair": 1,
+      "build": "candidate",
+      "order": 1,
+      "scenario": "emit_observed",
+      "iterations": 200000,
+      "elapsed_ns": 31655467,
+      "allocation_iterations": 1000,
+      "allocations": 4000
+    },
+    {
+      "pair": 1,
+      "build": "baseline",
+      "order": 2,
+      "scenario": "emit_empty",
+      "iterations": 200000,
+      "elapsed_ns": 6598727,
+      "allocation_iterations": 1000,
+      "allocations": 1000
+    },
+    {
+      "pair": 1,
+      "build": "baseline",
+      "order": 2,
+      "scenario": "waterfall_empty",
+      "iterations": 200000,
+      "elapsed_ns": 11624790,
+      "allocation_iterations": 1000,
+      "allocations": 3000
+    },
+    {
+      "pair": 1,
+      "build": "baseline",
+      "order": 2,
+      "scenario": "get_unintercepted",
+      "iterations": 200000,
+      "elapsed_ns": 31105030,
+      "allocation_iterations": 1000,
+      "allocations": 4000
+    },
+    {
+      "pair": 1,
+      "build": "baseline",
+      "order": 2,
+      "scenario": "emit_one_listener",
+      "iterations": 200000,
+      "elapsed_ns": 16620486,
+      "allocation_iterations": 1000,
+      "allocations": 2000
+    },
+    {
+      "pair": 1,
+      "build": "baseline",
+      "order": 2,
+      "scenario": "get_one_middleware",
+      "iterations": 200000,
+      "elapsed_ns": 46254193,
+      "allocation_iterations": 1000,
+      "allocations": 7000
+    },
+    {
+      "pair": 1,
+      "build": "baseline",
+      "order": 2,
+      "scenario": "emit_observed",
+      "iterations": 200000,
+      "elapsed_ns": 31828745,
+      "allocation_iterations": 1000,
+      "allocations": 5000
+    },
+    {
+      "pair": 2,
+      "build": "baseline",
+      "order": 1,
+      "scenario": "emit_empty",
+      "iterations": 200000,
+      "elapsed_ns": 6694830,
+      "allocation_iterations": 1000,
+      "allocations": 1000
+    },
+    {
+      "pair": 2,
+      "build": "baseline",
+      "order": 1,
+      "scenario": "waterfall_empty",
+      "iterations": 200000,
+      "elapsed_ns": 11590418,
+      "allocation_iterations": 1000,
+      "allocations": 3000
+    },
+    {
+      "pair": 2,
+      "build": "baseline",
+      "order": 1,
+      "scenario": "get_unintercepted",
+      "iterations": 200000,
+      "elapsed_ns": 31029788,
+      "allocation_iterations": 1000,
+      "allocations": 4000
+    },
+    {
+      "pair": 2,
+      "build": "baseline",
+      "order": 1,
+      "scenario": "emit_one_listener",
+      "iterations": 200000,
+      "elapsed_ns": 16895324,
+      "allocation_iterations": 1000,
+      "allocations": 2000
+    },
+    {
+      "pair": 2,
+      "build": "baseline",
+      "order": 1,
+      "scenario": "get_one_middleware",
+      "iterations": 200000,
+      "elapsed_ns": 45909300,
+      "allocation_iterations": 1000,
+      "allocations": 7000
+    },
+    {
+      "pair": 2,
+      "build": "baseline",
+      "order": 1,
+      "scenario": "emit_observed",
+      "iterations": 200000,
+      "elapsed_ns": 31569250,
+      "allocation_iterations": 1000,
+      "allocations": 5000
+    },
+    {
+      "pair": 2,
+      "build": "candidate",
+      "order": 2,
+      "scenario": "emit_empty",
+      "iterations": 200000,
+      "elapsed_ns": 3918928,
+      "allocation_iterations": 1000,
+      "allocations": 0
+    },
+    {
+      "pair": 2,
+      "build": "candidate",
+      "order": 2,
+      "scenario": "waterfall_empty",
+      "iterations": 200000,
+      "elapsed_ns": 3526275,
+      "allocation_iterations": 1000,
+      "allocations": 0
+    },
+    {
+      "pair": 2,
+      "build": "candidate",
+      "order": 2,
+      "scenario": "get_unintercepted",
+      "iterations": 200000,
+      "elapsed_ns": 25302466,
+      "allocation_iterations": 1000,
+      "allocations": 1000
+    },
+    {
+      "pair": 2,
+      "build": "candidate",
+      "order": 2,
+      "scenario": "emit_one_listener",
+      "iterations": 200000,
+      "elapsed_ns": 14264117,
+      "allocation_iterations": 1000,
+      "allocations": 1000
+    },
+    {
+      "pair": 2,
+      "build": "candidate",
+      "order": 2,
+      "scenario": "get_one_middleware",
+      "iterations": 200000,
+      "elapsed_ns": 44096919,
+      "allocation_iterations": 1000,
+      "allocations": 6000
+    },
+    {
+      "pair": 2,
+      "build": "candidate",
+      "order": 2,
+      "scenario": "emit_observed",
+      "iterations": 200000,
+      "elapsed_ns": 29550593,
+      "allocation_iterations": 1000,
+      "allocations": 4000
+    },
+    {
+      "pair": 3,
+      "build": "candidate",
+      "order": 1,
+      "scenario": "emit_empty",
+      "iterations": 200000,
+      "elapsed_ns": 3921702,
+      "allocation_iterations": 1000,
+      "allocations": 0
+    },
+    {
+      "pair": 3,
+      "build": "candidate",
+      "order": 1,
+      "scenario": "waterfall_empty",
+      "iterations": 200000,
+      "elapsed_ns": 3520437,
+      "allocation_iterations": 1000,
+      "allocations": 0
+    },
+    {
+      "pair": 3,
+      "build": "candidate",
+      "order": 1,
+      "scenario": "get_unintercepted",
+      "iterations": 200000,
+      "elapsed_ns": 24951345,
+      "allocation_iterations": 1000,
+      "allocations": 1000
+    },
+    {
+      "pair": 3,
+      "build": "candidate",
+      "order": 1,
+      "scenario": "emit_one_listener",
+      "iterations": 200000,
+      "elapsed_ns": 14235995,
+      "allocation_iterations": 1000,
+      "allocations": 1000
+    },
+    {
+      "pair": 3,
+      "build": "candidate",
+      "order": 1,
+      "scenario": "get_one_middleware",
+      "iterations": 200000,
+      "elapsed_ns": 44224139,
+      "allocation_iterations": 1000,
+      "allocations": 6000
+    },
+    {
+      "pair": 3,
+      "build": "candidate",
+      "order": 1,
+      "scenario": "emit_observed",
+      "iterations": 200000,
+      "elapsed_ns": 28969159,
+      "allocation_iterations": 1000,
+      "allocations": 4000
+    },
+    {
+      "pair": 3,
+      "build": "baseline",
+      "order": 2,
+      "scenario": "emit_empty",
+      "iterations": 200000,
+      "elapsed_ns": 9038279,
+      "allocation_iterations": 1000,
+      "allocations": 1000
+    },
+    {
+      "pair": 3,
+      "build": "baseline",
+      "order": 2,
+      "scenario": "waterfall_empty",
+      "iterations": 200000,
+      "elapsed_ns": 15568454,
+      "allocation_iterations": 1000,
+      "allocations": 3000
+    },
+    {
+      "pair": 3,
+      "build": "baseline",
+      "order": 2,
+      "scenario": "get_unintercepted",
+      "iterations": 200000,
+      "elapsed_ns": 35048225,
+      "allocation_iterations": 1000,
+      "allocations": 4000
+    },
+    {
+      "pair": 3,
+      "build": "baseline",
+      "order": 2,
+      "scenario": "emit_one_listener",
+      "iterations": 200000,
+      "elapsed_ns": 18398185,
+      "allocation_iterations": 1000,
+      "allocations": 2000
+    },
+    {
+      "pair": 3,
+      "build": "baseline",
+      "order": 2,
+      "scenario": "get_one_middleware",
+      "iterations": 200000,
+      "elapsed_ns": 66625236,
+      "allocation_iterations": 1000,
+      "allocations": 7000
+    },
+    {
+      "pair": 3,
+      "build": "baseline",
+      "order": 2,
+      "scenario": "emit_observed",
+      "iterations": 200000,
+      "elapsed_ns": 37813200,
+      "allocation_iterations": 1000,
+      "allocations": 5000
+    },
+    {
+      "pair": 4,
+      "build": "baseline",
+      "order": 1,
+      "scenario": "emit_empty",
+      "iterations": 200000,
+      "elapsed_ns": 6646428,
+      "allocation_iterations": 1000,
+      "allocations": 1000
+    },
+    {
+      "pair": 4,
+      "build": "baseline",
+      "order": 1,
+      "scenario": "waterfall_empty",
+      "iterations": 200000,
+      "elapsed_ns": 12255145,
+      "allocation_iterations": 1000,
+      "allocations": 3000
+    },
+    {
+      "pair": 4,
+      "build": "baseline",
+      "order": 1,
+      "scenario": "get_unintercepted",
+      "iterations": 200000,
+      "elapsed_ns": 32824173,
+      "allocation_iterations": 1000,
+      "allocations": 4000
+    },
+    {
+      "pair": 4,
+      "build": "baseline",
+      "order": 1,
+      "scenario": "emit_one_listener",
+      "iterations": 200000,
+      "elapsed_ns": 16917828,
+      "allocation_iterations": 1000,
+      "allocations": 2000
+    },
+    {
+      "pair": 4,
+      "build": "baseline",
+      "order": 1,
+      "scenario": "get_one_middleware",
+      "iterations": 200000,
+      "elapsed_ns": 47923580,
+      "allocation_iterations": 1000,
+      "allocations": 7000
+    },
+    {
+      "pair": 4,
+      "build": "baseline",
+      "order": 1,
+      "scenario": "emit_observed",
+      "iterations": 200000,
+      "elapsed_ns": 32397750,
+      "allocation_iterations": 1000,
+      "allocations": 5000
+    },
+    {
+      "pair": 4,
+      "build": "candidate",
+      "order": 2,
+      "scenario": "emit_empty",
+      "iterations": 200000,
+      "elapsed_ns": 5975151,
+      "allocation_iterations": 1000,
+      "allocations": 0
+    },
+    {
+      "pair": 4,
+      "build": "candidate",
+      "order": 2,
+      "scenario": "waterfall_empty",
+      "iterations": 200000,
+      "elapsed_ns": 3616219,
+      "allocation_iterations": 1000,
+      "allocations": 0
+    },
+    {
+      "pair": 4,
+      "build": "candidate",
+      "order": 2,
+      "scenario": "get_unintercepted",
+      "iterations": 200000,
+      "elapsed_ns": 25040928,
+      "allocation_iterations": 1000,
+      "allocations": 1000
+    },
+    {
+      "pair": 4,
+      "build": "candidate",
+      "order": 2,
+      "scenario": "emit_one_listener",
+      "iterations": 200000,
+      "elapsed_ns": 14374361,
+      "allocation_iterations": 1000,
+      "allocations": 1000
+    },
+    {
+      "pair": 4,
+      "build": "candidate",
+      "order": 2,
+      "scenario": "get_one_middleware",
+      "iterations": 200000,
+      "elapsed_ns": 45171314,
+      "allocation_iterations": 1000,
+      "allocations": 6000
+    },
+    {
+      "pair": 4,
+      "build": "candidate",
+      "order": 2,
+      "scenario": "emit_observed",
+      "iterations": 200000,
+      "elapsed_ns": 29895484,
+      "allocation_iterations": 1000,
+      "allocations": 4000
+    },
+    {
+      "pair": 5,
+      "build": "candidate",
+      "order": 1,
+      "scenario": "emit_empty",
+      "iterations": 200000,
+      "elapsed_ns": 4233455,
+      "allocation_iterations": 1000,
+      "allocations": 0
+    },
+    {
+      "pair": 5,
+      "build": "candidate",
+      "order": 1,
+      "scenario": "waterfall_empty",
+      "iterations": 200000,
+      "elapsed_ns": 3532935,
+      "allocation_iterations": 1000,
+      "allocations": 0
+    },
+    {
+      "pair": 5,
+      "build": "candidate",
+      "order": 1,
+      "scenario": "get_unintercepted",
+      "iterations": 200000,
+      "elapsed_ns": 30152315,
+      "allocation_iterations": 1000,
+      "allocations": 1000
+    },
+    {
+      "pair": 5,
+      "build": "candidate",
+      "order": 1,
+      "scenario": "emit_one_listener",
+      "iterations": 200000,
+      "elapsed_ns": 14720465,
+      "allocation_iterations": 1000,
+      "allocations": 1000
+    },
+    {
+      "pair": 5,
+      "build": "candidate",
+      "order": 1,
+      "scenario": "get_one_middleware",
+      "iterations": 200000,
+      "elapsed_ns": 49972422,
+      "allocation_iterations": 1000,
+      "allocations": 6000
+    },
+    {
+      "pair": 5,
+      "build": "candidate",
+      "order": 1,
+      "scenario": "emit_observed",
+      "iterations": 200000,
+      "elapsed_ns": 37397443,
+      "allocation_iterations": 1000,
+      "allocations": 4000
+    },
+    {
+      "pair": 5,
+      "build": "baseline",
+      "order": 2,
+      "scenario": "emit_empty",
+      "iterations": 200000,
+      "elapsed_ns": 6822529,
+      "allocation_iterations": 1000,
+      "allocations": 1000
+    },
+    {
+      "pair": 5,
+      "build": "baseline",
+      "order": 2,
+      "scenario": "waterfall_empty",
+      "iterations": 200000,
+      "elapsed_ns": 11708343,
+      "allocation_iterations": 1000,
+      "allocations": 3000
+    },
+    {
+      "pair": 5,
+      "build": "baseline",
+      "order": 2,
+      "scenario": "get_unintercepted",
+      "iterations": 200000,
+      "elapsed_ns": 31787744,
+      "allocation_iterations": 1000,
+      "allocations": 4000
+    },
+    {
+      "pair": 5,
+      "build": "baseline",
+      "order": 2,
+      "scenario": "emit_one_listener",
+      "iterations": 200000,
+      "elapsed_ns": 16756068,
+      "allocation_iterations": 1000,
+      "allocations": 2000
+    },
+    {
+      "pair": 5,
+      "build": "baseline",
+      "order": 2,
+      "scenario": "get_one_middleware",
+      "iterations": 200000,
+      "elapsed_ns": 47391971,
+      "allocation_iterations": 1000,
+      "allocations": 7000
+    },
+    {
+      "pair": 5,
+      "build": "baseline",
+      "order": 2,
+      "scenario": "emit_observed",
+      "iterations": 200000,
+      "elapsed_ns": 31946860,
+      "allocation_iterations": 1000,
+      "allocations": 5000
+    },
+    {
+      "pair": 6,
+      "build": "baseline",
+      "order": 1,
+      "scenario": "emit_empty",
+      "iterations": 200000,
+      "elapsed_ns": 9228462,
+      "allocation_iterations": 1000,
+      "allocations": 1000
+    },
+    {
+      "pair": 6,
+      "build": "baseline",
+      "order": 1,
+      "scenario": "waterfall_empty",
+      "iterations": 200000,
+      "elapsed_ns": 16297106,
+      "allocation_iterations": 1000,
+      "allocations": 3000
+    },
+    {
+      "pair": 6,
+      "build": "baseline",
+      "order": 1,
+      "scenario": "get_unintercepted",
+      "iterations": 200000,
+      "elapsed_ns": 36824401,
+      "allocation_iterations": 1000,
+      "allocations": 4000
+    },
+    {
+      "pair": 6,
+      "build": "baseline",
+      "order": 1,
+      "scenario": "emit_one_listener",
+      "iterations": 200000,
+      "elapsed_ns": 18636199,
+      "allocation_iterations": 1000,
+      "allocations": 2000
+    },
+    {
+      "pair": 6,
+      "build": "baseline",
+      "order": 1,
+      "scenario": "get_one_middleware",
+      "iterations": 200000,
+      "elapsed_ns": 49861137,
+      "allocation_iterations": 1000,
+      "allocations": 7000
+    },
+    {
+      "pair": 6,
+      "build": "baseline",
+      "order": 1,
+      "scenario": "emit_observed",
+      "iterations": 200000,
+      "elapsed_ns": 36659306,
+      "allocation_iterations": 1000,
+      "allocations": 5000
+    },
+    {
+      "pair": 6,
+      "build": "candidate",
+      "order": 2,
+      "scenario": "emit_empty",
+      "iterations": 200000,
+      "elapsed_ns": 3975272,
+      "allocation_iterations": 1000,
+      "allocations": 0
+    },
+    {
+      "pair": 6,
+      "build": "candidate",
+      "order": 2,
+      "scenario": "waterfall_empty",
+      "iterations": 200000,
+      "elapsed_ns": 3575709,
+      "allocation_iterations": 1000,
+      "allocations": 0
+    },
+    {
+      "pair": 6,
+      "build": "candidate",
+      "order": 2,
+      "scenario": "get_unintercepted",
+      "iterations": 200000,
+      "elapsed_ns": 25149489,
+      "allocation_iterations": 1000,
+      "allocations": 1000
+    },
+    {
+      "pair": 6,
+      "build": "candidate",
+      "order": 2,
+      "scenario": "emit_one_listener",
+      "iterations": 200000,
+      "elapsed_ns": 14425757,
+      "allocation_iterations": 1000,
+      "allocations": 1000
+    },
+    {
+      "pair": 6,
+      "build": "candidate",
+      "order": 2,
+      "scenario": "get_one_middleware",
+      "iterations": 200000,
+      "elapsed_ns": 44318688,
+      "allocation_iterations": 1000,
+      "allocations": 6000
+    },
+    {
+      "pair": 6,
+      "build": "candidate",
+      "order": 2,
+      "scenario": "emit_observed",
+      "iterations": 200000,
+      "elapsed_ns": 28792708,
+      "allocation_iterations": 1000,
+      "allocations": 4000
+    },
+    {
+      "pair": 7,
+      "build": "candidate",
+      "order": 1,
+      "scenario": "emit_empty",
+      "iterations": 200000,
+      "elapsed_ns": 3923845,
+      "allocation_iterations": 1000,
+      "allocations": 0
+    },
+    {
+      "pair": 7,
+      "build": "candidate",
+      "order": 1,
+      "scenario": "waterfall_empty",
+      "iterations": 200000,
+      "elapsed_ns": 3533776,
+      "allocation_iterations": 1000,
+      "allocations": 0
+    },
+    {
+      "pair": 7,
+      "build": "candidate",
+      "order": 1,
+      "scenario": "get_unintercepted",
+      "iterations": 200000,
+      "elapsed_ns": 30793518,
+      "allocation_iterations": 1000,
+      "allocations": 1000
+    },
+    {
+      "pair": 7,
+      "build": "candidate",
+      "order": 1,
+      "scenario": "emit_one_listener",
+      "iterations": 200000,
+      "elapsed_ns": 14932019,
+      "allocation_iterations": 1000,
+      "allocations": 1000
+    },
+    {
+      "pair": 7,
+      "build": "candidate",
+      "order": 1,
+      "scenario": "get_one_middleware",
+      "iterations": 200000,
+      "elapsed_ns": 48051050,
+      "allocation_iterations": 1000,
+      "allocations": 6000
+    },
+    {
+      "pair": 7,
+      "build": "candidate",
+      "order": 1,
+      "scenario": "emit_observed",
+      "iterations": 200000,
+      "elapsed_ns": 31910076,
+      "allocation_iterations": 1000,
+      "allocations": 4000
+    },
+    {
+      "pair": 7,
+      "build": "baseline",
+      "order": 2,
+      "scenario": "emit_empty",
+      "iterations": 200000,
+      "elapsed_ns": 6779725,
+      "allocation_iterations": 1000,
+      "allocations": 1000
+    },
+    {
+      "pair": 7,
+      "build": "baseline",
+      "order": 2,
+      "scenario": "waterfall_empty",
+      "iterations": 200000,
+      "elapsed_ns": 12271289,
+      "allocation_iterations": 1000,
+      "allocations": 3000
+    },
+    {
+      "pair": 7,
+      "build": "baseline",
+      "order": 2,
+      "scenario": "get_unintercepted",
+      "iterations": 200000,
+      "elapsed_ns": 31314953,
+      "allocation_iterations": 1000,
+      "allocations": 4000
+    },
+    {
+      "pair": 7,
+      "build": "baseline",
+      "order": 2,
+      "scenario": "emit_one_listener",
+      "iterations": 200000,
+      "elapsed_ns": 17074860,
+      "allocation_iterations": 1000,
+      "allocations": 2000
+    },
+    {
+      "pair": 7,
+      "build": "baseline",
+      "order": 2,
+      "scenario": "get_one_middleware",
+      "iterations": 200000,
+      "elapsed_ns": 47165805,
+      "allocation_iterations": 1000,
+      "allocations": 7000
+    },
+    {
+      "pair": 7,
+      "build": "baseline",
+      "order": 2,
+      "scenario": "emit_observed",
+      "iterations": 200000,
+      "elapsed_ns": 32008422,
+      "allocation_iterations": 1000,
+      "allocations": 5000
+    },
+    {
+      "pair": 8,
+      "build": "baseline",
+      "order": 1,
+      "scenario": "emit_empty",
+      "iterations": 200000,
+      "elapsed_ns": 6763982,
+      "allocation_iterations": 1000,
+      "allocations": 1000
+    },
+    {
+      "pair": 8,
+      "build": "baseline",
+      "order": 1,
+      "scenario": "waterfall_empty",
+      "iterations": 200000,
+      "elapsed_ns": 12401623,
+      "allocation_iterations": 1000,
+      "allocations": 3000
+    },
+    {
+      "pair": 8,
+      "build": "baseline",
+      "order": 1,
+      "scenario": "get_unintercepted",
+      "iterations": 200000,
+      "elapsed_ns": 32126437,
+      "allocation_iterations": 1000,
+      "allocations": 4000
+    },
+    {
+      "pair": 8,
+      "build": "baseline",
+      "order": 1,
+      "scenario": "emit_one_listener",
+      "iterations": 200000,
+      "elapsed_ns": 16988863,
+      "allocation_iterations": 1000,
+      "allocations": 2000
+    },
+    {
+      "pair": 8,
+      "build": "baseline",
+      "order": 1,
+      "scenario": "get_one_middleware",
+      "iterations": 200000,
+      "elapsed_ns": 47553371,
+      "allocation_iterations": 1000,
+      "allocations": 7000
+    },
+    {
+      "pair": 8,
+      "build": "baseline",
+      "order": 1,
+      "scenario": "emit_observed",
+      "iterations": 200000,
+      "elapsed_ns": 32302509,
+      "allocation_iterations": 1000,
+      "allocations": 5000
+    },
+    {
+      "pair": 8,
+      "build": "candidate",
+      "order": 2,
+      "scenario": "emit_empty",
+      "iterations": 200000,
+      "elapsed_ns": 4131124,
+      "allocation_iterations": 1000,
+      "allocations": 0
+    },
+    {
+      "pair": 8,
+      "build": "candidate",
+      "order": 2,
+      "scenario": "waterfall_empty",
+      "iterations": 200000,
+      "elapsed_ns": 3694104,
+      "allocation_iterations": 1000,
+      "allocations": 0
+    },
+    {
+      "pair": 8,
+      "build": "candidate",
+      "order": 2,
+      "scenario": "get_unintercepted",
+      "iterations": 200000,
+      "elapsed_ns": 25725775,
+      "allocation_iterations": 1000,
+      "allocations": 1000
+    },
+    {
+      "pair": 8,
+      "build": "candidate",
+      "order": 2,
+      "scenario": "emit_one_listener",
+      "iterations": 200000,
+      "elapsed_ns": 14810498,
+      "allocation_iterations": 1000,
+      "allocations": 1000
+    },
+    {
+      "pair": 8,
+      "build": "candidate",
+      "order": 2,
+      "scenario": "get_one_middleware",
+      "iterations": 200000,
+      "elapsed_ns": 45211233,
+      "allocation_iterations": 1000,
+      "allocations": 6000
+    },
+    {
+      "pair": 8,
+      "build": "candidate",
+      "order": 2,
+      "scenario": "emit_observed",
+      "iterations": 200000,
+      "elapsed_ns": 30024957,
+      "allocation_iterations": 1000,
+      "allocations": 4000
+    },
+    {
+      "pair": 9,
+      "build": "candidate",
+      "order": 1,
+      "scenario": "emit_empty",
+      "iterations": 200000,
+      "elapsed_ns": 3917927,
+      "allocation_iterations": 1000,
+      "allocations": 0
+    },
+    {
+      "pair": 9,
+      "build": "candidate",
+      "order": 1,
+      "scenario": "waterfall_empty",
+      "iterations": 200000,
+      "elapsed_ns": 3723248,
+      "allocation_iterations": 1000,
+      "allocations": 0
+    },
+    {
+      "pair": 9,
+      "build": "candidate",
+      "order": 1,
+      "scenario": "get_unintercepted",
+      "iterations": 200000,
+      "elapsed_ns": 25597764,
+      "allocation_iterations": 1000,
+      "allocations": 1000
+    },
+    {
+      "pair": 9,
+      "build": "candidate",
+      "order": 1,
+      "scenario": "emit_one_listener",
+      "iterations": 200000,
+      "elapsed_ns": 14543563,
+      "allocation_iterations": 1000,
+      "allocations": 1000
+    },
+    {
+      "pair": 9,
+      "build": "candidate",
+      "order": 1,
+      "scenario": "get_one_middleware",
+      "iterations": 200000,
+      "elapsed_ns": 45074681,
+      "allocation_iterations": 1000,
+      "allocations": 6000
+    },
+    {
+      "pair": 9,
+      "build": "candidate",
+      "order": 1,
+      "scenario": "emit_observed",
+      "iterations": 200000,
+      "elapsed_ns": 31283195,
+      "allocation_iterations": 1000,
+      "allocations": 4000
+    },
+    {
+      "pair": 9,
+      "build": "baseline",
+      "order": 2,
+      "scenario": "emit_empty",
+      "iterations": 200000,
+      "elapsed_ns": 9092960,
+      "allocation_iterations": 1000,
+      "allocations": 1000
+    },
+    {
+      "pair": 9,
+      "build": "baseline",
+      "order": 2,
+      "scenario": "waterfall_empty",
+      "iterations": 200000,
+      "elapsed_ns": 15740489,
+      "allocation_iterations": 1000,
+      "allocations": 3000
+    },
+    {
+      "pair": 9,
+      "build": "baseline",
+      "order": 2,
+      "scenario": "get_unintercepted",
+      "iterations": 200000,
+      "elapsed_ns": 37648926,
+      "allocation_iterations": 1000,
+      "allocations": 4000
+    },
+    {
+      "pair": 9,
+      "build": "baseline",
+      "order": 2,
+      "scenario": "emit_one_listener",
+      "iterations": 200000,
+      "elapsed_ns": 18238799,
+      "allocation_iterations": 1000,
+      "allocations": 2000
+    },
+    {
+      "pair": 9,
+      "build": "baseline",
+      "order": 2,
+      "scenario": "get_one_middleware",
+      "iterations": 200000,
+      "elapsed_ns": 51144451,
+      "allocation_iterations": 1000,
+      "allocations": 7000
+    },
+    {
+      "pair": 9,
+      "build": "baseline",
+      "order": 2,
+      "scenario": "emit_observed",
+      "iterations": 200000,
+      "elapsed_ns": 36529144,
+      "allocation_iterations": 1000,
+      "allocations": 5000
+    },
+    {
+      "pair": 10,
+      "build": "baseline",
+      "order": 1,
+      "scenario": "emit_empty",
+      "iterations": 200000,
+      "elapsed_ns": 6632337,
+      "allocation_iterations": 1000,
+      "allocations": 1000
+    },
+    {
+      "pair": 10,
+      "build": "baseline",
+      "order": 1,
+      "scenario": "waterfall_empty",
+      "iterations": 200000,
+      "elapsed_ns": 12372419,
+      "allocation_iterations": 1000,
+      "allocations": 3000
+    },
+    {
+      "pair": 10,
+      "build": "baseline",
+      "order": 1,
+      "scenario": "get_unintercepted",
+      "iterations": 200000,
+      "elapsed_ns": 31599585,
+      "allocation_iterations": 1000,
+      "allocations": 4000
+    },
+    {
+      "pair": 10,
+      "build": "baseline",
+      "order": 1,
+      "scenario": "emit_one_listener",
+      "iterations": 200000,
+      "elapsed_ns": 17191203,
+      "allocation_iterations": 1000,
+      "allocations": 2000
+    },
+    {
+      "pair": 10,
+      "build": "baseline",
+      "order": 1,
+      "scenario": "get_one_middleware",
+      "iterations": 200000,
+      "elapsed_ns": 47534953,
+      "allocation_iterations": 1000,
+      "allocations": 7000
+    },
+    {
+      "pair": 10,
+      "build": "baseline",
+      "order": 1,
+      "scenario": "emit_observed",
+      "iterations": 200000,
+      "elapsed_ns": 46861003,
+      "allocation_iterations": 1000,
+      "allocations": 5000
+    },
+    {
+      "pair": 10,
+      "build": "candidate",
+      "order": 2,
+      "scenario": "emit_empty",
+      "iterations": 200000,
+      "elapsed_ns": 4074650,
+      "allocation_iterations": 1000,
+      "allocations": 0
+    },
+    {
+      "pair": 10,
+      "build": "candidate",
+      "order": 2,
+      "scenario": "waterfall_empty",
+      "iterations": 200000,
+      "elapsed_ns": 3616219,
+      "allocation_iterations": 1000,
+      "allocations": 0
+    },
+    {
+      "pair": 10,
+      "build": "candidate",
+      "order": 2,
+      "scenario": "get_unintercepted",
+      "iterations": 200000,
+      "elapsed_ns": 25091583,
+      "allocation_iterations": 1000,
+      "allocations": 1000
+    },
+    {
+      "pair": 10,
+      "build": "candidate",
+      "order": 2,
+      "scenario": "emit_one_listener",
+      "iterations": 200000,
+      "elapsed_ns": 14554568,
+      "allocation_iterations": 1000,
+      "allocations": 1000
+    },
+    {
+      "pair": 10,
+      "build": "candidate",
+      "order": 2,
+      "scenario": "get_one_middleware",
+      "iterations": 200000,
+      "elapsed_ns": 45081441,
+      "allocation_iterations": 1000,
+      "allocations": 6000
+    },
+    {
+      "pair": 10,
+      "build": "candidate",
+      "order": 2,
+      "scenario": "emit_observed",
+      "iterations": 200000,
+      "elapsed_ns": 30352653,
+      "allocation_iterations": 1000,
+      "allocations": 4000
+    }
+  ],
+  "validation": {
+    "candidate_tests": {
+      "command": "cargo test --locked --offline -p cordis -p cordis-up -p cordis-routing",
+      "passed": 223,
+      "failed": 0,
+      "ignored": 1
+    },
+    "candidate_release_allocation_tests": {
+      "passed": 3,
+      "ignored_timing_entry": 1
+    },
+    "baseline_release_allocation_tests": {
+      "expected_failures": 3,
+      "observed_allocations": {
+        "emit_empty": 1,
+        "waterfall_empty": 3,
+        "get_unintercepted": 4
+      }
+    },
+    "baseline_drop_order_test": "passed in isolated target; Ok, Err and panic preserve args before terminal capture",
+    "formatting": "rustfmt --check on all changed Rust files passed",
+    "clippy": "cargo clippy --locked --offline -p cordis --all-targets -- -D warnings passed"
+  }
+}
