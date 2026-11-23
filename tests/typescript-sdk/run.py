@@ -52,7 +52,9 @@ def main():
         ("migration", "migration.py", ["migration"]),
         ("rollback", "migration.py", ["rollback", "rollback"]),
     ]
-    result = []
+    command(["node", "--test", "tests/typescript-sdk/terminal-ownership.mjs", "tests/typescript-sdk/queued-timeout.mjs"],
+            evidence / "terminal-ownership.log", environment)
+    result = [{"scenario": "terminal-ownership", "exit": 0}]
     for name, script, arguments in scenarios:
         command(["conda", "run", "--no-capture-output", "-n", "base", "python", str(Path(__file__).with_name(script)), *arguments], evidence / f"{name}.log", environment)
         result.append({"scenario": name, "exit": 0})

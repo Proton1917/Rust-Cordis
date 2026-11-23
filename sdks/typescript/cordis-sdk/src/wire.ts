@@ -6,6 +6,7 @@ import { currentSignal, supportsInvocationBudget, type Runtime } from "./runtime
 import { checkValue, type ValueLimits } from "./budget.js";
 
 interface Pending {
+    ownsDeadline: boolean;
     resolve(value: Payload): void;
     reject(error: unknown): void;
 }
@@ -115,34 +116,36 @@ export class Connection {
         const deadline = Math.min(local, (signal && this.deadlines.get(signal)) ?? local);
         let writing = false;
         let cancelled = false;
-        let rejectResponse: (error: unknown) => void;
+        let received: Payload | undefined;
         let timer: ReturnType<typeof setTimeout>;
         let cancel: () => void;
         let expire: () => void;
         const result = new Promise<Payload>((resolve, reject) => {
-            rejectResponse = reject;
-            this.pending.set(id, { resolve, reject });
+            this.pending.set(id, {
+                ownsDeadline: deadline === local,
+                resolve(payload) { received = payload; resolve(payload); },
+                reject,
+            });
             cancel = () => {
-                if (cancelled) return;
+                const pending = this.claimPending(id);
+                if (!pending) return;
                 cancelled = true;
-                reject(signal?.reason instanceof CordisError ? signal.reason : new CordisError(7, "调用已取消"));
+                pending.reject(signal?.reason instanceof CordisError ? signal.reason : new CordisError(7, "调用已取消"));
                 if (writing) this.notifySoon("cancel", { id });
             };
             signal?.addEventListener("abort", cancel, { once: true });
             expire = () => {
-                if (cancelled) return;
+                const pending = this.claimPending(id, true);
+                if (!pending) return;
                 cancelled = true;
-                reject(new CordisError(6, "请求超过截止时间"));
+                pending.reject(new CordisError(6, "请求超过截止时间"));
                 if (writing) this.notifySoon("cancel", { id });
-                if (deadline === local && ++this.timeouts >= this.limits.consecutiveTimeouts)
-                    this.fail(new CordisError(6, "连续请求超时"));
             };
             timer = setTimeout(expire, Math.max(0, deadline - started));
         });
         // 截止时间同时覆盖写入等待，结果 Promise 从创建起即具有失败接收方。
         const completed = result.finally(() => {
             clearTimeout(timer);
-            this.pending.delete(id);
             signal?.removeEventListener("abort", cancel);
         });
         try {
@@ -151,14 +154,14 @@ export class Connection {
             }
             const sent = this.send({ request: { id, method, params } }, offers, () => {
                 if (performance.now() >= deadline) expire();
-                writing = !cancelled;
+                writing = !cancelled && this.pending.has(id);
                 return writing;
             });
             const [, payload] = await Promise.all([sent, completed]);
-            this.timeouts = 0;
             return payload;
         } catch (error) {
-            rejectResponse!(error);
+            this.claimPending(id)?.reject(error);
+            received?.close();
             throw error;
         }
     }
@@ -249,15 +252,26 @@ export class Connection {
         } else throw new CordisError(3, "消息类别无效");
     }
 
+    /** DOC-16 §10：终态先消费等待项，再更新由本调用拥有的连接健康。 */
+    private claimPending(id: Identifier, timedOut?: boolean): Pending | undefined {
+        const pending = this.pending.get(id);
+        if (!pending) return undefined;
+        this.pending.delete(id);
+        if (timedOut === false) this.timeouts = 0;
+        else if (timedOut && pending.ownsDeadline && ++this.timeouts >= this.limits.consecutiveTimeouts)
+            this.fail(new CordisError(6, "连续请求超时"));
+        return pending;
+    }
+
     private response(body: Fields): void {
         const id = identifier(body.id);
         const result = fields(body.result);
-        const pending = this.pending.get(id);
         if ("error" in result) {
             const error = fields(result.error);
-            pending?.reject(new CordisError(error.code, error.message, error.detail));
+            this.claimPending(id, error.code === 6)?.reject(new CordisError(error.code, error.message, error.detail));
         } else if ("ok" in result) {
             const payload = this.runtime.payload(result.ok);
+            const pending = this.claimPending(id, false);
             if (pending) pending.resolve(payload);
             else payload.close();
         } else throw new CordisError(2, "响应需要 ok 或 error");
