@@ -3,7 +3,7 @@ import { Decoder, Encoder, setSizeLimits } from "cbor-x";
 import { CordisError, fields, identifier, type Identifier, type Fields } from "./types.js";
 import type { Payload } from "./bindings.js";
 import { currentSignal, supportsInvocationBudget, type Runtime } from "./runtime.js";
-import { checkValue, type ValueLimits } from "./budget.js";
+import { checkMessage, type ValueLimits } from "./budget.js";
 
 interface Pending {
     ownsDeadline: boolean;
@@ -73,7 +73,7 @@ export class Connection {
             if (this.closed) throw new CordisError(4, "核心连接已关闭");
             if (this.writes >= this.limits.queueCapacity)
                 throw new CordisError(8, "发送队列额度耗尽");
-            checkValue(message, this.limits);
+            checkMessage(message, this.limits);
             const data = this.encoder.encode(message);
             if (data.length > this.limits.maxFrame) throw new CordisError(8, "消息超过帧长度上限");
             const framed = new Uint8Array(data.length + 4);
@@ -226,7 +226,7 @@ export class Connection {
                         bytes = partial;
                     }
                     const message = this.decoder.decode(bytes);
-                    checkValue(message, this.limits);
+                    checkMessage(message, this.limits);
                     headerBytes = received = 0;
                     partial = undefined;
                     this.receive(message);

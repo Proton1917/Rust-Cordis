@@ -131,7 +131,12 @@ def main():
         "realms",
         "migration",
     ]
-    results = []
+    boundary_environment = {**environment, "PYTHONPATH": os.pathsep.join([
+        str(options.source.resolve() / "sdks/python"), environment["CORDIS_TEST_DEPENDENCIES"],
+    ])}
+    command(python + ["-m", "unittest", "discover", "-s", "tests/python-sdk", "-p", "test_*.py"],
+            evidence / "sdk-boundaries.log", options.source.resolve(), boundary_environment)
+    results = [{"scenario": "sdk-boundaries", "exit": 0}]
     for scenario in scenarios:
         script = "resources" if scenario == "transfer" else scenario
         arguments = python + [str(Path(__file__).with_name(script + ".py"))]

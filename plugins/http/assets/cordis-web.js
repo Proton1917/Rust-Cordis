@@ -23,7 +23,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 */
-// node_modules/cbor-x/decode.js
+// ../../../pr04-node-terminal/sdks/typescript/node_modules/cbor-x/decode.js
 var decoder;
 try {
   decoder = new TextDecoder();
@@ -1088,7 +1088,7 @@ var FLOAT32_OPTIONS = {
   DECIMAL_FIT: 4
 };
 
-// node_modules/cbor-x/encode.js
+// ../../../pr04-node-terminal/sdks/typescript/node_modules/cbor-x/encode.js
 var textEncoder;
 try {
   textEncoder = new TextEncoder();
@@ -2308,13 +2308,16 @@ function configuration(value) {
 }
 
 // cordis-sdk/src/budget.ts
-function checkValue(root, limits) {
-  const pending = [[root, 0]];
+function checkValue(root, limits, overhead = 0) {
+  const pending = [[root, overhead]];
   let nodes = 0;
   while (pending.length) {
     const [value, depth] = pending.pop();
-    if (++nodes > limits.maxValues || depth > limits.maxDepth)
+    if (++nodes > limits.maxValues)
       throw new CordisError(8, "\u503C\u56FE\u8D85\u8FC7\u6DF1\u5EA6\u6216\u8282\u70B9\u9884\u7B97");
+    const container = value instanceof Tag || Array.isArray(value) || value instanceof Map || value && typeof value === "object" && !(value instanceof Uint8Array);
+    if (container && depth >= limits.maxDepth)
+      throw new CordisError(8, "\u503C\u56FE\u8D85\u8FC7\u6DF1\u5EA6\u9884\u7B97");
     if (value instanceof Tag) pending.push([value.value, depth + 1]);
     else if (Array.isArray(value)) {
       if (value.length > limits.maxCollection) throw new CordisError(8, "\u6570\u7EC4\u8D85\u8FC7\u5143\u7D20\u9884\u7B97");
@@ -2328,6 +2331,50 @@ function checkValue(root, limits) {
       for (const [key, item] of entries) pending.push([key, depth + 1], [item, depth + 1]);
     }
   }
+}
+function checkMessage(message, limits) {
+  const children = (value) => {
+    if (value instanceof Tag) return [value.value];
+    if (Array.isArray(value)) return value;
+    if (value instanceof Map) return function* () {
+      for (const [key, item] of value) {
+        yield key;
+        yield item;
+      }
+    }();
+    if (value && typeof value === "object" && !(value instanceof Uint8Array))
+      return function* () {
+        for (const key in value) if (Object.hasOwn(value, key)) {
+          yield key;
+          yield value[key];
+        }
+      }();
+    return void 0;
+  };
+  const stack = [[[message].values(), 0]];
+  while (stack.length) {
+    const [iterator, depth] = stack[stack.length - 1];
+    const next = iterator.next();
+    if (next.done) {
+      stack.pop();
+      continue;
+    }
+    const nested = children(next.value);
+    if (nested) {
+      if (depth >= limits.maxDepth) throw new CordisError(8, "\u6D88\u606F\u8D85\u8FC7\u6DF1\u5EA6\u9884\u7B97");
+      stack.push([nested[Symbol.iterator](), depth + 1]);
+    }
+  }
+  const get = (value, key) => value instanceof Map ? value.get(key) : value && typeof value === "object" ? value[key] : void 0;
+  const has = (value, key) => value instanceof Map ? value.has(key) : !!value && typeof value === "object" && Object.hasOwn(value, key);
+  for (const kind of ["request", "notification"]) {
+    const body = get(message, kind);
+    if (has(body, "params")) checkValue(get(body, "params"), limits, 2);
+  }
+  const result = get(get(message, "response"), "result");
+  if (has(result, "ok")) checkValue(get(result, "ok"), limits, 3);
+  const error = get(result, "error");
+  if (has(error, "detail")) checkValue(get(error, "detail"), limits, 4);
 }
 
 // cordis-sdk/src/wire.ts
@@ -2376,7 +2423,7 @@ var Connection = class {
       if (this.closed) throw new CordisError(4, "\u6838\u5FC3\u8FDE\u63A5\u5DF2\u5173\u95ED");
       if (this.writes >= this.limits.queueCapacity)
         throw new CordisError(8, "\u53D1\u9001\u961F\u5217\u989D\u5EA6\u8017\u5C3D");
-      checkValue(message, this.limits);
+      checkMessage(message, this.limits);
       const data = this.encoder.encode(message);
       if (data.length > this.limits.maxFrame) throw new CordisError(8, "\u6D88\u606F\u8D85\u8FC7\u5E27\u957F\u5EA6\u4E0A\u9650");
       const framed = new Uint8Array(data.length + 4);
@@ -2524,7 +2571,7 @@ var Connection = class {
             bytes = partial;
           }
           const message = this.decoder.decode(bytes);
-          checkValue(message, this.limits);
+          checkMessage(message, this.limits);
           headerBytes = received = 0;
           partial = void 0;
           this.receive(message);
