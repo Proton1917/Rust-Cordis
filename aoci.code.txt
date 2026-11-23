@@ -334,7 +334,7 @@ readme.rs[TB3T]: F:演示确定性宿主中的效应登记、反向清理与组�
 context.rs[RB8M]: F:建立共享内核的持久上下文视图，处理扩展、隔离和拦截层 | R:code:crates/cordis/src/kernel.rs,code:crates/cordis/src/reflect.rs | A:Context,Realm | S:同类型扩展由最近一层覆盖；拦截元数据在服务访问时合并
 effect.rs[RW9L]: F:管理组件可逆效应、嵌套清理、异步步骤和等待者 | R:code:crates/cordis/src/fiber.rs,code:crates/cordis/src/kernel.rs | A:Effect,EffectScope,EffectMeta | S:唯一逆操作开始后仍由实例持有到清理完成；任务拒收时保留原 Future 供拥有者继续清理
 error.rs[CG5T]: F:提供可克隆的内核错误、登记位置及聚合原因 | R:code:crates/cordis/src/effect.rs | A:Error,Result | S:-
-events.rs[MM8L]: F:登记可释放监听器并从快照派发类型化及命名的同步、异步和瀑布事件 | R:code:crates/cordis/src/effect.rs,code:crates/cordis/src/kernel.rs | A:Event,EventOptions | S:一次性回调先消费登记；同步派发共享回调调用逻辑且各自保留短路或完整遍历语义
+events.rs[MM8L]: F:登记可释放监听器并从快照派发类型化及命名的同步、异步和瀑布事件 | R:code:crates/cordis/src/effect.rs,code:crates/cordis/src/kernel.rs | A:Event,EventOptions,Context::waterfall_filtered | S:一次性回调先消费登记；派发观察先于监听器取快照，静态事件名在生成观察记录时才转为 Arc；空瀑布在过滤后执行终点，正常返回和展开都先释放参数再释放终点闭包
 fiber.rs[RW9L]: F:按绑定和纪元调和组件加载与清理，提供挂载父视图和稳定状态查询 | R:code:crates/cordis/src/registry.rs,code:crates/cordis/src/effect.rs,code:crates/cordis/src/reflect.rs | A:Fiber,Epoch,FiberState,parent_context | S:等待判定与通知共用稳定条件；卸载过程中登记的新效应须结束后才切换纪元
 kernel.rs[RB8S]: F:持有内核纤程、效应、绑定与待处理工作，并移交任务给宿主执行器 | R:code:crates/cordis/src/fiber.rs,code:crates/cordis/src/context.rs | A:Clock,Spawn,Task | S:首次轮询从共享槽取走原 Future，宿主拒收时只在仍独占该槽时交还原任务
 lib.rs[RB6T]: F:公开内核的上下文、实例、效应、事件与服务接口 | R:code:crates/cordis/src/context.rs,code:crates/cordis/src/fiber.rs | A:- | S:-
@@ -506,6 +506,8 @@ release-v0.2.5.json[OV5T]: F:记录 v0.2.5 组件版本、契约、实际包和�
 test-evidence-pruning.json[OQ3T]: F:记录测试证据的已保留与已清理用例、恢复位置及释放空间 | R:code:crates/cordis-testkit/src/cleanup.rs | A:- | S:-
 v0.2.8-review.md[SQ6T]: F:记录 v0.2.8 的十六项修复、测试范围、热替换驻留内存和分片接收测量 | R:code:crates/cordis-runtime/src/status.rs,code:sdks/typescript/cordis-sdk/src/wire.ts | A:- | S:原生数据来自八线程五十轮换库场景；Node 样本计入四个分片应答的接收和解码
 deployment-revision.md[SP6S]: F:汇总部署修订的源码成本、配对性能测量、分配次数及跨模块业务验收证据 | R:code:benchmarks/deployment/workload.py,code:benchmarks/deployment/apply_decode_allocations.rs,code:tools/revision_lines.py | A:- | S:宿主优化与调用预算协商后的数据分别绑定对应构建；全口径与手写源码的净变化分别报告
+kernel-event-hot-paths.json[TP5L]: F:记录六类内核调用的配对原始样本、候选源码身份、环境及验证结果 | R:code:docs/measurements/kernel-event-hot-paths.md,code:benchmarks/kernel/README.md | A:summary,samples,validation | S:第零组为探索样本，正式统计取其余十组；计时和分配数据来自两个窗口
+kernel-event-hot-paths.md[SP5T]: F:报告同步事件、瀑布调用与服务读取的分配和耗时，说明配对实验与回归结果 | R:code:docs/measurements/kernel-event-hot-paths.json,code:benchmarks/kernel/README.md | A:- | S:耗时取批量平均调用成本的中位数，配对比值按同组候选耗时除以基线耗时
 
 ===/<repository>/docs/measurements/m21-performance/===
 README.md[SP5T]: F:解释三类性能量测的条件、口径、历史样本和直接调用负载差异 | R:code:docs/measurements/m21-performance/summary.json | A:- | S:-
@@ -882,3 +884,6 @@ replacement.json[TR4L]: F:保存五十次原生替换的影响数、跨阈值重
 size-baseline.json[TQ4M]: F:按包、职责及实现类别保存审查基线的源码物理行数 | R:code:tools/revision_lines.py | A:- | S:-
 size-candidate.json[TQ4M]: F:记录修订工作树按包、职责和类别计算的源码物理行数 | R:code:tools/revision_lines.py | A:- | S:-
 workload-inputs.json[FP4T]: F:保存配对工作负载的平台、探针及两套程序的大小和修改时间 | R:code:benchmarks/deployment/workload.py | A:- | S:-
+
+===/<repository>/benchmarks/kernel/===
+README.md[SP5T]: F:说明内核事件与服务读取的分配预算、计时入口和配对复现方法 | R:code:docs/measurements/kernel-event-hot-paths.md | A:CORDIS_BENCH_ITERATIONS,CORDIS_BENCH_ROUNDS | S:分配计数与计时分开，比较修订时用相同测试源码和独立构建目录

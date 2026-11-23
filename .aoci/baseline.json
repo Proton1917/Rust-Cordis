@@ -1,7 +1,7 @@
 {
   "version": 1,
   "created_at": "2026-11-19T12:29:42Z",
-  "updated_at": "2026-11-22T21:02:32Z",
+  "updated_at": "2026-11-23T06:49:07Z",
   "files": {
     ".gitattributes": {
       "role": "index",
@@ -53,9 +53,9 @@
     },
     "aoci.code.txt": {
       "role": "index",
-      "sha256": "f67fd7b4298af920a19f8e5f47acb716b7ac1aa344e4f345531440c4afff40f0",
-      "size": 127217,
-      "normalized_sha256": "f67fd7b4298af920a19f8e5f47acb716b7ac1aa344e4f345531440c4afff40f0"
+      "sha256": "7d7dd596508fc7c364f57193bff724d885cb627b6709fa071ca03c995e4b44dd",
+      "size": 128376,
+      "normalized_sha256": "7d7dd596508fc7c364f57193bff724d885cb627b6709fa071ca03c995e4b44dd"
     },
     "aoci.meta.txt": {
       "role": "index",
@@ -200,6 +200,12 @@
       "sha256": "ed4bd37c7a632d1638145325525a585e8406d22e2c9ecec34d49609151755e58",
       "size": 268,
       "normalized_sha256": "ed4bd37c7a632d1638145325525a585e8406d22e2c9ecec34d49609151755e58"
+    },
+    "benchmarks/kernel/README.md": {
+      "role": "index",
+      "sha256": "1849b70d75e42cc8f283c512653a913a4c2369169d26629d0e8931fb905f20c3",
+      "size": 2057,
+      "normalized_sha256": "1849b70d75e42cc8f283c512653a913a4c2369169d26629d0e8931fb905f20c3"
     },
     "benchmarks/multilanguage/README.md": {
       "role": "index",
@@ -1721,9 +1727,9 @@
     },
     "crates/cordis/src/events.rs": {
       "role": "index",
-      "sha256": "5d73af210a59179c7b82e6134453123915b20c31e496c83a363143bae7dde9ef",
-      "size": 28149,
-      "normalized_sha256": "5d73af210a59179c7b82e6134453123915b20c31e496c83a363143bae7dde9ef"
+      "sha256": "6b1d06a1f81d16c31406b32f828f60b70bf127a1349e8e0b1531d6ace0a69cc6",
+      "size": 28421,
+      "normalized_sha256": "6b1d06a1f81d16c31406b32f828f60b70bf127a1349e8e0b1531d6ace0a69cc6"
     },
     "crates/cordis/src/fiber.rs": {
       "role": "index",
@@ -1815,11 +1821,17 @@
       "size": 8437,
       "normalized_sha256": "58f54187142673654ba41c2a359129f2d7b6b14bd52c3d3ee1a2860f772865ef"
     },
+    "crates/cordis/tests/event_hot_paths.rs": {
+      "role": "observe",
+      "sha256": "5b81c1ece0e05a94a429e14d38abbd17774b51486d02f58ffd7b1e155412ab5c",
+      "size": 6240,
+      "normalized_sha256": "5b81c1ece0e05a94a429e14d38abbd17774b51486d02f58ffd7b1e155412ab5c"
+    },
     "crates/cordis/tests/events.rs": {
       "role": "observe",
-      "sha256": "0f5068962a091034736446dc8a5146a74c64f55396c05f02721d70833e89e704",
-      "size": 28786,
-      "normalized_sha256": "0f5068962a091034736446dc8a5146a74c64f55396c05f02721d70833e89e704"
+      "sha256": "9c82fa49ec6e89f875995bbc0463d06d12a22badf0026da652f6ccc474fb087a",
+      "size": 32386,
+      "normalized_sha256": "9c82fa49ec6e89f875995bbc0463d06d12a22badf0026da652f6ccc474fb087a"
     },
     "crates/cordis/tests/events_lifecycle.rs": {
       "role": "observe",
@@ -2560,6 +2572,18 @@
       "sha256": "7e6367642f6a27f7a8bd6cf58cd11e965d630eeb1e3e83a00babd739f3280a84",
       "size": 2548,
       "normalized_sha256": "7e6367642f6a27f7a8bd6cf58cd11e965d630eeb1e3e83a00babd739f3280a84"
+    },
+    "docs/measurements/kernel-event-hot-paths.json": {
+      "role": "index",
+      "sha256": "ae03671cc4af379eeda6124ecc163012d9f51a4b53aa344a9ebc390751e9ea42",
+      "size": 35556,
+      "normalized_sha256": "ae03671cc4af379eeda6124ecc163012d9f51a4b53aa344a9ebc390751e9ea42"
+    },
+    "docs/measurements/kernel-event-hot-paths.md": {
+      "role": "index",
+      "sha256": "b6615e78084ce6908610277d14e7a127d56e6a854108c45abc2a454f0ab3eb68",
+      "size": 3718,
+      "normalized_sha256": "b6615e78084ce6908610277d14e7a127d56e6a854108c45abc2a454f0ab3eb68"
     },
     "docs/measurements/m14-acceptance.md": {
       "role": "index",
