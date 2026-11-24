@@ -814,17 +814,17 @@ runtime.ts[RU6S]: F:装载、激活和清理网页组件，并向核心报告页
 socket.ts[IN5T]: F:把 WebSocket 二进制消息转换为共享 UP/1 输入和输出流 | R:code:sdks/typescript/cordis-sdk/src/wire.ts | A:Socket | S:-
 
 ===/<repository>/skills/cordis-first-principles/===
-SKILL.md[SE5T]: F:指导 Rust-cordis 插件的职责划分、事实来源、资源和版本化契约 | R:code:skills/cordis-first-principles/references/principles.md,code:skills/cordis-first-principles/references/plugin-basics.md | A:- | S:-
+SKILL.md[SE5T]: F:说明 Rust-cordis 插件的事实归属与开发入口，默认一个包交付一项完整业务能力 | R:code:skills/cordis-first-principles/references/principles.md,code:skills/cordis-first-principles/references/plugin-basics.md | A:- | S:-
 
 ===/<repository>/skills/cordis-first-principles/references/===
 calls.md[SP5S]: F:说明长任务提交和查询、调用期限、线程配置与错误处理 | R:code:docs/adr/0051-native-synchronous-wait.md,code:skills/cordis-first-principles/references/resources-state.md | A:- | S:-
-deployment.md[SV5S]: F:指导部署分组、服务安装、运行配置、恢复、日志和备份 | R:code:docs/guide.md,code:skills/cordis-first-principles/references/packaging.md | A:- | S:-
+deployment.md[SV5S]: F:说明生产宿主分组、进程容量、服务配置、日志和状态恢复 | R:code:crates/cordis-runtime/src/catalog.rs,code:skills/cordis-first-principles/references/packaging.md | A:- | S:原生插件省略 group 时，格式 1 按插件名分组，格式 2 进入 native 组。共用宿主的插件仍分别交付动态库
 dynamic.md[SE4T]: F:说明按名称取得服务并传递参数、资源和异步结果 | R:code:crates/cordis-sdk/src/dynamic.rs | A:- | S:-
 http.md[SN4T]: F:说明 HTTP 路由提供方、通用字节流、可信页面来源和密钥授权 | R:code:plugins/http-api/wit/http.wit,code:plugins/stream-api/wit/stream.wit | A:- | S:-
 migration.md[SV4T]: F:说明从现有应用识别事实所有者、分配插件职责和验证迁移 | R:code:skills/cordis-first-principles/references/principles.md | A:- | S:-
 packaging.md[SV4T]: F:说明原生与脚本应用的发布输入、解释器布局、签名和运行验证 | R:code:crates/cordis-dev/src/pack/mod.rs | A:- | S:-
 plugin-basics.md[SE4T]: F:介绍插件形态选择、工程生成和 SDK 接入要求 | R:code:crates/cordis-dev/src/scaffold.rs | A:- | S:-
-principles.md[SE5S]: F:阐明插件职责、事实所有权、资源释放与版本化边界 | R:code:skills/cordis-first-principles/SKILL.md | A:- | S:-
+principles.md[SE5S]: F:规定插件包、组件与模块的划分，以及事实所有权、效应清理和版本化接口 | R:code:skills/cordis-first-principles/SKILL.md,code:skills/cordis-first-principles/references/deployment.md | A:- | S:拆包依据独立部署、复用、替换或隔离需求。以减少资源占用为由时，比较目标部署的安装体积和稳态内存
 python.md[SE4T]: F:给出 Python 插件工程、依赖和组件服务效应示例 | R:code:sdks/python/README.md | A:- | S:-
 repository.md[SV4T]: F:列出仓库模板来源、SDK 构建、Python 依赖和发布路径规则 | R:code:sdks/typescript/build.mjs,code:tools/build_paths.rs | A:- | S:-
 resources-state.md[SD5T]: F:解释插件资源归属、可逆效应和替换的状态继承行为 | R:code:docs/11-plugin-model.md | A:- | S:-

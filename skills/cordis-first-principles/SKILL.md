@@ -26,7 +26,7 @@ Rust-cordis 的核心不运行插件代码，只管理组件的依赖、加载�
 
 本技能的所有规则都由这四条推出：
 
-1. **职责跟着事实走。** 掌握者承担职责，其他方向它要；不为单个使用方开特例，不改核心。
+1. **职责跟着事实走。** 掌握者承担职责，其他方向它要。默认一个插件包交付一项完整业务能力；包内用模块组织代码，有独立依赖或生命周期的部分用 Cordis 组件。拆包条件见[插件边界](references/principles.md#13-插件边界)。
 2. **只写自己掌握的事实，只信掌握者给出的事实。** 数据只经所有者，身份只信核心，机密只在 secrets 服务，结论只由被测代码和真实流程产生。
 3. **只占用自己拥有的资源，用完归还。** 实例资源、调用截止时间、执行线程、事件循环各有主人。
 4. **跨越边界只靠带版本的契约。** 接口带版本，不共享表、全局变量或私有格式。
@@ -43,7 +43,7 @@ Rust-cordis 的核心不运行插件代码，只管理组件的依赖、加载�
 
 | 任务 | 阅读 |
 |---|---|
-| 选插件形态、生成插件、SDK 基本要求 | [插件基础](references/plugin-basics.md) |
+| 划分插件包、选插件形态、生成插件 | [插件边界](references/principles.md#13-插件边界)、[插件基础](references/plugin-basics.md) |
 | 写 Rust 插件 | [Rust 接口](references/rust-api.md)、[资源与状态](references/resources-state.md) |
 | 写 Python、TypeScript、网页插件 | [Python](references/python.md)、[TypeScript](references/typescript.md)、[网页与全栈](references/web.md) |
 | HTTP 路由、认证、字节流、机密 | [HTTP、流与身份](references/http.md) |

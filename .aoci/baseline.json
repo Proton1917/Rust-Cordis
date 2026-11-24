@@ -1,7 +1,7 @@
 {
   "version": 1,
   "created_at": "2026-11-19T12:29:42Z",
-  "updated_at": "2026-11-24T03:44:52Z",
+  "updated_at": "2026-11-24T06:46:39Z",
   "files": {
     ".gitattributes": {
       "role": "index",
@@ -65,9 +65,9 @@
     },
     "aoci.code.txt": {
       "role": "index",
-      "sha256": "3eb087d95b20ad364783173dfd692c15472c51a3f73f13dfbbfa1f06a83bda57",
-      "size": 149640,
-      "normalized_sha256": "3eb087d95b20ad364783173dfd692c15472c51a3f73f13dfbbfa1f06a83bda57"
+      "sha256": "19c8c7c070d2f3c9bb8393046768213dc4ca44650e0f186e3b6be5028d8c33d1",
+      "size": 150052,
+      "normalized_sha256": "19c8c7c070d2f3c9bb8393046768213dc4ca44650e0f186e3b6be5028d8c33d1"
     },
     "aoci.meta.txt": {
       "role": "index",
@@ -4405,9 +4405,9 @@
     },
     "skills/cordis-first-principles/SKILL.md": {
       "role": "index",
-      "sha256": "9402e6bacff9366ec631ddeb00e9cbbc69e30cfb3e3a154068b4e5c11f02ac0b",
-      "size": 4855,
-      "normalized_sha256": "9402e6bacff9366ec631ddeb00e9cbbc69e30cfb3e3a154068b4e5c11f02ac0b"
+      "sha256": "f5453363fc570da488f390802652770014881af5d86fa71de13308fdb4ef995f",
+      "size": 5082,
+      "normalized_sha256": "f5453363fc570da488f390802652770014881af5d86fa71de13308fdb4ef995f"
     },
     "skills/cordis-first-principles/references/calls.md": {
       "role": "index",
@@ -4417,9 +4417,9 @@
     },
     "skills/cordis-first-principles/references/deployment.md": {
       "role": "index",
-      "sha256": "33073eb2e5e1dad410782880ab3d2ea442f003b50abf5984e990f5a38a43f762",
-      "size": 11540,
-      "normalized_sha256": "33073eb2e5e1dad410782880ab3d2ea442f003b50abf5984e990f5a38a43f762"
+      "sha256": "e0edd69219f02d8008a9bda5b66efdf834a4c3137f0872925fc2839240a7bbed",
+      "size": 11639,
+      "normalized_sha256": "e0edd69219f02d8008a9bda5b66efdf834a4c3137f0872925fc2839240a7bbed"
     },
     "skills/cordis-first-principles/references/dynamic.md": {
       "role": "index",
@@ -4453,9 +4453,9 @@
     },
     "skills/cordis-first-principles/references/principles.md": {
       "role": "index",
-      "sha256": "a541229ae2e4b2b1f7884116ee0dc1ba913c47bddd0605d44f49d5673fc4f004",
-      "size": 11816,
-      "normalized_sha256": "a541229ae2e4b2b1f7884116ee0dc1ba913c47bddd0605d44f49d5673fc4f004"
+      "sha256": "f5cbb5225457c145598948a7e84731f60d4fb5d11e9b96fdfd21202d1b3d8bfc",
+      "size": 12689,
+      "normalized_sha256": "f5cbb5225457c145598948a7e84731f60d4fb5d11e9b96fdfd21202d1b3d8bfc"
     },
     "skills/cordis-first-principles/references/python.md": {
       "role": "index",
