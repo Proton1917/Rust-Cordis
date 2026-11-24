@@ -41,6 +41,34 @@ fn dispose_manually() {
     assert!(root.fiber().effects().is_empty());
 }
 
+#[test]
+fn synchronous_effect_borrows_setup_and_owns_deferred_cleanup() {
+    let host = TestExecutor::new();
+    let root = Context::new(host.clone());
+    let released = Arc::new(Mutex::new(Vec::new()));
+    let effect = {
+        let label = String::from("scoped permission");
+        let mut registered = 0;
+        let effect = root
+            .effect("borrowed setup", |scope| {
+                registered += 1;
+                let owned_label = label.clone();
+                let output = released.clone();
+                scope.defer(move || {
+                    output.lock().unwrap().push(owned_label);
+                    Ok(())
+                })
+            })
+            .unwrap();
+        assert_eq!(registered, 1);
+        effect
+    };
+    assert!(released.lock().unwrap().is_empty());
+    host.finish(effect.dispose()).unwrap();
+    assert_eq!(*released.lock().unwrap(), ["scoped permission"]);
+    assert!(root.fiber().effects().is_empty());
+}
+
 // DSP-03；T-EFF-3、T-EFF-6：显式 adopt 对应生成器交回子效应。
 #[test]
 fn yield_dispose() {

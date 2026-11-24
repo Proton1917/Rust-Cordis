@@ -479,7 +479,7 @@ impl Controller {
         let scope = if remount {
             let view = self.mount_view(&settings)?;
             let manage = self.provide_management(&settings, &view)?;
-            Arc::new(MountScope { view, manage })
+            Arc::new(MountScope::new(view, manage, self.logs.clone()))
         } else {
             old.expect("existing view").scope.clone()
         };
@@ -725,8 +725,8 @@ impl Mounted {
     }
 
     pub(super) async fn release(self) -> Result<()> {
-        if let Some(grant) = Arc::into_inner(self.scope).and_then(|scope| scope.manage) {
-            grant.dispose().await.map_err(kernel)?;
+        if let Some(scope) = Arc::into_inner(self.scope) {
+            scope.release().await?;
         }
         Ok(())
     }

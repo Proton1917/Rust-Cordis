@@ -3,6 +3,7 @@
 mod batch;
 mod contract;
 mod outcomes;
+mod permissions;
 mod sources;
 mod web;
 pub(crate) use outcomes::{BatchOutcomes, PendingBatch};
@@ -59,10 +60,7 @@ impl InstanceOwners<'_> {
     }
 }
 
-struct MountScope {
-    view: Context,
-    manage: Option<Effect>,
-}
+use permissions::MountScope;
 
 pub struct Controller {
     web: Arc<cordis_web_deployment::Deployment>,
@@ -601,53 +599,63 @@ impl Controller {
         settings: &InstanceSettings,
         view: &Context,
     ) -> Result<Option<Effect>> {
-        let mut provisions = Vec::new();
-        if settings.forwarder {
-            provisions.push(self.web.forwarder(view)?);
-        }
-        for (interface, legacy, methods) in [
-            (
-                "cordis.manage@1.1",
-                true,
-                &["install", "replace_batch", "shutdown"][..],
-            ),
-            ("cordis.manage@2.0", false, config::METHODS),
-        ] {
-            let grants = settings.management_grants(legacy);
-            if grants.is_empty() {
-                continue;
-            }
-            let mut methods: Vec<String> = methods.iter().map(|method| (*method).into()).collect();
-            if !legacy {
-                methods.push("result".into());
-            }
-            provisions.push(self.manager.provide_builtin_in(
-                view,
-                interface,
-                methods,
-                Arc::new(Management {
-                    legacy,
-                    grants: grants.to_vec(),
-                    control: self.handle.clone(),
-                    configuration: self.path.clone(),
-                    outcomes: self.outcomes.clone(),
-                    logs: self.logs.clone(),
-                }),
-            )?);
-        }
-        if provisions.is_empty() {
+        if !settings.forwarder
+            && settings.management_grants(true).is_empty()
+            && settings.management_grants(false).is_empty()
+        {
             return Ok(None);
         }
-        view.effect("instance-permissions", move |scope| {
-            scope.defer_async(move || async move {
-                for provision in provisions {
-                    provision.dispose().await?;
+        let mut registration_error = None;
+        let effect = view.effect("instance-permissions", |scope| {
+            let register = || -> Result<()> {
+                if settings.forwarder {
+                    scope
+                        .adopt(self.web.forwarder(view)?.effect())
+                        .map_err(kernel)?;
+                }
+                for (interface, legacy, methods) in [
+                    (
+                        "cordis.manage@1.1",
+                        true,
+                        &["install", "replace_batch", "shutdown"][..],
+                    ),
+                    ("cordis.manage@2.0", false, config::METHODS),
+                ] {
+                    let grants = settings.management_grants(legacy);
+                    if grants.is_empty() {
+                        continue;
+                    }
+                    let mut methods: Vec<String> =
+                        methods.iter().map(|method| (*method).into()).collect();
+                    if !legacy {
+                        methods.push("result".into());
+                    }
+                    let provision = self.manager.provide_builtin_in(
+                        view,
+                        interface,
+                        methods,
+                        Arc::new(Management {
+                            legacy,
+                            grants: grants.to_vec(),
+                            control: self.handle.clone(),
+                            configuration: self.path.clone(),
+                            outcomes: self.outcomes.clone(),
+                            logs: self.logs.clone(),
+                        }),
+                    )?;
+                    scope.adopt(provision.effect()).map_err(kernel)?;
                 }
                 Ok(())
+            };
+            register().map_err(|problem| {
+                let error = cordis::Error::new(problem.message.clone());
+                registration_error = Some(problem);
+                error
             })
-        })
-        .map(Some)
-        .map_err(kernel)
+        });
+        effect
+            .map(Some)
+            .map_err(|problem| registration_error.unwrap_or_else(|| kernel(problem)))
     }
 
     /// DOC-15 §3.2、§11.4：配置与插件批次共用状态保存、页面协调及持久提交。
