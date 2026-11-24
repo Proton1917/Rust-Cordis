@@ -57,6 +57,72 @@ fn one_core_owns_the_state_directory_and_only_its_snapshot_is_live() {
 }
 
 #[test]
+fn cancelled_embedded_runtime_reaps_plugin_before_returning_state_claim() {
+    let case = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "embedded-cancel");
+    let _fixture = fixture().for_case(&case);
+    let project = project(&case, "embedded-cancel");
+    plugin(&project.join("plugins/store"), "store", "v1");
+    let gate = project.join("cleanup");
+    fs::write(project.join("cordis.toml"), format!(
+        "[runtime]\ncheckpoint_ms=0\nconfirm_ms=0\nlifecycle_timeout_ms=5000\n[instance.store]\nplugin='store'\nconfig={{initial=41,cleanup_gate={}}}\n",
+        quoted(&gate)
+    )).unwrap();
+    let executor = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(2)
+        .enable_all()
+        .build()
+        .unwrap();
+    let running = executor.spawn(cordis_runtime::run(project.join("cordis.toml")));
+    let snapshot = active(&project, "store");
+    let pid = snapshot["groups"][0]["pid"].as_u64().unwrap().to_string();
+    let alive = || {
+        Command::new("/bin/kill")
+            .args(["-0", &pid])
+            .stderr(Stdio::null())
+            .status()
+            .unwrap()
+            .success()
+    };
+    assert!(alive());
+    running.abort();
+    assert!(executor.block_on(running).unwrap_err().is_cancelled());
+    let claim = fs::File::open(project.join("state")).unwrap();
+    assert!(matches!(
+        claim.try_lock(),
+        Err(fs::TryLockError::WouldBlock)
+    ));
+    until("actual plugin cleanup starts", || {
+        gate.with_extension("started").exists().then_some(())
+    });
+    assert!(matches!(
+        claim.try_lock(),
+        Err(fs::TryLockError::WouldBlock)
+    ));
+    assert!(alive(), "cleanup gate keeps the real plugin alive");
+    fs::write(gate, "").unwrap();
+    until("cleanup returns the state directory claim", || {
+        claim.try_lock().ok()
+    });
+    assert!(
+        !alive(),
+        "process is reaped before another core can claim the directory"
+    );
+    drop(claim);
+    let mut next = Process::start(&project, "after-cancellation");
+    active(&project, "store");
+    assert!(
+        Command::new("/bin/kill")
+            .args(["-TERM", &next.0.as_ref().unwrap().id().to_string()])
+            .status()
+            .unwrap()
+            .success()
+    );
+    next.finish();
+    assert_eq!(status(&project).unwrap()["phase"], "stopped");
+    case.success();
+}
+
+#[test]
 fn sigterm_confirms_store_source_after_its_first_write() {
     let case = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "early-stop-source");
     let _fixture = fixture().for_case(&case);

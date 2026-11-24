@@ -1,5 +1,8 @@
 //! DOC-15 Q0、CP-7、CP-11：核心启动、管理事件、检查点与最终状态发布。
 
+mod owner;
+use owner::RuntimeRoot;
+
 use crate::{
     builtins::{DataDirectory, Logs, RuntimeInfo},
     config::{Configuration, Result, parameter},
@@ -33,10 +36,11 @@ pub async fn run_with_contract(path: PathBuf, plan: Option<Plan>) -> Result<()> 
     let session = plan.map(Session::new).transpose()?;
     let path = path.canonicalize().map_err(io_error)?;
     let (directory, input) = crate::deployment::load_with_state_dir(&path)?;
-    let _owner = crate::storage::claim(&directory)?;
+    let owner = crate::storage::claim(&directory)?;
     let mut terminate = signal(SignalKind::terminate()).map_err(io_error)?;
     let mut interrupt = signal(SignalKind::interrupt()).map_err(io_error)?;
-    let root = Context::new(Arc::new(Executor::new()));
+    let lifetime = RuntimeRoot::new(owner);
+    let root = lifetime.context();
     let result = async {
         let store = Store::create(directory)?;
         store.recover_deployment()?;
@@ -56,12 +60,12 @@ pub async fn run_with_contract(path: PathBuf, plan: Option<Plan>) -> Result<()> 
         };
         configuration.check_version(&version)?;
         let (controller, requests, view) =
-            create_controller(&root, path, configuration, store).await?;
+            create_controller(root, path, configuration, store).await?;
         if let Some(session) = &session {
             session.install(&controller.manager)?;
         }
         serve(
-            &root,
+            root,
             controller,
             requests,
             view,
@@ -73,7 +77,7 @@ pub async fn run_with_contract(path: PathBuf, plan: Option<Plan>) -> Result<()> 
         .await
     }
     .await;
-    let disposed = root.fiber().dispose().await.map_err(kernel);
+    let disposed = lifetime.finish().await;
     let result = result.and(disposed);
     if let Some(session) = session {
         session.save(&result)?;
