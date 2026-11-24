@@ -1,0 +1,48 @@
+name: Component conformance
+
+on:
+  pull_request:
+    paths:
+      - 'crates/cordis/**'
+      - 'crates/cordis-testkit/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'rust-toolchain.toml'
+      - 'docs/04-conformance.md'
+      - 'tools/conformance*.py'
+      - 'tools/tests/test_conformance_run.py'
+      - '.github/workflows/conformance.yml'
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  conformance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CARGO_PROFILE_DEV_DEBUG: '0'
+      CARGO_PROFILE_TEST_DEBUG: '0'
+      CARGO_INCREMENTAL: '0'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Install pinned Rust
+        run: rustup toolchain install 1.96.0 --profile minimal --component rustfmt --component clippy
+      - name: Retrieve the immutable upstream test source
+        run: |
+          git init cordis
+          git -C cordis fetch --depth=1 https://github.com/cordiverse/cordis.git 261c5fdae6edb54e7ed4f071024f530acd18903b
+          git -C cordis checkout --detach FETCH_HEAD
+      - name: Check evidence failure paths
+        run: python3 -m unittest discover -s tools/tests -p 'test_conformance_run.py' -v
+      - name: Execute every applicable conformance row
+        run: python3 tools/conformance_run.py --output target/conformance-report.json
+      - name: Preserve execution evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: conformance-evidence
+          path: target/conformance-report.json
+          if-no-files-found: warn

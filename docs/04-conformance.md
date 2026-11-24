@@ -4,6 +4,21 @@
 
 ID、上游位置和用例标题取自清单工具；里程碑和测试位置记录当时的对应关系。需要核对矩阵时，在仓库根目录运行 `conda run -n base python tools/conformance.py check --through M6`。命令读取只读上游检出和本表，并报告差异。
 
+### 执行证据
+
+`tools/conformance_run.py` 将本表的每个适用条目绑定到编译器实际生成的测试程序、测试清单及执行结果。上游检出固定为 `261c5fdae6edb54e7ed4f071024f530acd18903b`，用例文件保持该修订的原始内容。在仓库根目录执行：
+
+```sh
+conda run -n base python tools/conformance_run.py \
+  --upstream cordis --output target/conformance-report.json
+```
+
+`--upstream` 可以指向另一个只读上游检出；依赖沿用 `Cargo.lock`。工具先校验 177 行矩阵，再编译并执行涉及的 Rust 测试目标和文档编译失败测试。174 个适用条目对应 160 个独立源码引用，部分用例共享同一个覆盖多场景的测试。`EVT-05`、`RFL-01`、`ASC-06` 保留本表说明的 JavaScript 特有行为范围。
+
+矩阵缺少或重复条目、引用的测试不存在、Cargo 未生成相应测试程序、零条测试被执行、测试被忽略、测试失败、编译失败文档示例未执行，以及验证期间源码变化，都会令命令以非零状态结束。JSON 报告逐条保存结果，并记录源码摘要、修订、编译器、命令及原始输出。构建默认限时 600 秒，每个测试程序默认限时 180 秒；可通过 `--build-timeout` 和 `--test-timeout` 为具体环境调整。
+
+这些记录证明固定条件下的实际回归行为。形式化等价命题、模型的适用范围与源码精化关系需要各自的机器证明，另行给出证据。
+
 ### DSP：`dispose.spec.ts`（15 条）
 
 | ID | 上游位置 | 上游用例 | 里程碑 | 状态 | Rust 测试 / 理由 |
