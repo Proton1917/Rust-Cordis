@@ -565,6 +565,7 @@ dependencies = [
  "cordis-types",
  "cordis-up",
  "cordis-web-deployment",
+ "futures-util",
  "parking_lot 0.13.0",
  "semver",
  "serde",
