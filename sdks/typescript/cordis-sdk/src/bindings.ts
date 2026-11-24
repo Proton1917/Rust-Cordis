@@ -42,9 +42,16 @@ export class Payload {
         readonly value: any,
     ) {
         if (!(value instanceof Map)) return;
-        for (const entry of value.get("refs") ?? []) {
+        const entries = value.get("refs");
+        if (entries == null || (Array.isArray(entries) && !entries.length)) return;
+        const numbers = new Set<Identifier>();
+        for (const entry of entries) {
             const number = identifier(entry);
-            if (this.references.has(number)) throw new CordisError(2, "refs 中的编号重复");
+            if (numbers.has(number)) throw new CordisError(2, "refs 中的编号重复");
+            numbers.add(number);
+        }
+        // The complete ownership table is valid before any shared count changes.
+        for (const number of numbers) {
             this.references.set(number, runtime.reference(number).retain());
         }
     }

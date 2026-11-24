@@ -186,6 +186,21 @@ pub struct LibraryRetired {
     pub closed: bool,
     pub quiescence_ms: Option<u64>,
     pub retired_images: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retirement: Option<LibraryRetirement>,
+}
+
+/// Retirement history, handle ownership and measured mappings have separate units.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct LibraryRetirement {
+    pub retired_total: u64,
+    /// Library handles returned by the host; mappings are measured separately.
+    pub closed_total: u64,
+    pub open_retired_handles: u64,
+    pub retired_leases: u64,
+    pub retired_cache_pins: u64,
+    /// Linux /proc/self/maps observation. Absent when unavailable or incomplete.
+    pub mapped_retired_images: Option<u64>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Context {
@@ -477,6 +492,8 @@ pub struct PluginResult {
 pub struct LibraryStatus {
     pub libraries: Vec<cordis_types::LibraryInfo>,
     pub retired_images: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retirement: Option<LibraryRetirement>,
 }
 
 /// DOC-11 SW-9：候选确认后的清理错误携带该次事务的提交事实，运行时据此持久化部署。

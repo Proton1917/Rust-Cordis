@@ -1,0 +1,89 @@
+name: Runtime resource ownership
+
+on:
+  pull_request:
+    paths:
+      - 'crates/cordis/**'
+      - 'crates/cordis-runtime/**'
+      - 'crates/cordis-supervisor/**'
+      - 'crates/cordis-web-deployment/**'
+      - 'crates/cordis-up/**'
+      - 'crates/cordis-routing/**'
+      - 'crates/cordis-channels/**'
+      - 'crates/cordis-process/**'
+      - 'crates/cordis-types/**'
+      - 'crates/cordis-artifact/**'
+      - 'crates/cordis-testkit/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'rust-toolchain.toml'
+      - 'tools/conformance.py'
+      - 'tools/conformance_run.py'
+      - '.github/workflows/runtime-ownership.yml'
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  ownership:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      RUSTUP_TOOLCHAIN: '1.96.0'
+      CARGO_BUILD_JOBS: '2'
+      CARGO_PROFILE_DEV_DEBUG: '0'
+      CARGO_PROFILE_TEST_DEBUG: '0'
+      CARGO_INCREMENTAL: '0'
+      CARGO_TERM_COLOR: never
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Install pinned Rust
+        run: rustup toolchain install 1.96.0 --profile minimal
+      - name: Exercise runtime ownership and durable publication
+        run: |
+          set -euo pipefail
+          mkdir -p target/ownership-evidence
+          cargo test --locked -p cordis-runtime --lib -- --test-threads=2 | tee target/ownership-evidence/runtime-lib.log
+      - name: Exercise real processes and state directory ownership
+        run: |
+          set -euo pipefail
+          cargo test --locked -p cordis-runtime --test runtime offline:: -- --test-threads=2 | tee target/ownership-evidence/runtime-offline.log
+      - name: Require executed ownership evidence
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import sys
+          sys.path.insert(0, 'tools')
+          from conformance_run import VerificationError, passed_tests, require_passed
+
+          evidence = Path('target/ownership-evidence')
+          library = passed_tests((evidence / 'runtime-lib.log').read_text())
+          if not library:
+              raise VerificationError('runtime library: zero executed tests')
+          for name in library:
+              require_passed(name, library, 'runtime library')
+          offline = passed_tests((evidence / 'runtime-offline.log').read_text())
+          expected = [
+              'one_core_owns_the_state_directory_and_only_its_snapshot_is_live',
+              'cancelled_embedded_runtime_reaps_plugin_before_returning_state_claim',
+              'sigterm_confirms_store_source_after_its_first_write',
+              'a_fresh_empty_deployment_publishes_empty_confirmed_bindings',
+              'offline_queries_observe_atomic_commits_and_empty_deployments',
+          ]
+          for name in expected:
+              require_passed(f'offline::{name}', offline, 'runtime ownership')
+          print(f'Verified {len(library)} runtime unit tests and {len(expected)} named offline tests.')
+          PY
+      - name: Preserve ownership evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: runtime-ownership-evidence
+          path: target/ownership-evidence/*.log
+          if-no-files-found: warn

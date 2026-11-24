@@ -1,8 +1,8 @@
 //! 上下文句柄与持久视图链。
 
 use crate::{
-    Clock, Fiber, Merge, ServiceKey, Spawn,
-    kernel::{FiberId, Kernel},
+    Clock, Epoch, Fiber, Merge, ServiceKey, Spawn,
+    kernel::{FiberId, Kernel, State},
 };
 use std::{
     any::{Any, TypeId},
@@ -50,6 +50,8 @@ pub(crate) struct Scope {
     pub fiber: FiberId,
     pub layer: Layer,
     pub lease: Option<Weak<Kernel>>,
+    /// Immutable view shape, reset at a new fiber boundary.
+    pub has_epoch_guard: bool,
 }
 
 impl Drop for Scope {
@@ -72,12 +74,18 @@ impl Drop for Scope {
     }
 }
 
+#[cfg(test)]
+std::thread_local! {
+    static ADMISSION_SCOPE_VISITS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
 pub(crate) enum Layer {
     Root,
     Fiber,
     Extend(TypeId, Arc<dyn Any + Send + Sync>),
     Isolate(Arc<str>, Realm),
     Intercept(Arc<str>, Arc<dyn Any + Send + Sync>),
+    Epoch(Arc<Epoch>),
 }
 
 impl Context {
@@ -90,6 +98,7 @@ impl Context {
             fiber,
             layer: Layer::Root,
             lease: None,
+            has_epoch_guard: false,
         });
         {
             let mut state = kernel.state.lock();
@@ -100,6 +109,7 @@ impl Context {
     }
 
     pub(crate) fn derive(&self, layer: Layer) -> Self {
+        let has_epoch_guard = self.scope.has_epoch_guard || matches!(layer, Layer::Epoch(_));
         Self {
             kernel: self.kernel.clone(),
             scope: Arc::new(Scope {
@@ -107,8 +117,49 @@ impl Context {
                 fiber: self.scope.fiber,
                 layer,
                 lease: None,
+                has_epoch_guard,
             }),
         }
+    }
+
+    /// R-CTX-1：将新效应的登记权限限定到 `expected` 纪元，克隆和派生共享纪元值。
+    ///
+    /// 同一纤程视图链中的所有纪元约束共同生效。`effect`、`provide`、监听器和
+    /// 子组件挂载在登记效应的内核锁内检查这些约束；过期视图返回失活错误。
+    /// `is_current` 包含该约束，服务读取继续保留清理期的已提交绑定。
+    /// 子组件拥有新的纤程作用域，由父级挂载效应管理寿命，其自身视图可另行绑定纪元。
+    pub fn for_epoch(&self, expected: Arc<Epoch>) -> Self {
+        self.derive(Layer::Epoch(expected))
+    }
+
+    /// Registration admission and effect insertion share the caller's State lock.
+    pub(crate) fn permits_effect(&self, state: &State) -> bool {
+        let owner = self.scope.fiber;
+        let data = &state.fibers[owner];
+        if !data.alive {
+            return false;
+        }
+        if !self.scope.has_epoch_guard {
+            return true;
+        }
+        if !data.is_current() {
+            return false;
+        }
+        let mut scope = Some(self.scope.as_ref());
+        while let Some(node) = scope {
+            #[cfg(test)]
+            ADMISSION_SCOPE_VISITS.with(|visits| visits.set(visits.get() + 1));
+            if node.fiber != owner {
+                break;
+            }
+            if let Layer::Epoch(expected) = &node.layer
+                && data.target != **expected
+            {
+                return false;
+            }
+            scope = node.parent.as_deref();
+        }
+        true
     }
 
     /// S-CTX-2：类型相同的扩展值由最近一层覆盖。
@@ -247,5 +298,41 @@ impl Context {
 impl fmt::Debug for Context {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Context <{}>", self.fiber().name())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::Task;
+
+    struct Host;
+    impl Spawn for Host {
+        fn spawn(&self, _: Task) {}
+    }
+    impl Clock for Host {
+        fn now(&self) -> Duration {
+            Duration::ZERO
+        }
+        fn sleep(&self, _: Duration) -> Task {
+            Box::pin(async {})
+        }
+    }
+
+    #[test]
+    fn unguarded_admission_keeps_constant_work_across_deep_views() {
+        let root = Context::new(Arc::new(Host));
+        let mut view = root.clone();
+        for index in 0..128 {
+            view = view.extend(index);
+        }
+        ADMISSION_SCOPE_VISITS.with(|visits| visits.set(0));
+        view.effect("unguarded", |_| Ok(())).unwrap();
+        assert_eq!(ADMISSION_SCOPE_VISITS.with(|visits| visits.get()), 0);
+        let guarded = view.for_epoch(Arc::new(root.fiber().epoch()));
+        guarded.effect("guarded", |_| Ok(())).unwrap();
+        assert!(ADMISSION_SCOPE_VISITS.with(|visits| visits.get()) > 128);
+
+        drop(root.fiber().dispose());
     }
 }

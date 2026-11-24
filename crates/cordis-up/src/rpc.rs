@@ -1,18 +1,21 @@
+mod buffer;
+
 use crate::{Limits, Message, Value, WireError};
 use parking_lot::Mutex;
 use std::{
     collections::HashMap,
-    future::Future,
+    future::{Future, poll_fn},
     pin::Pin,
     sync::{
         Arc, Weak,
         atomic::{AtomicBool, AtomicU64, Ordering},
     },
+    task::{Poll, Waker},
     time::Duration,
 };
 use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
-    sync::{Semaphore, mpsc, oneshot, watch},
+    sync::{OwnedSemaphorePermit, Semaphore, mpsc, oneshot, watch},
     time::{Instant, timeout, timeout_at},
 };
 
@@ -25,6 +28,40 @@ pub type HandlerFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 struct PendingReply {
     sender: Reply,
     owns_deadline: bool,
+    write: Arc<RequestWrite>,
+}
+
+struct RequestWrite {
+    state: Mutex<RequestWriteState>,
+}
+
+struct RequestWriteState {
+    started: bool,
+    cancelled: bool,
+    commit: Option<Box<dyn FnOnce() + Send>>,
+    waiter: Option<Waker>,
+}
+
+impl RequestWrite {
+    // The same lock covers the first successful poll_write and cancellation.
+    // Only a frame that has transferred bytes needs a following cancel message.
+    fn cancel(&self) -> bool {
+        let (started, commit, waiter) = {
+            let mut state = self.state.lock();
+            state.cancelled = true;
+            let commit = if state.started {
+                None
+            } else {
+                state.commit.take()
+            };
+            (state.started, commit, state.waiter.take())
+        };
+        drop(commit);
+        if let Some(waiter) = waiter {
+            waiter.wake();
+        }
+        started
+    }
 }
 
 const INVOKE_BUDGET_CAPABILITY: &str = "invoke_budget_v1";
@@ -124,6 +161,12 @@ pub struct ConnectionOptions {
     pub limits: Limits,
     pub max_inflight: usize,
     pub queue_capacity: usize,
+    /// Capacity held from encoding through queued and partial writes.
+    pub max_buffered_bytes: usize,
+    /// Additional byte capacity available to responses and resource controls.
+    pub control_reserve_bytes: usize,
+    /// Reserved FIFO admission slots for responses, cancel and release.
+    pub control_queue_capacity: usize,
     pub request_timeout: Duration,
     pub consecutive_timeouts: u32,
 }
@@ -134,6 +177,9 @@ impl Default for ConnectionOptions {
             limits: Limits::default(),
             max_inflight: 64,
             queue_capacity: 64,
+            max_buffered_bytes: 64 * 1024 * 1024,
+            control_reserve_bytes: 64 * 1024,
+            control_queue_capacity: 64,
             request_timeout: Duration::from_secs(30),
             consecutive_timeouts: 3,
         }
@@ -145,6 +191,18 @@ impl ConnectionOptions {
     fn validate(&self) -> Result<()> {
         if self.max_inflight == 0
             || self.queue_capacity == 0
+            || self.control_queue_capacity == 0
+            || self.max_buffered_bytes < 64
+            || self.control_reserve_bytes < 64
+            || self
+                .max_buffered_bytes
+                .checked_add(self.control_reserve_bytes)
+                .is_none()
+            || self.limits.max_frame.checked_add(4).is_none()
+            || self
+                .queue_capacity
+                .checked_add(self.control_queue_capacity)
+                .is_none_or(|capacity| capacity > Semaphore::MAX_PERMITS)
             || self.limits.max_frame < 64
             || self.limits.max_collection == 0
             || self.limits.max_values < 4
@@ -165,6 +223,9 @@ struct Inner {
     id: u64,
     options: ConnectionOptions,
     send: mpsc::Sender<Outbound>,
+    data_slots: Arc<Semaphore>,
+    control_slots: Arc<Semaphore>,
+    bytes: Arc<buffer::Budget>,
     pending: Mutex<HashMap<u64, PendingReply>>,
     inbound: Mutex<HashMap<u64, Option<oneshot::Sender<()>>>>,
     next: AtomicU64,
@@ -208,9 +269,12 @@ impl Inner {
         let inbound = std::mem::take(&mut *self.inbound.lock());
         drop(inbound);
         for (_, reply) in pending {
+            reply.write.cancel();
             let _receiver = reply.sender.send(Err(error(4, reason.clone())));
         }
         self.permits.close();
+        self.data_slots.close();
+        self.control_slots.close();
         self.ended.send_replace(Some(reason));
     }
 }
@@ -218,7 +282,7 @@ impl Inner {
 #[derive(Clone)]
 pub struct Connection(Arc<Inner>);
 
-/// UP/1：提交回调捕获发送引用的 RAII 守卫，成功入队后转交引用所有权。
+/// UP/1：提交回调捕获出口引用的 RAII 守卫；可撤回请求在首字节写出时转交引用。
 pub struct Outgoing {
     value: Value,
     commit: Option<Box<dyn FnOnce() + Send>>,
@@ -229,6 +293,16 @@ struct Outbound {
     // 帧头与消息体共用缓冲，写端按完整帧推进部分写入。
     bytes: Vec<u8>,
     after_write: Option<Box<dyn FnOnce() + Send>>,
+    request: Option<QueuedRequest>,
+    _bytes: buffer::Lease,
+    queue_slot: Option<OwnedSemaphorePermit>,
+}
+
+struct QueuedRequest {
+    id: u64,
+    deadline: Instant,
+    budget_offset: Option<usize>,
+    write: Arc<RequestWrite>,
 }
 
 impl Outgoing {
@@ -253,13 +327,16 @@ impl Outgoing {
     fn take_value(&mut self) -> Value {
         std::mem::replace(&mut self.value, Value::Null)
     }
-    fn sent(mut self, bytes: Vec<u8>) -> Outbound {
+    fn sent(mut self, encoded: buffer::Encoded, slot: OwnedSemaphorePermit) -> Outbound {
         if let Some(commit) = self.commit.take() {
             commit();
         }
         Outbound {
-            bytes,
+            bytes: encoded.bytes,
             after_write: self.after_write.take(),
+            request: None,
+            _bytes: encoded.lease,
+            queue_slot: Some(slot),
         }
     }
 }
@@ -290,11 +367,12 @@ impl Drop for RemoteLease {
 /// UP/1：载荷持有接收到的引用，导入的对象分别延长所需引用的寿命。
 pub struct Payload {
     value: Value,
+    wire_bytes: usize,
     objects: HashMap<u64, Arc<RemoteLease>>,
 }
 
 impl Payload {
-    fn received(peer: &Connection, value: Value) -> Result<Self> {
+    fn received(peer: &Connection, value: Value, wire_bytes: usize) -> Result<Self> {
         let mut objects = HashMap::new();
         for id in crate::payload_refs(&value).map_err(|problem| error(2, problem.to_string()))? {
             objects.insert(
@@ -305,7 +383,16 @@ impl Payload {
                 }),
             );
         }
-        Ok(Self { value, objects })
+        Ok(Self {
+            value,
+            wire_bytes,
+            objects,
+        })
+    }
+
+    /// Original CBOR message body bytes, measured once at the connection reader.
+    pub fn wire_bytes(&self) -> usize {
+        self.wire_bytes
     }
 
     pub fn value(&self) -> &Value {
@@ -353,11 +440,15 @@ impl Connection {
         W: AsyncWrite + Unpin + Send + 'static,
     {
         options.validate()?;
-        let (send, outbound) = mpsc::channel(options.queue_capacity);
+        let (send, outbound) =
+            mpsc::channel(options.queue_capacity + options.control_queue_capacity);
         let (ended, _) = watch::channel(None);
         let peer = Self(Arc::new(Inner {
             id,
             permits: Arc::new(Semaphore::new(options.max_inflight)),
+            data_slots: Arc::new(Semaphore::new(options.queue_capacity)),
+            control_slots: Arc::new(Semaphore::new(options.control_queue_capacity)),
+            bytes: buffer::Budget::new(options.max_buffered_bytes, options.control_reserve_bytes),
             options,
             send,
             pending: Mutex::new(HashMap::new()),
@@ -414,23 +505,70 @@ impl Connection {
         self.0.fail(reason);
     }
 
+    /// Current encoded-buffer capacity, including queue waits and partial writes.
+    pub fn buffered_bytes(&self) -> usize {
+        self.0.bytes.bytes()
+    }
+
+    /// Peak encoded-buffer capacity since connection creation.
+    pub fn peak_buffered_bytes(&self) -> usize {
+        self.0.bytes.peak()
+    }
+
+    fn encode(
+        &self,
+        message: &Message,
+        retire_on_quota: bool,
+        response_label: Option<&str>,
+    ) -> Result<buffer::Encoded> {
+        let control = matches!(message, Message::Response { .. })
+            || matches!(message, Message::Notification { method, .. } if matches!(method.as_str(), "cancel" | "release"));
+        self.0
+            .bytes
+            .encode(message, &self.0.options.limits, control)
+            .map_err(|failure| {
+                let problem = if failure.exhausted {
+                    error(8, "连接发送缓冲字节额度耗尽")
+                } else {
+                    encoding_error(
+                        failure.problem,
+                        &response_label
+                            .map_or_else(|| describe(message), |label| format!("{label} 的返回值")),
+                    )
+                };
+                if failure.exhausted && retire_on_quota {
+                    self.0.fail(problem.to_string());
+                }
+                problem
+            })
+    }
+
     async fn send(&self, message: Message, outgoing: Outgoing) -> Result<()> {
-        let bytes = crate::codec::encode_frame(&message, &self.0.options.limits)
-            .map_err(|problem| encoding_error(problem, &describe(&message)))?;
+        let bytes = self.encode(&message, false, None)?;
         // 等待发送容量时只保留编码结果，业务值的生命周期止于编码完成。
         drop(message);
         self.send_bytes(bytes, outgoing).await
     }
 
-    async fn send_bytes(&self, bytes: Vec<u8>, outgoing: Outgoing) -> Result<()> {
+    async fn send_bytes(&self, bytes: buffer::Encoded, outgoing: Outgoing) -> Result<()> {
         if !self.is_alive() {
             return Err(error(4, "插件进程已结束"));
         }
-        let permit = timeout(self.0.options.request_timeout, self.0.send.reserve())
+        let deadline = deadline_after(self.0.options.request_timeout)?;
+        let slots = if bytes.control {
+            &self.0.control_slots
+        } else {
+            &self.0.data_slots
+        };
+        let slot = timeout_at(deadline, slots.clone().acquire_owned())
             .await
             .map_err(|_| error(6, "插件发送队列等待超时"))?
             .map_err(|_| error(4, "插件管道已关闭"))?;
-        permit.send(outgoing.sent(bytes));
+        let permit = timeout_at(deadline, self.0.send.reserve())
+            .await
+            .map_err(|_| error(6, "插件发送队列等待超时"))?
+            .map_err(|_| error(4, "插件管道已关闭"))?;
+        permit.send(outgoing.sent(bytes, slot));
         Ok(())
     }
 
@@ -441,13 +579,13 @@ impl Connection {
             Err(problem) => (Err(problem), Outgoing::new(Value::Null)),
         };
         let message = Message::Response { id, result };
-        let encoded = crate::codec::encode_frame(&message, &self.0.options.limits);
+        let encoded = self.encode(&message, false, Some(label));
         drop(message);
         match encoded {
             Ok(bytes) => self.send_bytes(bytes, outgoing).await,
             Err(problem) => {
                 drop(outgoing);
-                let failure = encoding_error(problem, &format!("{label} 的返回值"));
+                let failure = problem;
                 self.send(
                     Message::Response {
                         id,
@@ -481,36 +619,55 @@ impl Connection {
             .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |id| id.checked_add(1))
             .map_err(|_| error(8, "请求编号空间已耗尽"))?;
         let mut params = outgoing.take_value();
-        let label = call_label(method, &params);
         let operation = async {
+            let slot = self
+                .0
+                .data_slots
+                .clone()
+                .acquire_owned()
+                .await
+                .map_err(|_| error(4, "插件管道已关闭"))?;
             let permit = self
                 .0
                 .send
                 .reserve()
                 .await
                 .map_err(|_| error(4, "插件管道已关闭"))?;
-            if method == "invoke" && self.0.peer_budget.load(Ordering::Acquire) {
-                let remaining = deadline
-                    .saturating_duration_since(Instant::now())
-                    .as_millis();
-                set_parameter(
-                    &mut params,
-                    INVOKE_BUDGET_FIELD,
-                    Value::from(u64::try_from(remaining.max(1)).unwrap_or(u64::MAX)),
-                );
-            }
-            let bytes = crate::codec::encode_frame(
+            let budget = if method == "invoke"
+                && self.0.peer_budget.load(Ordering::Acquire)
+                && let Value::Map(fields) = &mut params
+            {
+                // Keep the negotiated budget last so the writer can replace its
+                // CBOR integer in place without retaining or cloning the value tree.
+                let remaining = remaining_budget(deadline);
+                fields.retain(|(key, _)| key.as_text() != Some(INVOKE_BUDGET_FIELD));
+                fields.push((INVOKE_BUDGET_FIELD.into(), Value::from(remaining)));
+                Some(remaining)
+            } else {
+                None
+            };
+            let bytes = self.encode(
                 &Message::Request {
                     id,
                     method: method.into(),
                     params,
                 },
-                &self.0.options.limits,
-            )
-            .map_err(|problem| encoding_error(problem, &format!("{label} 的参数")))?;
+                false,
+                None,
+            )?;
             if Instant::now() >= deadline {
                 return Err(error(6, "插件请求在入队前超过截止时间"));
             }
+            let budget_offset =
+                budget.map(|remaining| bytes.bytes.len() - integer_width(remaining));
+            let write = Arc::new(RequestWrite {
+                state: Mutex::new(RequestWriteState {
+                    started: false,
+                    cancelled: false,
+                    commit: outgoing.commit.take(),
+                    waiter: None,
+                }),
+            });
             let (send, receive) = oneshot::channel();
             {
                 let mut pending = self.0.pending.lock();
@@ -522,11 +679,23 @@ impl Connection {
                     PendingReply {
                         sender: send,
                         owns_deadline: deadline == own_deadline,
+                        write: write.clone(),
                     },
                 );
             }
             let _pending = Pending { peer: self, id };
-            permit.send(outgoing.sent(bytes));
+            permit.send(Outbound {
+                bytes: bytes.bytes,
+                _bytes: bytes.lease,
+                queue_slot: Some(slot),
+                after_write: outgoing.after_write.take(),
+                request: Some(QueuedRequest {
+                    id,
+                    deadline,
+                    budget_offset,
+                    write,
+                }),
+            });
             // 本地排队或编码错误不作为远端响应重置连续超时计数。
             receive.await.map_err(|_| error(4, "插件请求已结束"))
         };
@@ -559,13 +728,17 @@ impl Connection {
         if stop {
             self.0.fail("插件连续请求超时");
         }
-        if removed.is_none() {
-            return;
+        let Some(removed) = removed else { return };
+        let started = removed.write.cancel();
+        if timed_out {
+            let _receiver = removed.sender.send(Err(error(6, "插件请求超过截止时间")));
         }
-        let _closed = self.try_notify(
-            "cancel",
-            Value::Map(vec![(Value::Text("id".into()), Value::Integer(id.into()))]),
-        );
+        if started {
+            let _closed = self.try_notify(
+                "cancel",
+                Value::Map(vec![(Value::Text("id".into()), Value::Integer(id.into()))]),
+            );
+        }
     }
 
     pub async fn notify(&self, method: &str, params: impl Into<Outgoing>) -> Result<()> {
@@ -586,27 +759,83 @@ impl Connection {
         if !self.is_alive() {
             return Err(error(4, "插件进程已结束"));
         }
-        let bytes = crate::codec::encode_frame(
+        let bytes = self.encode(
             &Message::Notification {
                 method: method.into(),
                 params: outgoing.take_value(),
             },
-            &self.0.options.limits,
-        )
-        .map_err(|problem| encoding_error(problem, &format!("通知 {method} 的参数")))?;
-        let result = self
-            .0
-            .send
-            .try_reserve()
-            .map(|permit| {
-                permit.send(outgoing.sent(bytes));
-            })
-            .map_err(|problem| error(8, problem.to_string()));
+            true,
+            None,
+        )?;
+        let slots = if bytes.control {
+            &self.0.control_slots
+        } else {
+            &self.0.data_slots
+        };
+        let result = slots
+            .clone()
+            .try_acquire_owned()
+            .map_err(|problem| error(8, problem.to_string()))
+            .and_then(|slot| {
+                self.0
+                    .send
+                    .try_reserve()
+                    .map(|permit| {
+                        permit.send(outgoing.sent(bytes, slot));
+                    })
+                    .map_err(|problem| error(8, problem.to_string()))
+            });
         if let Err(problem) = &result {
             self.0.fail(problem.to_string());
         }
         result
     }
+}
+
+fn remaining_budget(deadline: Instant) -> u64 {
+    u64::try_from(
+        deadline
+            .saturating_duration_since(Instant::now())
+            .as_millis()
+            .max(1),
+    )
+    .unwrap_or(u64::MAX)
+}
+
+fn integer_width(value: u64) -> usize {
+    match value {
+        0..=23 => 1,
+        24..=255 => 2,
+        256..=65535 => 3,
+        65536..=4294967295 => 5,
+        _ => 9,
+    }
+}
+
+fn update_budget(bytes: &mut Vec<u8>, offset: usize, value: u64) {
+    let width = integer_width(value);
+    bytes.truncate(offset);
+    match width {
+        1 => bytes.push(value as u8),
+        2 => {
+            bytes.push(24);
+            bytes.push(value as u8);
+        }
+        3 => {
+            bytes.push(25);
+            bytes.extend_from_slice(&(value as u16).to_be_bytes());
+        }
+        5 => {
+            bytes.push(26);
+            bytes.extend_from_slice(&(value as u32).to_be_bytes());
+        }
+        _ => {
+            bytes.push(27);
+            bytes.extend_from_slice(&value.to_be_bytes());
+        }
+    }
+    let length = (bytes.len() - 4) as u32;
+    bytes[..4].copy_from_slice(&length.to_be_bytes());
 }
 
 /// DOC-16 §2、ADR-0024：帧头、消息体与flush完成后执行管理响应钩子。
@@ -621,18 +850,81 @@ async fn write_frames<W: AsyncWrite + Unpin>(
             _ = ended.changed() => break,
             frame = outbound.recv() => match frame { Some(frame) => frame, None => break },
         };
+        drop(frame.queue_slot.take());
         let write = async {
-            output.write_all(&frame.bytes).await?;
-            output.flush().await
+            let start = if let Some(request) = &frame.request {
+                let mut expired = false;
+                let first = poll_fn(|cx| {
+                    let mut state = request.write.state.lock();
+                    if state.cancelled {
+                        return Poll::Ready(Ok(None));
+                    }
+                    if Instant::now() >= request.deadline {
+                        expired = true;
+                        return Poll::Ready(Ok(None));
+                    }
+                    if let Some(offset) = request.budget_offset {
+                        update_budget(&mut frame.bytes, offset, remaining_budget(request.deadline));
+                    }
+                    match Pin::new(&mut output).poll_write(cx, &frame.bytes) {
+                        Poll::Pending => {
+                            state.waiter = Some(cx.waker().clone());
+                            Poll::Pending
+                        }
+                        Poll::Ready(Ok(0)) => Poll::Ready(Err(std::io::Error::new(
+                            std::io::ErrorKind::WriteZero,
+                            "UP/1 frame write returned zero",
+                        ))),
+                        Poll::Ready(Ok(count)) => {
+                            state.started = true;
+                            state.waiter = None;
+                            let commit = state.commit.take();
+                            drop(state);
+                            if let Some(commit) = commit {
+                                commit();
+                            }
+                            Poll::Ready(Ok(Some(count)))
+                        }
+                        Poll::Ready(Err(problem)) => Poll::Ready(Err(problem)),
+                    }
+                });
+                match timeout_at(request.deadline, first).await {
+                    Ok(Ok(Some(count))) => count,
+                    Ok(Ok(None)) => {
+                        if expired && let Some(inner) = peer.upgrade() {
+                            Connection(inner).cancel_pending(request.id, true);
+                        }
+                        return Ok(false);
+                    }
+                    Ok(Err(problem)) => return Err(problem),
+                    Err(_) => {
+                        if let Some(inner) = peer.upgrade() {
+                            Connection(inner).cancel_pending(request.id, true);
+                        }
+                        return Ok(false);
+                    }
+                }
+            } else {
+                0
+            };
+            output.write_all(&frame.bytes[start..]).await?;
+            output.flush().await?;
+            Ok(true)
         };
         let result = tokio::select! {
             _ = ended.changed() => break,
             result = write => result,
         };
-        if let Err(problem) = result {
-            fail(&peer, problem.to_string());
-            break;
+        match result {
+            Err(problem) => {
+                fail(&peer, problem.to_string());
+                break;
+            }
+            Ok(false) => continue,
+            Ok(true) => {}
         }
+        drop(frame.bytes);
+        drop(frame._bytes);
         if let Some(action) = frame.after_write.take() {
             action();
         }
@@ -681,11 +973,12 @@ async fn read_frames<R: AsyncRead + Unpin>(
     notifications: mpsc::Sender<Notification>,
     mut ended: Ended,
 ) {
-    while let Some(message) = read_frame(&mut input, &peer, &mut ended).await {
+    while let Some((message, wire_bytes)) = read_frame(&mut input, &peer, &mut ended).await {
         let Some(inner) = peer.upgrade() else { break };
         if !dispatch_message(
             Connection(inner),
             message,
+            wire_bytes,
             &handler,
             &permits,
             &notifications,
@@ -702,7 +995,7 @@ async fn read_frame<R: AsyncRead + Unpin>(
     input: &mut R,
     peer: &Weak<Inner>,
     ended: &mut Ended,
-) -> Option<Message> {
+) -> Option<(Message, usize)> {
     let mut length = [0; 4];
     let read = tokio::select! {
         _ = ended.changed() => return None,
@@ -730,7 +1023,7 @@ async fn read_frame<R: AsyncRead + Unpin>(
         return None;
     }
     match crate::decode(&bytes, &limits) {
-        Ok(message) => Some(message),
+        Ok(message) => Some((message, size)),
         Err(problem) => {
             fail(peer, problem.to_string());
             None
@@ -741,25 +1034,26 @@ async fn read_frame<R: AsyncRead + Unpin>(
 async fn dispatch_message(
     peer: Connection,
     message: Message,
+    wire_bytes: usize,
     handler: &Arc<dyn Handler>,
     permits: &Arc<Semaphore>,
     notifications: &mpsc::Sender<Notification>,
 ) -> bool {
     match message {
-        Message::Response { id, result } => receive_response(&peer, id, result),
+        Message::Response { id, result } => receive_response(&peer, id, result, wire_bytes),
         Message::Request { id, method, params } => {
-            receive_request(peer, id, method, params, handler, permits).await
+            receive_request(peer, id, method, params, wire_bytes, handler, permits).await
         }
         Message::Notification { method, params } => {
-            receive_notification(peer, method, params, handler, notifications).await
+            receive_notification(peer, method, params, wire_bytes, handler, notifications).await
         }
     }
 }
 
 /// DOC-16 §6、§10：响应资源先建立拥有关系，迟到响应沿载荷析构归还引用。
-fn receive_response(peer: &Connection, id: u64, result: Result<Value>) -> bool {
+fn receive_response(peer: &Connection, id: u64, result: Result<Value>, wire_bytes: usize) -> bool {
     let result = match result {
-        Ok(value) => match Payload::received(peer, value) {
+        Ok(value) => match Payload::received(peer, value, wire_bytes) {
             Ok(value) => Ok(value),
             Err(problem) => {
                 peer.0.fail(problem.to_string());
@@ -778,6 +1072,7 @@ fn receive_response(peer: &Connection, id: u64, result: Result<Value>) -> bool {
         peer.0.fail("插件连续请求超时");
     }
     if let Some(reply) = reply {
+        reply.write.cancel();
         let _receiver = reply.sender.send(result);
     }
     true
@@ -789,10 +1084,11 @@ async fn receive_request(
     id: u64,
     method: String,
     params: Value,
+    wire_bytes: usize,
     handler: &Arc<dyn Handler>,
     permits: &Arc<Semaphore>,
 ) -> bool {
-    let params = match Payload::received(&peer, params) {
+    let params = match Payload::received(&peer, params, wire_bytes) {
         Ok(params) => params,
         Err(problem) => {
             peer.0.fail(problem.to_string());
@@ -906,7 +1202,9 @@ async fn serve_request(
     }
     let removed = peer.0.inbound.lock().remove(&id);
     drop(removed);
-    let _closed = peer.respond(id, &label, result).await;
+    if let Err(problem) = peer.respond(id, &label, result).await {
+        peer.0.fail(problem.to_string());
+    }
 }
 
 /// DOC-16 §6–§8：即时资源簿记先于后续帧，用户通知保持FIFO与等待期限。
@@ -914,13 +1212,14 @@ async fn receive_notification(
     peer: Connection,
     method: String,
     params: Value,
+    wire_bytes: usize,
     handler: &Arc<dyn Handler>,
     notifications: &mpsc::Sender<Notification>,
 ) -> bool {
     if method == "cancel" {
         return cancel_request(&peer, &params);
     }
-    let params = match Payload::received(&peer, params) {
+    let params = match Payload::received(&peer, params, wire_bytes) {
         Ok(params) => params,
         Err(problem) => {
             peer.0.fail(problem.to_string());
@@ -934,15 +1233,11 @@ async fn receive_notification(
         }
         return true;
     }
-    if !matches!(
-        timeout(
-            peer.0.options.request_timeout,
-            notifications.send((peer.clone(), method, params))
-        )
-        .await,
-        Ok(Ok(()))
-    ) {
-        peer.0.fail("插件通知队列超过等待时限或已经关闭");
+    if notifications
+        .try_send((peer.clone(), method, params))
+        .is_err()
+    {
+        peer.0.fail("插件通知队列额度耗尽或已经关闭");
         return false;
     }
     true

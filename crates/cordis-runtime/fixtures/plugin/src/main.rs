@@ -38,6 +38,7 @@ struct Config {
     observed: Option<PathBuf>,
     checkpoint_source: Option<PathBuf>,
     export_gate: Option<PathBuf>,
+    cleanup_gate: Option<PathBuf>,
     meta_observed: Option<PathBuf>,
     scoped: bool,
     invalid: bool,
@@ -307,6 +308,12 @@ impl Shared {
                 let task = session.task.lock().take();
                 if let Some(task) = task {
                     task.await.map_err(error)??;
+                }
+                if let Some(gate) = &session.config.cleanup_gate {
+                    publish(&gate.with_extension("started"), Vec::new())?;
+                    while !gate.try_exists().map_err(error)? {
+                        tokio::time::sleep(Duration::from_millis(10)).await;
+                    }
                 }
             }
             _ => return Err(WireError::new(2, "fixture callback type")),

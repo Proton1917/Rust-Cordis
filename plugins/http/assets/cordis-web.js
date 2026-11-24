@@ -23,7 +23,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 */
-// node_modules/cbor-x/decode.js
+// ../../../pr04-node-terminal/sdks/typescript/node_modules/cbor-x/decode.js
 var decoder;
 try {
   decoder = new TextDecoder();
@@ -1088,7 +1088,7 @@ var FLOAT32_OPTIONS = {
   DECIMAL_FIT: 4
 };
 
-// node_modules/cbor-x/encode.js
+// ../../../pr04-node-terminal/sdks/typescript/node_modules/cbor-x/encode.js
 var textEncoder;
 try {
   textEncoder = new TextEncoder();
@@ -2308,13 +2308,16 @@ function configuration(value) {
 }
 
 // cordis-sdk/src/budget.ts
-function checkValue(root, limits) {
-  const pending = [[root, 0]];
+function checkValue(root, limits, overhead = 0) {
+  const pending = [[root, overhead]];
   let nodes = 0;
   while (pending.length) {
     const [value, depth] = pending.pop();
-    if (++nodes > limits.maxValues || depth > limits.maxDepth)
+    if (++nodes > limits.maxValues)
       throw new CordisError(8, "\u503C\u56FE\u8D85\u8FC7\u6DF1\u5EA6\u6216\u8282\u70B9\u9884\u7B97");
+    const container = value instanceof Tag || Array.isArray(value) || value instanceof Map || value && typeof value === "object" && !(value instanceof Uint8Array);
+    if (container && depth >= limits.maxDepth)
+      throw new CordisError(8, "\u503C\u56FE\u8D85\u8FC7\u6DF1\u5EA6\u9884\u7B97");
     if (value instanceof Tag) pending.push([value.value, depth + 1]);
     else if (Array.isArray(value)) {
       if (value.length > limits.maxCollection) throw new CordisError(8, "\u6570\u7EC4\u8D85\u8FC7\u5143\u7D20\u9884\u7B97");
@@ -2329,6 +2332,50 @@ function checkValue(root, limits) {
     }
   }
 }
+function checkMessage(message, limits) {
+  const children = (value) => {
+    if (value instanceof Tag) return [value.value];
+    if (Array.isArray(value)) return value;
+    if (value instanceof Map) return function* () {
+      for (const [key, item] of value) {
+        yield key;
+        yield item;
+      }
+    }();
+    if (value && typeof value === "object" && !(value instanceof Uint8Array))
+      return function* () {
+        for (const key in value) if (Object.hasOwn(value, key)) {
+          yield key;
+          yield value[key];
+        }
+      }();
+    return void 0;
+  };
+  const stack = [[[message].values(), 0]];
+  while (stack.length) {
+    const [iterator, depth] = stack[stack.length - 1];
+    const next = iterator.next();
+    if (next.done) {
+      stack.pop();
+      continue;
+    }
+    const nested = children(next.value);
+    if (nested) {
+      if (depth >= limits.maxDepth) throw new CordisError(8, "\u6D88\u606F\u8D85\u8FC7\u6DF1\u5EA6\u9884\u7B97");
+      stack.push([nested[Symbol.iterator](), depth + 1]);
+    }
+  }
+  const get = (value, key) => value instanceof Map ? value.get(key) : value && typeof value === "object" ? value[key] : void 0;
+  const has = (value, key) => value instanceof Map ? value.has(key) : !!value && typeof value === "object" && Object.hasOwn(value, key);
+  for (const kind of ["request", "notification"]) {
+    const body = get(message, kind);
+    if (has(body, "params")) checkValue(get(body, "params"), limits, 2);
+  }
+  const result = get(get(message, "response"), "result");
+  if (has(result, "ok")) checkValue(get(result, "ok"), limits, 3);
+  const error = get(result, "error");
+  if (has(error, "detail")) checkValue(get(error, "detail"), limits, 4);
+}
 
 // cordis-sdk/src/wire.ts
 var DEFAULT_LIMITS = {
@@ -2339,7 +2386,9 @@ var DEFAULT_LIMITS = {
   consecutiveTimeouts: 3,
   maxDepth: 64,
   maxCollection: 65536,
-  maxValues: 262144
+  maxValues: 262144,
+  maxActiveCallbacks: 64,
+  maxCallbackBytes: 64 * 1024 * 1024
 };
 var Connection = class {
   constructor(runtime, input, output, limits) {
@@ -2347,6 +2396,8 @@ var Connection = class {
     this.input = input;
     this.output = output;
     this.limits = { ...DEFAULT_LIMITS, ...limits };
+    if (![this.limits.maxActiveCallbacks, this.limits.maxCallbackBytes].every((value) => Number.isSafeInteger(value) && value > 0))
+      throw new CordisError(2, "\u56DE\u8C03\u989D\u5EA6\u9700\u8981\u6B63\u5B89\u5168\u6574\u6570");
     setSizeLimits({
       maxArraySize: this.limits.maxCollection + 1,
       maxMapSize: this.limits.maxCollection + 1,
@@ -2376,7 +2427,7 @@ var Connection = class {
       if (this.closed) throw new CordisError(4, "\u6838\u5FC3\u8FDE\u63A5\u5DF2\u5173\u95ED");
       if (this.writes >= this.limits.queueCapacity)
         throw new CordisError(8, "\u53D1\u9001\u961F\u5217\u989D\u5EA6\u8017\u5C3D");
-      checkValue(message, this.limits);
+      checkMessage(message, this.limits);
       const data = this.encoder.encode(message);
       if (data.length > this.limits.maxFrame) throw new CordisError(8, "\u6D88\u606F\u8D85\u8FC7\u5E27\u957F\u5EA6\u4E0A\u9650");
       const framed = new Uint8Array(data.length + 4);
@@ -2416,33 +2467,38 @@ var Connection = class {
     const deadline = Math.min(local, (signal && this.deadlines.get(signal)) ?? local);
     let writing = false;
     let cancelled = false;
-    let rejectResponse;
+    let received;
     let timer;
     let cancel;
     let expire;
     const result = new Promise((resolve, reject) => {
-      rejectResponse = reject;
-      this.pending.set(id, { resolve, reject });
+      this.pending.set(id, {
+        ownsDeadline: deadline === local,
+        resolve(payload) {
+          received = payload;
+          resolve(payload);
+        },
+        reject
+      });
       cancel = () => {
-        if (cancelled) return;
+        const pending = this.claimPending(id);
+        if (!pending) return;
         cancelled = true;
-        reject(signal?.reason instanceof CordisError ? signal.reason : new CordisError(7, "\u8C03\u7528\u5DF2\u53D6\u6D88"));
+        pending.reject(signal?.reason instanceof CordisError ? signal.reason : new CordisError(7, "\u8C03\u7528\u5DF2\u53D6\u6D88"));
         if (writing) this.notifySoon("cancel", { id });
       };
       signal?.addEventListener("abort", cancel, { once: true });
       expire = () => {
-        if (cancelled) return;
+        const pending = this.claimPending(id, true);
+        if (!pending) return;
         cancelled = true;
-        reject(new CordisError(6, "\u8BF7\u6C42\u8D85\u8FC7\u622A\u6B62\u65F6\u95F4"));
+        pending.reject(new CordisError(6, "\u8BF7\u6C42\u8D85\u8FC7\u622A\u6B62\u65F6\u95F4"));
         if (writing) this.notifySoon("cancel", { id });
-        if (deadline === local && ++this.timeouts >= this.limits.consecutiveTimeouts)
-          this.fail(new CordisError(6, "\u8FDE\u7EED\u8BF7\u6C42\u8D85\u65F6"));
       };
       timer = setTimeout(expire, Math.max(0, deadline - started));
     });
     const completed = result.finally(() => {
       clearTimeout(timer);
-      this.pending.delete(id);
       signal?.removeEventListener("abort", cancel);
     });
     try {
@@ -2451,14 +2507,14 @@ var Connection = class {
       }
       const sent = this.send({ request: { id, method, params } }, offers, () => {
         if (performance.now() >= deadline) expire();
-        writing = !cancelled;
+        writing = !cancelled && this.pending.has(id);
         return writing;
       });
       const [, payload] = await Promise.all([sent, completed]);
-      this.timeouts = 0;
       return payload;
     } catch (error) {
-      rejectResponse(error);
+      this.claimPending(id)?.reject(error);
+      received?.close();
       throw error;
     }
   }
@@ -2519,10 +2575,10 @@ var Connection = class {
             bytes = partial;
           }
           const message = this.decoder.decode(bytes);
-          checkValue(message, this.limits);
+          checkMessage(message, this.limits);
           headerBytes = received = 0;
           partial = void 0;
-          this.receive(message);
+          this.receive(message, length);
         }
       }
       if (headerBytes) throw new CordisError(2, "\u8F93\u5165\u5E27\u88AB\u622A\u65AD");
@@ -2530,7 +2586,7 @@ var Connection = class {
       this.fail(new CordisError(4, "\u6838\u5FC3\u8F93\u5165\u5DF2\u7ED3\u675F"), false);
     }
   }
-  receive(message) {
+  receive(message, wireBytes) {
     if (!(message instanceof Map) || message.size !== 1)
       throw new CordisError(2, "\u6D88\u606F\u5305\u7EDC\u9700\u8981\u5355\u952E\u6620\u5C04");
     const [kind, entry] = [...message][0];
@@ -2538,18 +2594,28 @@ var Connection = class {
     if (kind === "response") this.response(body);
     else if (kind === "request") this.start(body);
     else if (kind === "notification") {
-      void this.runtime.notification(body.method, body.params).catch((error) => this.fail(error));
+      void this.runtime.notification(body.method, body.params, wireBytes).catch((error) => this.fail(error));
     } else throw new CordisError(3, "\u6D88\u606F\u7C7B\u522B\u65E0\u6548");
+  }
+  /** DOC-16 §10：终态先消费等待项，再更新由本调用拥有的连接健康。 */
+  claimPending(id, timedOut) {
+    const pending = this.pending.get(id);
+    if (!pending) return void 0;
+    this.pending.delete(id);
+    if (timedOut === false) this.timeouts = 0;
+    else if (timedOut && pending.ownsDeadline && ++this.timeouts >= this.limits.consecutiveTimeouts)
+      this.fail(new CordisError(6, "\u8FDE\u7EED\u8BF7\u6C42\u8D85\u65F6"));
+    return pending;
   }
   response(body) {
     const id = identifier(body.id);
     const result = fields(body.result);
-    const pending = this.pending.get(id);
     if ("error" in result) {
       const error = fields(result.error);
-      pending?.reject(new CordisError(error.code, error.message, error.detail));
+      this.claimPending(id, error.code === 6)?.reject(new CordisError(error.code, error.message, error.detail));
     } else if ("ok" in result) {
       const payload = this.runtime.payload(result.ok);
+      const pending = this.claimPending(id, false);
       if (pending) pending.resolve(payload);
       else payload.close();
     } else throw new CordisError(2, "\u54CD\u5E94\u9700\u8981 ok \u6216 error");
@@ -2643,9 +2709,15 @@ var Payload = class {
     this.runtime = runtime;
     this.value = value;
     if (!(value instanceof Map)) return;
-    for (const entry of value.get("refs") ?? []) {
+    const entries = value.get("refs");
+    if (entries == null || Array.isArray(entries) && !entries.length) return;
+    const numbers = /* @__PURE__ */ new Set();
+    for (const entry of entries) {
       const number = identifier(entry);
-      if (this.references.has(number)) throw new CordisError(2, "refs \u4E2D\u7684\u7F16\u53F7\u91CD\u590D");
+      if (numbers.has(number)) throw new CordisError(2, "refs \u4E2D\u7684\u7F16\u53F7\u91CD\u590D");
+      numbers.add(number);
+    }
+    for (const number of numbers) {
       this.references.set(number, runtime.reference(number).retain());
     }
   }
@@ -3111,6 +3183,8 @@ var Runtime = class {
   contexts = /* @__PURE__ */ new Map();
   events = /* @__PURE__ */ new Map();
   next = 1n;
+  activeCallbacks = 0;
+  callbackBytes = 0;
   description() {
     const components = [...this.components.values()].map((component) => ({
       name: component.name,
@@ -3250,7 +3324,11 @@ var Runtime = class {
       context.close();
     }
   }
-  async notification(method, value) {
+  /** Reader-measured CBOR notification bodies retained until actual callback completion. */
+  get callbackUsage() {
+    return { active: this.activeCallbacks, bytes: this.callbackBytes };
+  }
+  async notification(method, value, wireBytes) {
     const params = fields(value);
     if (method === "release") this.releaseExports(params.objects.map(identifier));
     else if (method === "cancel") {
@@ -3262,12 +3340,25 @@ var Runtime = class {
       this.contexts.delete(id);
       for (const abort of this.events.get(id) ?? []) abort.abort();
       this.events.delete(id);
-    } else if (method === "callback") this.event(params, value);
+    } else if (method === "callback") this.event(params, value, wireBytes);
     else throw new CordisError(3, `\u901A\u77E5\u65B9\u6CD5\u7F3A\u5E2D\uFF1A${method}`);
   }
-  event(params, value) {
+  event(params, value, wireBytes) {
     const payload = this.payload(value);
-    const id = identifier(params.context);
+    let id;
+    const size = wireBytes ?? this.connection.limits.maxFrame;
+    try {
+      id = identifier(params.context);
+      if (!Number.isSafeInteger(size) || size <= 0 || size > this.connection.limits.maxFrame)
+        throw new CordisError(2, "\u56DE\u8C03\u8F7D\u8377\u957F\u5EA6\u65E0\u6548");
+      if (this.activeCallbacks >= this.connection.limits.maxActiveCallbacks || size > this.connection.limits.maxCallbackBytes - this.callbackBytes)
+        throw new CordisError(8, "\u6D3B\u8DC3\u56DE\u8C03\u989D\u5EA6\u8017\u5C3D");
+    } catch (error) {
+      payload.close();
+      throw error;
+    }
+    this.activeCallbacks++;
+    this.callbackBytes += size;
     const abort = new AbortController();
     let events = this.events.get(id);
     if (!events) {
@@ -3284,6 +3375,9 @@ var Runtime = class {
     }).finally(() => {
       events.delete(abort);
       payload.close();
+      this.activeCallbacks--;
+      this.callbackBytes -= size;
+      if (!events.size && this.events.get(id) === events) this.events.delete(id);
     });
   }
   close() {

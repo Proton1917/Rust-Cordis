@@ -66,6 +66,7 @@ pub struct RuntimeSettings {
     pub restart_max: u32,
     pub restart_backoff_ms: u64,
     pub retired_image_limit: usize,
+    pub retired_image_basis: cordis_supervisor::manager::RetiredImageBasis,
     pub unload: Unload,
 }
 
@@ -91,6 +92,7 @@ impl Default for RuntimeSettings {
             restart_max: 5,
             restart_backoff_ms: 500,
             retired_image_limit: 20,
+            retired_image_basis: cordis_supervisor::manager::RetiredImageBasis::Cumulative,
             unload: Unload::Never,
         }
     }
@@ -137,7 +139,7 @@ pub struct Overlay {
     pub instance: BTreeMap<String, OverlayEntry>,
     #[serde(default)]
     pub removed: BTreeSet<String>,
-    #[serde(default)]
+    #[serde(default, serialize_with = "serialize_previous")]
     pub previous: BTreeMap<String, OverlayEntry>,
 }
 
@@ -193,6 +195,44 @@ impl<'de> Deserialize<'de> for Isolation {
             Input::Named(name) => Ok(Self::Named(name)),
             Input::Fresh(true) => Ok(Self::Fresh),
             Input::Fresh(false) => Err(serde::de::Error::custom("隔离域使用名称或 true")),
+        }
+    }
+}
+
+// Rollback consumes the previous program identity and keeps the current instance settings.
+// Deserialize the old complete entries, but write only the identity used by rollback.
+fn serialize_previous<S: serde::Serializer>(
+    entries: &BTreeMap<String, OverlayEntry>,
+    serializer: S,
+) -> std::result::Result<S::Ok, S::Error> {
+    use serde::ser::SerializeMap;
+    #[derive(Serialize)]
+    struct Previous<'a> {
+        plugin: &'a str,
+    }
+    let mut map = serializer.serialize_map(Some(entries.len()))?;
+    for (name, entry) in entries {
+        map.serialize_entry(
+            name,
+            &Previous {
+                plugin: &entry.plugin,
+            },
+        )?;
+    }
+    map.end()
+}
+
+impl OverlayEntry {
+    pub(crate) fn previous(plugin: String) -> Self {
+        Self {
+            plugin,
+            component: None,
+            group: None,
+            scope: None,
+            disabled: false,
+            config: toml::Table::new(),
+            isolate: BTreeMap::new(),
+            intercept: BTreeMap::new(),
         }
     }
 }
@@ -324,32 +364,45 @@ impl Configuration {
         self.expand_scopes(self.entries(overlay))
     }
 
+    /// Query membership without cloning other instances' configuration.
+    pub fn contains_entry(&self, overlay: &Overlay, name: &str) -> bool {
+        overlay.instance.contains_key(name)
+            || (!overlay.removed.contains(name) && self.instance.contains_key(name))
+    }
+
+    /// Resolve one original member; scope inheritance stays in effective().
+    pub fn entry(&self, overlay: &Overlay, name: &str) -> Option<InstanceSettings> {
+        if let Some(entry) = overlay.instance.get(name) {
+            let base = self.instance.get(name);
+            Some(InstanceSettings {
+                plugin: entry.plugin.clone(),
+                component: entry.component.clone(),
+                group: entry.group.clone(),
+                scope: entry.scope.clone(),
+                disabled: entry.disabled || base.is_some_and(|base| base.disabled),
+                config: entry.config.clone(),
+                isolate: entry.isolate.clone(),
+                intercept: entry.intercept.clone(),
+                grants: base.map(|base| base.grants.clone()).unwrap_or_default(),
+                forwarder: base.is_some_and(|base| base.forwarder),
+            })
+        } else if overlay.removed.contains(name) {
+            None
+        } else {
+            self.instance.get(name).cloned()
+        }
+    }
+
     /// ADR-0033：管理持久化保存成员自身的配置，组继承在生成运行目标时计算。
     pub fn entries(&self, overlay: &Overlay) -> BTreeMap<String, InstanceSettings> {
         let mut instances = self.instance.clone();
         for name in &overlay.removed {
             instances.remove(name);
         }
-        for (name, entry) in &overlay.instance {
+        for name in overlay.instance.keys() {
             instances.insert(
                 name.clone(),
-                InstanceSettings {
-                    plugin: entry.plugin.clone(),
-                    component: entry.component.clone(),
-                    group: entry.group.clone(),
-                    scope: entry.scope.clone(),
-                    disabled: entry.disabled
-                        || self.instance.get(name).is_some_and(|base| base.disabled),
-                    config: entry.config.clone(),
-                    isolate: entry.isolate.clone(),
-                    intercept: entry.intercept.clone(),
-                    grants: self
-                        .instance
-                        .get(name)
-                        .map(|base| base.grants.clone())
-                        .unwrap_or_default(),
-                    forwarder: self.instance.get(name).is_some_and(|base| base.forwarder),
-                },
+                self.entry(overlay, name).expect("overlay member"),
             );
         }
         instances

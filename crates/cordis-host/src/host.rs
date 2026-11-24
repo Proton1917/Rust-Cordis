@@ -33,6 +33,8 @@ pub struct HostOptions {
     pub library: LibraryOptions,
     pub request_timeout: Duration,
     pub native_workers: usize,
+    pub max_active_callbacks: usize,
+    pub max_callback_bytes: usize,
 }
 
 pub(crate) struct NotificationTask {
@@ -97,6 +99,7 @@ pub(crate) struct Inner {
     process: AtomicU64,
     group: OnceLock<String>,
     next_notification: AtomicU64,
+    callback_admission: Arc<crate::callback::Admission>,
     initialized: AtomicBool,
     contexts: Mutex<HashMap<u64, Arc<ContextRecord>>>,
     pub objects: Arc<Objects>,
@@ -119,6 +122,10 @@ impl Host {
 
     /// DOC-15 CP-1：初始化宿主数据和独立原生执行器，运行时构造错误直接返回。
     pub fn new(options: HostOptions, io: tokio::runtime::Handle) -> Result<Self> {
+        let callback_admission = crate::callback::Admission::new(
+            options.max_active_callbacks,
+            options.max_callback_bytes,
+        )?;
         let store = LibraryStore::new(options.library.clone(), &options.libraries)?;
         let native = RuntimeOwner::new(options.native_workers)?;
         let executor = NativeExecutor::new(native.handle(), io.clone());
@@ -133,6 +140,7 @@ impl Host {
             process: AtomicU64::new(0),
             group: OnceLock::new(),
             next_notification: AtomicU64::new(1),
+            callback_admission,
             initialized: AtomicBool::new(false),
             contexts: Mutex::new(HashMap::new()),
             objects: Arc::new(Objects::new(executor.clone())),
@@ -283,6 +291,7 @@ impl Host {
         payload::LibraryStatus {
             libraries,
             retired_images: lease::retired_images(),
+            retirement: Some(lease::retirement_status(true)),
         }
     }
 
@@ -321,6 +330,9 @@ impl Host {
         lease.quiet().await;
         lease.reap();
         lease::reap_ready();
+        if lease.closed() {
+            self.trim_closed_history();
+        }
         self.prune_cache().await;
         lease.descriptor_result().map_err(|problem| {
             Error::new(
@@ -334,7 +346,25 @@ impl Host {
             closed: lease.closed(),
             quiescence_ms: Some(started.elapsed().as_millis() as u64),
             retired_images: lease::retired_images(),
+            retirement: Some(lease::retirement_status(false)),
         })
+    }
+
+    fn trim_closed_history(&self) {
+        const CLOSED_HISTORY: usize = 256;
+        let mut retired = self.0.retired.lock();
+        if retired.len() <= CLOSED_HISTORY {
+            return;
+        }
+        let mut closed: Vec<_> = retired
+            .iter()
+            .filter_map(|(id, entry)| entry.lease.closed().then_some(*id))
+            .collect();
+        closed.sort_unstable();
+        let discard = closed.len().saturating_sub(CLOSED_HISTORY);
+        for id in closed.into_iter().take(discard) {
+            retired.remove(&id);
+        }
     }
 
     async fn request(&self, method: &str, params: impl Into<Outgoing>) -> Result<Payload> {
@@ -944,9 +974,10 @@ impl Host {
                 return Ok(());
             }
             let object = self.objects().borrow(request.object)?;
+            let permit = self.0.callback_admission.acquire(params.wire_bytes())?;
             let host = self.clone();
             let task = self.0.executor.start(
-                async move { host.callback(request, params, object).await },
+                permit.run(async move { host.callback(request, params, object).await }),
                 true,
             );
             let cancel = task.cancellation();

@@ -133,6 +133,8 @@ def parse_matrix():
         cells = [c.strip() for c in re.split(r"(?<!\\)\|", line)[1:-1]]
         if len(cells) != 6:
             sys.exit(f"矩阵行列数应为 6：{line}")
+        if cells[0] in rows:
+            sys.exit(f"矩阵用例 ID 重复：{cells[0]}")
         rows[cells[0]] = cells
     return rows
 

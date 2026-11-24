@@ -39,3 +39,19 @@ await run("hello", [{
 `context.exportState(schema, version, exporter, frozen, thaw)` 登记状态导出器。导出前 Frozen 进入冻结状态，写入方法调用 `frozen.check()`；回退时解除冻结并执行可选的 thaw。`context.inherited` 保存核心传来的 State，包含 schema、version 与 data。kv-ts 与 Rust KV 共用 kv.snapshot@1，entries 中的字节值保存为整数数组。
 
 `withSignal(signal, () => client.method(...))` 将调用方取消传给核心。提供方通过 `currentSignal()` 取得当前调用的取消信号，将其传给 Node 的 timers、fetch 等异步接口。apply 和请求式清理按核心生命周期执行。标准输入结束后进程释放本地表项并退出。
+
+## 异步通知回调容量
+
+`Limits.maxActiveCallbacks` 与 `Limits.maxCallbackBytes` 默认分别为 64 和 67108864，
+设置为正安全整数。一个 Runtime 的全部上下文共享异步 callback 通知额度；请求式 callback
+沿 `maxInflight` 管理。字节计量使用读帧入口取得的完整 CBOR 通知正文长度，包含包络，
+四字节帧头单独处理。解码对象及业务代码复制的对象具有各自内存大小。
+
+创建 AbortController 和回调执行前取得任务及字节额度，任一额度不足时产生 code 8 并终止
+连接。已接受通知沿接收顺序开始执行，完成顺序由异步回调决定。`release_context` 发出
+AbortSignal；回调实际完成及载荷释放时归还额度，忽略取消信号的回调在此期间继续占用额度。
+控制通知和反向调用响应可在全部回调槽位占用期间继续处理。
+`runtime.callbackUsage` 返回 `{active, bytes}` 观测值。
+
+标准 UP/1 路径始终把实际帧正文长度传给 `Runtime.notification`。直接嵌入调用时可在第三个
+参数传入自身读帧入口测得的 `wireBytes`；缺省时按 `maxFrame` 收取单次回调额度。

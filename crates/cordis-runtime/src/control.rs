@@ -3,6 +3,7 @@
 mod batch;
 mod contract;
 mod outcomes;
+mod permissions;
 mod sources;
 mod web;
 pub(crate) use outcomes::{BatchOutcomes, PendingBatch};
@@ -38,10 +39,28 @@ struct Mounted {
     scope: Arc<MountScope>,
 }
 
-struct MountScope {
-    view: Context,
-    manage: Option<Effect>,
+/// A mounted declaration selects one actual lifecycle owner. Resolve the current
+/// fiber through that owner so a generation change never leaves a cached old fiber.
+struct InstanceOwners<'a> {
+    mounted: &'a BTreeMap<String, Mounted>,
+    manager: &'a Manager,
+    web: &'a cordis_web_deployment::Deployment,
 }
+
+impl InstanceOwners<'_> {
+    fn fiber(&self, name: &str) -> Result<cordis::Fiber> {
+        let mounted = self
+            .mounted
+            .get(name)
+            .ok_or_else(|| WireError::new(4, format!("部署实例 {name} 缺席")))?;
+        match mounted.package.entry {
+            Entry::Web => self.web.instance_fiber(name),
+            _ => self.manager.instance_fiber(name),
+        }
+    }
+}
+
+use permissions::MountScope;
 
 pub struct Controller {
     web: Arc<cordis_web_deployment::Deployment>,
@@ -154,7 +173,8 @@ impl Controller {
         if let Some(candidate) = candidate
             && let Err(problem) = self.reload_configuration(candidate).await
         {
-            self.logs.emit(0, "runtime", &format!("启动配置应用失败：{problem}"));
+            self.logs
+                .emit(0, "runtime", &format!("启动配置应用失败：{problem}"));
         }
         Ok(())
     }
@@ -179,7 +199,51 @@ impl Controller {
         if let Some(problem) = &self.recovery_required {
             return Err(problem.clone());
         }
-        self.sources.confirm(&self.manager)
+        self.sources.confirm(
+            &InstanceOwners {
+                mounted: &self.mounted,
+                manager: &self.manager,
+                web: &self.web,
+            },
+            &self.store,
+        )
+    }
+
+    pub(crate) fn instance_fiber(&self, name: &str) -> Result<cordis::Fiber> {
+        InstanceOwners {
+            mounted: &self.mounted,
+            manager: &self.manager,
+            web: &self.web,
+        }
+        .fiber(name)
+        .map_err(|problem| {
+            self.diagnostics
+                .lock()
+                .instance_errors
+                .get(name)
+                .map(|message| WireError::new(problem.code, message.clone()))
+                .unwrap_or(problem)
+        })
+    }
+
+    /// Failure details come from the same owners used by the public status view.
+    /// The full snapshots are needed only on a failed contract check.
+    pub(crate) fn instance_failure(&self, name: &str) -> Option<String> {
+        self.diagnostics
+            .lock()
+            .instance_errors
+            .get(name)
+            .cloned()
+            .or_else(|| {
+                self.manager
+                    .snapshot()
+                    .instances
+                    .into_iter()
+                    .chain(self.web.snapshot())
+                    .find(|instance| instance.name == name)
+                    .and_then(|instance| instance.error)
+                    .map(|error| error.message)
+            })
     }
 
     fn record_decision(
@@ -300,7 +364,7 @@ impl Controller {
         config: &toml::Table,
     ) -> Result<()> {
         config::instance_name(name)?;
-        if self.configuration.entries(&self.overlay).contains_key(name) {
+        if self.configuration.contains_entry(&self.overlay, name) {
             return Err(parameter("实例名称已经存在"));
         }
         let settings = InstanceSettings {
@@ -331,8 +395,7 @@ impl Controller {
     /// DOC-15 §3.2：按部署叠加规则取得管理操作的当前实例设置。
     fn current(&self, name: &str) -> Result<InstanceSettings> {
         self.configuration
-            .entries(&self.overlay)
-            .remove(name)
+            .entry(&self.overlay, name)
             .ok_or_else(|| WireError::new(4, format!("实例 {name} 缺席")))
     }
 
@@ -366,8 +429,15 @@ impl Controller {
                 }
             }
         }
+        self.installed.retain(|reference, package| {
+            reference == &package.reference
+                && reference.starts_with("installed-")
+                && catalog
+                    .packages
+                    .get(reference)
+                    .is_some_and(|current| current.source == package.source)
+        });
         self.catalog = catalog;
-        self.installed.clear();
         let mut diagnostics = self.diagnostics.lock();
         diagnostics.sources = self.catalog.packages.values().cloned().collect();
         diagnostics.plugin_errors = errors;
@@ -442,20 +512,22 @@ impl Controller {
                 .map(|(name, mounted)| (name, &mounted.settings, &mounted.package)),
         );
         let snapshot = self.manager.snapshot();
+        let descriptors: HashMap<_, _> = snapshot
+            .groups
+            .iter()
+            .flat_map(|group| {
+                group
+                    .plugins
+                    .iter()
+                    .map(move |plugin| ((group.name.as_str(), plugin.name.as_str()), plugin))
+            })
+            .collect();
         for mounted in self.mounted.values() {
-            if let Some(descriptor) = snapshot
-                .groups
-                .iter()
-                .find(|group| group.name == mounted.group)
-                .and_then(|group| {
-                    group
-                        .plugins
-                        .iter()
-                        .find(|plugin| plugin.name == mounted.package.name)
-                })
+            if let Some(descriptor) =
+                descriptors.get(&(mounted.group.as_str(), mounted.package.name.as_str()))
                 && let Some(package) = self.catalog.packages.get_mut(&mounted.package.reference)
             {
-                package.descriptor = Some(descriptor.clone());
+                package.descriptor = Some((*descriptor).clone());
             }
         }
         let mut diagnostics = self.diagnostics.lock();
@@ -530,53 +602,63 @@ impl Controller {
         settings: &InstanceSettings,
         view: &Context,
     ) -> Result<Option<Effect>> {
-        let mut provisions = Vec::new();
-        if settings.forwarder {
-            provisions.push(self.web.forwarder(view)?);
-        }
-        for (interface, legacy, methods) in [
-            (
-                "cordis.manage@1.1",
-                true,
-                &["install", "replace_batch", "shutdown"][..],
-            ),
-            ("cordis.manage@2.0", false, config::METHODS),
-        ] {
-            let grants = settings.management_grants(legacy);
-            if grants.is_empty() {
-                continue;
-            }
-            let mut methods: Vec<String> = methods.iter().map(|method| (*method).into()).collect();
-            if !legacy {
-                methods.push("result".into());
-            }
-            provisions.push(self.manager.provide_builtin_in(
-                view,
-                interface,
-                methods,
-                Arc::new(Management {
-                    legacy,
-                    grants: grants.to_vec(),
-                    control: self.handle.clone(),
-                    configuration: self.path.clone(),
-                    outcomes: self.outcomes.clone(),
-                    logs: self.logs.clone(),
-                }),
-            )?);
-        }
-        if provisions.is_empty() {
+        if !settings.forwarder
+            && settings.management_grants(true).is_empty()
+            && settings.management_grants(false).is_empty()
+        {
             return Ok(None);
         }
-        view.effect("instance-permissions", move |scope| {
-            scope.defer_async(move || async move {
-                for provision in provisions {
-                    provision.dispose().await?;
+        let mut registration_error = None;
+        let effect = view.effect("instance-permissions", |scope| {
+            let register = || -> Result<()> {
+                if settings.forwarder {
+                    scope
+                        .adopt(self.web.forwarder(view)?.effect())
+                        .map_err(kernel)?;
+                }
+                for (interface, legacy, methods) in [
+                    (
+                        "cordis.manage@1.1",
+                        true,
+                        &["install", "replace_batch", "shutdown"][..],
+                    ),
+                    ("cordis.manage@2.0", false, config::METHODS),
+                ] {
+                    let grants = settings.management_grants(legacy);
+                    if grants.is_empty() {
+                        continue;
+                    }
+                    let mut methods: Vec<String> =
+                        methods.iter().map(|method| (*method).into()).collect();
+                    if !legacy {
+                        methods.push("result".into());
+                    }
+                    let provision = self.manager.provide_builtin_in(
+                        view,
+                        interface,
+                        methods,
+                        Arc::new(Management {
+                            legacy,
+                            grants: grants.to_vec(),
+                            control: self.handle.clone(),
+                            configuration: self.path.clone(),
+                            outcomes: self.outcomes.clone(),
+                            logs: self.logs.clone(),
+                        }),
+                    )?;
+                    scope.adopt(provision.effect()).map_err(kernel)?;
                 }
                 Ok(())
+            };
+            register().map_err(|problem| {
+                let error = cordis::Error::new(problem.message.clone());
+                registration_error = Some(problem);
+                error
             })
-        })
-        .map(Some)
-        .map_err(kernel)
+        });
+        effect
+            .map(Some)
+            .map_err(|problem| registration_error.unwrap_or_else(|| kernel(problem)))
     }
 
     /// DOC-15 §3.2、§11.4：配置与插件批次共用状态保存、页面协调及持久提交。
@@ -592,7 +674,8 @@ impl Controller {
     async fn reload_configuration(&mut self, configuration: Result<Configuration>) -> Result<()> {
         let result = match configuration {
             Ok(configuration) => {
-                self.commit_configuration(configuration, self.overlay.clone()).await
+                self.commit_configuration(configuration, self.overlay.clone())
+                    .await
             }
             Err(problem) => Err(problem),
         };

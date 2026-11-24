@@ -2,11 +2,13 @@
 
 use crate::config::{self, Overlay, Result, parameter};
 use cordis_up::{Limits, Value, WireError, payload};
+use parking_lot::Mutex;
 use std::{
-    collections::HashMap,
+    collections::{BTreeMap, HashMap},
     fs::{self, File, TryLockError},
     io::{Read, Write},
     path::{Path, PathBuf},
+    sync::Arc,
 };
 
 const OWNER: &str = "runtime.pid";
@@ -96,9 +98,41 @@ fn publish(path: &Path, bytes: &[u8], durable: bool) -> Result<()> {
 }
 
 fn sync_directory(path: &Path) -> Result<()> {
+    #[cfg(test)]
+    sync_test::before(path)?;
     File::open(path)
         .and_then(|directory| directory.sync_all())
         .map_err(io_error)
+}
+
+#[cfg(test)]
+pub(crate) mod sync_test {
+    use super::*;
+    use std::cell::RefCell;
+
+    thread_local! {
+        static CALLS: RefCell<Vec<PathBuf>> = const { RefCell::new(Vec::new()) };
+        static FAILURE: RefCell<Option<PathBuf>> = const { RefCell::new(None) };
+    }
+
+    pub(crate) fn fail_next(path: &Path) {
+        FAILURE.with(|failure| *failure.borrow_mut() = Some(path.to_owned()));
+    }
+
+    pub(crate) fn calls(path: &Path) -> usize {
+        CALLS.with(|calls| calls.borrow().iter().filter(|call| *call == path).count())
+    }
+
+    pub(super) fn before(path: &Path) -> Result<()> {
+        CALLS.with(|calls| calls.borrow_mut().push(path.to_owned()));
+        if FAILURE.with(|failure| failure.borrow().as_deref() == Some(path)) {
+            FAILURE.with(|failure| failure.borrow_mut().take());
+            return Err(io_error(std::io::Error::other(
+                "injected directory sync failure",
+            )));
+        }
+        Ok(())
+    }
 }
 
 /// CP-8、CP-9：状态块使用 UP/1 受限 CBOR 解码器和共享 State 数据定义。
@@ -110,6 +144,167 @@ pub fn parse_state(bytes: &[u8]) -> Result<payload::State> {
 #[derive(Clone)]
 pub struct Store {
     pub directory: PathBuf,
+    checkpoints: Arc<Mutex<CheckpointCache>>,
+}
+
+const CHECKPOINT_CACHE_BYTES: usize = 16 * 1024 * 1024;
+const CHECKPOINT_CACHE_ENTRIES: usize = 256;
+
+struct PublishedCheckpoint {
+    state: Option<Arc<payload::State>>,
+    bytes: Arc<[u8]>,
+    age: u64,
+    charged: usize,
+}
+
+#[derive(Default)]
+struct CheckpointCache {
+    directory: PathBuf,
+    entries: HashMap<String, PublishedCheckpoint>,
+    order: BTreeMap<u64, String>,
+    bytes: usize,
+    next: u64,
+    #[cfg(test)]
+    encodes: usize,
+    #[cfg(test)]
+    reads: usize,
+    #[cfg(test)]
+    writes: usize,
+}
+
+impl CheckpointCache {
+    fn bind(&mut self, directory: &Path) {
+        if self.directory != directory {
+            self.clear();
+            self.directory = directory.to_owned();
+        } else if !directory.is_absolute() {
+            // The public Store path may be reassigned. A relative spelling can
+            // resolve differently after a process cwd change, so it is not a key.
+            self.clear();
+        }
+    }
+
+    fn remove(&mut self, name: &str) {
+        if let Some(old) = self.entries.remove(name) {
+            self.order.remove(&old.age);
+            self.bytes -= old.charged;
+        }
+    }
+
+    fn clear(&mut self) {
+        self.entries.clear();
+        self.order.clear();
+        self.bytes = 0;
+    }
+
+    fn remember(&mut self, name: &str, state: Option<Arc<payload::State>>, bytes: Arc<[u8]>) {
+        self.remove(name);
+        // Charge every retained allocation even when the State Arc is shared.
+        // Index/Arc bookkeeping is charged conservatively; allocator fragmentation
+        // and process RSS remain independent measurements.
+        let charged = bytes
+            .len()
+            .saturating_add(512)
+            .saturating_add(name.len().saturating_mul(2))
+            .saturating_add(state.as_ref().map_or(0, |state| {
+                std::mem::size_of::<payload::State>()
+                    .saturating_add(128)
+                    .saturating_add(state.schema.capacity())
+                    .saturating_add(value_heap(&state.data))
+            }));
+        if charged > CHECKPOINT_CACHE_BYTES {
+            return;
+        }
+        while self.entries.len() >= CHECKPOINT_CACHE_ENTRIES
+            || self.bytes.saturating_add(charged) > CHECKPOINT_CACHE_BYTES
+        {
+            let (_, oldest) = self.order.first_key_value().expect("cache has an entry");
+            let oldest = oldest.clone();
+            self.remove(&oldest);
+        }
+        if self.next == u64::MAX {
+            self.clear();
+            self.next = 0;
+        }
+        let age = self.next;
+        self.next += 1;
+        self.bytes += charged;
+        self.order.insert(age, name.to_owned());
+        self.entries.insert(
+            name.to_owned(),
+            PublishedCheckpoint {
+                state,
+                bytes,
+                age,
+                charged,
+            },
+        );
+    }
+}
+
+fn value_heap(value: &Value) -> usize {
+    const ALLOCATION: usize = 64;
+    match value {
+        Value::Text(value) => value.capacity().saturating_add(ALLOCATION),
+        Value::Bytes(value) => value.capacity().saturating_add(ALLOCATION),
+        Value::Array(values) => values.iter().fold(
+            values
+                .capacity()
+                .saturating_mul(std::mem::size_of::<Value>())
+                .saturating_add(ALLOCATION),
+            |total, value| total.saturating_add(value_heap(value)),
+        ),
+        Value::Map(values) => values.iter().fold(
+            values
+                .capacity()
+                .saturating_mul(std::mem::size_of::<(Value, Value)>())
+                .saturating_add(ALLOCATION),
+            |total, (key, value)| {
+                total
+                    .saturating_add(value_heap(key))
+                    .saturating_add(value_heap(value))
+            },
+        ),
+        Value::Tag(_, value) => std::mem::size_of::<Value>()
+            .saturating_add(ALLOCATION)
+            .saturating_add(value_heap(value)),
+        _ => 0,
+    }
+}
+
+// Equality used to skip encoding preserves signed zero and floating bit patterns.
+#[cfg(test)]
+thread_local! {
+    static VALUE_COMPARISONS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+fn same_value(left: &Value, right: &Value) -> bool {
+    #[cfg(test)]
+    VALUE_COMPARISONS.with(|count| count.set(count.get() + 1));
+    match (left, right) {
+        (Value::Float(left), Value::Float(right)) => left.to_bits() == right.to_bits(),
+        (Value::Array(left), Value::Array(right)) => {
+            left.len() == right.len() && left.iter().zip(right).all(|(a, b)| same_value(a, b))
+        }
+        (Value::Map(left), Value::Map(right)) => {
+            left.len() == right.len()
+                && left
+                    .iter()
+                    .zip(right)
+                    .all(|((ak, av), (bk, bv))| same_value(ak, bk) && same_value(av, bv))
+        }
+        (Value::Tag(a, av), Value::Tag(b, bv)) => a == b && same_value(av, bv),
+        _ => left == right,
+    }
+}
+
+fn same_state(left: &payload::State, right: &payload::State) -> bool {
+    if std::ptr::eq(left, right) {
+        return true;
+    }
+    left.schema == right.schema
+        && left.version == right.version
+        && same_value(&left.data, &right.data)
 }
 
 #[derive(Debug)]
@@ -128,6 +323,55 @@ impl From<WireError> for CommitError {
 #[derive(Debug)]
 pub(crate) struct Committed {
     pub cleanup_error: Option<WireError>,
+}
+
+/// All fallible serialization and size checks finish before the undo journal is published.
+struct PreparedDeployment<'a> {
+    base: String,
+    overlay: String,
+    states: HashMap<String, Option<Vec<u8>>>,
+    sources: &'a [u8],
+}
+
+impl<'a> PreparedDeployment<'a> {
+    fn encode<S: std::borrow::Borrow<payload::State>>(
+        base: &config::Configuration,
+        overlay: &Overlay,
+        states: &HashMap<String, Option<S>>,
+        sources: &'a [u8],
+    ) -> Result<Self> {
+        let base = toml::to_string(base).map_err(parameter)?;
+        config::text(base.as_bytes())?;
+        let overlay = encode_overlay(overlay)?;
+        if sources.len() > Limits::DEFAULT.max_frame {
+            return Err(parameter("来源记录超过 16 MiB"));
+        }
+        let states = states
+            .iter()
+            .map(|(name, state)| {
+                config::instance_name(name)?;
+                let bytes = state
+                    .as_ref()
+                    .map(|state| {
+                        cordis_up::encode_state(state.borrow(), &Limits::DEFAULT).map_err(parameter)
+                    })
+                    .transpose()?;
+                Ok((name.clone(), bytes))
+            })
+            .collect::<Result<_>>()?;
+        Ok(Self {
+            base,
+            overlay,
+            states,
+            sources,
+        })
+    }
+}
+
+fn encode_overlay(overlay: &Overlay) -> Result<String> {
+    let bytes = toml::to_string_pretty(overlay).map_err(parameter)?;
+    config::text(bytes.as_bytes())?;
+    Ok(bytes)
 }
 
 const BASE: &str = "deployment-base-v1.toml";
@@ -193,6 +437,7 @@ impl Store {
     /// 持有运行目录写锁时，把中断部署触及的文件恢复到提交前的版本。
     pub(crate) fn recover_deployment(&self) -> Result<()> {
         let _lock = self.lock_deployment()?;
+        self.checkpoints.lock().clear();
         self.restore_deployment_files()?;
         if let Err(problem) = self.clear_staging() {
             eprintln!("已恢复部署，暂存目录清理失败：{problem}");
@@ -230,6 +475,7 @@ impl Store {
     }
 
     fn restore_deployment_files(&self) -> Result<()> {
+        self.checkpoints.lock().clear();
         let journal = self.directory.join(".deployment-undo");
         if journal.try_exists().map_err(io_error)? {
             check_journal_format(&journal)?;
@@ -327,27 +573,33 @@ impl Store {
         states: &HashMap<String, Option<S>>,
         sources: &[u8],
     ) -> std::result::Result<Committed, CommitError> {
+        let prepared = PreparedDeployment::encode(base, overlay, states, sources)?;
         let _lock = self.lock_deployment()?;
-        let bytes = toml::to_string(base).map_err(parameter)?;
-        config::text(bytes.as_bytes())?;
-        if let Err(problem) = self.prepare_deployment(states.keys()) {
+        if let Err(problem) = self.prepare_deployment(prepared.states.keys()) {
             return Err(self.reject_deployment(problem));
         }
-        self.commit_prepared(bytes.as_bytes(), overlay, states, sources)
+        self.commit_prepared(&prepared)
     }
 
-    fn commit_prepared<S: std::borrow::Borrow<payload::State>>(
+    fn commit_prepared(
         &self,
-        base: &[u8],
-        overlay: &Overlay,
-        states: &HashMap<String, Option<S>>,
-        sources: &[u8],
+        prepared: &PreparedDeployment<'_>,
     ) -> std::result::Result<Committed, CommitError> {
+        self.checkpoints.lock().clear();
         let result = (|| {
-            write(&self.directory.join(BASE), base)?;
-            self.restore_states(states)?;
-            self.save_overlay(overlay)?;
-            write(&self.directory.join("sources.json"), sources)?;
+            write(&self.directory.join(BASE), prepared.base.as_bytes())?;
+            for (name, bytes) in &prepared.states {
+                let path = self.directory.join(format!("{name}.state"));
+                match bytes {
+                    Some(bytes) => write(&path, bytes)?,
+                    None => remove_file(&path)?,
+                }
+            }
+            write(
+                &self.directory.join("instances.toml"),
+                prepared.overlay.as_bytes(),
+            )?;
+            write(&self.directory.join("sources.json"), prepared.sources)?;
             sync_directory(&self.directory)?;
             self.move_decision_marker()
         })();
@@ -388,7 +640,10 @@ impl Store {
         fs::create_dir_all(directory.join("consumed")).map_err(io_error)?;
         fs::create_dir_all(directory.join("data")).map_err(io_error)?;
         let directory = directory.canonicalize().map_err(io_error)?;
-        Ok(Self { directory })
+        Ok(Self {
+            directory,
+            checkpoints: Arc::new(Mutex::new(CheckpointCache::default())),
+        })
     }
 
     /// DOC-15 §3.2：首次启动使用空叠加层，已有叠加层按配置契约解析。
@@ -405,8 +660,19 @@ impl Store {
 
     /// DOC-15 §3.2：序列化已提交部署并原子发布 instances.toml。
     pub fn save_overlay(&self, overlay: &Overlay) -> Result<()> {
-        let bytes = toml::to_string_pretty(overlay).map_err(parameter)?;
-        write(&self.directory.join("instances.toml"), bytes.as_bytes())
+        let bytes = encode_overlay(overlay)?;
+        self.publish_record("instances.toml", bytes.as_bytes())
+    }
+
+    /// ADR-0054：来源确认与离线读取使用同一写入边界，目录同步后才确认成功。
+    pub(crate) fn save_sources(&self, bytes: &[u8]) -> Result<()> {
+        self.publish_record("sources.json", bytes)
+    }
+
+    fn publish_record(&self, name: &str, bytes: &[u8]) -> Result<()> {
+        let _lock = self.lock_deployment()?;
+        write(&self.directory.join(name), bytes)?;
+        sync_directory(&self.directory)
     }
 
     /// CP-11：实例重启时读取最近一次保存的检查点。
@@ -420,25 +686,91 @@ impl Store {
         }
     }
 
-    /// CP-11：逐实例发布真实导出状态，写入失败交由运行时记录。
-    ///
-    /// 已发布文件与本次导出逐字节相同时跳过写入：检查点周期可以很短（例如 1 秒），
-    /// 每次都 `sync_all` 会让空闲实例持续刷盘。
+    /// CP-11：发布状态并复用最后成功发布的不可变编码。
+    /// 缓存属于持有状态目录写权的 Store；克隆共享缓存，部署恢复使其失效。
     pub fn checkpoint<S: std::borrow::Borrow<payload::State>>(
         &self,
         states: &HashMap<String, S>,
     ) -> Result<()> {
+        self.checkpoint_entries(
+            states
+                .iter()
+                .map(|(name, state)| (name, state.borrow(), None)),
+        )
+    }
+
+    /// Runtime 已持有 Arc<State>，内容未变时复用原编码及持久发布事实。
+    pub fn checkpoint_shared(&self, states: &HashMap<String, Arc<payload::State>>) -> Result<()> {
+        self.checkpoint_entries(
+            states
+                .iter()
+                .map(|(name, state)| (name, state.as_ref(), Some(state))),
+        )
+    }
+
+    fn checkpoint_entries<'a>(
+        &self,
+        states: impl Iterator<
+            Item = (
+                &'a String,
+                &'a payload::State,
+                Option<&'a Arc<payload::State>>,
+            ),
+        >,
+    ) -> Result<()> {
+        let _lock = self.lock_deployment()?;
+        let mut cache = self.checkpoints.lock();
+        cache.bind(&self.directory);
         let mut failure = None;
-        for (name, state) in states {
-            let result = (|| {
+        let mut needs_sync = false;
+        for (name, state, shared) in states {
+            let result: Result<()> = (|| {
                 config::instance_name(name)?;
-                let value = Value::serialized(state.borrow()).map_err(parameter)?;
-                let bytes = cordis_up::encode_value(&value, &Limits::DEFAULT).map_err(parameter)?;
-                let path = self.directory.join(format!("{name}.state"));
-                if fs::read(&path).is_ok_and(|current| current == bytes) {
+                if let Some(published) = cache.entries.get(name)
+                    && let Some(previous) = &published.state
+                    && same_state(previous, state)
+                {
                     return Ok(());
                 }
-                write(&path, &bytes)
+                #[cfg(test)]
+                {
+                    cache.encodes += 1;
+                }
+                let bytes: Arc<[u8]> = cordis_up::encode_state(state, &Limits::DEFAULT)
+                    .map_err(parameter)?
+                    .into();
+                let path = self.directory.join(format!("{name}.state"));
+                let published = cache.entries.contains_key(name);
+                let unchanged = match cache.entries.get(name) {
+                    Some(previous) => previous.bytes == bytes,
+                    None => {
+                        #[cfg(test)]
+                        {
+                            cache.reads += 1;
+                        }
+                        read(&path).is_ok_and(|current| current.as_slice() == bytes.as_ref())
+                    }
+                };
+                if !unchanged {
+                    cache.remove(name);
+                    #[cfg(test)]
+                    {
+                        cache.writes += 1;
+                    }
+                    write(&path, &bytes)?;
+                    needs_sync = true;
+                } else if !published {
+                    // A readable file can come from a publication whose directory
+                    // sync failed. Confirm both its contents and name once before
+                    // making it eligible for the warm-cache fast path.
+                    File::open(&path)
+                        .and_then(|file| file.sync_all())
+                        .map_err(io_error)?;
+                    needs_sync = true;
+                }
+                // The cache lock keeps this batch private until directory sync.
+                cache.remember(name, shared.cloned(), bytes);
+                Ok(())
             })();
             if let Err(problem) = result {
                 failure.get_or_insert_with(|| {
@@ -449,6 +781,10 @@ impl Store {
                 });
             }
         }
+        if needs_sync && let Err(problem) = sync_directory(&self.directory) {
+            cache.clear();
+            failure.get_or_insert(problem);
+        }
         failure.map_or(Ok(()), Err)
     }
 
@@ -457,15 +793,20 @@ impl Store {
         &self,
         states: &HashMap<String, Option<S>>,
     ) -> Result<()> {
+        let _lock = self.lock_deployment()?;
+        self.checkpoints.lock().clear();
         for (name, state) in states {
             config::instance_name(name)?;
             if let Some(state) = state {
-                let value = Value::serialized(state.borrow()).map_err(parameter)?;
-                let bytes = cordis_up::encode_value(&value, &Limits::DEFAULT).map_err(parameter)?;
+                let bytes =
+                    cordis_up::encode_state(state.borrow(), &Limits::DEFAULT).map_err(parameter)?;
                 write(&self.directory.join(format!("{name}.state")), &bytes)?;
             } else {
                 remove_file(&self.directory.join(format!("{name}.state")))?;
             }
+        }
+        if !states.is_empty() {
+            sync_directory(&self.directory)?;
         }
         Ok(())
     }
@@ -492,6 +833,330 @@ fn remove_file(path: &Path) -> Result<()> {
 mod tests {
     use super::*;
     use cordis_testkit::cleanup::TestGuard;
+
+    fn snapshot(value: Value) -> Arc<payload::State> {
+        Arc::new(payload::State {
+            schema: "counter".into(),
+            version: 1,
+            data: value,
+        })
+    }
+
+    #[test]
+    fn checkpoint_shared_reuses_encoding_and_published_bytes() {
+        let case =
+            TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "checkpoint-cache");
+        let store = Store::create(case.directory("checkpoint-cache")).unwrap();
+        let original = snapshot(Value::Bytes(vec![17; 1024 * 1024]));
+        let states = HashMap::from([("panel".into(), original.clone())]);
+        store.checkpoint_shared(&states).unwrap();
+        let clone = store.clone();
+        // An independently exported but unchanged value also reuses the encoding.
+        let repeated = HashMap::from([("panel".into(), snapshot(original.data.clone()))]);
+        clone.checkpoint_shared(&repeated).unwrap();
+        {
+            let cache = store.checkpoints.lock();
+            assert_eq!((cache.encodes, cache.reads, cache.writes), (1, 1, 1));
+        }
+        let next = HashMap::from([("panel".into(), snapshot(42u64.into()))]);
+        clone.checkpoint_shared(&next).unwrap();
+        let cache = store.checkpoints.lock();
+        assert_eq!((cache.encodes, cache.reads, cache.writes), (2, 1, 2));
+        drop(cache);
+        assert_eq!(
+            store.load("panel").unwrap().unwrap().data,
+            Value::from(42u64)
+        );
+        case.success();
+    }
+
+    #[test]
+    fn checkpoint_shared_identity_skips_value_scans() {
+        let case = TestGuard::for_package(
+            Path::new(env!("CARGO_MANIFEST_DIR")),
+            "checkpoint-shared-identity",
+        );
+        let store = Store::create(case.directory("checkpoint-shared-identity")).unwrap();
+        let original = snapshot(Value::Array(
+            (0..256)
+                .map(|index| Value::Bytes(vec![index as u8; 4096]))
+                .collect(),
+        ));
+        let states = HashMap::from([("panel".into(), original.clone())]);
+        store.checkpoint_shared(&states).unwrap();
+        let comparisons = VALUE_COMPARISONS.with(std::cell::Cell::get);
+        for _ in 0..1_000 {
+            store.checkpoint_shared(&states).unwrap();
+        }
+        assert_eq!(VALUE_COMPARISONS.with(std::cell::Cell::get), comparisons);
+        let distinct = HashMap::from([("panel".into(), snapshot(original.data.clone()))]);
+        store.checkpoint_shared(&distinct).unwrap();
+        assert_eq!(
+            VALUE_COMPARISONS.with(std::cell::Cell::get),
+            comparisons + 257
+        );
+        let cache = store.checkpoints.lock();
+        assert_eq!((cache.encodes, cache.reads, cache.writes), (1, 1, 1));
+        drop(cache);
+        case.success();
+    }
+
+    #[test]
+    fn checkpoint_cache_follows_each_stores_directory() {
+        let case = TestGuard::for_package(
+            Path::new(env!("CARGO_MANIFEST_DIR")),
+            "checkpoint-directory-owner",
+        );
+        let first = Store::create(case.directory("checkpoint-directory-first")).unwrap();
+        let second = Store::create(case.directory("checkpoint-directory-second")).unwrap();
+        let mut moved = first.clone();
+        let one = HashMap::from([("panel".into(), snapshot(1u64.into()))]);
+        first.checkpoint_shared(&one).unwrap();
+        moved.directory = second.directory;
+        moved.checkpoint_shared(&one).unwrap();
+        assert_eq!(moved.load("panel").unwrap().unwrap().data, 1u64.into());
+        let two = HashMap::from([("panel".into(), snapshot(2u64.into()))]);
+        moved.checkpoint_shared(&two).unwrap();
+        first.checkpoint_shared(&two).unwrap();
+        assert_eq!(first.load("panel").unwrap().unwrap().data, 2u64.into());
+        moved.checkpoint_shared(&two).unwrap();
+        assert_eq!(moved.load("panel").unwrap().unwrap().data, 2u64.into());
+
+        // Relative Store paths remain supported; a reused spelling is not proof
+        // of the same directory when the process can change its working directory.
+        let mut cache = CheckpointCache::default();
+        cache.bind(Path::new("state"));
+        cache.remember("panel", None, Arc::from([0u8]));
+        cache.bind(Path::new("state"));
+        assert!(cache.entries.is_empty());
+        case.success();
+    }
+
+    #[test]
+    fn checkpoint_batch_confirms_directory_before_reusing_published_bytes() {
+        let case = TestGuard::for_package(
+            Path::new(env!("CARGO_MANIFEST_DIR")),
+            "checkpoint-directory-sync",
+        );
+        let store = Store::create(case.directory("checkpoint-directory-sync")).unwrap();
+        let states = HashMap::from([
+            ("first".into(), snapshot(1u64.into())),
+            ("second".into(), snapshot(2u64.into())),
+        ]);
+        sync_test::fail_next(&store.directory);
+        let failure = store.checkpoint_shared(&states).unwrap_err();
+        assert!(failure.message.contains("directory sync failure"));
+        // Real file writes and renames completed before the injected barrier failure.
+        assert_eq!(store.load("first").unwrap().unwrap().data, 1u64.into());
+        assert_eq!(store.load("second").unwrap().unwrap().data, 2u64.into());
+        assert!(store.checkpoints.lock().entries.is_empty());
+        assert_eq!(sync_test::calls(&store.directory), 1);
+
+        store.clone().checkpoint_shared(&states).unwrap();
+        assert_eq!(sync_test::calls(&store.directory), 2);
+        {
+            let cache = store.checkpoints.lock();
+            assert_eq!(cache.entries.len(), 2);
+            assert_eq!((cache.encodes, cache.reads, cache.writes), (4, 4, 2));
+        }
+        store.checkpoint_shared(&states).unwrap();
+        assert_eq!(sync_test::calls(&store.directory), 2);
+        let cache = store.checkpoints.lock();
+        assert_eq!((cache.encodes, cache.reads, cache.writes), (4, 4, 2));
+        drop(cache);
+        case.success();
+    }
+
+    #[test]
+    fn ordinary_records_and_state_restoration_require_directory_confirmation() {
+        let case = TestGuard::for_package(
+            Path::new(env!("CARGO_MANIFEST_DIR")),
+            "record-directory-sync",
+        );
+        let store = Store::create(case.directory("record-directory-sync")).unwrap();
+        sync_test::fail_next(&store.directory);
+        assert!(store.save_overlay(&Overlay::default()).is_err());
+        sync_test::fail_next(&store.directory);
+        assert!(store.save_sources(b"{}").is_err());
+        let states = HashMap::from([("panel".into(), Some(snapshot(1u64.into())))]);
+        sync_test::fail_next(&store.directory);
+        assert!(store.restore_states(&states).is_err());
+        assert_eq!(sync_test::calls(&store.directory), 3);
+        store.restore_states(&states).unwrap();
+        assert_eq!(sync_test::calls(&store.directory), 4);
+        case.success();
+    }
+
+    #[test]
+    fn checkpoint_cache_updates_only_after_success_and_invalidates_on_restore() {
+        let case = TestGuard::for_package(
+            Path::new(env!("CARGO_MANIFEST_DIR")),
+            "checkpoint-cache-retry",
+        );
+        let store = Store::create(case.directory("checkpoint-cache-retry")).unwrap();
+        let old = snapshot(1u64.into());
+        let new = snapshot(2u64.into());
+        store
+            .checkpoint_shared(&HashMap::from([("panel".into(), old.clone())]))
+            .unwrap();
+        let blocked = store.directory.join("panel.state.next");
+        fs::create_dir(&blocked).unwrap();
+        let changed = HashMap::from([("panel".into(), new.clone())]);
+        assert!(store.checkpoint_shared(&changed).is_err());
+        assert!(!store.checkpoints.lock().entries.contains_key("panel"));
+        fs::remove_dir(&blocked).unwrap();
+        store.checkpoint_shared(&changed).unwrap();
+        assert_eq!(store.load("panel").unwrap().unwrap().data, new.data);
+        store
+            .restore_states(&HashMap::from([("panel".into(), Some(old.clone()))]))
+            .unwrap();
+        store.checkpoint_shared(&changed).unwrap();
+        assert_eq!(store.load("panel").unwrap().unwrap().data, new.data);
+        // A committed deployment is another writer under the same Store owner.
+        store
+            .commit_deployment(
+                &config::parse(b"").unwrap(),
+                &Overlay::default(),
+                &HashMap::from([("panel".into(), Some(old))]),
+                b"{}",
+            )
+            .unwrap();
+        store.checkpoint_shared(&changed).unwrap();
+        assert_eq!(store.load("panel").unwrap().unwrap().data, new.data);
+        case.success();
+    }
+
+    #[test]
+    fn checkpoint_cache_preserves_signed_zero_and_bounds_encoded_retention() {
+        let case = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "checkpoint-zero");
+        let store = Store::create(case.directory("checkpoint-zero")).unwrap();
+        for value in [0.0f64, -0.0f64] {
+            store
+                .checkpoint_shared(&HashMap::from([(
+                    "panel".into(),
+                    snapshot(Value::Float(value)),
+                )]))
+                .unwrap();
+            let loaded = store.load("panel").unwrap().unwrap();
+            assert_eq!(loaded.data.as_float().unwrap().to_bits(), value.to_bits());
+        }
+        let mut cache = store.checkpoints.lock();
+        for n in 0..300 {
+            cache.remember(&format!("entry-{n}"), None, Arc::from([0u8]));
+        }
+        assert!(cache.entries.len() <= CHECKPOINT_CACHE_ENTRIES);
+        cache.remember(
+            "large",
+            None,
+            Arc::from(vec![0u8; CHECKPOINT_CACHE_BYTES / 2]),
+        );
+        assert!(cache.entries.contains_key("large"));
+        assert!(cache.bytes <= CHECKPOINT_CACHE_BYTES);
+        let mut sparse =
+            Vec::with_capacity(CHECKPOINT_CACHE_BYTES / std::mem::size_of::<Value>() + 1);
+        sparse.push(Value::Null);
+        cache.remember(
+            "tiny-encoding-large-capacity",
+            Some(snapshot(Value::Array(sparse))),
+            Arc::from([0u8]),
+        );
+        assert!(!cache.entries.contains_key("tiny-encoding-large-capacity"));
+        assert!(cache.bytes <= CHECKPOINT_CACHE_BYTES);
+        drop(cache);
+        case.success();
+    }
+
+    #[test]
+    fn previous_configuration_is_read_compatibly_and_persisted_as_program_identity() {
+        let case =
+            TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "compact-previous");
+        let store = Store::create(case.directory("compact-previous")).unwrap();
+        let base = config::parse(b"[instance.panel]\nplugin='installed-1'\n").unwrap();
+        let legacy = config::parse_overlay(
+            b"[previous.panel]\nplugin='installed-1'\ngroup='old-group'\n[previous.panel.config]\nvalue=42\n",
+        ).unwrap();
+        assert_eq!(
+            legacy.previous["panel"].config["value"].as_integer(),
+            Some(42)
+        );
+        let mut settings = base.instance["panel"].clone();
+        settings.config.insert(
+            "blob".into(),
+            toml::Value::String("x".repeat(9 * 1024 * 1024)),
+        );
+        let mut overlay = Overlay::default();
+        overlay
+            .previous
+            .insert("panel".into(), config::OverlayEntry::from(&settings));
+        settings.plugin = "installed-2".into();
+        overlay
+            .instance
+            .insert("panel".into(), config::OverlayEntry::from(&settings));
+        store
+            .commit_deployment::<payload::State>(&base, &overlay, &HashMap::new(), b"{}")
+            .unwrap();
+        let recovered = store.overlay().unwrap();
+        assert_eq!(recovered.instance["panel"].config, settings.config);
+        assert_eq!(recovered.previous["panel"].plugin, "installed-1");
+        assert!(recovered.previous["panel"].config.is_empty());
+        assert!(
+            fs::metadata(store.directory.join("instances.toml"))
+                .unwrap()
+                .len()
+                < Limits::DEFAULT.max_frame as u64
+        );
+        case.success();
+    }
+
+    #[test]
+    fn deployment_preflight_rejects_unreadable_files_before_any_journal_or_write() {
+        let case = TestGuard::for_package(
+            Path::new(env!("CARGO_MANIFEST_DIR")),
+            "deployment-preflight",
+        );
+        let store = Store::create(case.directory("deployment-preflight")).unwrap();
+        let base = config::parse(b"[instance.panel]\nplugin='installed-1'\n").unwrap();
+        let overlay = Overlay::default();
+        store
+            .commit_deployment::<payload::State>(&base, &overlay, &HashMap::new(), b"old")
+            .unwrap();
+        let old_base = read(&store.directory.join(BASE)).unwrap();
+        let old_overlay = read(&store.directory.join("instances.toml")).unwrap();
+        let oversized = vec![b'x'; Limits::DEFAULT.max_frame + 1];
+        let sources =
+            store.commit_deployment::<payload::State>(&base, &overlay, &HashMap::new(), &oversized);
+        assert!(matches!(sources, Err(CommitError::NotCommitted(_))));
+        let mut settings = base.instance["panel"].clone();
+        settings.config.insert(
+            "blob".into(),
+            toml::Value::String(String::from_utf8(oversized).unwrap()),
+        );
+        let mut oversized_overlay = Overlay::default();
+        oversized_overlay
+            .instance
+            .insert("panel".into(), config::OverlayEntry::from(&settings));
+        let active = store.commit_deployment::<payload::State>(
+            &base,
+            &oversized_overlay,
+            &HashMap::new(),
+            b"new",
+        );
+        assert!(matches!(active, Err(CommitError::NotCommitted(_))));
+        let invalid_states = HashMap::from([("../bad".into(), None::<payload::State>)]);
+        assert!(matches!(
+            store.commit_deployment(&base, &overlay, &invalid_states, b"new"),
+            Err(CommitError::NotCommitted(_))
+        ));
+        assert_eq!(read(&store.directory.join(BASE)).unwrap(), old_base);
+        assert_eq!(
+            read(&store.directory.join("instances.toml")).unwrap(),
+            old_overlay
+        );
+        assert_eq!(read(&store.directory.join("sources.json")).unwrap(), b"old");
+        assert!(!store.directory.join(".deployment-undo").exists());
+        assert!(!store.directory.join(".deployment-staging").exists());
+        case.success();
+    }
 
     #[test]
     fn write_and_marker_faults_preserve_the_previously_committed_deployment() {
@@ -528,7 +1193,14 @@ mod tests {
             store.prepare_deployment(states.keys()).unwrap();
             fs::create_dir(&staging).unwrap();
             File::create(staging.join("reserved")).unwrap();
-            let failure = store.commit_prepared(new_base, &overlay, &states, b"new");
+            let prepared = PreparedDeployment::encode(
+                &config::parse(new_base).unwrap(),
+                &overlay,
+                &states,
+                b"new",
+            )
+            .unwrap();
+            let failure = store.commit_prepared(&prepared);
             assert!(
                 matches!(failure, Err(CommitError::RecoveryRequired(_))),
                 "{failure:?}"
@@ -757,6 +1429,11 @@ mod tests {
             store.load(healthy).unwrap().unwrap().data,
             Value::from(37u64)
         );
+        assert_eq!(sync_test::calls(&store.directory), 1);
+        let cache = store.checkpoints.lock();
+        assert!(cache.entries.contains_key(healthy));
+        assert!(!cache.entries.contains_key(blocked));
+        drop(cache);
         case.success();
     }
 }

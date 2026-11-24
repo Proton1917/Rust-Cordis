@@ -72,6 +72,7 @@ native_scenarios! {
     native_library_swap_and_rollback => "swap",
     native_confirmation_restores_dependent_state => "confirmation-state",
     retired_image_threshold_restarts_group => "threshold",
+    native_retirement_metrics_and_open_handle_policy => "retirement-metrics",
     rejected_native_candidates_respect_image_limit => "rejected-images",
     shared_directory_allocates_monotonic_copies => "allocation",
     native_cache_bounds_descriptions_starts_and_swaps => "cache-bounded",
