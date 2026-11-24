@@ -6,6 +6,7 @@ mod error;
 mod events;
 mod fiber;
 mod kernel;
+mod lifecycle;
 mod list;
 mod logger;
 mod reflect;

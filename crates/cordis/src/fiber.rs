@@ -17,24 +17,8 @@ use std::{
     task::{Poll, Waker},
 };
 
-/// S-FBR-1：组件实例最近一次生命周期迁移记录的状态。
-///
-/// 实例的存活性由 [`Fiber::is_alive`] 查询，调和完成性由 [`Fiber::is_settled`] 查询。
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum FiberState {
-    /// 实例存活，等待声明的依赖全部满足。
-    Pending,
-    /// 正在执行一次加载迁移。
-    Loading,
-    /// 本次加载已经完成，加载纪元与目标纪元一致。
-    Active,
-    /// 加载或宿主派发失败；[`Fiber::settled`] 返回相应错误。
-    Failed,
-    /// 实例释放迁移已经完成，生命周期登记已撤回。
-    Disposed,
-    /// 正在等待依赖方清理，并恢复本次加载登记的效应。
-    Unloading,
-}
+pub use crate::lifecycle::FiberState;
+use crate::lifecycle::{self, Action, TargetDecision};
 
 /// T-LIF-2、S-FBR-5：用修订号和依赖绑定身份标识一次目标配置。
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -138,23 +122,24 @@ impl FiberData {
     }
 
     fn idle_state(&self) -> FiberState {
-        if !self.alive {
-            FiberState::Disposed
-        } else if self.error.is_some() {
-            FiberState::Failed
-        } else if self.target != Epoch::Inactive {
-            FiberState::Active
-        } else {
-            FiberState::Pending
-        }
+        lifecycle::idle(
+            self.alive,
+            self.error.is_some(),
+            self.target != Epoch::Inactive,
+        )
     }
 
     fn is_settled(&self) -> bool {
-        !self.inertia && !self.queued && self.notifications == 0 && self.suspended.is_none()
+        lifecycle::settled(
+            self.inertia,
+            self.queued,
+            self.notifications != 0,
+            self.suspended.is_some(),
+        )
     }
 
     pub(crate) fn is_current(&self) -> bool {
-        self.alive && self.target == self.running_epoch
+        lifecycle::current(self.alive, || self.target == self.running_epoch)
     }
 }
 
@@ -266,6 +251,20 @@ impl Fiber {
     /// 进行中的加载以开始时的纪元运行，目标变化驱动随后串联的迁移。
     pub fn epoch(&self) -> Epoch {
         self.kernel.state.lock().fibers[self.id].target.clone()
+    }
+    /// T-LIF-7：在同一次内核读取中检查存活性、运行目标与给定纪元。
+    ///
+    /// 返回 `is_current()` 与目标纪元等于 `expected` 的联合结果。借用给定纪元，
+    /// 保留依赖向量并避免为查询克隆它；调用方可以用此方法判断捕获的实例换代
+    /// 是否仍对应当前执行。该瞬时观察不延长组件或外部资源的生命周期。
+    pub fn is_current_epoch(&self, expected: &Epoch) -> bool {
+        let state = self.kernel.state.lock();
+        let data = &state.fibers[self.id];
+        lifecycle::current_epoch(
+            data.alive,
+            || data.target == data.running_epoch,
+            || &data.target == expected,
+        )
     }
     /// S-FBR-3：实例的挂载效应仍然存活时返回 `true`。
     ///
@@ -554,67 +553,75 @@ pub(crate) fn drain(kernel: &Arc<Kernel>) {
         }
         let guard = DrainGuard { kernel };
         loop {
-            let action = {
-                let mut state = kernel.state.lock();
-                #[cfg(test)]
-                if std::mem::take(&mut state.panic_on_drain) {
-                    panic!("injected internal drain panic");
-                }
-                let Some(scope) = state.dirty.pop_front() else {
-                    break;
-                };
-                let id = scope.fiber;
-                let fiber = Fiber {
-                    kernel: kernel.clone(),
-                    id,
-                    scope,
-                };
-                let data = &state.fibers[id];
-                let target = if data.error.is_some() && data.alive {
-                    data.target.clone()
-                } else if data.alive {
-                    crate::reflect::epoch_ids(&state, id).map_or(Epoch::Inactive, |impls| {
-                        Epoch::Active {
-                            revision: data.revision,
-                            impls,
-                        }
-                    })
-                } else {
-                    Epoch::Inactive
-                };
-                let data = &mut state.fibers[id];
-                data.queued = false;
-                let old_target = std::mem::replace(&mut data.target, target);
-                let old_state = data.state;
-                let transition = if data.inertia || data.suspended.is_some() {
-                    None
-                } else if data.target == old_target
-                    && (data.alive || data.effects.iter().next().is_none())
+            let action =
                 {
-                    data.state = data.idle_state();
-                    None
-                } else {
-                    let loading = old_target == Epoch::Inactive && data.target != Epoch::Inactive;
-                    data.inertia = true;
-                    data.state = if loading {
-                        FiberState::Loading
-                    } else {
-                        FiberState::Unloading
-                    };
-                    if loading {
-                        data.running_epoch = data.target.clone();
+                    let mut state = kernel.state.lock();
+                    #[cfg(test)]
+                    if std::mem::take(&mut state.panic_on_drain) {
+                        panic!("injected internal drain panic");
                     }
-                    Some(loading)
+                    let Some(scope) = state.dirty.pop_front() else {
+                        break;
+                    };
+                    let id = scope.fiber;
+                    let fiber = Fiber {
+                        kernel: kernel.clone(),
+                        id,
+                        scope,
+                    };
+                    let data = &state.fibers[id];
+                    let target =
+                        match lifecycle::target(data.alive, data.error.is_some()) {
+                            TargetDecision::Keep => data.target.clone(),
+                            TargetDecision::Resolved => crate::reflect::epoch_ids(&state, id)
+                                .map_or(Epoch::Inactive, |impls| Epoch::Active {
+                                    revision: data.revision,
+                                    impls,
+                                }),
+                            TargetDecision::Inactive => Epoch::Inactive,
+                        };
+                    let data = &mut state.fibers[id];
+                    data.queued = false;
+                    let old_target = std::mem::replace(&mut data.target, target);
+                    let old_state = data.state;
+                    let action = lifecycle::refresh(
+                        data.inertia,
+                        data.suspended.is_some(),
+                        || data.target == old_target,
+                        data.alive,
+                        data.effects.iter().next().is_none(),
+                        old_target == Epoch::Inactive,
+                        data.target != Epoch::Inactive,
+                    );
+                    let transition = match action {
+                        Action::Keep => None,
+                        Action::Idle => {
+                            data.state = data.idle_state();
+                            None
+                        }
+                        Action::Load | Action::Unload => {
+                            let loading = action == Action::Load;
+                            data.inertia = true;
+                            data.state = if loading {
+                                FiberState::Loading
+                            } else {
+                                FiberState::Unloading
+                            };
+                            if loading {
+                                data.running_epoch = data.target.clone();
+                            }
+                            Some(loading)
+                        }
+                    };
+                    let new_state = data.state;
+                    if old_state != new_state {
+                        data.notifications += 1;
+                    }
+                    if transition == Some(true) {
+                        crate::reflect::commit_locked(&mut state, id);
+                    }
+                    (fiber, old_state, new_state, transition)
                 };
-                let new_state = data.state;
-                if old_state != new_state {
-                    data.notifications += 1;
-                }
-                if transition == Some(true) {
-                    crate::reflect::commit_locked(&mut state, id);
-                }
-                (fiber, old_state, new_state, transition)
-            };
             let (fiber, old, new, transition) = action;
             status_changed(&fiber, old, new);
             if let Some(loading) = transition {
@@ -732,12 +739,16 @@ fn finish_transition(fiber: &Fiber, loading: bool) -> Option<bool> {
         let (old, new, next) = {
             let mut state = fiber.kernel.state.lock();
             let data = &mut state.fibers[fiber.id];
-            let next = if loading {
-                (data.target != data.running_epoch).then_some(false)
-            } else if data.state == FiberState::Unloading && data.effects.iter().next().is_some() {
-                Some(false)
-            } else {
-                (data.target != Epoch::Inactive).then_some(true)
+            let next = match lifecycle::finish(
+                loading,
+                || data.target == data.running_epoch,
+                data.state == FiberState::Unloading,
+                data.effects.iter().next().is_some(),
+                data.target != Epoch::Inactive,
+            ) {
+                Action::Load => Some(true),
+                Action::Unload => Some(false),
+                Action::Keep | Action::Idle => None,
             };
             let old = data.state;
             data.state = match next {

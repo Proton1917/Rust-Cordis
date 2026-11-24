@@ -382,7 +382,7 @@ impl Effect {
         let steps = {
             let mut state = self.kernel.state.lock();
             let data = &mut state.effects[self.id];
-            if data.running || data.cleaning {
+            if !crate::lifecycle::cleanup(data.running, data.cleaning) {
                 return;
             }
             data.cleaning = true;
