@@ -11,6 +11,10 @@ on:
       - 'docs/04-conformance.md'
       - 'tools/conformance*.py'
       - 'tools/tests/test_conformance_run.py'
+      - 'formal/**'
+      - 'tools/verify_semantics.py'
+      - 'tools/tests/test_verify_semantics.py'
+      - 'docs/formal-semantics.md'
       - '.github/workflows/conformance.yml'
   push:
     branches: [main]
@@ -30,6 +34,19 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - name: Install pinned Rust
         run: rustup toolchain install 1.96.0 --profile minimal --component rustfmt --component clippy
+      - name: Install pinned Lean proof checker
+        run: |
+          mkdir -p "$RUNNER_TEMP/lean"
+          curl --fail --location --retry 2 --max-time 180 https://github.com/leanprover/lean4/releases/download/v4.19.0/lean-4.19.0-linux.tar.zst -o "$RUNNER_TEMP/lean.tar.zst"
+          printf '%s  %s\n' 6fe3ce97a58f44e2b3567d455b994eacec5bfe9ae7774f2a573444480ba813fe "$RUNNER_TEMP/lean.tar.zst" | sha256sum --check
+          tar --zstd -xf "$RUNNER_TEMP/lean.tar.zst" -C "$RUNNER_TEMP/lean" --strip-components=1
+          printf '%s\n' "$RUNNER_TEMP/lean/bin" >> "$GITHUB_PATH"
+      - name: Check proofs and compiled production decisions
+        run: python3 tools/verify_semantics.py --evidence target/formal-semantics.json
+      - name: Check semantic evidence failure paths
+        run: python3 -m unittest discover -s tools/tests -p 'test_verify_semantics.py' -v
+      - name: Check kernel ownership and epoch query integration
+        run: cargo test -p cordis --lib --test concurrency --test current_epoch --test event_hot_paths
       - name: Retrieve the immutable upstream test source
         run: |
           git init cordis
@@ -43,6 +60,8 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: conformance-evidence
-          path: target/conformance-report.json
+          name: component-semantics-evidence
+          path: |
+            target/conformance-report.json
+            target/formal-semantics.json
           if-no-files-found: warn
