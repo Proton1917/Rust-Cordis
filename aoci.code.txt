@@ -5,7 +5,7 @@
 .gitignore[FV3T]: F:排除上游参考检出、构建产物、本地测试报告和语言依赖目录 | R:- | A:- | S:-
 AGENTS.md[SC5S]: F:介绍项目文档入口，规定 AOCI 索引初始化、读取验证与维护流程 | R:code:docs/PROGRESS.md,code:docs/00-strategy.md,code:docs/guide.md | A:- | S:-
 CLAUDE.md[SC2T]: F:为 Claude Code 引入本仓库的代理规则 | R:code:AGENTS.md | A:@AGENTS.md | S:-
-Cargo.toml[FV7T]: F:登记 Rust 工作区成员、独立夹具、共享依赖及包默认值 | R:code:crates/cordis-runtime/Cargo.toml,code:crates/cordis-sdk/Cargo.toml | A:resolver=3,edition=2024,rust-version=1.96 | S:多语言基准与部分动态库夹具拥有独立的 Cargo 工作区
+Cargo.toml[FV7T]: F:登记 Rust 工作区、共享依赖和独立夹具，提供打包与安装共用的产物库 | R:code:crates/cordis-runtime/Cargo.toml,code:crates/cordis-artifact/Cargo.toml | A:resolver=3,edition=2024,rust-version=1.96 | S:多语言基准与部分动态库夹具拥有独立的 Cargo 工作区
 LICENSE[SZ2T]: F:保存 MIT 许可及项目和上游 Cordis 的版权声明 | R:- | A:- | S:-
 README.md[SG5T]: F:介绍可独立换代的组件运行时、v0.3.1 macOS 下载和工程开发入口 | R:code:docs/guide.md,code:docs/PROGRESS.md | A:- | S:-
 rust-toolchain.toml[FV4T]: F:固定工作区 Rust 1.96.0 工具链与格式化和 lint 组件 | R:code:Cargo.toml | A:- | S:-
@@ -78,7 +78,7 @@ Cargo.toml[FV3T]: F:配置原生契约套件辅助库及 SDK 依赖 | R:code:cra
 lib.rs[LQ5T]: F:将每项契约断言及预期与实测诊断报给运行时 | R:code:crates/cordis-sdk/src/builtin.rs | A:Suite::new,Suite::check,Suite::equal | S:-
 
 ===/<repository>/crates/cordis-dev/===
-Cargo.toml[FV4T]: F:定义 cordis-dev 0.3.0 的开发、生成、打包与验证依赖 | R:code:crates/cordis-dev/src/main.rs | A:cordis-dev | S:-
+Cargo.toml[FV4T]: F:定义 cordis-dev 0.3.0 的开发、生成、打包和产物树校验依赖 | R:code:crates/cordis-dev/src/main.rs,code:crates/cordis-artifact/Cargo.toml | A:cordis-dev | S:-
 build.rs[XV5T]: F:在编译时记录脚手架依赖使用的完整 Git 修订 | R:code:crates/cordis-dev/src/scaffold.rs | A:CORDIS_SOURCE_REVISION | S:允许由构建环境显式指定源码修订
 
 ===/<repository>/crates/cordis-dev/src/===
@@ -91,7 +91,7 @@ verify.rs[TQ6M]: F:固定待测库，匹配接口覆盖套件并运行真实验�
 
 ===/<repository>/crates/cordis-dev/src/pack/===
 artifacts.rs[XV6M]: F:解析 Cargo 工作区与编译消息，按包和目标身份选择实际发布文件并记录构建特性 | R:code:crates/cordis-dev/src/pack/mod.rs,code:tools/build_paths.rs | A:Build,Artifacts,Artifact | S:同名可执行目标或动态库分配独立构建目录，归档构建记录省略本机文件位置
-files.rs[OV5S]: F:复制发布目录与包内链接，压缩、同步后原子发布归档 | R:code:crates/cordis-dev/src/pack/mod.rs | A:copy_tree,archive | S:复制输出须在源目录外；同名归档保留原文件
+files.rs[OV5S]: F:复制并校验发布目录和可迁移链接，压缩、同步后原子发布归档 | R:code:crates/cordis-artifact/src/lib.rs,code:crates/cordis-dev/src/pack/mod.rs | A:copy_tree,archive | S:复制目标位于源目录外，源和输出均执行闭合树检查，同名归档保留原文件
 mod.rs[AV7L]: F:从部署格式及源码工作区协调 Cargo、网页资源、原生验证、签名和应用装配 | R:code:crates/cordis-dev/src/pack/artifacts.rs,code:crates/cordis-dev/src/pack/plugins.rs,code:crates/cordis-dev/src/pack/signing.rs | A:pack | S:构建路径按部署清单解释；发布实例选用配置覆盖，签名后的库参与验证
 platform.rs[OV6S]: F:校对产物格式与目标架构，生成 macOS 包信息并列出待签代码 | R:code:crates/cordis-dev/src/pack/signing.rs | A:Platform,code_files | S:包内代码按路径深度排序，深层模块先签署
 plugins.rs[AV7L]: F:将部署引用解析成唯一来源，装配原生库、进程插件、网页及解释器 | R:code:crates/cordis-dev/src/pack/artifacts.rs,code:crates/cordis-dev/src/pack/secrets.rs,code:crates/cordis-dev/src/pack/plugins/verification.rs | A:prepare,assemble,runtimes | S:每份来源的清单、产物与描述符在准备时固定，资源过滤和装配共用
@@ -130,16 +130,17 @@ Cargo.toml[FV4T]: F:声明原生宿主 0.1.5 的动态装载、ABI 与传输依�
 ===/<repository>/crates/cordis-host/src/===
 abi.rs[IE7S]: F:安装原生宿主后端并将分版本 C 函数表转接到 Host | R:code:crates/cordis-host/src/host.rs,code:crates/cordis-abi/src/host.rs | A:install,environment | S:进程内宿主后端登记在 OnceLock，边界统一转换拥有错误
 forward.rs[IN6M]: F:解析宿主转发服务操作并把逻辑通道帧投递到接收器 | R:code:crates/cordis-channels/src/lib.rs,code:crates/cordis-host/src/wire.rs | A:object,Forwarders | S:从分配编号到打开应答期间串行，帧与关闭可以独立推进
-host.rs[RE8L]: F:装载原生组件并处理调用、上下文、通知与关闭 | R:code:crates/cordis-host/src/abi.rs,code:crates/cordis-host/src/native.rs,code:crates/cordis-host/src/wire.rs | A:Host,HostOptions | S:调用接管业务参数，完成导入前载荷继续持有资源；回调登记和释放按接收顺序处理，业务回调由原生执行器运行
+host.rs[RE8L]: F:装载原生组件，管理调用、上下文、回调和宿主退役 | R:code:crates/cordis-host/src/callback.rs,code:crates/cordis-host/src/lease.rs,code:crates/cordis-host/src/wire.rs | A:Host,HostOptions | S:回调按实际帧字节取得额度并由原生执行器持有至析构；退役应答与完整库采样分别读取轻量和物理计量
 jobs.rs[RW6S]: F:把原生异步任务和系统线程登记成核心效应，并等待退出 | R:code:crates/cordis-host/src/host.rs,code:crates/cordis-host/src/native.rs | A:Host::spawn,Host::spawn_thread | S:-
-lease.rs[RE7M]: F:管理原生库引用与退役计数，归还缓存文件并记录描述符释放结果 | R:code:crates/cordis-host/src/library.rs,code:crates/cordis-process/src/cache.rs | A:Lease,UnloadPolicy | S:只收集退役且租约归零的待回收库；主动关闭还要求描述符释放成功，失败保留错误和映像
-lib.rs[RE5T]: F:导出原生宿主的库加载、对象目录和 ABI 执行模块 | R:code:crates/cordis-host/src/host.rs,code:crates/cordis-host/src/library.rs | A:- | S:-
+lease.rs[RE7L]: F:管理原生库租约、退役计数、句柄关闭及可选物理映像观察 | R:code:crates/cordis-host/src/host.rs,code:docs/adr/0058-native-retirement-metrics.md | A:Lease,UnloadPolicy,retirement_status | S:实际退役并归零才尝试回收；句柄关闭和解除映射各自计量，映像观察按设备与 inode 匹配
+lib.rs[RE5T]: F:装配宿主的库加载、对象目录、回调准入及 ABI 运行模块 | R:code:crates/cordis-host/src/host.rs,code:crates/cordis-host/src/callback.rs | A:Host | S:-
 library.rs[RE8L]: F:装载与探测原生库，协商卸载策略并管理组件描述与库副本 | R:code:crates/cordis-host/src/lease.rs,code:crates/cordis-host/src/verification.rs | A:LibraryStore,NativeLibrary,NativeComponent | S:可选卸载协商在首次握手前进行，缺少入口则保留映像至宿主退出；描述符持有租约，验证准入比较装载字节
-main.rs[EE6S]: F:解析原生宿主命令行并在主线程推进标准流 UP/1 会话 | R:code:crates/cordis-host/src/host.rs,code:crates/cordis-host/src/native.rs | A:cordis-host | S:插件轮询、同步等待及析构由独立原生执行器承担
+main.rs[EE6S]: F:解析宿主命令和回调、队列及帧预算，在主线程驱动 UP/1 | R:code:crates/cordis-host/src/host.rs,code:crates/cordis-up/src/rpc.rs | A:cordis-host | S:插件轮询、同步等待及析构由独立原生执行器承担
 native.rs[RP7S]: F:在独立原生执行器上调度调用、取消及受托对象析构 | R:code:crates/cordis-host/src/jobs.rs,code:crates/cordis-host/src/lease.rs | A:NativeExecutor,NativeTask,RuntimeOwner | S:协议读写使用独立运行环境；取消等待后同步代码的实际执行及析构仍持有对象
 objects.rs[RD7M]: F:配发宿主本地对象编号并管理响应发送前后的资源所有权 | R:code:crates/cordis-host/src/wire.rs,code:crates/cordis-host/src/native.rs | A:Objects,ObjectInfo | S:待发送拥有引用随成功响应提交，发送失败随守卫回收
 verification.rs[OQ6S]: F:打开原生库前校对验证副本，握手后核对契约覆盖 | R:code:crates/cordis-host/src/library.rs,code:crates/cordis-types/src/verification.rs | A:before_open,preserve | S:已接受的缓存库携带验证印记，分组重启仍走准入检查
 wire.rs[IN7S]: F:桥接原生服务和远端对象，把调用参数及返回值转交给拥有型 DTO | R:code:crates/cordis-host/src/objects.rs,code:crates/cordis-up/src/payload.rs,code:crates/cordis-up/src/rpc.rs | A:Bridge | S:原载荷持有导入前的引用，ABI 缓冲持有导入后对象；发送接纳时提交出口
+callback.rs[RP6S]: F:按数量和接收帧字节管理原生回调准入及归还 | R:code:crates/cordis-host/src/host.rs,code:crates/cordis-host/src/native.rs | A:Admission,Permit,Admitted | S:回调 Future 已析构才归还额度，覆盖首轮询前取消和同步执行中取消
 
 ===/<repository>/crates/cordis-idl/===
 Cargo.toml[FV3T]: F:声明 cordis-idl 0.1.1 的 WIT 解析、代码生成与命名依赖 | R:code:crates/cordis-idl/src/lib.rs | A:- | S:-
@@ -171,7 +172,7 @@ Cargo.toml[FV3T]: F:定义路由库 0.1.2 的协议、异步调度及版本解�
 
 ===/<repository>/crates/cordis-routing/src/===
 description.rs[MN5T]: F:校验协议组件描述符的名称、状态版本及接口声明，计算保留字节 | R:code:crates/cordis-routing/src/metadata.rs,code:crates/cordis-routing/src/interface.rs | A:components,component_types | S:-
-directory.rs[MD7M]: F:按接收连接管理路由出口、编号分配、发送批次和按寿命释放 | R:code:crates/cordis-routing/src/lifetime.rs,code:crates/cordis-routing/src/transfer.rs | A:Router,Batch | S:当前映射的长度决定活跃额度，历史编号独立递增；资源在目录锁外析构
+directory.rs[MD7M]: F:管理连接的对象出口、编号、发送批次以及按来源和租约回收 | R:code:crates/cordis-routing/src/lifetime.rs,code:crates/cordis-routing/src/transfer.rs | A:Router,Batch | S:同锁维护接收者、来源和寿命索引；摘除时同步解除各索引，资源在锁外析构
 interface.rs[LN6T]: F:将版本化协议接口拆为完整名称、主版本服务键和次版本要求 | R:code:crates/cordis-routing/src/description.rs | A:Interface,Interface::key | S:-
 lib.rs[MN5T]: F:公开对象路由目录、生命周期与本地服务入口 | R:code:crates/cordis-routing/src/directory.rs,code:crates/cordis-routing/src/local.rs | A:- | S:-
 lifetime.rs[MR6T]: F:让进行中的服务调用随提供方纪元退役而取消 | R:code:crates/cordis-routing/src/directory.rs | A:Retirement,RouteLifetime | S:-
@@ -180,7 +181,7 @@ metadata.rs[MP6M]: F:对连接保留的描述、对象和诊断元数据实施�
 transfer.rs[MN7M]: F:路由本地或远程调用，在已有值树中按目标连接重写资源编号 | R:code:crates/cordis-routing/src/directory.rs,code:crates/cordis-routing/src/local.rs,code:crates/cordis-up/src/payload.rs | A:Router::transfer,Router::invoke_remote,Router::invoke_local | S:按值树顺序访问资源标签并为重复编号复用同一出口，部分映射失败由 Batch 回收
 
 ===/<repository>/crates/cordis-runtime/===
-Cargo.toml[FV5T]: F:声明核心程序 0.1.11 的运行依赖、自动票据的 UUID v4 特性及测试依赖 | R:code:crates/cordis-runtime/src/main.rs,code:crates/cordis-runtime/src/control/outcomes.rs | A:cordis | S:-
+Cargo.toml[FV5T]: F:声明运行时的程序入口、部署依赖、产物树与安装候选索引依赖 | R:code:crates/cordis-runtime/src/install/index.rs,code:crates/cordis-artifact/Cargo.toml | A:cordis | S:-
 
 ===/<repository>/crates/cordis-runtime/fuzz/===
 Cargo.toml[FQ3T]: F:登记部署配置、插件清单和状态块的独立模糊测试项目 | R:code:crates/cordis-runtime/fuzz/fuzz_targets/configuration.rs | A:- | S:-
@@ -194,19 +195,19 @@ state_block.rs[TD3T]: F:用模糊输入验证状态块解析入口 | R:code:crat
 builtins.rs[AW7S]: F:提供管理授权、直接票据查询、兼容运行快照、日志和数据目录服务 | R:code:crates/cordis-runtime/src/control/outcomes.rs,code:crates/cordis-runtime/src/request.rs,code:crates/cordis-runtime/src/status.rs | A:Management,RuntimeInfo,DataDirectory | S:只有本调用实例可查询其票据，联合重读另查 reload 授权；运行快照 1.x 翻译新终态
 catalog.rs[AE7M]: F:发现并检查原生、进程和网页来源，按格式及实例声明选择分组并形成启动计划 | R:code:crates/cordis-runtime/src/manifest.rs,code:crates/cordis-runtime/src/install.rs | A:Catalog,Package,plan | S:格式 2 的原生插件缺省进入 native 组；安装引用复用须与本轮再次发现的路径一致
 cli.rs[EG6S]: F:分派运行、服务与开发命令，按启动位置查询在线状态、票据和离线来源 | R:code:crates/cordis-runtime/src/deployment.rs,code:crates/cordis-runtime/src/storage.rs | A:status,--offline,--ticket,--caller | S:票据以调用实例和请求编号定位，活动快照匹配持锁核心 PID
-config.rs[FC8M]: F:解析版本化部署和管理覆盖，展开带作用域的实例、授权与运行参数 | R:code:crates/cordis-runtime/src/config/scopes.rs,code:crates/cordis-runtime/src/control/batch.rs | A:Configuration,RuntimeSettings,Overlay | S:管理覆盖继承基础授权；缺少格式号采用版本 1，构建声明属于版本 2
-contract.rs[TQ7M]: F:在同一截止时间内执行启动、套件运行、状态往返和断言报告 | R:code:crates/cordis-runtime/src/control/contract.rs,code:crates/cordis-contract/src/lib.rs | A:Plan | S:阶段切换时重新取得受观察实例，最终报告同时计入套件断言和清理结果
-control.rs[AW8L]: F:持有部署目录与实例授权，调度管理操作，启动候选和重载共用配置提交 | R:code:crates/cordis-runtime/src/control/batch.rs,code:crates/cordis-runtime/src/control/sources.rs,code:crates/cordis-runtime/src/storage.rs | A:Controller,ControlServices | S:待恢复时保留候选并暂停结构写入，候选网页权限持有至持久决定形成
+config.rs[FC8L]: F:解析部署、管理覆盖和退役策略，按实例名展开有效作用域与授权 | R:code:crates/cordis-runtime/src/config/scopes.rs,code:crates/cordis-runtime/src/control/batch.rs | A:Configuration,RuntimeSettings,Overlay | S:点查与全量展开共用祖先规则；管理覆盖继承基础授权，旧覆盖保留程序回退引用
+contract.rs[TQ7M]: F:在同一截止时间内执行套件、状态往返和断言，按实际生命周期所有者查询实例 | R:code:crates/cordis-runtime/src/control.rs,code:crates/cordis-runtime/src/control/contract.rs | A:Plan | S:阶段变化后重新取得实例；最终结果同时记录套件断言与清理结果
+control.rs[AW8L]: F:管理部署目录、实际实例所有者、授权及结构变更，协调启动和重载 | R:code:crates/cordis-runtime/src/control/permissions.rs,code:crates/cordis-runtime/src/control/batch.rs,code:crates/cordis-runtime/src/storage.rs | A:Controller,ControlServices | S:授权取得后移交效应，实例当前纤程按真实后端或网页所有者查得；待恢复时暂停结构写入
 deployment.rs[OV6M]: F:解析部署配置、应用包和可写路径，从启动输入定位状态目录 | R:code:crates/cordis-runtime/src/cli.rs,code:crates/cordis-runtime/src/config.rs | A:Locations,load_with_state_dir,load | S:候选配置无效时从同一输入独立解析定位字段，确保状态查询与启动采用同一目录
 executor.rs[RP4T]: F:用运行时 Tokio 句柄和单调时钟实现内核的执行接口 | R:code:crates/cordis/src/lib.rs | A:Executor,Spawn,Clock | S:-
-install.rs[PE6M]: F:比较授权来源与既有副本，分配不可变安装引用并发布副本和旁置凭据 | R:code:crates/cordis-runtime/src/control.rs | A:install,equal | S:按安装目录持有跨进程文件锁，覆盖序号分配、暂存复制与凭据发布
+install.rs[PE6L]: F:选择、校验、复制及持久发布插件副本与验证凭据 | R:code:crates/cordis-runtime/src/install/index.rs,code:crates/cordis-artifact/src/lib.rs | A:install,equal | S:跨进程目录锁覆盖候选选择和序号分配；副本与凭据完成同步才交回安装引用
 lib.rs[RG4T]: F:公开独立核心的运行入口、配置、契约、清单和状态解析模块 | R:code:crates/cordis-runtime/src/runtime.rs | A:run,run_with_contract | S:-
 main.rs[EG5T]: F:分派运行、状态、版本、服务与开发命令，并以退出状态报告结果 | R:code:crates/cordis-runtime/src/cli.rs | A:cordis | S:-
 manifest.rs[FE6S]: F:把 UTF-8 TOML 插件清单转换为插口、版本、重启和网页声明 | R:code:crates/cordis-runtime/src/catalog.rs | A:Manifest,Entry,Web,parse | S:-
 request.rs[MW7M]: F:解码管理方法，管理有界预约、应答写出后的提交及停机受理 | R:code:crates/cordis-runtime/src/control/outcomes.rs,code:crates/cordis-runtime/src/runtime.rs | A:Operation,Handle,Reserved | S:停机请求写出后与队列提交一起关闭受理；调用者结束等待后队列仍拥有已提交的工作
-runtime.rs[RW8L]: F:恢复持久部署后提交启动候选，协调请求、信号、状态发布及停机 | R:code:crates/cordis-runtime/src/control.rs,code:crates/cordis-runtime/src/storage.rs,code:crates/cordis-runtime/src/status.rs | A:run,run_with_contract | S:候选被拒且旧部署已恢复时继续服务，决定待恢复时保留磁盘证据和恢复阶段
+runtime.rs[RW8L]: F:恢复持久部署、提交启动候选，协调信号、检查点与状态发布效应 | R:code:crates/cordis-runtime/src/control.rs,code:crates/cordis-runtime/src/runtime/owner.rs,code:crates/cordis-runtime/src/storage.rs | A:run,run_with_contract | S:状态发布受运行根持有，按停止信号写最后快照并共享完成结果；取消时写权随根清理生存
 status.rs[OO6M]: F:从监管器实况、部署声明、票据与宿主采样构造可发布的运行快照 | R:code:crates/cordis-runtime/src/runtime.rs,code:crates/cordis-runtime/src/control/outcomes.rs,code:crates/cordis-supervisor/src/manager/native.rs | A:View,Status,write | S:按连接映射库编号；一般查询读取最近的采样，局部采样失败保留带来源的诊断
-storage.rs[PD8L]: F:锁定运行目录并以撤销日志共同提交或恢复基础配置、覆盖、确认来源和实例检查点 | R:code:crates/cordis-runtime/src/control/batch.rs,code:crates/cordis-runtime/src/control/sources.rs | A:Store,CommitError,Committed,read_committed_sources | S:移动决定标记后目录同步失败须恢复确认；决定已同步后的回收错误随成功返回。兼容无版本标记的旧日志并迁移 consumed 中的检查点
+storage.rs[PD8L]: F:确认运行目录中的部署决定、来源、覆盖及检查点持久发布，并复用确认后的编码 | R:code:crates/cordis-runtime/src/control/batch.rs,code:crates/cordis-runtime/src/control/sources.rs,code:crates/cordis-up/src/codec.rs | A:Store,CommitError,Committed,checkpoint_shared | S:目录同步确认后才开放缓存，失败维持待确认；缓存绑定目录，部署决定后收尾错误单独保留
 
 ===/<repository>/crates/cordis-runtime/src/cli/===
 service.rs[OV6M]: F:生成、注册和卸载 launchd 或 systemd 运行服务 | R:code:crates/cordis-runtime/src/cli/service/template.rs | A:ServiceAction,ServicePlatform | S:系统管理器失败作为命令错误返回
@@ -219,11 +220,12 @@ tests.rs[TV3T]: F:核验标准服务安装位置和卸载失败行为 | R:code:c
 scopes.rs[FC6S]: F:校验作用域关系并按祖先次序展开继承的逻辑部署视图 | R:code:crates/cordis-runtime/src/config.rs | A:Configuration::expand_scopes | S:接口元数据表按字段覆盖，其他值由最近一层替换
 
 ===/<repository>/crates/cordis-runtime/src/control/===
-batch.rs[AW8L]: F:准备统一部署目标，把后端、网页和存储决定接入监管器批次 | R:code:crates/cordis-supervisor/src/manager/batch.rs,code:crates/cordis-runtime/src/control/web.rs,code:crates/cordis-runtime/src/storage.rs | A:start_target,apply_deployment_batch | S:已接纳视图和候选共享挂载记录，资源依实际所有者移交；决定后退役失败作为清理结果，恢复由原事务执行
-contract.rs[TQ5T]: F:等待被测实例激活并令契约套件在重启后重新挂载 | R:code:crates/cordis-runtime/src/contract.rs,code:crates/cordis-runtime/src/control/batch.rs | A:contract_settle,contract_roundtrip | S:暂停和恢复套件复用部署入口，被测组保留独立重启意图
+batch.rs[AW8L]: F:准备统一目标并协调后端、网页、程序来源和持久提交 | R:code:crates/cordis-supervisor/src/manager/batch.rs,code:crates/cordis-runtime/src/control/web.rs,code:crates/cordis-runtime/src/storage.rs | A:start_target,apply_deployment_batch | S:已接纳和候选共用必要挂载记录；配置点查与批量展开保持作用域，持久决定与退役错误分别记录
+contract.rs[TQ5T]: F:等待被测实例激活并恢复契约套件，按当前实例所有者读取失败 | R:code:crates/cordis-runtime/src/contract.rs,code:crates/cordis-runtime/src/control.rs | A:contract_settle | S:-
 outcomes.rs[DW6S]: F:按调用实例保留有界票据和终态，缺省票据使用随机 UUID | R:code:crates/cordis-runtime/src/request.rs,code:crates/cordis-runtime/src/builtins.rs | A:BatchOutcomes,PendingBatch | S:自选标识命中保留记录时沿用原结果，受理响应写出后执行，预约中断记录拒绝
-sources.rs[PD7S]: F:解析已安装程序来源，按实例激活确认绑定并随部署保存 | R:code:crates/cordis-runtime/src/storage.rs,code:crates/cordis-runtime/src/control/batch.rs | A:SourceBindings,offline_sources | S:显式管理引用优先，来源确认记录与已接纳基础配置、覆盖及检查点共享持久决定
+sources.rs[PD7M]: F:从当前后端或网页所有者确认实例程序来源并提供离线读取 | R:code:crates/cordis-runtime/src/control.rs,code:crates/cordis-runtime/src/storage.rs | A:SourceBindings,offline_sources | S:写盘成功由 Store 确认，目录同步失败保持待发布标记；消费方按已提交程序绑定查询
 web.rs[AU7S]: F:准备网页实例增删与变更，按部署结果更新、恢复或清理页面 | R:code:crates/cordis-runtime/src/control/batch.rs,code:crates/cordis-web-deployment/src/lib.rs | A:WebChange,PreparationFailure | S:新增记录区分准备和实际挂载，恢复时只撤回已挂载候选；准备失败可保留受损现场
+permissions.rs[AS7M]: F:把单实例管理授权与转发能力交给一个挂载效应并观察撤回结果 | R:code:crates/cordis-runtime/src/control.rs,code:crates/cordis/src/effect.rs | A:MountScope | S:正常释放与等待取消共用内核清理，最后一个共享所有者撤回授权，已取得的前缀也参与回收
 
 ===/<repository>/crates/cordis-sdk-macros/===
 Cargo.toml[FV3T]: F:声明 SDK 过程宏 0.1.3 的编译目标与语法生成依赖 | R:code:crates/cordis-sdk-macros/src/lib.rs | A:- | S:-
@@ -263,20 +265,21 @@ Cargo.toml[FV4T]: F:定义监管器 0.1.8 的内核、连接、进程和路由�
 
 ===/<repository>/crates/cordis-supervisor/src/===
 lib.rs[RE4T]: F:公开管理器以及进程监管和 UP/1 连接接口 | R:code:crates/cordis-supervisor/src/manager.rs,code:crates/cordis-process/src/lib.rs | A:- | S:-
-manager.rs[RE8L]: F:持有内核、连接、实例及检查点目录，并调度有界结构操作和页面参与操作 | R:code:crates/cordis-supervisor/src/manager/batch.rs,code:crates/cordis-supervisor/src/manager/lifecycle.rs | A:Manager | S:唯一工作者可在等待持久决定时执行页面参与操作；待恢复部署继续持有原资源并阻断新的结构变化
+manager.rs[RE8L]: F:持有监管目录和结构变更队列，统一协调部署、页面与废弃冻结租约 | R:code:crates/cordis-supervisor/src/manager/batch.rs,code:crates/cordis-supervisor/src/manager/lifecycle.rs | A:Manager,InstanceLifecycle,RetiredImageBasis | S:管理工作者收回被放弃的冻结权限，结构变更及异常恢复沿同一调度入口
 
 ===/<repository>/crates/cordis-supervisor/src/manager/===
-batch.rs[AW9L]: F:准备部署和重启目标，交接并确认候选，按照持久决定恢复或退役 | R:code:crates/cordis-runtime/src/control/batch.rs,code:crates/cordis-supervisor/src/manager/transition.rs,code:crates/cordis-supervisor/src/manager/lifecycle.rs | A:BatchInstance,BatchReplacement,BatchCommit,BatchFailure,DeploymentDecision | S:持久捕获取直接变化和影响闭包内的目标根，清除失效身份；持有旧组和冻结状态直至决定，恢复失败保留两代资源
-generation.rs[RE8L]: F:管理加载纪元、远端效应、上下文绑定与所属插件描述符 | R:code:crates/cordis-supervisor/src/manager/handlers.rs,code:crates/cordis-up/src/payload.rs | A:Generation,RemoteComponent,RemoteEffect | S:纪元持有共享的不可变配置及继承状态，发送 apply 时直接借用两者编码
+batch.rs[AW9L]: F:按目标索引准备统一部署，交接状态、确认候选并按持久决定恢复或退役 | R:code:crates/cordis-runtime/src/control/batch.rs,code:crates/cordis-supervisor/src/manager/transition.rs,code:crates/cordis-supervisor/src/manager/lifecycle.rs | A:BatchInstance,BatchReplacement,BatchCommit,BatchFailure,DeploymentDecision | S:批次索引统一实例身份与存续分组；原资源保留到决定明确，拒绝由原批次恢复，恢复失败保留两代
+generation.rs[RE8L]: F:管理加载代、远端效应、插件描述符及该代的上下文绑定 | R:code:crates/cordis-supervisor/src/manager/instance.rs,code:crates/cordis/src/context.rs,code:crates/cordis-up/src/payload.rs | A:Generation,RemoteComponent,RemoteEffect | S:捕获纪元由绑定 Context 持有，准入由内核决定；不可变配置及继承状态由加载代共享
 handlers.rs[IN8L]: F:分派连接上的服务、效应、视图及资源操作，拥有式拆解调用参数 | R:code:crates/cordis-supervisor/src/manager/routing.rs,code:crates/cordis-up/src/rpc.rs | A:- | S:调用以本地时限和继承截止中较早者结束；无效请求结构终止连接，导入期保留收到的引用
-lifecycle.rs[RE9L]: F:管理进程、子实例、状态导出与最终停机，按实例归还检查点写权 | R:code:crates/cordis-supervisor/src/manager/batch.rs,code:crates/cordis-supervisor/src/manager/transition.rs | A:FrozenSnapshot,Manager::checkpoint_instance,Manager::export_shutdown | S:普通与部署确认后的检查点逐实例解冻，换代交接及停机维持批量冻结；退避等待在事务队列外
+lifecycle.rs[RE9L]: F:管理进程、子实例、状态捕获和停机，回收被放弃的冻结权限 | R:code:crates/cordis-supervisor/src/manager/batch.rs,code:crates/cordis-supervisor/src/manager/transition.rs | A:FrozenSnapshot,Manager::checkpoint_instance,Manager::export_shutdown | S:冻结快照最后所有者放弃时交给工作者解冻；普通检查点逐实例释放写权，换代和停机维持批量冻结
 metadata.rs[MP5T]: F:把连接的描述、对象和错误保留量交给路由元数据预算管理 | R:code:crates/cordis-routing/src/metadata.rs | A:- | S:保留错误超额时结束该连接并记录有界诊断
-model.rs[FC5T]: F:声明监管器的分组、重启策略、实例和部署报告数据 | R:code:crates/cordis-supervisor/src/manager.rs | A:GroupSpec,RestartPolicy | S:-
-native.rs[RE7M]: F:提供原生库准备、装载、缓存租约、按需重启和只读库采样 | R:code:crates/cordis-supervisor/src/manager/batch.rs,code:crates/cordis-host/src/host.rs | A:Manager::replace_library,Manager::sample_libraries | S:页面模块和单个原生库都由批次换代；采样错误单独返回，缓存租约覆盖重启计划
-routing.rs[MN8L]: F:解析服务路由、作用域与对象归属，通过拥有型调用值执行转发 | R:code:crates/cordis-routing/src/directory.rs,code:crates/cordis-supervisor/src/manager/views.rs | A:- | S:路由锁保护编号与所有权，实际调用在锁外；拆出结果后从原载荷导入作用域返回的对象
+model.rs[FC6S]: F:声明监管器设置、分组和恢复策略，按退役指标选择整组恢复条件 | R:code:crates/cordis-supervisor/src/manager/native.rs,code:crates/cordis-up/src/payload.rs | A:GroupSpec,RestartPolicy,RetiredImageBasis | S:默认使用累计退役数；选定指标缺失时沿用旧字段
+native.rs[RE7L]: F:准备和替换原生库，采样退役指标并按策略恢复宿主组 | R:code:crates/cordis-supervisor/src/manager/batch.rs,code:crates/cordis-host/src/lease.rs | A:Manager::replace_library,Manager::library_retirement,Manager::sample_libraries | S:累计及句柄策略复用退役应答，物理指标按需采样；重启计划持有对应缓存租约
+routing.rs[MN8L]: F:从作用域和已提交依赖选择服务路由并转发跨连接对象 | R:code:crates/cordis-routing/src/directory.rs,code:crates/cordis-supervisor/src/manager/views.rs | A:Manager::remote_service_in | S:已提交绑定按请求次版本校验；编号和所有权在路由锁内维护，调用和资源释放在锁外
 transition.rs[AW8M]: F:沿实际绑定、父子关系及同插件候选接口计算影响闭包并确认变更 | R:code:crates/cordis-supervisor/src/manager/batch.rs,code:crates/cordis-supervisor/src/manager/views.rs | A:select_instances,confirm_transition | S:动态子组件可能补足的依赖按接口版本、继承域和同一命名空间的已登记域匹配；继续原纪元的实例在确认前解冻
 trusted.rs[RI7T]: F:在核心上下文记录调用来源并让派生视图和子组件继承 | R:code:crates/cordis-supervisor/src/manager/views.rs,code:crates/cordis-sdk/src/metadata.rs | A:Manager::caller_context | S:业务拦截元数据与核心建立的来源分别持有
-views.rs[RE7M]: F:管理派生视图、命名隔离域和作用域租约，按父上下文挂载动态子组件 | R:code:crates/cordis-supervisor/src/manager/generation.rs,code:crates/cordis-supervisor/src/manager/lifecycle.rs | A:Manager::derive_context,Manager::page_context | S:命名域归属页面命名空间，子实例随真实父效应撤回
+views.rs[RE7M]: F:管理派生视图、隔离和拦截，并为实例生命周期分配私有服务域 | R:code:crates/cordis-supervisor/src/manager/instance.rs,code:crates/cordis-supervisor/src/manager/lifecycle.rs | A:Manager::derive_context,Manager::instance_lifecycle_view,Manager::page_context | S:实例域与页面命名域独立；提供方及等待方共享租约，最后一个视图撤回域记录
+instance.rs[RE7T]: F:在实例私有域中用内核服务表达已提交的远端加载代 | R:code:crates/cordis-supervisor/src/manager/generation.rs,code:crates/cordis-supervisor/src/manager/views.rs | A:InstanceLifecycle,InstanceGeneration | S:固定类型键配合私有域；弱引用固定旧代身份，父组件和父视图由该代给出
 
 ===/<repository>/crates/cordis-testkit/===
 Cargo.toml[FQ3T]: F:定义测试工具库的内核、调度与证据序列化依赖 | R:code:crates/cordis-testkit/src/lib.rs | A:- | S:-
@@ -308,19 +311,19 @@ Cargo.toml[FQ3T]: F:登记 UP/1 解码的独立 cargo-fuzz 目标 | R:code:crate
 up1_decoder.rs[TN4T]: F:向 UP/1 解码入口投递任意输入并检查合法消息的资源和值处理 | R:code:crates/cordis-up/src/codec.rs,code:crates/cordis-up/src/payload.rs | A:- | S:-
 
 ===/<repository>/crates/cordis-up/src/===
-codec.rs[LN8L]: F:校验并编码 UP/1 消息与 CBOR 值，在同一缓冲写入完整帧 | R:code:crates/cordis-up/src/message.rs,code:crates/cordis-up/src/rpc.rs | A:Limits,encode,decode,encode_value,decode_value | S:帧的四字节头位于正文字节预算之外，节点与深度预算仍适用于同一消息；尾随输入单独报错
-lib.rs[LN5T]: F:公开 UP/1 消息、编解码器、资源编号与双向连接 | R:code:crates/cordis-up/src/codec.rs,code:crates/cordis-up/src/rpc.rs | A:- | S:-
+codec.rs[LN8L]: F:校验并编解码 UP/1 消息和值，向受限写入器输出帧或借用状态 | R:code:crates/cordis-up/src/message.rs,code:crates/cordis-up/src/rpc/buffer.rs | A:Limits,encode,decode,encode_state,decode_value | S:帧头在正文预算之外；借用状态编码沿用原外层字段和节点预算，并拒绝资源引用
+lib.rs[LN5T]: F:公开 UP/1 消息、编解码、借用状态写入和双向连接 | R:code:crates/cordis-up/src/codec.rs,code:crates/cordis-up/src/rpc.rs | A:encode_state,Limits,Message | S:-
 message.rs[LN6T]: F:定义 UP/1 请求、响应、通知与协议错误的线表示 | R:code:crates/cordis-up/src/codec.rs | A:Message,WireError | S:请求方向分别管理编号；错误详情是普通诊断数据
-payload.rs[LN7L]: F:定义 UP/1 载荷并用拥有型转换转交调用参数和结果的原有值树 | R:code:crates/cordis-up/src/rpc.rs,code:crates/cordis-up/src/message.rs | A:Apply,Invoke,InvokeResult,ObjectRef,payload_refs | S:拥有型外层结构保持既有 Serde 字段与字节语义；apply 的配置和继承输入以借用形式编码
-rpc.rs[MN8L]: F:管理有界双向调用、完整帧排队、应答、取消及嵌套时限 | R:code:crates/cordis-up/src/codec.rs,code:crates/cordis-up/src/payload.rs | A:Connection,Handler,Outgoing,Payload,inherit_invocation,bound_invocation | S:应答与本地到期共用待应答表的移除权，在同一临界区更新连接超时；值树编码后释放，导入租约随载荷独立保留
+payload.rs[LN7L]: F:定义 UP/1 载荷、拥有型调用转换与可选的原生库退役计量 | R:code:crates/cordis-up/src/rpc.rs,code:docs/adr/0058-native-retirement-metrics.md | A:Apply,Invoke,InvokeResult,LibraryRetirement,ObjectRef | S:旧退役字段保持累计语义，新计量可缺席；拥有型转换维持既有 Serde 形状
+rpc.rs[MN8L]: F:管理带字节租约的双向帧调度、终态、取消和嵌套截止时间 | R:code:crates/cordis-up/src/codec.rs,code:crates/cordis-up/src/rpc/buffer.rs,code:crates/cordis-up/src/payload.rs | A:Connection,ConnectionOptions,Handler,Outgoing,Payload | S:请求撤回与首个写入共用锁；部分帧写完再取消，控制额度与数据额度共享 FIFO，帧租约覆盖编码至写出
 
 ===/<repository>/crates/cordis-web-deployment/===
 Cargo.toml[FV3T]: F:定义网页部署库 0.1.1 的内核、监管器、通道和 URL 依赖 | R:code:crates/cordis-web-deployment/src/lib.rs | A:- | S:-
 
 ===/<repository>/crates/cordis-web-deployment/src/===
-lib.rs[AU7L]: F:登记网页资源与父实例，保存变更前的配置和共享子实例状态以供换代恢复 | R:code:crates/cordis-web-deployment/src/pages.rs,code:crates/cordis-supervisor/src/manager/lifecycle.rs | A:Deployment,Spec,Change | S:页面冻结快照与监管器共享同版状态，真实父效应及页面连接各自拥有相应清理
-pages.rs[AU7L]: F:按页面连接装入模块、建立受父效应管理的组件并回收页面组 | R:code:crates/cordis-web-deployment/src/lib.rs,code:crates/cordis-supervisor/src/manager/batch.rs | A:- | S:页面组的模块更新沿监管器批次；不同页各有服务隔离域与独立子实例
-registry.rs[MU5T]: F:登记网页 HTTP 版本路由并保留对应服务对象供清理 | R:code:crates/cordis-web-deployment/src/pages.rs | A:- | S:清理使用原登记持有的 HTTP 服务引用
+lib.rs[AU7L]: F:装配网页资源和实例所有者，保存候选与旧版切换状态 | R:code:crates/cordis-web-deployment/src/pages.rs,code:crates/cordis-supervisor/src/manager/instance.rs | A:Deployment,WebSpec,WebChange | S:全栈网页声明父实例私有生命周期依赖，切换通过已提交绑定确定父代
+pages.rs[AU7L]: F:装入页面模块，激活并清理页面的配置、组件和绑定 | R:code:crates/cordis-web-deployment/src/registry.rs,code:crates/cordis-supervisor/src/manager/batch.rs | A:- | S:页面以 Owner 的已提交 HTTP 对象注册，固定后端代同时提供组件名与父上下文
+registry.rs[MU5T]: F:登记网页 HTTP 版本路由并持有实际提供方用于激活和撤回 | R:code:crates/cordis-web-deployment/src/pages.rs,code:crates/cordis-supervisor/src/manager/routing.rs | A:Registration | S:三个阶段使用同一已提交的 HTTP 对象
 
 ===/<repository>/crates/cordis/===
 Cargo.toml[FV4T]: F:声明组件内核 0.1.2 的状态、并发及测试依赖 | R:code:crates/cordis/src/lib.rs | A:- | S:-
@@ -331,36 +334,40 @@ plugins.rs[TB4S]: F:用 Tokio 宿主演示提供者、消费者、事件与依�
 readme.rs[TB3T]: F:演示确定性宿主中的效应登记、反向清理与组件装载 | R:code:crates/cordis/README.md,code:crates/cordis-testkit/src/lib.rs | A:- | S:-
 
 ===/<repository>/crates/cordis/src/===
-context.rs[RB8M]: F:建立共享内核的持久上下文视图，处理扩展、隔离和拦截层 | R:code:crates/cordis/src/kernel.rs,code:crates/cordis/src/reflect.rs | A:Context,Realm | S:同类型扩展由最近一层覆盖；拦截元数据在服务访问时合并
-effect.rs[RW9L]: F:管理组件的可逆效应、嵌套清理与异步等待者 | R:code:crates/cordis/src/fiber.rs,code:crates/cordis/src/kernel.rs | A:Effect,EffectScope,EffectMeta | S:逆操作由原效应拥有到清理完成；拒收时保留原 Future，派发错误增删在状态锁内同时更新挂起清理总数
+context.rs[RB8M]: F:构造共享内核的派生视图，管理隔离、拦截和不可变加载纪元守卫 | R:code:crates/cordis/src/kernel.rs,code:crates/cordis/src/effect.rs,code:crates/cordis/src/fiber.rs | A:Context,Realm,Context::for_epoch | S:派生继承同纤程纪元条件并取合取；缓存只记守卫形状，实际当前性由内核锁确定
+effect.rs[RW9L]: F:登记、转交及清理组件效应，调度嵌套任务并观察完成 | R:code:crates/cordis/src/context.rs,code:crates/cordis/src/fiber.rs,code:crates/cordis/src/lifecycle.rs | A:Effect,EffectScope,EffectMeta | S:纪元准入在效应插入的同一状态锁内；逆操作由原效应拥有到实际结束，派发拒绝保留原任务
 error.rs[CG5T]: F:提供可克隆的内核错误、登记位置及聚合原因 | R:code:crates/cordis/src/effect.rs | A:Error,Result | S:-
 events.rs[MM8L]: F:登记可释放监听器并从快照派发类型化及命名的同步、异步和瀑布事件 | R:code:crates/cordis/src/effect.rs,code:crates/cordis/src/kernel.rs | A:Event,EventOptions,Context::waterfall_filtered | S:一次性回调先消费登记；派发观察先于监听器取快照，静态事件名在生成观察记录时才转为 Arc；空瀑布在过滤后执行终点，正常返回和展开都先释放参数再释放终点闭包
-fiber.rs[RW9L]: F:按绑定和纪元调和组件挂载、清理及稳定状态 | R:code:crates/cordis/src/registry.rs,code:crates/cordis/src/effect.rs,code:crates/cordis/src/reflect.rs | A:Fiber,Epoch,FiberState,parent_context | S:等待与通知共用稳定条件；挂起清理为零时跳过派发错误扫描，恢复只取得所选纤程树内的原清理任务
-kernel.rs[RB8S]: F:持有内核纤程、效应、绑定和待执行任务，并向宿主移交 Future | R:code:crates/cordis/src/fiber.rs,code:crates/cordis/src/effect.rs | A:Clock,Spawn,Task | S:同一把状态锁保护纤程和效应的派发错误以及挂起清理总数；宿主拒收时由仍持有共享任务槽的一方交还原任务
-lib.rs[RB6T]: F:公开内核的上下文、实例、效应、事件与服务接口 | R:code:crates/cordis/src/context.rs,code:crates/cordis/src/fiber.rs | A:- | S:-
+fiber.rs[RW9L]: F:调和纤程的绑定、纪元、活跃状态及资源清理，并应用纯生命周期决策 | R:code:crates/cordis/src/lifecycle.rs,code:crates/cordis/src/effect.rs,code:crates/cordis/src/reflect.rs | A:Fiber,Epoch,FiberState,Fiber::is_current_epoch | S:联合当前性检查借用纪元并共用状态锁；卸载过程中新增的效应在切代前结束
+kernel.rs[RB8S]: F:持有纤程、效应、绑定、消费者索引和待执行任务事实 | R:code:crates/cordis/src/fiber.rs,code:crates/cordis/src/reflect.rs | A:Clock,Spawn,Task | S:状态锁保护消费者索引和原纤程登记；宿主拒收时仍独占共享任务槽的一方交还原任务
+lib.rs[RB6T]: F:公开 Rust 内核的上下文、实例、效应、事件与服务接口 | R:code:crates/cordis/src/context.rs,code:crates/cordis/src/lifecycle.rs | A:Context,Fiber,Effect | S:-
 list.rs[CD3T]: F:实现支持前插、后插和按值移除的有序登记表 | R:code:crates/cordis/src/fiber.rs | A:- | S:-
 logger.rs[MO6L]: F:管理日志阈值、弱来源引用、有界缓冲和可释放导出器 | R:code:crates/cordis/src/context.rs,code:crates/cordis/src/effect.rs | A:Logger,LogMessage | S:导出器独立配置级别；消息保留序号、宿主时间及弱来源
-reflect.rs[RB9L]: F:维护隔离域中的绑定与服务授权，为类型化和命名服务选择活动实现并通知消费者 | R:code:crates/cordis/src/service.rs,code:crates/cordis/src/fiber.rs | A:Context::get,Context::provide,Context::lookup | S:可用性判定在锁外运行，写回时核对通知修订、谓词和值；运行纪元使用已接纳的绑定
-registry.rs[RB8L]: F:管理组件配置、依赖规格、挂载、转发别名及替换后的实例登记 | R:code:crates/cordis/src/fiber.rs,code:crates/cordis/src/context.rs | A:Inject,Component,ComponentDef,ValidationError | S:规范运行时的实例集合互斥，跨运行时迁移可直接追加；子实例编号随父挂载效应登记并随父撤回
+reflect.rs[RB9L]: F:维护隔离域服务、承诺绑定及按声明依赖定位的消费者通知 | R:code:crates/cordis/src/service.rs,code:crates/cordis/src/registry.rs,code:crates/cordis/src/fiber.rs | A:Context::get,Context::provide,notify_binding | S:消费者按服务键和域索引，挂载、换定义和销毁与原登记在同一状态锁内更新
+registry.rs[RB8L]: F:管理组件配置、依赖、挂载、别名和替换后的实例成员 | R:code:crates/cordis/src/registry/members.rs,code:crates/cordis/src/fiber.rs,code:crates/cordis/src/context.rs | A:Inject,Component,ComponentDef,ValidationError | S:按身份移除成员并保留插入顺序；过期父视图准入失败时回收此前建立的子记录
 service.rs[LB7M]: F:定义服务键、提供方句柄和带上下文的类型化访问投影 | R:code:crates/cordis/src/reflect.rs,code:crates/cordis/src/context.rs | A:ServiceKey,Scoped,Provision,Merge | S:类型化读取与即时查询复用绑定投影；元数据依声明、外层、内层次序合并
+lifecycle.rs[RW7T]: F:定义纤程状态和纯生命周期决策接口，接入生成后的分支 | R:code:crates/cordis/src/fiber.rs,code:crates/cordis/src/lifecycle_generated.rs,code:formal/Lifecycle.lean | A:FiberState,Action,TargetDecision | S:纯决策读取内核事实并返回动作，由调用方保有全部状态与资源
+lifecycle_generated.rs[RW7S]: F:实现由 Lean 决策树生成的纤程迁移、当前性及效应清理分支 | R:code:crates/cordis/src/lifecycle.rs,code:formal/Generate.lean,code:tools/verify_semantics.py | A:target,refresh,finish,current_epoch,cleanup | S:保持故障、失活及在途分支的短路，纪元相等谓词按需执行
 
 ===/<repository>/docs/===
 00-strategy.md[SB6T]: F:解释共享上下文下的时间与空间可组合性以及插件运行边界 | R:code:docs/01-semantics.md,code:docs/15-universal-socket.md | A:- | S:-
-01-semantics.md[SB8M]: F:规定效应可回退、依赖纪元、上下文及实例生命周期行为并链接验收条款 | R:code:docs/04-conformance.md,code:crates/cordis/src/fiber.rs | A:- | S:依赖方先于提供方清理，以便前者在清理时仍能使用原绑定
+01-semantics.md[SB8M]: F:规定依赖和效应的组件生命周期，并定义 Rust 加载纪元视图的效应准入 | R:code:docs/04-conformance.md,code:crates/cordis/src/context.rs,code:docs/formal-semantics.md | A:R-CTX-1,R-CTX-2,R-CTX-3 | S:过期视图允许清理时读取原已提交绑定，新效应由同锁纪元检查决定
 02-architecture.md[SB7T]: F:规定单内核状态、服务隔离、锁边界及串行调和规则 | R:code:crates/cordis/src/kernel.rs,code:docs/01-semantics.md | A:- | S:回调和 Future 轮询发生在状态锁外；挂起清理计数与派发错误在状态锁内同步，零计数允许跳过扫描
 03-roadmap.md[SQ4T]: F:列出内核从工作区建立到依赖重绑定和多线程运行的里程碑验收 | R:code:docs/14-roadmap-phase2.md | A:- | S:-
-04-conformance.md[SQ6M]: F:将上游 177 项组件行为映射到 Rust 测试、等价解释与适用范围 | R:code:docs/01-semantics.md | A:- | S:-
+04-conformance.md[SQ6M]: F:将上游 177 项行为映射到 Rust 测试与适用范围，并说明实际执行证据 | R:code:docs/01-semantics.md,code:tools/conformance_run.py | A:- | S:适用条目必须对应确实执行的测试，语言特有条目显式列出
 10-evolution-strategy.md[SV5T]: F:解释机器接口、业务契约和状态独立演进及性能评价边界 | R:code:docs/11-plugin-model.md,code:docs/12-abi-v1.md | A:- | S:-
 11-plugin-model.md[SE7T]: F:规定组件服务、实例资源、周期检查点、状态继承与换代时序 | R:code:docs/15-universal-socket.md,code:crates/cordis-supervisor/src/manager/lifecycle.rs,code:crates/cordis-runtime/src/storage.rs | A:- | S:周期导出后逐实例解冻；旧版检查点在恢复中断部署后迁入根目录，同名时采用根目录中的版本
 12-abi-v1.md[SE8S]: F:说明原生 ABI 的数据和调用寿命、兼容期及下一代固定入口设计 | R:code:crates/cordis-abi/src/raw.rs,code:docs/abi/v1-layout.txt,code:docs/PROGRESS.md | A:- | S:Rust SDK 0.2.3 对含异步方法的表单独核对最终结果布局，与 0.2.2 混用时按名称调用
 13-runtime-architecture.md[SV6S]: F:说明运行时分工、部署装配与宿主协议执行、传输所有权 | R:code:crates/cordis-dev/src/pack/artifacts.rs,code:crates/cordis-runtime/src/control/batch.rs,code:crates/cordis-up/src/rpc.rs | A:- | S:宿主协议在主线程推进，原生执行器独立；请求完成权和连续超时计数由同一临界区决定
 14-roadmap-phase2.md[SQ5T]: F:定义共享宿主、原生契约、大结果和独立应用交付的验收场景 | R:code:docs/04-conformance.md,code:docs/PROGRESS.md | A:- | S:-
 15-universal-socket.md[SE7T]: F:说明核心、原生宿主与独立插件的职责、调用路径及分组演进 | R:code:docs/12-abi-v1.md,code:docs/16-up1-protocol.md | A:- | S:共享默认组属于新格式的设计，现行清单沿用原有分组语义
-16-up1-protocol.md[SN8S]: F:规定 UP/1 的帧、请求、资源、错误、容量与调用预算协商契约 | R:code:crates/cordis-up/src/rpc.rs,code:crates/cordis-up/src/codec.rs | A:- | S:握手成功后支持方才传递嵌套调用的剩余预算，原生执行的实际租约和生命周期时限各有独立寿命
+16-up1-protocol.md[SN8S]: F:规定 UP/1 帧、字节与并发预算、调用时限、终态和资源所有权 | R:code:crates/cordis-up/src/rpc.rs,code:crates/cordis-up/src/codec.rs | A:- | S:Rust 写端首字节前可撤回或更新剩余时限；控制消息用保留额度保持 FIFO；回调额度至实际析构
 17-upstream-ecosystem-compat.md[SE4T]: F:说明原版 JavaScript 包兼容所需宿主语义和 C0 至 C4 专项状态 | R:code:docs/adr/0050-upstream-compat-host.md | A:- | S:-
 PROGRESS.md[SV6T]: F:记录各发行版组件身份、v0.3.1 部署修复及 v0.3.0 对照测量范围 | R:code:docs/guide.md,code:docs/measurements/deployment-revision.md | A:- | S:原生 ABI 沿用 1.2，固定入口实验沿独立门槛评价
 guide.md[SE6S]: F:说明 v0.3.1 工程创建、部署格式、管理票据、打包和启动恢复行为 | R:code:docs/PROGRESS.md,code:docs/deployment-semantics.md | A:- | S:启动与状态查询依当前配置定位状态目录，启动候选被拒且原部署恢复时由状态查询显示错误
-deployment-semantics.md[SB7T]: F:定义部署声明、运行状态、影响闭包、持久捕获范围和调用所有权 | R:code:docs/01-semantics.md,code:docs/04-conformance.md,code:tools/deployment_model.py | A:- | S:恢复已提交目标后通过部署事务采纳新输入，确认后的检查点只捕获受影响的目标根
+deployment-semantics.md[SB7T]: F:规定部署转换、持久决定、状态缓存和调用资源所有权 | R:code:docs/01-semantics.md,code:crates/cordis-runtime/src/storage.rs,code:tools/deployment_model.py | A:- | S:检查点缓存绑定目录且同步确认后发布，持久保证要求状态目录路径已持久存在
+component-ownership.md[SB7T]: F:将框架第一性原理映射到九个架构域的事实、资源与验收 | R:code:docs/01-semantics.md,code:docs/formal-semantics.md,code:crates/cordis-supervisor/src/manager/instance.rs | A:- | S:Rust 锁内准入与已提交依赖由实现和回归支持，Lean 模型承担明确列出的数学义务
+formal-semantics.md[SQ7S]: F:解释生命周期、清理和上下文准入的 Lean 模型及 Rust 精化边界 | R:code:formal/Lifecycle.lean,code:formal/Admission.lean,code:tools/verify_semantics.py | A:- | S:模型证明任意输入轨迹，源码证据承担锁、回调、服务存储和外部协议的实际对应
 
 ===/<repository>/docs/abi/===
 v1-layout.txt[SE6S]: F:保存 ABI 1.0 在 64 位小端目标的数据尺寸、对齐和字段偏移 | R:code:crates/cordis-abi/src/raw.rs,code:docs/abi/v1.1-layout.txt | A:- | S:-
@@ -407,7 +414,7 @@ v1.1-layout.txt[SE5T]: F:记录 ABI 1.1 扩展宿主表和 block_in_place 槽的
 0038-http-entry-service.md[SN4T]: F:划分 HTTP 插件的监听和资源入口与核心的页面连接职责 | R:code:plugins/http/src/lib.rs | A:- | S:-
 0039-wit-bindings.md[SN5T]: F:记录跨语言 WIT 类型、资源所有权和嵌套字节串的线表示 | R:code:crates/cordis-idl/src/lib.rs | A:- | S:-
 0040-script-sdk.md[SE4T]: F:规定 Python 和 TypeScript SDK 的 UP/1 执行及依赖交付 | R:code:docs/16-up1-protocol.md | A:- | S:-
-0041-routing-channels-web-deployment.md[SN5T]: F:划分服务对象路由、逻辑通道和页面实例部署职责 | R:code:crates/cordis-routing/src/lib.rs,code:crates/cordis-channels/src/lib.rs,code:crates/cordis-web-deployment/src/lib.rs | A:- | S:-
+0041-routing-channels-web-deployment.md[SN5T]: F:划分跨连接服务、通道和网页部署职责，并说明网页对已提交绑定的使用 | R:code:crates/cordis-routing/src/lib.rs,code:crates/cordis-web-deployment/src/pages.rs | A:- | S:网页一代的父实例身份和 HTTP 服务由实际依赖绑定确定
 0042-plugin-component-libraries.md[SE4T]: F:将可复用 Rust 组件库与动态 ABI 导出入口分开 | R:code:plugins/kv-mem-component/src/lib.rs,code:plugins/kv-mem/src/lib.rs | A:- | S:-
 0043-bundled-script-runtimes.md[SV4T]: F:规定独立分发 Python 和 Node 自带解释器、扩展、许可证及相对链接 | R:code:crates/cordis-dev/src/pack/plugins.rs | A:- | S:-
 0044-configuration-stability.md[SW5T]: F:区分代码替换的激活目标和主动撤去服务时的 Pending 稳定结果 | R:code:crates/cordis-supervisor/src/manager/batch.rs | A:- | S:-
@@ -423,6 +430,7 @@ v1.1-layout.txt[SE5T]: F:记录 ABI 1.1 扩展宿主表和 block_in_place 槽的
 0055-plugin-tokio-context.md[SP4T]: F:说明插件库级 Tokio 上下文与宿主保留映像或主动卸载时的关闭行为 | R:code:crates/cordis-sdk/src/ambient.rs | A:- | S:插件自建系统线程由插件在效应清理时结束
 0056-typed-layout-digest.md[SE5T]: F:记录 ABI 1.2 以布局摘要判断类型化调用，其他情况按方法名分派 | R:code:crates/cordis-abi/src/object.rs,code:crates/cordis-sdk-macros/src/interface/generate.rs | A:- | S:-
 0057-shared-host-and-plugin-contract.md[SE6T]: F:记录共享宿主、稳定方法身份、业务提交回执和跨目录交付的目标契约 | R:code:docs/15-universal-socket.md,code:docs/13-runtime-architecture.md | A:- | S:v0.2.6 属于 ABI v1 系列，新分组和机器入口按部署版本启用
+0058-native-retirement-metrics.md[SR5T]: F:规定退役计量、映射观察和宿主恢复阈值策略 | R:code:crates/cordis-host/src/lease.rs,code:crates/cordis-supervisor/src/manager/native.rs | A:retired_image_basis,retired_image_limit | S:旧宿主和缺失观测采用累计值，已关闭句柄仍可能映射
 
 ===/<repository>/docs/design/flow/===
 dagre.LICENSE.txt[SZ2T]: F:保留浏览器状态图所用 Dagre 的许可证和版权 | R:code:docs/design/flow/index.html | A:- | S:-
@@ -509,6 +517,7 @@ deployment-revision.md[SP6S]: F:汇总部署修订的源码成本、配对性能
 kernel-event-hot-paths.json[TP5L]: F:记录六类内核调用的配对原始样本、候选源码身份、环境及验证结果 | R:code:docs/measurements/kernel-event-hot-paths.md,code:benchmarks/kernel/README.md | A:summary,samples,validation | S:第零组为探索样本，正式统计取其余十组；计时和分配数据来自两个窗口
 kernel-event-hot-paths.md[SP5T]: F:报告同步事件、瀑布调用与服务读取的分配和耗时，说明配对实验与回归结果 | R:code:docs/measurements/kernel-event-hot-paths.json,code:benchmarks/kernel/README.md | A:- | S:耗时取批量平均调用成本的中位数，配对比值按同组候选耗时除以基线耗时
 runtime-efficiency.md[SP6S]: F:解释跨宿主调用、宿主内存、DTO 分配和内核换代的配对实验及验证 | R:code:docs/measurements/runtime-efficiency/rpc-memory-summary.json,code:docs/measurements/runtime-efficiency/replacement/summary.json,code:docs/measurements/runtime-efficiency/validation/summary.json | A:- | S:总 PSS 在结果发布后采样；内核换代窗口覆盖列表迁移和等待稳定，完整部署另有后端成本
+architecture-ownership.md[SP6T]: F:记录整合 PR 的责任、故障回放、组合验证和可归因成本 | R:code:docs/component-ownership.md,code:docs/formal-semantics.md,code:docs/deployment-semantics.md | A:- | S:局部操作计数与进程资源及端到端性能分别报告
 
 ===/<repository>/docs/measurements/m21-performance/===
 README.md[SP5T]: F:解释三类性能量测的条件、口径、历史样本和直接调用负载差异 | R:code:docs/measurements/m21-performance/summary.json | A:- | S:-
@@ -634,7 +643,7 @@ lib.rs[DN5S]: F:实现原生 HTTP 请求回显与使用实例数据目录的流�
 Cargo.toml[FV4T]: F:配置 HTTP 插件 0.1.4 的网络运行时、WebSocket、静态文件和路由依赖 | R:code:plugins/http/src/lib.rs | A:cdylib | S:-
 
 ===/<repository>/plugins/http/assets/===
-cordis-web.js[LU4L]: F:随 HTTP 插件交付浏览器连接、资源及网页组件执行功能，报告网页 SDK 0.1.3 | R:code:sdks/typescript/cordis-web/src/runtime.ts,code:sdks/typescript/build.mjs | A:connect,WebRuntime,defineComponent | S:内置副本与网页 SDK 由同一构建生成，调用预算能力取决于执行环境
+cordis-web.js[LU4L]: F:随 HTTP 发行浏览器连接、网页组件、值预算与受限回调执行 | R:code:sdks/typescript/cordis-web/src/runtime.ts,code:sdks/typescript/cordis-sdk/src/wire.ts,code:sdks/typescript/build.mjs | A:connect | S:交付的浏览器代码内嵌请求终态所有权和接收帧字节准入
 index.html[EU4T]: F:提供 HTTP 服务浏览器外壳与页面模块挂载位置 | R:code:plugins/http/src/server.rs | A:- | S:-
 
 ===/<repository>/plugins/http/src/===
@@ -751,7 +760,7 @@ protocol.rs[IN7L]: F:将窗口服务、状态与效应接入 UP/1，并以管理
 ui.rs[IU6M]: F:在系统主线程持有 WebView 窗口，处理跨线程请求和释放 | R:code:plugins/window/src/protocol.rs | A:Bridge,WindowLease,WindowSpec | S:跨线程应答以实际界面操作完成为准
 
 ===/<repository>/sdks/python/===
-README.md[SE5T]: F:说明 Python 插件运行、SDK 安装、WIT 两种绑定生成方式和生命周期用法 | R:code:sdks/python/cordis_sdk/wit.py,code:sdks/python/cordis_sdk/runtime.py | A:- | S:-
+README.md[SE5T]: F:说明 Python 插件启动、绑定生成、UP/1 值预算和异步回调准入 | R:code:sdks/python/cordis_sdk/budget.py,code:sdks/python/cordis_sdk/runtime.py | A:- | S:回调取消以后仍持有任务及接收字节额度至实际完成
 pyproject.toml[FV3T]: F:声明 Python SDK 0.1.4 的安装元数据、解释器条件与 CBOR 依赖 | R:code:sdks/python/cordis_sdk/__init__.py | A:cordis-sdk | S:-
 requirements.txt[FV2T]: F:固定进程插件使用的 cbor2 依赖版本 | R:code:sdks/python/pyproject.toml | A:- | S:-
 
@@ -762,24 +771,25 @@ context.py[LE7M]: F:提供 Python 组件声明、服务和事件、效应、状�
 errors.py[LN4T]: F:定义 Python SDK 与 UP/1 共用的错误编号、消息及详情 | R:code:sdks/python/cordis_sdk/wire.py | A:CordisError | S:-
 http.py[LN4T]: F:用所属组件效应登记 HTTP 路由及异步撤回 | R:code:sdks/python/cordis_sdk/context.py | A:register_route | S:-
 metadata.py[LI4T]: F:把核心提供的 cordis.caller 元数据解码为实例或页面身份 | R:code:crates/cordis-supervisor/src/manager/trusted.rs | A:Caller,caller | S:-
-runtime.py[RE7M]: F:执行 Python 组件激活、服务调用和回调，报告 SDK 0.1.4 的运行身份 | R:code:sdks/python/cordis_sdk/context.py,code:sdks/python/cordis_sdk/wire.py | A:Runtime,run | S:标准流承载协议，连接关闭时归还出口资源并取消所属事件任务
+runtime.py[RE7M]: F:执行 Python 组件与资源回调，持有连接级回调数量及帧字节额度 | R:code:sdks/python/cordis_sdk/context.py,code:sdks/python/cordis_sdk/wire.py | A:Runtime,run,Runtime.callback_usage | S:取消后的回调继续占额度，完成处理先释放载荷再归还额度；按实际接收帧字节计量
 streams.py[LN5T]: F:为 Python 字节流提供文件、迭代分块及有界读取资源 | R:code:sdks/python/cordis_sdk/bindings.py,code:plugins/stream-api/wit/stream.wit | A:ByteStream,from_file,from_chunks | S:-
-wire.py[LN7M]: F:经标准流交换 UP/1 帧，处理协商截止时间、取消和载荷所有权 | R:code:sdks/python/cordis_sdk/runtime.py,code:docs/16-up1-protocol.md | A:Connection | S:入站过期调用在业务分派前结束；发送方先固定参数，取得写权并消化背压后换算剩余预算，失败由当前所有者撤回出口引用
+wire.py[LN7M]: F:经标准流交换 UP/1 帧，校验容量并转交取消、调用预算和载荷 | R:code:sdks/python/cordis_sdk/runtime.py,code:sdks/python/cordis_sdk/budget.py | A:Connection | S:传输层把接收正文的字节数交回执行端；发送方先固定参数，取得写权后换算剩余时限
 wit.py[LN6S]: F:按调用方提供的 WIT 类型图转换 Python 值、调用代理并分派业务方法 | R:code:crates/cordis-idl/src/script.rs,code:sdks/python/cordis_sdk/bindings.py | A:bind_runtime,Tagged,Some,Ok,Err,Transport | S:业务类、代理映射和模式归各生成件；独立生成器内嵌此实现，SDK 模式直接导入
+budget.py[LN7S]: F:在 Python 侧限制 CBOR 帧和值图，处理编码输出及解码前集合校验 | R:code:sdks/python/cordis_sdk/wire.py,code:docs/16-up1-protocol.md | A:encode,decode,check_encoded,check_value | S:值图预算按负载字段计数，解码前检查声明的集合与帧界，超限附具体预算
 
 ===/<repository>/sdks/typescript/===
 build.mjs[XV5T]: F:编译两个 TypeScript SDK 并打包带依赖许可证的浏览器产物 | R:code:sdks/typescript/cordis-sdk/build.mjs,code:plugins/http/assets/cordis-web.js | A:- | S:同一构建产物原子写入 SDK dist 和 HTTP 插件资源
 package.json[FV2T]: F:登记进程 SDK 与网页 SDK 的 npm 工作区和统一构建命令 | R:code:sdks/typescript/build.mjs | A:- | S:-
 
 ===/<repository>/sdks/typescript/cordis-sdk/===
-README.md[SE5T]: F:说明 Node 进程 SDK 的构建、插件启动及服务生命周期用法 | R:code:sdks/typescript/cordis-sdk/src/index.ts | A:- | S:-
+README.md[SE5T]: F:介绍 Node SDK 的插件启动、服务生命周期及队列与回调额度 | R:code:sdks/typescript/cordis-sdk/src/index.ts,code:sdks/typescript/cordis-sdk/src/runtime.ts | A:- | S:异步通知的回调额度覆盖取消至实际完成，正安全整数配置在运行入口验证
 build.mjs[XV4T]: F:用 TypeScript 编译器配置和诊断编译 SDK 或浏览器项目 | R:code:sdks/typescript/build.mjs,code:sdks/typescript/cordis-sdk/tsconfig.json | A:compile | S:-
 package.json[FV3T]: F:指定 Node 进程 SDK 0.2.3 的模块入口、类型声明、编译命令与依赖 | R:code:sdks/typescript/cordis-sdk/src/index.ts | A:npm run build | S:-
 tsconfig.json[FV2T]: F:配置进程 SDK 的严格 NodeNext 编译、类型声明和输出位置 | R:code:sdks/typescript/cordis-sdk/package.json | A:- | S:-
 
 ===/<repository>/sdks/typescript/cordis-sdk/src/===
-bindings.ts[LN6M]: F:连接 TypeScript 生成代理与进程协议、管理发送和接收资源的拥有引用 | R:code:sdks/typescript/cordis-sdk/src/resources.ts,code:sdks/typescript/cordis-sdk/src/runtime.ts | A:BindingTransport,Remote,Reference,Payload | S:-
-budget.ts[LN5T]: F:检查 TypeScript 协议值图的嵌套深度、集合大小和节点数 | R:code:sdks/typescript/cordis-sdk/src/wire.ts | A:ValueLimits,checkValue | S:-
+bindings.ts[LN6M]: F:连接 TypeScript 生成代理与协议，管理接收和发送的资源引用 | R:code:sdks/typescript/cordis-sdk/src/resources.ts,code:sdks/typescript/cordis-sdk/src/runtime.ts | A:Payload | S:载荷先校验完整引用表，再取得引用，避免局部失败留下已保留资源
+budget.ts[LN5T]: F:验证 TypeScript 消息及其负载的深度、集合大小和节点数量 | R:code:sdks/typescript/cordis-sdk/src/wire.ts,code:docs/16-up1-protocol.md | A:ValueLimits,checkValue,checkMessage | S:包络深度与负载节点预算分别按协议检查
 cbor-x.d.ts[LN2T]: F:补充 cbor-x 运行时公开的尺寸限制函数类型 | R:code:sdks/typescript/cordis-sdk/src/wire.ts | A:setSizeLimits | S:-
 context.ts[LE7M]: F:向 TypeScript 组件提供服务、事件、可逆效应、后台任务和状态登记 | R:code:sdks/typescript/cordis-sdk/src/runtime.ts,code:sdks/typescript/cordis-sdk/src/bindings.ts | A:Context,Component,Effect,Frozen | S:先登记清理再启动任务，普通任务异常通过原实例日志报告；效应 close 归还句柄，dispose 等待实际撤回
 http.ts[LN4T]: F:以组件效应管理 HTTP 路由，并按受信页面键读取属性 | R:code:sdks/typescript/cordis-sdk/src/context.ts | A:registerRoute,pageAttributes | S:-
@@ -787,11 +797,11 @@ index.ts[LE5T]: F:导出 Node 插件作者使用的运行、上下文、资源�
 metadata.ts[LI4T]: F:从核心提供的元数据解析直接实例或页面调用方 | R:code:crates/cordis-supervisor/src/manager/trusted.rs | A:Caller,caller | S:-
 node.ts[IN5T]: F:以 Node 标准流启动可移植运行时，建立调用级 AbortSignal 上下文 | R:code:sdks/typescript/cordis-sdk/src/runtime.ts | A:run | S:-
 resources.ts[LD4T]: F:按本地资源实际出口引用计数控制关闭 | R:code:sdks/typescript/cordis-sdk/src/bindings.ts | A:OwnedResource | S:-
-runtime.ts[RE7M]: F:执行 TypeScript 进程组件的激活、服务与回调并报告 SDK 0.2.3 身份 | R:code:sdks/typescript/cordis-sdk/src/wire.ts,code:sdks/typescript/cordis-sdk/src/node.ts | A:Runtime,currentSignal,withSignal | S:按调用信号维持父请求的剩余时限，取消归属于对应的异步请求
+runtime.ts[RE7M]: F:执行 TypeScript 组件、服务、回调及跨异步任务的调用上下文 | R:code:sdks/typescript/cordis-sdk/src/wire.ts,code:sdks/typescript/cordis-sdk/src/bindings.ts | A:Runtime,currentSignal,withSignal | S:异步回调以实际通知帧正文取得数量和字节额度，载荷在回调完成后关闭，取消保留实际执行责任
 streams-node.ts[LN5T]: F:把 Node 文件转为受所有权管理的按需字节流，或将流写入文件 | R:code:sdks/typescript/cordis-sdk/src/streams.ts | A:fromFile,streamToFile | S:到达文件末尾或资源出口归零时关闭文件句柄
 streams.ts[LN5T]: F:定义字节流块大小、迭代器转流以及按读取节奏复制 | R:code:sdks/typescript/cordis-sdk/src/resources.ts | A:ByteStream,MAX_CHUNK_BYTES,fromChunks,copyStream | S:-
 types.ts[LN6T]: F:定义协议错误、u64 编号、配置形态及生成绑定的传输契约 | R:code:sdks/typescript/cordis-sdk/src/wire.ts | A:CordisError,Transport,Binding,identifier | S:协议编号归一成 bigint，应用 CBOR 值与协议记录分开转换
-wire.ts[LN7M]: F:组装 UP/1 帧并管理有界发送、资源转交、取消与可协商的剩余调用时限 | R:code:sdks/typescript/cordis-sdk/src/runtime.ts,code:sdks/typescript/cordis-sdk/src/budget.ts | A:Connection,DEFAULT_LIMITS | S:入队超时与在途取消分开处理；协商后发送阶段扣减等待时间，接收端把嵌套截止绑定到当前调用信号
+wire.ts[LN7M]: F:交换 UP/1 帧并管理请求终态、取消、协商时限和连接健康 | R:code:sdks/typescript/cordis-sdk/src/runtime.ts,code:sdks/typescript/cordis-sdk/src/budget.ts | A:Connection,Limits | S:先移除 pending 再决定 Promise 终态；迟到或重复应答归还载荷，本地和远端到期按实际截止拥有者计数
 
 ===/<repository>/sdks/typescript/cordis-web/===
 README.md[SU5S]: F:说明浏览器连接、组件声明、服务、效应及替换状态的使用 | R:code:sdks/typescript/cordis-web/src/index.ts,code:examples/web/README.md | A:- | S:-
@@ -844,13 +854,15 @@ web-deployment.toml[FU2T]: F:为网页部署模板开启独立分组的本机临
 build_explainer.py[XU3T]: F:为说明页源片段加上文档外壳并生成独立 HTML | R:code:docs/explainer/index.html,code:docs/explainer/cordis-explainer.html | A:- | S:-
 build_paths.py[XV4T]: F:把共享路径映射与现有 Rust 和 C/C++ 编译环境合并供 Python 发布工具使用 | R:code:tools/path-remapping.json,code:tools/release.py | A:build_environment,encoded_flags | S:-
 build_paths.rs[XV5S]: F:为 Rust 工具构造实际 Cargo 调用使用的跨语言路径映射环境 | R:code:tools/path-remapping.json,code:crates/cordis-dev/src/pack/artifacts.rs | A:environment | S:目标平台决定 Apple 链接参数，已有参数保留 token 语义
-conformance.py[XQ5S]: F:从上游 spec 提取用例，并核对一致性矩阵、标识和 Rust 测试关联 | R:code:docs/04-conformance.md | A:list,init,check | S:-
+conformance.py[XQ5S]: F:提取上游场景并检查一致性矩阵及 Rust 测试关联 | R:code:docs/04-conformance.md,code:tools/conformance_run.py | A:list,init,check | S:矩阵条目身份唯一，适用测试引用供独立执行器解析
 path-remapping.json[FV4T]: F:统一 Rust、C/C++ 和 Apple 链接调试路径重映射规则 | R:code:tools/build_paths.rs,code:tools/build_paths.py | A:- | S:-
 release.py[OV5S]: F:构建 macOS arm64 发行包，签署并核对程序架构和路径隐私，生成版本表及归档 | R:code:tools/release/README.md,code:tools/release/cordis.toml | A:component_versions,inspect,archive_package | S:发行工具固定构建时源码修订，内置网页 SDK 和进程 SDK 的版本分别取自各自包清单
 source_lines.py[XQ3T]: F:使用 cloc 的 Rust 注释规则统计源码并按文件保留重复内容 | R:code:docs/13-runtime-architecture.md | A:- | S:-
 unsafe_audit.py[XQ3T]: F:以 Cargo 执行原生 ABI 的 unsafe 审计测试入口 | R:code:crates/cordis-abi/Cargo.toml | A:- | S:-
 deployment_model.py[TQ5S]: F:探索两份部署的持久决定、崩溃恢复与有限图上的影响闭包并核对不变量 | R:code:docs/deployment-semantics.md,code:crates/cordis-runtime/src/storage.rs | A:check,graph_cases | S:图覆盖三节点与全部起始集合，状态搜索至指定深度或固定点
 revision_lines.py[XQ5S]: F:从固定 Git 提交或当前工作树统计生产、测试、生成、模板与构建工具的物理行数 | R:code:docs/measurements/deployment-revision.md | A:--revision,--root | S:Rust 测试条件按语法节点识别；两侧都跳过符号链接以免重复计算来源
+conformance_run.py[XQ7M]: F:把适用的上游矩阵条目绑定到实际 Rust 编译和执行证据 | R:code:tools/conformance.py,code:docs/04-conformance.md,code:.github/workflows/conformance.yml | A:verify,passed_tests,require_passed | S:拒绝空执行、忽略项、身份不符及源码变化；上游测试固定到不可变修订
+verify_semantics.py[XQ7M]: F:检查 Lean 定理、生成 Rust、实际编译向量及负控并输出来源绑定证据 | R:code:formal/Generate.lean,code:formal/decision_probe.rs,code:crates/cordis/src/lifecycle_generated.rs | A:verify,--write-generated,--evidence | S:审计内核公理，逐字核对生成件，生产探针覆盖全部有限决策输入；错误证据替换旧成功记录
 
 ===/<repository>/tools/release/===
 README.md[SV4T]: F:为正式发行包生成组件版本表、启动示例、票据查询与状态迁移说明 | R:code:tools/release.py,code:tools/release/cordis.toml,code:docs/guide.md | A:- | S:-
@@ -936,3 +948,40 @@ language-cross.json[TN4S]: F:保存跨进程提供方身份、Python 与 TypeScr
 language-migration.json[TN4L]: F:保存 Rust、Python 与 TypeScript 逐代替换中的业务计数、票据和状态快照 | R:code:docs/measurements/runtime-efficiency/validation/language-commands.json | A:sequence,counts,replacements,snapshots | S:快照和计数对应同一场景中的实际迁移顺序
 log-provenance.json[TQ4S]: F:记录纳入性能资料的日志、规范化处理及原始和归档摘要 | R:code:docs/measurements/runtime-efficiency/validation/summary.json | A:path,normalization,original_sha256,stored_sha256 | S:-
 summary.json[TQ5T]: F:汇总 Rust 用例、跨语言契约、静态检查及验证平台约束 | R:code:docs/measurements/runtime-efficiency.md,code:docs/measurements/runtime-efficiency/validation/language-contracts.json | A:rust,languages,clippy | S:Linux 上的 macOS 专属 watch 用例选中零项；计时入口单独运行
+
+===/<repository>/.github/workflows/===
+conformance.yml[TQ6T]: F:在固定 Rust 与 Lean 环境执行组件生命周期证明、生产决策和上游场景矩阵 | R:code:tools/verify_semantics.py,code:tools/conformance_run.py | A:conformance | S:上游测试源码按固定提交获取，证据保留实际执行身份及结果
+runtime-ownership.yml[TQ6T]: F:执行运行时库测试及真实进程的离线所有权回归并发布日志 | R:code:tools/conformance_run.py,code:crates/cordis-runtime/src/runtime.rs | A:ownership | S:检查五项具名离线用例均实际通过，空库测试清单视为证据失败
+
+===/<repository>/crates/cordis-artifact/===
+Cargo.toml[FV4T]: F:声明产物树校验库及其相对链接和测试依赖 | R:code:crates/cordis-artifact/src/lib.rs | A:cordis-artifact | S:-
+
+===/<repository>/crates/cordis-artifact/src/===
+lib.rs[OV6S]: F:校验打包与安装共有的闭合产物树，并把链接规范化为可迁移的相对路径 | R:code:crates/cordis-dev/src/pack/files.rs,code:crates/cordis-runtime/src/install.rs | A:validate,relative_link,link_target,excluded | S:可达链接解析后须在根内，目录链接参与循环检测，显式排除路径按解析后的祖先判定
+
+===/<repository>/crates/cordis-routing/src/directory/===
+tests.rs[TD5S]: F:验证路由按真实来源只回收相关出口，并保留其他接收连接的对象 | R:code:crates/cordis-routing/src/directory.rs | A:- | S:清理同时核对来源、接收者与寿命条目的交集
+
+===/<repository>/crates/cordis-runtime/src/install/===
+index.rs[PP6M]: F:按产物树元数据和内容摘要定位已安装候选，保存可重建目录索引 | R:code:crates/cordis-runtime/src/install.rs,code:crates/cordis-artifact/src/lib.rs | A:Inventory | S:摘要用于选候选，命中后仍逐字节比较；安装目录锁保护整次使用，持久引用由各实际所有者持有
+
+===/<repository>/crates/cordis-runtime/src/runtime/===
+owner.rs[RR7S]: F:持有运行根上下文和状态目录独占权，清理完成后归还 | R:code:crates/cordis-runtime/src/runtime.rs,code:crates/cordis-runtime/src/storage.rs | A:RuntimeRoot | S:外层等待取消时启动或加入同一内核清理，目录 claim 随完成观察保留到实际清理结束
+
+===/<repository>/crates/cordis-up/src/rpc/===
+buffer.rs[MP7S]: F:按连接预算为编码帧保留数据和控制字节，并随帧释放额度 | R:code:crates/cordis-up/src/rpc.rs,code:crates/cordis-up/src/codec.rs | A:Budget,Encoded,Lease | S:申请扩容前记入容量，完整帧转交保持租约；缓冲析构先于额度归还
+
+===/<repository>/crates/cordis/src/registry/===
+members.rs[DP6S]: F:在组件运行时内按纤程身份维护有序成员 | R:code:crates/cordis/src/registry.rs | A:Members | S:身份删除通过前驱后继局部更新，余下成员保留原顺序
+
+===/<repository>/formal/===
+.gitignore[FV3T]: F:忽略 Lake 为证明项目生成的本地构建目录 | R:code:formal/lakefile.toml | A:- | S:-
+Admission.lean[TQ7T]: F:形式化加载代守卫与单步效应登记的所有权条件 | R:code:formal/Lifecycle.lean,code:formal/Scopes.lean,code:crates/cordis/src/effect.rs | A:Guard,Valid,register | S:拒绝保持拥有者原状态，已登记效应要求全部纪元条件同时成立
+Effects.lean[TQ7S]: F:证明单个效应执行、取消与清理交接的轨迹约束 | R:code:formal/Lifecycle.lean,code:crates/cordis/src/effect.rs | A:State,Command,claim,step | S:运行期取消保留已取得及后续登记的清理，领取者按逆序取出操作且至多开始一次
+Generate.lean[XQ7T]: F:将已检查的生命周期决策树输出为 Rust，生成供编译探针核对的预期向量 | R:code:formal/Lifecycle.lean,code:formal/decision_probe.rs,code:tools/verify_semantics.py | A:rustTree,rustFunction | S:相等谓词沿决策树惰性输出，参考向量由 Lean 基线函数产生
+Lifecycle.lean[TQ8M]: F:定义生命周期参考与生成决策，证明迁移输出及任意输入序列等价 | R:code:formal/Generate.lean,code:formal/Effects.lean,code:crates/cordis/src/lifecycle.rs | A:Tree,Decisions,State,step,run,trace_equiv | S:允许无界纪元绑定及轨迹，外部回调作为输入；证明分支读取次数保留原短路
+Scopes.lean[TQ7S]: F:证明同纤程纪元守卫与不可变视图缓存的一致性 | R:code:formal/Admission.lean,code:crates/cordis/src/context.rs | A:Layer,Node,guards,cached | S:缓存表达守卫存在性，根和子纤程层终止当前段但保留服务查找的父链
+decision_probe.rs[TQ6S]: F:直接编译生产生命周期模块并枚举有限决策输入及谓词读取计数 | R:code:crates/cordis/src/lifecycle.rs,code:tools/verify_semantics.py | A:main | S:探针使用真实生成模块，预期值独立由 Lean 基线提供
+lake-manifest.json[FV3T]: F:记录证明工作区的 Lake 清单版本和空外部包集合 | R:code:formal/lakefile.toml | A:- | S:-
+lakefile.toml[FV4T]: F:登记 Lean 生命周期、效应、准入及作用域四个证明库 | R:code:formal/lean-toolchain,code:formal/Lifecycle.lean,code:formal/Scopes.lean | A:Lifecycle,Effects,Admission,Scopes | S:-
+lean-toolchain[FV4T]: F:固定证明构建和验证用 Lean 4.19.0 工具链 | R:code:formal/lakefile.toml,code:tools/verify_semantics.py | A:- | S:-
