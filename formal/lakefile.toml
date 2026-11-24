@@ -1,6 +1,6 @@
 name = "cordis_semantics"
 version = "0.1.0"
-defaultTargets = ["Lifecycle", "Effects", "Admission"]
+defaultTargets = ["Lifecycle", "Effects", "Admission", "Scopes"]
 
 [[lean_lib]]
 name = "Lifecycle"
@@ -10,3 +10,6 @@ name = "Effects"
 
 [[lean_lib]]
 name = "Admission"
+
+[[lean_lib]]
+name = "Scopes"

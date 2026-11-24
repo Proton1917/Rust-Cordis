@@ -1,6 +1,6 @@
 # 生命周期决策与效应所有权的形式化验证
 
-内核依据实例存活性、依赖绑定纪元、迁移进度和效应所有权决定下一步。`formal/Lifecycle.lean` 给出这部分决策的参考语义、可执行决策树及等价证明；`formal/Effects.lean` 给出取消、执行完成与清理所有权的协议和不变量；`formal/Admission.lean` 给出绑定到捕获纪元的效应准入条件。实际 Rust 生命周期路径调用由这些决策树生成的 `crates/cordis/src/lifecycle_generated.rs`。
+内核依据实例存活性、依赖绑定纪元、迁移进度和效应所有权决定下一步。`formal/Lifecycle.lean` 给出这部分决策的参考语义、可执行决策树及等价证明；`formal/Effects.lean` 给出取消、执行完成与清理所有权的协议和不变量；`formal/Admission.lean` 给出绑定到捕获纪元的效应准入条件；`formal/Scopes.lean` 证明不可变上下文派生链的守卫收集和缓存准入与完整遍历相等。实际 Rust 生命周期路径调用由生命周期决策树生成的 `crates/cordis/src/lifecycle_generated.rs`。
 
 证明的基线为 `7e4dd5e41445be82af10def53fae315b5b83f7ea` 的 `fiber.rs` 和 `effect.rs`。对应的产品语义来自[行为规格](01-semantics.md)中的 T-LIF、S-FBR、T-EFF、S-EFF；[上游一致性矩阵](04-conformance.md)继续验证真实实例、服务、事件及异步执行。
 
@@ -49,6 +49,9 @@ Lean 的 `Epoch` 是 `Option (Nat × List Nat)`。`none` 表示非活跃目标�
 | `active_epoch_change_unloads` | 活跃纪元之间的变化先卸载 | S-FBR-8 |
 | `current_epoch_equiv` | 同一快照中的存活性、运行目标与捕获纪元联合判定 | T-LIF-7、实例换代所有权 |
 | `Admission.successful_registration`、`stale_guard_denies_registration` | 登记使用当前所有者事实，满足全部代际守卫；任一守卫过期即拒绝且保留原有归属 | T-CTX-1、T-LIF-7、效应准入 |
+| `Scopes.cache_matches_guards`、`cached_admission_equiv`、`cached_registration_equiv` | 任意合法派生链上的守卫缓存与完整遍历相同，并产生相同的所有权登记结果 | 上下文不可变派生、效应准入 |
+| `Scopes.binding_cannot_restore_rejected_view`、`child_starts_own_guard_segment` | 同一纤程追加纪元约束保留旧约束；子纤程建立自己的守卫范围 | T-CTX-1、T-LIF-7、S-FBR-15 |
+| `Scopes.nonempty_guards_share_current` | 同一快照的多个守卫共享一次当前纪元检查，逐项只比较捕获纪元，结果保持相同 | 联合纪元查询、守卫遍历成本 |
 | `Effects.cleanup_starts_at_most_once` | 任意次取消、完成与再次释放只产生一个清理所有者 | T-EFF-2、S-EFF-4 |
 | `Effects.cancel_waits_for_execution`、`final_defer_retained` | 取消请求保留在途步骤及最后交回的逆变换 | T-EFF-4、5、S-EFF-5 |
 | `Effects.complete_rollback` | 单个效应的已取得逆变换按后进先出顺序交给清理执行 | T-EFF-1、3、S-EFF-3 |
@@ -58,6 +61,29 @@ Lean 的 `Epoch` 是 `Option (Nat × List Nat)`。`none` 表示非活跃目标�
 `complete_rollback` 描述清理操作序列，假定各抽象操作完成后继续下一步。它不提供对任意插件回调终止性的证明。多个顶层效应的并发清理继续遵守 S-FBR-12、S-FBR-13。
 
 准入模型直接复用 `currentEpoch`。`Admission.register` 在一次状态转换中检查所有者存活性和全部捕获纪元守卫，再把新效应登记给该所有者。`ordinary_context_preserves_alive_contract` 证明没有附加守卫的普通上下文保留原有存活性契约。运行时实现需在取得同一把状态锁后检查与登记，并从正确的上下文层级收集守卫；这两项是对应实现的精化义务。先在锁外查询、随后在另一个状态下登记的路径不满足该模型。
+
+`Scopes` 把上下文表示为由近到远的不可变视图链。`root` 和 `child` 建立纤程边界，`derive` 表示扩展、隔离、拦截等普通派生，`bind` 附加捕获纪元；每层保留一个 `hasEpochGuard` 标记。`WellFormed` 覆盖从根开始经过任意有限次数这些操作得到的链，证明不限制链长、守卫数量或纤程嵌套深度。
+
+完整遍历收集当前纤程边界内的全部捕获纪元。缓存只记录这段不可变视图是否包含守卫，实例存活性和纪元有效性继续读取同一份内核事实。`cache_matches_guards` 证明标记准确；`cached_admission_equiv` 和 `cached_registration_equiv` 证明带快路的准入及所有权更新与完整遍历和既有 `Admission.register` 相等。守卫非空时，`nonempty_guards_share_current` 证明所有守卫可以共享一次 `target == running` 检查，再逐项比较 `target == captured`，保留全部守卫各自检查 `currentEpoch` 的结果。缓存为空的普通视图继续只要求所有者存活。
+
+普通派生保留已有守卫，追加纪元约束只增加一个合取项；旧视图失效后追加新纪元仍保持拒绝。子纤程终止父级守卫范围，依靠父挂载效应获得生命周期所有权，再使用自己的纪元约束。这里的派生闭包覆盖普通视图操作和追加纪元约束；持有 `Fiber` 的跨代管理者可以显式取得普通上下文，这属于独立的管理入口。
+
+Rust `Scope` 用不可变 `Arc` 链和 `FiberId` 实现这些边界，普通视图通过缓存标记直接保留原来的存活性检查。Rust 构造器与模型构造器的对应、`FiberId` 比较与模型边界的对应，以及检查和登记共享锁的线性化仍属于实现精化义务。`epoch_context.rs` 与登记窗口的实际回归检验这些连接。
+
+### 上下文准入的实现映射
+
+| Rust 入口或状态 | Lean 对象与关系 | 实现连接 |
+|---|---|---|
+| `Context::new` 创建 `Layer::Root`，缓存为 `false` | `Scopes.root`、`WellFormed.root` | 新根没有捕获纪元守卫 |
+| `Context::derive` 保留 `fiber` 与父 `Arc`；普通层继承缓存 | `Scopes.derive`、`WellFormed.derive` | `Extend`、`Isolate`、`Intercept` 保留同一段已有守卫 |
+| `Context::for_epoch` 通过 `derive(Layer::Epoch)` 设置缓存 | `Scopes.bind`、`WellFormed.bind` | 新守卫加入合取；旧守卫继续保留 |
+| `Context::mount_with` 分配新 `FiberId`、`Layer::Fiber`，缓存重置为 `false` | `Scopes.child`、`WellFormed.child` | 父链保留供服务解析使用；效应守卫遍历在纤程边界结束 |
+| `FiberData.alive`、`target`、`running_epoch` | `Scopes.Facts.alive`、`target`、`running` | 一次准入的所有比较使用调用方持有的同一份 `State` 快照 |
+| `Context::permits_effect` 的父链遍历与 `Layer::Epoch` 比较 | `Scopes.guards`、`fast` 与 `slow` | Rust 在父节点 `fiber` 改变时停止；模型在对应 `Fiber` 层停止；共享当前纪元检查由 `nonempty_guards_share_current` 支持 |
+| `Context::create_effect` 检查准入后插入 `state.effects` 与所有者 `effects` | `Scopes.register` 精化 `Admission.register` | 一把 `kernel.state` 锁覆盖检查和两处归属写入；该临界区是准入的线性化边界 |
+| `mount_with` 的 `ctx.use()` 父效应与 `defer_async` 子清理交接 | 父子效应所有权的实现义务 | 预分配子记录后再次执行效应准入；拒绝时释放子记录，成功时在途父效应保留最后交回的清理 |
+
+映射表约束本次源码审查和回归选择。`Scopes` 的 15 个定理证明模型构造和准入变换，Rust 表示与临界区的语言级证明继续属于下表的实现精化义务。
 
 ## 生成和实际编译的连接
 
@@ -79,7 +105,7 @@ Lean 的 `Epoch` 是 `Option (Nat × List Nat)`。`none` 表示非活跃目标�
 | 决策结果到状态字段 | 保留 `drain`、`finish_transition` 的更新次序、绑定提交和锁外通知；原有真实生命周期用例执行 | Rust 赋值、锁线性化点及 `publish` 模型更新的一致性证明 |
 | 依赖解析与提交 | 核心拥有 `epoch_ids`、`commit_locked`、已提交绑定和消费者集合；服务替换与逐绑定清理回归 | 服务存储、隔离域、可用性谓词及承诺绑定的精化关系 |
 | 效应回调与执行器 | 清理守卫进入生产路径；同步、异步、取消、失败及宿主拒收场景由真实执行器运行 | Future 轮询、异常、任务归还与模型输入产生规则 |
-| 捕获纪元的效应准入 | 联合谓词已进入生产查询；`Admission` 完整检查传入守卫集合和所有权登记结果 | 上下文守卫收集、检查与登记共享锁的线性化、子实例交接的 Rust 精化 |
+| 捕获纪元的效应准入 | `Admission` 检查全部守卫及所有权登记；`Scopes` 证明任意合法视图链的缓存与完整遍历相等、旧约束保留和子纤程范围 | Rust `Scope`/`FiberId` 表示与模型构造器的对应、检查与登记共享锁的线性化、子实例交接的 Rust 精化 |
 | 上游、协议及部署 | 177 行矩阵由实际执行证据绑定；协议、SDK、持久化保持各自回归 | TypeScript 与 Rust 的语言级语义映射，以及跨进程、存储恢复模型 |
 
 证明信任基础包括 Lean 4.19.0 的内核及其标准逻辑公理、决策树的 Rust 打印器、固定 Rust 工具链和执行探针的环境。验证以 `--trust=0` 重新类型检查导入模块，逐项输出所有定理的公理依赖，只允许 Lean 的标准 `propext`、`Quot.sound`、`Classical.choice`；拒绝新增公理、未完成证明和绕过内核的求值证明。

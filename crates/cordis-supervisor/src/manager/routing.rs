@@ -146,6 +146,26 @@ impl Manager {
         }
     }
 
+    /// Read a declared remote dependency from the component's committed binding.
+    /// This preserves its isolation realm and the provider selected by the kernel,
+    /// including the old binding retained during dependency cleanup.
+    pub fn remote_service_in(&self, context: &Context, interface: &str) -> Result<RemoteObject> {
+        let requested = Interface::parse(interface)?;
+        let binding = context
+            .get_named(requested.key.as_str())
+            .map_err(kernel_error)?
+            .downcast::<Binding>()
+            .map_err(|_| error(2, "服务绑定需要远端路由"))?;
+        if binding.interface.minor < requested.minor {
+            return Err(error(3, "接口次版本不足"));
+        }
+        let _live = binding.route.live()?;
+        match &binding.route.target {
+            Target::Remote(object) => Ok(object.clone()),
+            _ => Err(error(3, "核心装配接口需要远端提供方")),
+        }
+    }
+
     fn lookup_service_route(&self, interface: &str) -> Result<Arc<Route>> {
         let requested = Interface::parse(interface)?;
         let binding = self

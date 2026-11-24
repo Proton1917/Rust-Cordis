@@ -229,7 +229,7 @@ impl Context {
     fn create_effect(&self, label: String, location: &'static Location<'static>) -> Result<Effect> {
         let mut state = self.kernel.state.lock();
         let owner = self.scope.fiber;
-        if !state.fibers[owner].alive {
+        if !self.permits_effect(&state) {
             return Err(Error::inactive().at(location));
         }
         let armed = Arc::new(AtomicBool::new(true));

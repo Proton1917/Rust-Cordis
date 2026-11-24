@@ -75,7 +75,6 @@ pub(super) struct Generation {
     pub exporter: Mutex<Option<Arc<Exporter>>>,
     pub config: Arc<Value>,
     pub inherited: Option<Arc<payload::State>>,
-    pub epoch: cordis::Epoch,
     pub retirement: cordis_routing::Retirement,
     pub effects: Mutex<HashMap<u64, Arc<RemoteEffect>>>,
     registrations: Arc<AtomicUsize>,
@@ -87,7 +86,7 @@ pub(super) struct Generation {
 
 impl Generation {
     pub fn is_current(&self) -> bool {
-        self.context.is_current() && self.context.fiber().epoch() == self.epoch
+        self.context.is_current()
     }
     pub fn active(&self) -> Result<()> {
         if self.is_current()
@@ -280,6 +279,8 @@ impl Manager {
         } else {
             self.caller_context(&context, &configuration.instance.name, Vec::new())
         };
+        let epoch = Arc::new(context.fiber().epoch());
+        let context = context.for_epoch(epoch);
         let id = self.id();
         let generation = Arc::new_cyclic(|weak| {
             let base = Arc::new(ViewRecord::new(
@@ -292,7 +293,6 @@ impl Manager {
             ));
             Generation {
                 id,
-                epoch: context.fiber().epoch(),
                 retirement: cordis_routing::Retirement::default(),
                 context: context.clone(),
                 instance: configuration.instance.clone(),
@@ -309,11 +309,9 @@ impl Manager {
             }
         });
         *generation.instance.error.lock() = None;
-        // ADR-0041：网页 Owner 经内核依赖跟随实际后端加载纪元。
-        context.provide_named(
-            format!("cordis.instance.{}", generation.instance.name),
-            Arc::new(()),
-        )?;
+        // ADR-0041: the ordinary typed binding carries the exact generation.
+        self.lifecycle_view(&context, &generation.instance.name)
+            .provide::<InstanceLifecycle>(Arc::new(InstanceGeneration::new(&generation)))?;
         *generation.instance.current.lock() = Arc::downgrade(&generation);
         self.0
             .contexts

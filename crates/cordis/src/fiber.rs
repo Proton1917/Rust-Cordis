@@ -509,11 +509,15 @@ impl Fiber {
 impl Context {
     /// T-LIF-7：组件在异步步骤边界检查其加载纪元。
     ///
-    /// 实例存活且最近计算的目标纪元与当前加载纪元相等时返回 `true`。
+    /// 实例存活、最近计算的目标纪元与当前加载纪元相等，且视图的纪元约束满足时返回 `true`。
     /// 组件可在值变为 `false` 后结束当前执行，由卸载流程恢复已经登记的效应。
     pub fn is_current(&self) -> bool {
         let state = self.kernel.state.lock();
-        state.fibers[self.scope.fiber].is_current()
+        if self.scope.has_epoch_guard {
+            self.permits_effect(&state)
+        } else {
+            state.fibers[self.scope.fiber].is_current()
+        }
     }
 }
 

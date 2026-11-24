@@ -15,8 +15,13 @@ impl Registration {
     pub fn version_path(&self) -> &str {
         self.path.split('?').next().expect("registration URL path")
     }
-    pub async fn create(manager: &Manager, spec: &Spec, sequence: u64) -> Result<Self> {
-        let service = manager.lookup_remote_service("cordis.web@1.1")?;
+    pub async fn create(
+        manager: &Manager,
+        context: &Context,
+        spec: &Spec,
+        sequence: u64,
+    ) -> Result<Self> {
+        let service = manager.remote_service_in(context, "cordis.web@1.1")?;
         let fields = Value::Map(vec![
             ("name".into(), spec.name.clone().into()),
             ("version".into(), spec.version.clone().into()),

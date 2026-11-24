@@ -2,8 +2,8 @@ use cordis::{Clock, Context, FiberState, Spawn, Task};
 use cordis_supervisor::{
     PeerOptions,
     manager::{
-        Arguments, CallContext, GroupSpec, InstanceSpec, LocalReply, LocalService, Manager,
-        ManagerOptions, RestartPolicy,
+        Arguments, CallContext, GroupSpec, InstanceLifecycle, InstanceSpec, LocalReply,
+        LocalService, Manager, ManagerOptions, RestartPolicy,
     },
 };
 use cordis_testkit::cleanup::{FixtureLease, SharedFixture, TestGuard};
@@ -529,18 +529,25 @@ async fn core_owner_tracks_backend_presence_and_releases_page() {
     let observed = current.clone();
     let definition = cordis::ComponentDef::new(
         "web-owner",
-        cordis::Inject::new().with_named("cordis.instance.backend"),
+        cordis::Inject::new().with::<InstanceLifecycle>(),
         move |context, ()| {
             *observed.lock() = Some(context);
             async { Ok(()) }
         },
     );
-    let owner = manager.context().mount_with(&definition, ()).unwrap();
+    let owner = manager
+        .instance_lifecycle_view(&manager.context(), "backend")
+        .unwrap()
+        .mount_with(&definition, ())
+        .unwrap();
     assert_eq!(owner.state(), FiberState::Pending);
     mount_backend(&manager, "backend").await;
     owner.settled().await.unwrap();
     assert_eq!(owner.state(), FiberState::Active);
     let context = current.lock().clone().unwrap();
+    let previous = context.get::<InstanceLifecycle>().unwrap().value();
+    assert_eq!(previous.component().unwrap(), "independent");
+    let previous_parent = previous.context().unwrap();
     let child = manager
         .mount_owned_child(
             context,
@@ -554,6 +561,35 @@ async fn core_owner_tracks_backend_presence_and_releases_page() {
     let ready = control.ready_after("owned-page", 0).await;
     assert_eq!(integer(&invoke(&ready, "get", Vec::new()).await), 43);
     freeze_page(&manager, &ready).await;
+    manager.update("backend", configuration(19)).await.unwrap();
+    owner.settled().await.unwrap();
+    assert_eq!(owner.state(), FiberState::Active);
+    assert!(
+        previous_parent.fiber().context().is_current(),
+        "the same fiber has already entered its next current generation"
+    );
+    assert!(
+        !previous_parent.is_current(),
+        "the captured view retains the old generation's admission boundary"
+    );
+    assert!(
+        previous.context().is_err(),
+        "a committed identity stays bound to its retired generation"
+    );
+    assert_eq!(
+        manager
+            .mount_owned_child(
+                previous_parent,
+                page_spec("late-page", 99),
+                None,
+                page_scope("late-page"),
+            )
+            .await
+            .unwrap_err()
+            .code,
+        4,
+        "queued children cannot cross into the next generation of the same fiber"
+    );
     manager.dispose("backend").await.unwrap();
     assert_eq!(owner.state(), FiberState::Pending);
     assert_eq!(

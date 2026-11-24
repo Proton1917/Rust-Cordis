@@ -6,7 +6,10 @@ mod registry;
 
 use cordis::{ComponentDef, Context, Fiber, Inject, NamedProvision};
 use cordis_channels::Channels;
-use cordis_supervisor::manager::{Arguments, CallContext, LocalReply, LocalService, Manager};
+use cordis_supervisor::manager::{
+    Arguments, CallContext, InstanceGeneration, InstanceLifecycle, LocalReply, LocalService,
+    Manager,
+};
 use cordis_up::{
     Value, WireError, payload,
     rpc::{Connection, Handler, HandlerFuture, Outgoing, Payload},
@@ -49,6 +52,7 @@ struct Owner {
 struct Live {
     spec: Spec,
     context: Context,
+    parent: Option<Arc<InstanceGeneration>>,
     registration: registry::Registration,
     children: Arc<Mutex<BTreeMap<u64, Fiber>>>,
     mounting: Mutex<HashMap<u64, watch::Sender<Option<Result<()>>>>>,
@@ -132,10 +136,11 @@ impl Deployment {
     /// DOC-15 §11.3：资源登记Owner由内核依赖驱动；全栈Owner同时依赖指定后端的presence。
     pub fn mount(self: &Arc<Self>, spec: Spec) -> Result<Fiber> {
         let name = spec.instance.clone();
-        let parent_view = spec.view.clone();
+        let mut parent_view = spec.view.clone();
         let mut inject = Inject::new().with_named("cordis.web@1");
         if let Some(parent) = &spec.parent {
-            inject = inject.with_named(format!("cordis.instance.{parent}"));
+            parent_view = self.manager.instance_lifecycle_view(&parent_view, parent)?;
+            inject = inject.with::<InstanceLifecycle>();
         }
         let current = Arc::new(Mutex::new(spec));
         let revision = Arc::new(AtomicU64::new(1));

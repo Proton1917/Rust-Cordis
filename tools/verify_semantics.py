@@ -22,7 +22,7 @@ import time
 ROOT = Path(__file__).resolve().parents[1]
 FORMAL = ROOT / "formal"
 GENERATED = ROOT / "crates/cordis/src/lifecycle_generated.rs"
-PROOFS = {"Lifecycle.lean": "Cordis", "Effects.lean": "Cordis.Effects", "Admission.lean": "Cordis.Admission"}
+PROOFS = {"Lifecycle.lean": "Cordis", "Effects.lean": "Cordis.Effects", "Admission.lean": "Cordis.Admission", "Scopes.lean": "Cordis.Scopes"}
 ARITIES = {"idle": 3, "target": 2, "refresh": 7, "finish": 5, "settled": 4, "current": 2, "current_epoch": 3, "cleanup": 2}
 ALLOWED_AXIOMS = {"propext", "Quot.sound", "Classical.choice"}
 
@@ -100,6 +100,7 @@ def source_paths() -> list[Path]:
         ROOT / "rust-toolchain.toml", ROOT / "crates/cordis/src/lifecycle.rs",
         ROOT / "crates/cordis/src/fiber.rs", ROOT / "crates/cordis/src/effect.rs",
         ROOT / "crates/cordis/src/context.rs", ROOT / "crates/cordis/src/registry.rs",
+        ROOT / "crates/cordis/tests/epoch_context.rs",
         ROOT / "crates/cordis/src/lib.rs", Path(__file__).resolve(),
     ]
 
@@ -224,7 +225,7 @@ def verify(args: argparse.Namespace, evidence: dict) -> dict:
     return {
         "status": "passed",
         "proof_status": "passed",
-        "proof_scope": "lifecycle decision refinement, effect cleanup ownership and atomic generation admission models",
+        "proof_scope": "lifecycle decision refinement, effect cleanup ownership, atomic generation admission and immutable scope guard cache models",
         "theorems": names,
         "axiom_audit": axioms,
         "imported_module_trust_level": 0,
@@ -234,7 +235,7 @@ def verify(args: argparse.Namespace, evidence: dict) -> dict:
         "generated_write_requested": args.write_generated,
         "current_stage": "complete",
         "integration_scope": "run the existing core lifecycle/effect/conformance tests separately",
-        "unproved_boundaries": ["Rust adapter and state mutation correspondence", "callback and scheduler execution", "dependency resolution and committed binding implementation", "protocol, storage and external I/O"],
+        "unproved_boundaries": ["Rust adapter, scope representation, lock linearization and state mutation correspondence", "callback and scheduler execution", "dependency resolution and committed binding implementation", "protocol, storage and external I/O"],
     }
 
 

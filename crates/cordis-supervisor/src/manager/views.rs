@@ -7,7 +7,60 @@ use generation::{Binding, Registration};
 use routing::Target;
 use tokio::sync::OnceCell;
 
-pub(super) type RealmKey = (Option<u64>, String);
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub(super) enum RealmKey {
+    Named(Option<u64>, String),
+    Instance(String),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use cordis::{Clock, Spawn, Task};
+
+    struct Executor(std::time::Instant);
+    impl Spawn for Executor {
+        fn spawn(&self, task: Task) {
+            tokio::spawn(task);
+        }
+    }
+    impl Clock for Executor {
+        fn now(&self) -> Duration {
+            self.0.elapsed()
+        }
+        fn sleep(&self, duration: Duration) -> Task {
+            Box::pin(tokio::time::sleep(duration))
+        }
+    }
+
+    #[tokio::test]
+    async fn lifecycle_realms_are_private_and_released_with_the_last_view() {
+        let root = Context::new(Arc::new(Executor(std::time::Instant::now())));
+        let manager = Manager::new(root.clone(), ManagerOptions::default())
+            .await
+            .unwrap();
+        let context = manager.context();
+        for index in 0..512 {
+            let name = format!("page-{index}");
+            let first = manager.instance_lifecycle_view(&context, &name).unwrap();
+            let second = manager.instance_lifecycle_view(&context, &name).unwrap();
+            assert_eq!(
+                first.realm::<InstanceLifecycle>(),
+                second.realm::<InstanceLifecycle>()
+            );
+            let user = manager.realm_lease(&context, &name);
+            assert_ne!(first.realm::<InstanceLifecycle>(), user.realm);
+            assert_eq!(manager.0.realms.lock().len(), 2);
+            assert_eq!(manager.named_realms().len(), 1);
+            drop((first, user));
+            assert_eq!(manager.0.realms.lock().len(), 1);
+            drop(second);
+            assert!(manager.0.realms.lock().is_empty());
+        }
+        manager.shutdown().await.unwrap();
+        root.fiber().dispose().await.unwrap();
+    }
+}
 
 pub(super) struct RealmLease {
     name: RealmKey,
@@ -114,6 +167,23 @@ impl Manager {
         parent.extend(PageNamespace(connection))
     }
 
+    /// Select an instance's lifecycle using the existing service isolation model.
+    /// The view may be created before the instance is mounted. Its lease keeps
+    /// the realm stable while either a provider or a waiting consumer owns it.
+    pub fn instance_lifecycle_view(&self, parent: &Context, name: &str) -> Result<Context> {
+        self.running()?;
+        self.check_view(parent)?;
+        cordis_routing::description::validate_name(name)?;
+        Ok(self.lifecycle_view(parent, name))
+    }
+
+    pub(super) fn lifecycle_view(&self, parent: &Context, name: &str) -> Context {
+        let lease = self.lease_realm(RealmKey::Instance(name.to_owned()));
+        parent
+            .isolate::<InstanceLifecycle>(lease.realm)
+            .extend(lease)
+    }
+
     /// ADR-0025：部署配置与远端请求共享命名隔离域及逐字段元数据覆盖规则。
     pub fn derive_context(
         &self,
@@ -164,7 +234,10 @@ impl Manager {
 
     /// ADR-0025：同名域共享一份身份，最后一个视图释放时由 RealmLease 撤回登记。
     fn realm_lease(&self, context: &Context, name: &str) -> Arc<RealmLease> {
-        let name = (realm_namespace(context), name.to_owned());
+        self.lease_realm(RealmKey::Named(realm_namespace(context), name.to_owned()))
+    }
+
+    fn lease_realm(&self, name: RealmKey) -> Arc<RealmLease> {
         let mut realms = self.0.realms.lock();
         match realms.get(&name).and_then(Weak::upgrade) {
             Some(lease) => lease,
@@ -185,7 +258,10 @@ impl Manager {
         leases
             .into_iter()
             .filter_map(|lease| lease.upgrade())
-            .map(|lease| (lease.realm, lease.name.0))
+            .filter_map(|lease| match lease.name {
+                RealmKey::Named(namespace, _) => Some((lease.realm, namespace)),
+                RealmKey::Instance(_) => None,
+            })
             .collect()
     }
 
