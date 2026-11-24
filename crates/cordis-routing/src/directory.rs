@@ -24,6 +24,9 @@ struct Recipient<R> {
 struct Entries<R> {
     recipients: HashMap<u64, Recipient<R>>,
     lifetimes: HashMap<usize, HashSet<(u64, u64)>>,
+    owners: HashMap<u64, HashSet<(u64, u64)>>,
+    #[cfg(test)]
+    removed: usize,
 }
 struct Directory<R> {
     entries: Mutex<Entries<R>>,
@@ -43,8 +46,19 @@ pub struct Batch<R> {
 }
 
 impl<R> Entries<R> {
-    fn remove_one(&mut self, key: (u64, u64)) -> Option<Entry<R>> {
-        let entry = self.recipients.get_mut(&key.0)?.routes.remove(&key.1)?;
+    fn unlink(&mut self, key: (u64, u64), entry: &Entry<R>) {
+        #[cfg(test)]
+        {
+            self.removed += 1;
+        }
+        if let Some(owner) = entry.owner
+            && let Some(keys) = self.owners.get_mut(&owner)
+        {
+            keys.remove(&key);
+            if keys.is_empty() {
+                self.owners.remove(&owner);
+            }
+        }
         if let Some(lifetime) = &entry.lifetime {
             let id = lifetime.id();
             if let Some(keys) = self.lifetimes.get_mut(&id) {
@@ -54,7 +68,25 @@ impl<R> Entries<R> {
                 }
             }
         }
+    }
+
+    fn remove_one(&mut self, key: (u64, u64)) -> Option<Entry<R>> {
+        let entry = self.recipients.get_mut(&key.0)?.routes.remove(&key.1)?;
+        self.unlink(key, &entry);
         Some(entry)
+    }
+
+    fn remove_recipient(&mut self, recipient: u64) -> Vec<Entry<R>> {
+        let Some(peer) = self.recipients.remove(&recipient) else {
+            return Vec::new();
+        };
+        peer.routes
+            .into_iter()
+            .map(|(id, entry)| {
+                self.unlink((recipient, id), &entry);
+                entry
+            })
+            .collect()
     }
 
     fn remove(&mut self, recipient: u64, ids: &[u64]) -> Vec<Entry<R>> {
@@ -93,6 +125,9 @@ impl<R: RouteLifetime + Send + Sync + 'static> Router<R> {
                 entries: Mutex::new(Entries {
                     recipients: HashMap::new(),
                     lifetimes: HashMap::new(),
+                    owners: HashMap::new(),
+                    #[cfg(test)]
+                    removed: 0,
                 }),
                 max_exports,
             }),
@@ -158,6 +193,13 @@ impl<R: RouteLifetime + Send + Sync + 'static> Router<R> {
                 .or_default()
                 .insert((recipient.id(), id));
         }
+        if let Some(owner) = owner {
+            entries
+                .owners
+                .entry(owner)
+                .or_default()
+                .insert((recipient.id(), id));
+        }
         batch.ids.push(id);
         Ok(id)
     }
@@ -194,19 +236,9 @@ impl<R: RouteLifetime + Send + Sync + 'static> Router<R> {
     pub fn reclaim(&self, connection: u64) {
         let discarded = {
             let mut entries = self.directory.entries.lock();
-            let mut ids = Vec::new();
-            for (&recipient, peer) in &entries.recipients {
-                for (&id, entry) in &peer.routes {
-                    if recipient == connection || entry.owner == Some(connection) {
-                        ids.push((recipient, id));
-                    }
-                }
-            }
-            let discarded: Vec<_> = ids
-                .into_iter()
-                .filter_map(|key| entries.remove_one(key))
-                .collect();
-            entries.recipients.remove(&connection);
+            let mut discarded = entries.remove_recipient(connection);
+            let keys = entries.owners.remove(&connection).unwrap_or_default();
+            discarded.extend(keys.into_iter().filter_map(|key| entries.remove_one(key)));
             discarded
         };
         drop(discarded);
@@ -219,11 +251,12 @@ impl<R: RouteLifetime + Send + Sync + 'static> Router<R> {
             let mut entries = self.directory.entries.lock();
             let keys = entries.lifetimes.remove(&lifetime.id()).unwrap_or_default();
             let mut discarded = Vec::with_capacity(keys.len());
-            discarded.extend(keys.into_iter().filter_map(|(recipient, id)| {
-                entries.recipients.get_mut(&recipient)?.routes.remove(&id)
-            }));
+            discarded.extend(keys.into_iter().filter_map(|key| entries.remove_one(key)));
             discarded
         };
         drop(discarded);
     }
 }
+
+#[cfg(test)]
+mod tests;

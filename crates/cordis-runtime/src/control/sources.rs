@@ -108,7 +108,6 @@ impl SourceBindings {
         overlay: &Overlay,
         mounted: impl Iterator<Item = (&'a String, &'a InstanceSettings, &'a Package)>,
     ) {
-        let entries = configuration.entries(overlay);
         self.pending = mounted
             .map(|(name, settings, package)| {
                 (
@@ -128,15 +127,16 @@ impl SourceBindings {
             .filter(|(name, source)| self.confirmed.get(name) != Some(source))
             .collect();
         let previous = self.confirmed.len();
-        self.confirmed.retain(|name, _| entries.contains_key(name));
+        self.confirmed
+            .retain(|name, _| configuration.contains_entry(overlay, name));
         self.dirty |= self.confirmed.len() != previous;
     }
 
     /// DOC-11 §10、CP-11：真实 Active 状态确认代码引用，多项变化共用一次原子写入。
-    pub(super) fn observe(&mut self, manager: &Manager) {
+    pub(super) fn observe(&mut self, owners: &InstanceOwners<'_>) {
         self.pending.retain(|name, source| {
-            if manager
-                .instance_fiber(name)
+            if owners
+                .fiber(name)
                 .is_ok_and(|fiber| fiber.state() == cordis::FiberState::Active)
             {
                 self.confirmed.insert(name.clone(), source.clone());
@@ -167,12 +167,52 @@ impl SourceBindings {
         Ok(committed)
     }
 
-    pub(super) fn confirm(&mut self, manager: &Manager) -> Result<()> {
-        self.observe(manager);
+    pub(super) fn confirm(&mut self, owners: &InstanceOwners<'_>, store: &Store) -> Result<()> {
+        self.observe(owners);
+        self.publish(store)
+    }
+
+    fn publish(&mut self, store: &Store) -> Result<()> {
         if self.dirty {
-            crate::storage::write(&self.path, &self.encoded()?)?;
+            store.save_sources(&self.encoded()?)?;
             self.dirty = false;
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::storage::sync_test;
+    use cordis_testkit::cleanup::TestGuard;
+
+    #[test]
+    fn source_confirmation_remains_dirty_until_directory_sync_succeeds() {
+        let case = TestGuard::for_package(
+            Path::new(env!("CARGO_MANIFEST_DIR")),
+            "source-directory-sync",
+        );
+        let store = Store::create(case.directory("source-directory-sync")).unwrap();
+        let path = store.directory.join("sources.json");
+        let mut sources = SourceBindings::new(path.clone(), "plugins".into());
+        sources.load().unwrap();
+        assert!(sources.dirty);
+        sync_test::fail_next(&store.directory);
+        let failure = sources.publish(&store).unwrap_err();
+        assert!(failure.message.contains("directory sync failure"));
+        assert!(sources.dirty);
+        assert_eq!(sync_test::calls(&store.directory), 1);
+        sources.publish(&store).unwrap();
+        assert!(!sources.dirty);
+        assert_eq!(sync_test::calls(&store.directory), 2);
+        sources.publish(&store).unwrap();
+        assert_eq!(sync_test::calls(&store.directory), 2);
+        let offline = offline_sources(&path, &store.directory).unwrap();
+        assert_eq!(
+            serde_json::to_value(offline).unwrap()["instances"],
+            serde_json::json!({})
+        );
+        case.success();
     }
 }

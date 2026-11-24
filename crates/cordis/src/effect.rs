@@ -178,10 +178,11 @@ impl EffectScope {
 impl Context {
     /// T-EFF-1、S-EFF-1、S-EFF-2：同步执行效应体并登记逆变换。
     /// 成功时返回显式释放句柄；回调错误或 panic 触发已登记步骤的恢复。
+    /// 回调在本方法返回前完成，可以借用调用栈；登记的清理仍须拥有其捕获值。
     #[track_caller]
     pub fn effect<F>(&self, label: impl Into<String>, callback: F) -> Result<Effect>
     where
-        F: FnOnce(EffectScope) -> Result + Send + Sync + 'static,
+        F: FnOnce(EffectScope) -> Result + Send + Sync,
     {
         let location = Location::caller();
         let effect = self.create_effect(label.into(), location)?;
@@ -229,7 +230,7 @@ impl Context {
     fn create_effect(&self, label: String, location: &'static Location<'static>) -> Result<Effect> {
         let mut state = self.kernel.state.lock();
         let owner = self.scope.fiber;
-        if !state.fibers[owner].alive {
+        if !self.permits_effect(&state) {
             return Err(Error::inactive().at(location));
         }
         let armed = Arc::new(AtomicBool::new(true));
@@ -382,7 +383,7 @@ impl Effect {
         let steps = {
             let mut state = self.kernel.state.lock();
             let data = &mut state.effects[self.id];
-            if data.running || data.cleaning {
+            if !crate::lifecycle::cleanup(data.running, data.cleaning) {
                 return;
             }
             data.cleaning = true;

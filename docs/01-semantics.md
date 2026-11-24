@@ -214,3 +214,16 @@
 | `D-5` | 依赖顺序由 `notify` 推出 | 另有显式的依赖方集合：提供方的 `_unload` 与绑定的撤回都等待依赖方清理完毕 | `S-FBR-12`、`S-SVC-2` |
 | `D-6` | `unload` 整体执行 `fiber.dispose`，按后进先出顺序 | 顶层效应按相反顺序启动、并发执行；单个效应内部严格后进先出 | `S-FBR-12`、`S-EFF-3` |
 | `D-7` | 绑定存在即满足 | 绑定还要求提供方纤程为 `ACTIVE` 且可用性谓词通过 | `S-SVC-3`、`S-SVC-4` |
+
+
+## 第四部分 Rust 上下文准入
+
+Rust 的派生视图可把新效应的登记限定到捕获的加载纪元。内核同时掌握纤程存活性、运行纪元、目标纪元和效应集合，因此纪元检查与登记在同一把 `State` 锁内完成。该通用能力适用于框架内部组件和其他持有 Rust 上下文的调用方。
+
+| 条款 | 契约 | 入口与证据 |
+|---|---|---|
+| `R-CTX-1` | `Context::for_epoch(Arc<Epoch>)` 返回不可变派生视图。新 `effect`、服务、监听器和子挂载须满足所属纤程存活、目标纪元等于运行纪元、目标纪元等于同一纤程视图链的每个捕获纪元；准入失败返回失活错误。普通上下文继续采用 `S-FBR-3` 的存活契约 | `context.rs::permits_effect`、`effect.rs::create_effect`；`epoch_context.rs` |
+| `R-CTX-2` | `extend`、`isolate`、`intercept` 和再次 `for_epoch` 继承已有守卫，再次绑定增加合取条件。子纤程从自己的加载纪元管理新效应，寿命通过父 `ctx.use()` 效应交接；交接前父视图过期时回收预建子记录 | `context.rs::derive`、`registry.rs::mount_with`；`retired_parent_cannot_adopt_child_created_before_effect_admission` |
+| `R-CTX-3` | 绑定视图的 `is_current` 包含纪元约束。过期视图保留 `S-SVC-9` 的已提交服务读取供清理使用，新增效应受 `R-CTX-1` 限制。`Fiber::context()` 返回该纤程的普通上下文，继续用于跨加载代管理该纤程 | `fiber.rs::Context::is_current`、`reflect.rs`；`retired_view_reads_its_committed_service_during_cleanup` |
+
+[形式化准入模型](formal-semantics.md)给出守卫和所有权不变量；[框架组件所有权](component-ownership.md)说明网页与远端加载代如何使用该接口。

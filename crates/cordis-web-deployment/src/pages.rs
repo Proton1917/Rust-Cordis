@@ -7,23 +7,28 @@ use std::path::PathBuf;
 impl Deployment {
     /// DOC-15 §11.3：登记及清理先建立拥有关系，再把模块路由发布给页面。
     pub(super) async fn activate(self: Arc<Self>, context: Context, mut spec: Spec) -> Result<()> {
-        if let Some(parent) = &spec.parent {
-            let component = self
-                .manager
-                .snapshot()
-                .instances
-                .into_iter()
-                .find(|instance| instance.name == *parent)
-                .ok_or_else(|| WireError::new(4, "网页后端实例目录缺席"))?
-                .component;
-            spec.component = format!("{component}/web");
+        let context = context.for_epoch(Arc::new(context.fiber().epoch()));
+        let parent = spec
+            .parent
+            .as_ref()
+            .map(|_| {
+                context
+                    .get::<InstanceLifecycle>()
+                    .map(|binding| binding.value())
+            })
+            .transpose()
+            .map_err(wire)?;
+        if let Some(parent) = &parent {
+            spec.component = format!("{}/web", parent.component()?);
         }
         let sequence = self.next.fetch_add(1, Ordering::Relaxed);
-        let registration = registry::Registration::create(&self.manager, &spec, sequence).await?;
+        let registration =
+            registry::Registration::create(&self.manager, &context, &spec, sequence).await?;
         let children = Arc::new(Mutex::new(BTreeMap::<u64, Fiber>::new()));
         let live = Arc::new(Live {
             spec: spec.clone(),
             context: context.clone(),
+            parent,
             registration: registration.clone(),
             children: children.clone(),
             mounting: Mutex::new(HashMap::new()),
@@ -137,8 +142,8 @@ impl Deployment {
 
     /// DOC-15 §11.3：在当前后端上下文创建页面子实例，父级结束时释放登记。
     async fn mount_page_once(&self, id: u64, page: &Page, live: &Live) -> Result<()> {
-        let parent = match &live.spec.parent {
-            Some(parent) => self.manager.active_instance_context(parent)?,
+        let parent = match &live.parent {
+            Some(parent) => parent.context()?,
             None => live.context.clone(),
         };
         let parent = self.manager.page_context(&parent, id);

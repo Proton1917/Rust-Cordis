@@ -38,12 +38,22 @@ struct Arguments {
     verified_dirs: Vec<PathBuf>,
     #[arg(long, default_value_t = 2)]
     native_workers: usize,
+    #[arg(long, default_value_t = 64)]
+    max_active_callbacks: usize,
+    #[arg(long, default_value_t = 64 * 1024 * 1024)]
+    max_callback_bytes: usize,
     #[arg(long, default_value_t = 30_000)]
     request_timeout_ms: u64,
     #[arg(long, default_value_t = 64)]
     max_inflight: usize,
     #[arg(long, default_value_t = 64)]
     queue_capacity: usize,
+    #[arg(long, default_value_t = 64 * 1024 * 1024)]
+    max_buffered_bytes: usize,
+    #[arg(long, default_value_t = 64 * 1024)]
+    control_reserve_bytes: usize,
+    #[arg(long, default_value_t = 64)]
+    control_queue_capacity: usize,
     #[arg(long, default_value_t = 3)]
     consecutive_timeouts: u32,
     #[arg(long, default_value_t = 16 * 1024 * 1024)]
@@ -80,6 +90,8 @@ async fn run(args: Arguments) -> cordis_host::Result<i32> {
             },
             request_timeout: timeout,
             native_workers: args.native_workers,
+            max_active_callbacks: args.max_active_callbacks,
+            max_callback_bytes: args.max_callback_bytes,
         },
         tokio::runtime::Handle::current(),
     )?;
@@ -98,6 +110,9 @@ async fn run(args: Arguments) -> cordis_host::Result<i32> {
         },
         max_inflight: args.max_inflight,
         queue_capacity: args.queue_capacity,
+        max_buffered_bytes: args.max_buffered_bytes,
+        control_reserve_bytes: args.control_reserve_bytes,
+        control_queue_capacity: args.control_queue_capacity,
         request_timeout: timeout,
         consecutive_timeouts: args.consecutive_timeouts,
     };

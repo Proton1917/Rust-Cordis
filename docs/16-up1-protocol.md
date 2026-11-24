@@ -15,7 +15,10 @@ UP/1 连接核心与一个原生宿主、脚本进程或网页转发通道。同
 | `max_collection` | 65536 | 参数、成功结果或诊断值图中单个数组的元素数、单个映射的键值对数 |
 | `max_values` | 262144 | 参数、成功结果或诊断值图的总节点预算；映射的键与值分别计数，标签及其载荷分别计数 |
 | `max_inflight` | 64 | 每个方向的在途请求上限 |
-| `queue_capacity` | 64 | 每条连接的发送队列容量 |
+| `queue_capacity` | 64 | 每条连接的数据帧排队额度及异步通知队列容量 |
+| `max_buffered_bytes` | 67108864 字节 | Rust 连接从编码至完整写出的帧缓冲容量额度，包含等待入队的编码结果 |
+| `control_reserve_bytes` | 65536 字节 | 响应、cancel、release 可额外使用的缓冲容量 |
+| `control_queue_capacity` | 64 | 响应、cancel、release 的保留排队额度，与数据帧共用 FIFO 写端 |
 | `request_timeout` | 30 秒 | 通用请求的默认截止时间；核心按操作类别选择有效时限 |
 | `consecutive_timeouts` | 3 | 连续超时触发连接终止的阈值 |
 | `max_exports` | 65536 | 核心向单条连接导出的活跃对象别名上限 |
@@ -24,13 +27,29 @@ UP/1 连接核心与一个原生宿主、脚本进程或网页转发通道。同
 
 值图计数包括映射的键和值。字节数小于帧上限的内容，也可能先触及集合或节点上限。大清单写入返回操作编号和快照版本，完整内容用资源流或分页读取。调用者查询持久回执来区分写入失败与返回值传输失败。资源流按使用者的读取进度传送，取消和提供方退役都会释放相关引用。
 
+Rust 写端按缓冲容量增长取得字节额度，完整写出或丢弃后归还。额度耗尽时本次异步发送返回 code 8，未交付出口引用随调用归还；析构控制通知取得额度失败时连接退役并回收引用表。响应和资源控制使用保留额度，保持已接纳帧的 FIFO 与完整帧边界。异步通知队列满时立即退役连接，读帧任务由此持续拥有明确的前进或结束路径；通知处理器发起反向调用时，应答接收保持独立。
+
 ## 消息、身份与资源
 
 `hello` 建立连接与版本，`apply` 将组件激活交给执行端。`provide` 与 `get` 使内核解析绑定，`invoke` 向提供方送达方法、参数与真实调用方信息。调用编号配对请求和结果；资源引用由连接登记，普通整数依其业务类型解释。携带对象的失败调用和被丢弃的结果要归还各自持有的引用。清理先尊重依赖顺序，再撤回加载代。
 
 `channel_open`、`channel_frame` 和 `channel_close` 对应转发连接的建立、帧传递与关闭。HTTP 插件解释 Cookie 和 WebSocket；核心确认通道与页面身份。进程退出时撤回连接的服务和效应，之后按配置恢复。
 
-支持调用预算的端点在成功的 `hello` 结果中声明 `invoke_budget_v1: true`。握手发起方收到该能力后，可在 `invoke` 参数加入 `budget_ms: u64`，表示发送方当前剩余的毫秒数。对等端首次收到该字段后也可发送该字段。各端按本地单调时钟计算截止时间，核心为每次逻辑调用维护最终截止，转发与嵌套调用取父调用剩余预算与本地时限中的较小值。连接到原有端点时，核心继续使用发送方截止时间及 `cancel` 通知。插件加载和清理按其生命周期时限执行。原生同步调用的租约随实际执行及析构结束归还。
+支持调用预算的端点在成功的 `hello` 结果中声明 `invoke_budget_v1: true`。握手发起方收到该能力后，可在 `invoke` 参数加入 `budget_ms: u64`，表示发送方当前剩余的毫秒数。对等端首次收到该字段后也可发送该字段。各端按本地单调时钟计算截止时间，核心为每次逻辑调用维护最终截止，转发与嵌套调用取父调用剩余预算与本地时限中的较小值。连接到原有端点时，核心继续使用发送方截止时间及 `cancel` 通知。插件加载和清理按其生命周期时限执行。原生同步调用的租约随实际执行及析构结束归还。 Rust 写端在首字节写出前更新协商预算；尚未写出的请求在到期或取消时撤回并归还出口引用。已经写出部分字节的请求继续完成该帧，随后按顺序送达取消通知。
+
+## 异步通知执行额度
+
+| 参数 | 默认值 | 含义 |
+|---|---:|---|
+| `max_active_callbacks` | 64 | 执行端全部上下文共享的活跃异步 callback 通知数 |
+| `max_callback_bytes` | 67108864 字节 | 执行端活跃异步 callback 通知保留的完整 CBOR 正文总字节 |
+
+异步 callback 通知在创建执行任务前取得任务与字节额度。原生宿主、Python SDK 和 TypeScript SDK
+共享默认容量，字节来自读帧入口测得的完整 CBOR 正文，包含包络。许可持续到载荷释放和实际执行结束，
+`release_context` 发出取消后仍在执行的回调继续占用许可。达到任一额度时以 code 8 终止当前连接，
+核心按连接生命周期回收服务与效应。控制通知与反向响应保持独立处理；已接纳通知沿接收顺序投递，
+异步完成顺序由执行决定。请求式 callback 继续采用在途请求额度。
+原生宿主 CLI 通过 `--max-active-callbacks` 与 `--max-callback-bytes` 设置这两项额度。
 
 ## 线上字段参考
 
@@ -126,7 +145,12 @@ UP/1 连接核心与一个原生宿主、脚本进程或网页转发通道。同
 |---|---|---|---|
 | `library_prepare` | C→H request | `path: String` | `{library: u64, plugin: Plugin}` |
 | `library_activate` | C→H request | `library: u64` | `null` |
-| `library_retire` | C→H request | `library: u64` | `{leases: u64, closed: bool, quiescence_ms: Option<u64>, retired_images: u64}` |
+| `library_retire` | C→H request | `library: u64` | `{leases: u64, closed: bool, quiescence_ms: Option<u64>, retired_images: u64, retirement: Option<LibraryRetirement>}` |
+| `library_status` | C→H request | `null` | `{libraries: Vec<LibraryInfo>, retired_images: u64, retirement: Option<LibraryRetirement>}` |
+
+`retired_images` 继续表示累计退役次数。可选的 `LibraryRetirement` 分别包含累计退役数 `retired_total`、归还库句柄数 `closed_total`、仍持有的退役库句柄 `open_retired_handles`、实际退役租约 `retired_leases`、退役文件租约 `retired_cache_pins` 和可选映射数 `mapped_retired_images`。`library_status` 在 Linux 上按设备号和 inode 读取实际映射；其他平台、观测失败或身份不完整时，映射数为空。`library_retire` 返回轻量所有权计数，映射数为空。
+
+库清单保留活动库、仍持有句柄的退役库和最近 256 条已关闭库的诊断记录。累计计数和物理映射记录具有独立寿命。恢复策略默认使用累计数，显式配置可选择持有句柄或映射数；旧宿主和缺少物理观测时沿用累计数。[原生退役计量与恢复依据](adr/0058-native-retirement-metrics.md)
 
 ### 11 转发通道
 

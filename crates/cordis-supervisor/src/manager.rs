@@ -3,6 +3,7 @@
 mod batch;
 mod generation;
 mod handlers;
+mod instance;
 mod lifecycle;
 mod metadata;
 mod model;
@@ -16,10 +17,11 @@ pub use batch::{
     BatchCompletion, BatchFailure, BatchInstance, BatchReplacement, DeploymentDecision,
 };
 pub use cordis_routing::{Arguments, CallContext, LocalReply, LocalService};
+pub use instance::{InstanceGeneration, InstanceLifecycle};
 pub use lifecycle::FrozenSnapshot;
 pub use model::{
     Failure, GroupSnapshot, GroupSpec, InstanceSnapshot, InstanceSpec, LogOrigin, LogRecord,
-    LogSink, ManagerOptions, ReplaceReport, RestartPolicy, Snapshot,
+    LogSink, ManagerOptions, ReplaceReport, RestartPolicy, RetiredImageBasis, Snapshot,
 };
 
 use crate::Peer;
@@ -42,7 +44,7 @@ use std::{
     },
     time::Duration,
 };
-use tokio::sync::{mpsc, oneshot, watch};
+use tokio::sync::{Notify, mpsc, oneshot, watch};
 use views::{RealmLease, ViewRecord};
 
 pub type Result<T = ()> = std::result::Result<T, WireError>;
@@ -196,6 +198,8 @@ pub(super) struct Core {
     stopping: AtomicBool,
     exported: AtomicBool,
     shutdown_export: Mutex<Option<lifecycle::Frozen>>,
+    abandoned_snapshots: Mutex<Vec<Arc<lifecycle::Frozen>>>,
+    snapshot_returned: Notify,
     commands: Mutex<CommandQueue>,
     page_commands: tokio::sync::Mutex<mpsc::Receiver<Command>>,
     recovery_batch: Mutex<Option<batch::HeldDeployment>>,
@@ -262,6 +266,8 @@ impl Manager {
             stopping: AtomicBool::new(false),
             exported: AtomicBool::new(false),
             shutdown_export: Mutex::new(None),
+            abandoned_snapshots: Mutex::new(Vec::new()),
+            snapshot_returned: Notify::new(),
             commands: Mutex::new(CommandQueue {
                 accepting: true,
                 sender,
@@ -313,9 +319,11 @@ impl Manager {
                             manager.0.finished.send_replace(Some(result));
                             return Ok(());
                         }
+                        manager.thaw_abandoned_snapshots().await;
                         tokio::select! {
                             biased;
                             _ = shutdown.changed() => {},
+                            _ = manager.0.snapshot_returned.notified() => {},
                             page = manager.next_page_command() => {
                                 if let Some(page) = page { page.run(manager.clone()).await; }
                             },

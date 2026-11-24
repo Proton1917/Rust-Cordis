@@ -1,6 +1,5 @@
 # DOC-16 §2–6：标准流帧、请求截止时间与发送所有权；连接错误交回运行入口。
 import asyncio
-import io
 import struct
 import sys
 from contextvars import ContextVar
@@ -8,6 +7,7 @@ from contextvars import ContextVar
 import cbor2
 
 from .errors import CordisError
+from .budget import encode, decode
 
 _invoke_deadline = ContextVar("invoke_deadline", default=None)
 
@@ -15,11 +15,25 @@ _invoke_deadline = ContextVar("invoke_deadline", default=None)
 class Connection:
     """DOC-16 §2–6、§10：双向标准流连接，所有请求共享有界发送通道。"""
 
-    def __init__(self, runtime, max_frame=16777216, max_inflight=64, timeout=30):
+    def __init__(self, runtime, max_frame=16777216, max_inflight=64, timeout=30,
+                 max_depth=64, max_collection=65536, max_values=262144,
+                 max_active_callbacks=64, max_callback_bytes=64 * 1024 * 1024):
         self.runtime = runtime
         self.max_frame = max_frame
         self.max_inflight = max_inflight
         self.timeout = timeout
+        self.max_depth = max_depth
+        self.max_collection = max_collection
+        self.max_values = max_values
+        self.max_active_callbacks = max_active_callbacks
+        self.max_callback_bytes = max_callback_bytes
+        if not (all(type(value) is int for value in
+                    (max_frame, max_depth, max_collection, max_values, max_inflight,
+                     max_active_callbacks, max_callback_bytes))
+                and 64 <= max_frame < 1 << 32 and 4 <= max_depth <= 128
+                and max_collection > 0 and max_values >= 4 and max_inflight > 0
+                and max_active_callbacks > 0 and max_callback_bytes > 0):
+            raise CordisError(2, "Invalid UP/1 connection limits")
         self.peer_budget = False
         self.pending = {}
         self.running = {}
@@ -35,7 +49,7 @@ class Connection:
         """DOC-16 §6：发送成功交付出口引用，编码或写入失败撤回本次出口。"""
         committed = False
         try:
-            data = cbor2.dumps(message)
+            data = encode(message, self)
             length = len(data)
             if length > self.max_frame:
                 raise CordisError(8, "消息超过帧长度上限")
@@ -177,13 +191,8 @@ class Connection:
             length = struct.unpack(">I", header)[0]
             if length > self.max_frame:
                 raise CordisError(8, "输入帧超过长度上限")
-            stream = io.BytesIO(await reader.readexactly(length))
-            message = cbor2.CBORDecoder(stream).decode()
-            if (
-                stream.tell() != length
-                or not isinstance(message, dict)
-                or len(message) != 1
-            ):
+            message = decode(await reader.readexactly(length), self)
+            if not isinstance(message, dict) or len(message) != 1:
                 raise CordisError(2, "消息包络或尾随数据错误")
             kind, body = next(iter(message.items()))
             if kind == "response":
@@ -191,7 +200,7 @@ class Connection:
             elif kind == "request":
                 self._request(body)
             elif kind == "notification":
-                await self.runtime.notification(body["method"], body["params"])
+                await self.runtime.notification(body["method"], body["params"], length)
             else:
                 raise CordisError(3, "消息类别错误")
 

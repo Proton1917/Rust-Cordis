@@ -15,14 +15,16 @@ pub fn copy_tree(source: &Path, destination: &Path, excluded: &BTreeSet<PathBuf>
     if destination.canonicalize()?.starts_with(&root) {
         return Err(format!("装配目录位于复制来源内：{}", root.display()).into());
     }
-    copy_entries(&root, destination, &root, destination, excluded)
+    cordis_artifact::validate(&root, excluded, &[".git", "__pycache__"])?;
+    copy_entries(&root, destination, &root, excluded)?;
+    cordis_artifact::validate(destination, &BTreeSet::new(), &[])?;
+    Ok(())
 }
 
 fn copy_entries(
     source: &Path,
     destination: &Path,
     root: &Path,
-    output: &Path,
     excluded: &BTreeSet<PathBuf>,
 ) -> Result<()> {
     for entry in fs::read_dir(source)? {
@@ -33,22 +35,19 @@ fn copy_entries(
         }
         let target = destination.join(&name);
         let kind = entry.file_type()?;
-        if !excluded.is_empty() && excluded.contains(&entry.path().canonicalize()?) {
+        if cordis_artifact::excluded(&entry.path(), root, excluded, &[".git", "__pycache__"])? {
             continue;
         }
         if kind.is_symlink() {
-            let resolved = entry.path().canonicalize()?;
-            let relative = resolved
-                .strip_prefix(root)
-                .map_err(|_| format!("发布链接指向来源目录之外：{}", entry.path().display()))?;
-            let link = pathdiff::diff_paths(output.join(relative), destination)
-                .ok_or("链接目标与发布目录需要共同根目录")?;
+            let link = cordis_artifact::relative_link(&entry.path(), root)?;
             std::os::unix::fs::symlink(link, target)?;
         } else if kind.is_dir() {
             fs::create_dir(&target)?;
-            copy_entries(&entry.path(), &target, root, output, excluded)?;
+            copy_entries(&entry.path(), &target, root, excluded)?;
         } else if kind.is_file() {
             fs::copy(entry.path(), target)?;
+        } else {
+            return Err(format!("发布树包含特殊文件：{}", entry.path().display()).into());
         }
     }
     Ok(())
@@ -84,6 +83,48 @@ pub fn archive(source: &Path, out: &Path) -> Result<PathBuf> {
 mod tests {
     use super::*;
     use cordis_testkit::cleanup::TestGuard;
+
+    #[test]
+    fn archive_preserves_internal_links_with_the_installable_tree_policy() {
+        use std::os::unix::fs::symlink;
+        let case = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "pack-links");
+        let root = case.directory("pack-links");
+        let source = root.join("source");
+        fs::create_dir_all(source.join("data")).unwrap();
+        let source = source.canonicalize().unwrap();
+        fs::write(source.join("data/file"), b"value").unwrap();
+        symlink(source.join("data/file"), source.join("alias")).unwrap();
+        symlink("data", source.join("directory")).unwrap();
+        let secret = root.join("excluded-secret");
+        fs::write(&secret, b"secret").unwrap();
+        symlink(&secret, source.join("secret-alias")).unwrap();
+        let staged = root.join("artifact");
+        copy_tree(
+            &source,
+            &staged,
+            &BTreeSet::from([secret.canonicalize().unwrap()]),
+        )
+        .unwrap();
+        assert!(!staged.join("secret-alias").exists());
+        fs::remove_file(source.join("secret-alias")).unwrap();
+        assert_eq!(
+            fs::read_link(staged.join("alias")).unwrap(),
+            Path::new("data/file")
+        );
+        let archive = archive(&staged, &root).unwrap();
+        let extracted = root.join("extracted");
+        tar::Archive::new(flate2::read::GzDecoder::new(
+            fs::File::open(archive).unwrap(),
+        ))
+        .unpack(&extracted)
+        .unwrap();
+        let artifact = extracted.join("artifact");
+        cordis_artifact::validate(&artifact, &BTreeSet::new(), &[]).unwrap();
+        assert_eq!(fs::read(artifact.join("directory/file")).unwrap(), b"value");
+        symlink("..", source.join("data/cycle")).unwrap();
+        assert!(copy_tree(&source, &root.join("cycle"), &BTreeSet::new()).is_err());
+        case.success();
+    }
 
     #[test]
     fn packaging_rejects_nested_outputs_and_publishes_only_complete_archives() {

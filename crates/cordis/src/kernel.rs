@@ -14,7 +14,7 @@ use parking_lot::Mutex;
 use slotmap::{SlotMap, new_key_type};
 use std::{
     any::TypeId,
-    collections::{HashMap, VecDeque},
+    collections::{HashMap, HashSet, VecDeque},
     future::Future,
     panic::{AssertUnwindSafe, catch_unwind},
     pin::Pin,
@@ -63,12 +63,17 @@ pub(crate) struct State {
     pub draining: bool,
     #[cfg(test)]
     pub panic_on_drain: bool,
+    #[cfg(test)]
+    pub before_mount_effect: Option<Box<dyn FnOnce() + Send>>,
     pub runtimes: HashMap<ComponentId, RuntimeData>,
     pub logger: LoggerState,
     pub aliases: HashMap<ComponentId, ComponentId>,
     pub definitions: HashMap<ComponentId, ComponentDef>,
     pub impls: SlotMap<ImplId, ImplData>,
     pub store: HashMap<(Arc<str>, Realm), ImplId>,
+    pub consumers: HashMap<(Arc<str>, Realm), HashSet<FiberId>>,
+    #[cfg(test)]
+    pub notification_candidates: usize,
     pub names: HashMap<Arc<str>, Option<TypeId>>,
     pub impl_counter: u64,
 }
@@ -117,12 +122,17 @@ impl Kernel {
                     draining: false,
                     #[cfg(test)]
                     panic_on_drain: false,
+                    #[cfg(test)]
+                    before_mount_effect: None,
                     runtimes: HashMap::new(),
                     logger: LoggerState::default(),
                     aliases: HashMap::new(),
                     definitions: HashMap::new(),
                     impls: SlotMap::with_key(),
                     store: HashMap::new(),
+                    consumers: HashMap::new(),
+                    #[cfg(test)]
+                    notification_candidates: 0,
                     names: HashMap::new(),
                     impl_counter: 0,
                 }),

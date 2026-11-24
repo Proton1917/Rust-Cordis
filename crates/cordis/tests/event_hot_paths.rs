@@ -1,5 +1,5 @@
 use cordis::{
-    Context, Event, EventOptions, InternalDispatch, InternalGet, ServiceKey, SyncKind,
+    Context, Event, EventOptions, Inject, InternalDispatch, InternalGet, ServiceKey, SyncKind,
     WaterfallKind,
 };
 use cordis_testkit::TestExecutor;
@@ -129,6 +129,34 @@ fn unintercepted_service_read_allocation_budget() {
         "service read allocated {allocations} times"
     );
     host.finish(context.fiber().dispose()).unwrap();
+}
+
+#[test]
+fn current_epoch_query_borrows_dependency_vector_without_allocating() {
+    let host = TestExecutor::new();
+    let root = Context::new(host.clone());
+    root.provide::<Number>(Arc::new(7)).unwrap();
+    let fiber = root
+        .inject(Inject::new().with::<Number>(), |_| async { Ok(()) })
+        .unwrap();
+    host.finish(fiber.settled()).unwrap();
+    let expected = fiber.epoch();
+    let context = fiber.context();
+    let (_, previous) = count_allocations(|| {
+        for _ in 0..1_000 {
+            black_box(context.is_current() && fiber.epoch() == expected);
+        }
+    });
+    let (_, current) = count_allocations(|| {
+        for _ in 0..1_000 {
+            black_box(fiber.is_current_epoch(black_box(&expected)));
+        }
+    });
+    assert_eq!(current, 0);
+    eprintln!(
+        "epoch query allocations: separate reads={previous}, atomic borrowed reads={current}, iterations=1000"
+    );
+    host.finish(root.fiber().dispose()).unwrap();
 }
 
 fn measure(name: &str, mut operation: impl FnMut() -> usize) {

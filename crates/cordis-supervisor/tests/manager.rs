@@ -2,8 +2,8 @@ use cordis::{Clock, Context, FiberState, Spawn, Task};
 use cordis_supervisor::{
     PeerOptions,
     manager::{
-        Arguments, CallContext, GroupSpec, InstanceSpec, LocalReply, LocalService, Manager,
-        ManagerOptions, RestartPolicy,
+        Arguments, CallContext, GroupSpec, InstanceLifecycle, InstanceSpec, LocalReply,
+        LocalService, Manager, ManagerOptions, RestartPolicy,
     },
 };
 use cordis_testkit::cleanup::{FixtureLease, SharedFixture, TestGuard};
@@ -529,18 +529,25 @@ async fn core_owner_tracks_backend_presence_and_releases_page() {
     let observed = current.clone();
     let definition = cordis::ComponentDef::new(
         "web-owner",
-        cordis::Inject::new().with_named("cordis.instance.backend"),
+        cordis::Inject::new().with::<InstanceLifecycle>(),
         move |context, ()| {
             *observed.lock() = Some(context);
             async { Ok(()) }
         },
     );
-    let owner = manager.context().mount_with(&definition, ()).unwrap();
+    let owner = manager
+        .instance_lifecycle_view(&manager.context(), "backend")
+        .unwrap()
+        .mount_with(&definition, ())
+        .unwrap();
     assert_eq!(owner.state(), FiberState::Pending);
     mount_backend(&manager, "backend").await;
     owner.settled().await.unwrap();
     assert_eq!(owner.state(), FiberState::Active);
     let context = current.lock().clone().unwrap();
+    let previous = context.get::<InstanceLifecycle>().unwrap().value();
+    assert_eq!(previous.component().unwrap(), "independent");
+    let previous_parent = previous.context().unwrap();
     let child = manager
         .mount_owned_child(
             context,
@@ -554,6 +561,35 @@ async fn core_owner_tracks_backend_presence_and_releases_page() {
     let ready = control.ready_after("owned-page", 0).await;
     assert_eq!(integer(&invoke(&ready, "get", Vec::new()).await), 43);
     freeze_page(&manager, &ready).await;
+    manager.update("backend", configuration(19)).await.unwrap();
+    owner.settled().await.unwrap();
+    assert_eq!(owner.state(), FiberState::Active);
+    assert!(
+        previous_parent.fiber().context().is_current(),
+        "the same fiber has already entered its next current generation"
+    );
+    assert!(
+        !previous_parent.is_current(),
+        "the captured view retains the old generation's admission boundary"
+    );
+    assert!(
+        previous.context().is_err(),
+        "a committed identity stays bound to its retired generation"
+    );
+    assert_eq!(
+        manager
+            .mount_owned_child(
+                previous_parent,
+                page_spec("late-page", 99),
+                None,
+                page_scope("late-page"),
+            )
+            .await
+            .unwrap_err()
+            .code,
+        4,
+        "queued children cannot cross into the next generation of the same fiber"
+    );
     manager.dispose("backend").await.unwrap();
     assert_eq!(owner.state(), FiberState::Pending);
     assert_eq!(
@@ -1483,6 +1519,148 @@ async fn selected_checkpoint_detach_and_shutdown_freeze_use_real_process_state()
             .code,
         4
     );
+    manager.shutdown().await.unwrap();
+    case.success();
+}
+
+// Accepted freeze belongs to the manager until a receiver retains its permit.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn cancelled_freeze_returns_write_permission() {
+    let case = TestGuard::for_package(
+        Path::new(env!("CARGO_MANIFEST_DIR")),
+        "review-freeze-cancel",
+    );
+    let _fixture = plugin().for_case(&case);
+    let (manager, control) = setup(options()).await;
+    manager
+        .attach_group(group("subject", "v1", "manager-fixture", no_restart()))
+        .await
+        .unwrap();
+    let gate_dir = case.directory("freeze-gate");
+    std::fs::create_dir_all(&gate_dir).unwrap();
+    let gate = gate_dir.join("continue");
+    let mut config = configuration(40);
+    config
+        .as_map_mut()
+        .unwrap()
+        .push(("export_gate".into(), encoded(&gate)));
+    manager
+        .mount(
+            instance(
+                "independent",
+                "subject",
+                "manager-fixture",
+                "independent",
+                config,
+            ),
+            None,
+        )
+        .await
+        .unwrap()
+        .settled()
+        .await
+        .unwrap();
+    let ready = control.ready_after("independent", 0).await;
+    let events = control.events.lock().len();
+    let freeze = tokio::spawn({
+        let manager = manager.clone();
+        async move { manager.freeze_instances(&["independent".into()]).await }
+    });
+    control
+        .phase_after("independent", "export-wait", events)
+        .await;
+    freeze.abort();
+    assert!(matches!(freeze.await, Err(ref error) if error.is_cancelled()));
+    std::fs::write(&gate, []).unwrap();
+    // A queue barrier observes cleanup of the abandoned permit before later work.
+    let barrier = manager.freeze_instances(&[]).await.unwrap();
+    manager.thaw_snapshot(&barrier).await.unwrap();
+    let written = try_invoke(&ready, "add", vec![1u64.into()]).await;
+    assert_eq!(integer(&written.unwrap()), 41);
+    // Clones retain the permit until the final receiver drops it.
+    let snapshot = manager
+        .freeze_instances(&["independent".into()])
+        .await
+        .unwrap();
+    let retained = snapshot.clone();
+    drop(snapshot);
+    assert_eq!(
+        try_invoke(&ready, "add", vec![1u64.into()])
+            .await
+            .unwrap_err()
+            .code,
+        4
+    );
+    drop(retained);
+    let barrier = manager.freeze_instances(&[]).await.unwrap();
+    manager.thaw_snapshot(&barrier).await.unwrap();
+    assert_eq!(
+        integer(&try_invoke(&ready, "add", vec![1u64.into()]).await.unwrap()),
+        42
+    );
+    // Explicit thaw is idempotent and dropping the handle after retirement is safe.
+    let snapshot = manager
+        .freeze_instances(&["independent".into()])
+        .await
+        .unwrap();
+    manager.thaw_snapshot(&snapshot).await.unwrap();
+    manager.thaw_snapshot(&snapshot).await.unwrap();
+    drop(snapshot);
+    let retired = manager
+        .freeze_instances(&["independent".into()])
+        .await
+        .unwrap();
+    manager.dispose("independent").await.unwrap();
+    drop(retired);
+    let barrier = manager.freeze_instances(&[]).await.unwrap();
+    manager.thaw_snapshot(&barrier).await.unwrap();
+    assert_eq!(manager.snapshot().groups[0].state, "running");
+    manager.shutdown().await.unwrap();
+    case.success();
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn freeze_thaw_failure_retires_the_connection_once() {
+    let case = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "freeze-thaw-failure");
+    let _fixture = plugin().for_case(&case);
+    let (manager, control) = setup(options()).await;
+    manager
+        .attach_group(group("subject", "v1", "manager-fixture", no_restart()))
+        .await
+        .unwrap();
+    let mut config = configuration(40);
+    config
+        .as_map_mut()
+        .unwrap()
+        .push(("thaw_error".into(), true.into()));
+    manager
+        .mount(
+            instance(
+                "independent",
+                "subject",
+                "manager-fixture",
+                "independent",
+                config,
+            ),
+            None,
+        )
+        .await
+        .unwrap()
+        .settled()
+        .await
+        .unwrap();
+    let ready = control.ready_after("independent", 0).await;
+    let snapshot = manager
+        .freeze_instances(&["independent".into()])
+        .await
+        .unwrap();
+    assert_eq!(
+        manager.thaw_snapshot(&snapshot).await.unwrap_err().code,
+        1001
+    );
+    assert!(!ready.object.peer().is_alive());
+    manager.thaw_snapshot(&snapshot).await.unwrap();
+    drop(snapshot);
     manager.shutdown().await.unwrap();
     case.success();
 }

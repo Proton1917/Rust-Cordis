@@ -2,7 +2,7 @@
 
 use crate::PeerOptions;
 use cordis_up::{Value, payload};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::{path::PathBuf, time::Duration};
 
 #[derive(Clone)]
@@ -42,6 +42,33 @@ pub struct ManagerOptions {
     pub swap_timeout: Duration,
     pub confirm: Duration,
     pub retired_image_limit: u64,
+    pub retired_image_basis: RetiredImageBasis,
+}
+
+/// Select the resource fact used for native group recovery.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum RetiredImageBasis {
+    #[default]
+    Cumulative,
+    OpenHandles,
+    MappedImages,
+}
+
+impl RetiredImageBasis {
+    pub(super) fn pressure(
+        self,
+        cumulative: u64,
+        measured: Option<&payload::LibraryRetirement>,
+    ) -> u64 {
+        match (self, measured) {
+            (Self::OpenHandles, Some(measured)) => measured.open_retired_handles,
+            (Self::MappedImages, Some(measured)) => {
+                measured.mapped_retired_images.unwrap_or(cumulative)
+            }
+            _ => cumulative,
+        }
+    }
 }
 
 impl Default for ManagerOptions {
@@ -59,6 +86,7 @@ impl Default for ManagerOptions {
             swap_timeout: Duration::from_secs(30),
             confirm: Duration::from_secs(10),
             retired_image_limit: 20,
+            retired_image_basis: RetiredImageBasis::Cumulative,
         }
     }
 }
@@ -92,3 +120,50 @@ pub type GroupSnapshot = cordis_types::GroupInfo<payload::Plugin, Failure>;
 pub type InstanceSnapshot = cordis_types::InstanceInfo<Failure>;
 pub type ReplaceReport = cordis_types::GroupReplaceReport<Failure>;
 pub type Snapshot = cordis_types::ProcessSnapshot<payload::Plugin, Failure>;
+
+#[cfg(test)]
+mod retirement_tests {
+    use super::*;
+
+    #[test]
+    fn retirement_basis_preserves_legacy_default_and_fallback() {
+        let metrics = payload::LibraryRetirement {
+            retired_total: 21,
+            closed_total: 20,
+            open_retired_handles: 1,
+            mapped_retired_images: Some(2),
+            ..Default::default()
+        };
+        assert_eq!(
+            ManagerOptions::default().retired_image_basis,
+            RetiredImageBasis::Cumulative
+        );
+        assert_eq!(
+            RetiredImageBasis::Cumulative.pressure(21, Some(&metrics)),
+            21
+        );
+        assert_eq!(
+            RetiredImageBasis::OpenHandles.pressure(21, Some(&metrics)),
+            1
+        );
+        assert_eq!(
+            RetiredImageBasis::MappedImages.pressure(21, Some(&metrics)),
+            2
+        );
+        assert_eq!(RetiredImageBasis::OpenHandles.pressure(21, None), 21);
+        let unavailable = payload::LibraryRetirement {
+            mapped_retired_images: None,
+            ..metrics
+        };
+        assert_eq!(
+            RetiredImageBasis::MappedImages.pressure(21, Some(&unavailable)),
+            21
+        );
+        let legacy = Value::Map(vec![
+            ("libraries".into(), Value::Array(Vec::new())),
+            ("retired_images".into(), 21u64.into()),
+        ]);
+        let decoded: payload::LibraryStatus = legacy.deserialized().unwrap();
+        assert!(decoded.retirement.is_none());
+    }
+}

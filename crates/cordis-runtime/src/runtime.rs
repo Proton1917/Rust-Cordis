@@ -1,5 +1,8 @@
 //! DOC-15 Q0、CP-7、CP-11：核心启动、管理事件、检查点与最终状态发布。
 
+mod owner;
+use owner::RuntimeRoot;
+
 use crate::{
     builtins::{DataDirectory, Logs, RuntimeInfo},
     config::{Configuration, Result, parameter},
@@ -11,15 +14,15 @@ use crate::{
     status::{self, Diagnostics, View},
     storage::{Store, io_error},
 };
-use cordis::{Context, ExporterOptions, LogLevel, LogValue};
+use cordis::{Context, Effect, ExporterOptions, LogLevel, LogValue};
 use cordis_supervisor::manager::{Manager, ManagerOptions};
 use cordis_up::WireError;
+use futures_util::{FutureExt, future::Shared};
 use parking_lot::Mutex;
 use std::{path::PathBuf, sync::Arc, time::Duration};
 use tokio::{
     signal::unix::{Signal, SignalKind, signal},
     sync::{Notify, mpsc, watch},
-    task::{JoinError, JoinHandle},
     time::{Instant, MissedTickBehavior},
 };
 
@@ -33,10 +36,11 @@ pub async fn run_with_contract(path: PathBuf, plan: Option<Plan>) -> Result<()> 
     let session = plan.map(Session::new).transpose()?;
     let path = path.canonicalize().map_err(io_error)?;
     let (directory, input) = crate::deployment::load_with_state_dir(&path)?;
-    let _owner = crate::storage::claim(&directory)?;
+    let owner = crate::storage::claim(&directory)?;
     let mut terminate = signal(SignalKind::terminate()).map_err(io_error)?;
     let mut interrupt = signal(SignalKind::interrupt()).map_err(io_error)?;
-    let root = Context::new(Arc::new(Executor::new()));
+    let lifetime = RuntimeRoot::new(owner);
+    let root = lifetime.context();
     let result = async {
         let store = Store::create(directory)?;
         store.recover_deployment()?;
@@ -56,11 +60,12 @@ pub async fn run_with_contract(path: PathBuf, plan: Option<Plan>) -> Result<()> 
         };
         configuration.check_version(&version)?;
         let (controller, requests, view) =
-            create_controller(&root, path, configuration, store).await?;
+            create_controller(root, path, configuration, store).await?;
         if let Some(session) = &session {
             session.install(&controller.manager)?;
         }
         serve(
+            root,
             controller,
             requests,
             view,
@@ -72,7 +77,7 @@ pub async fn run_with_contract(path: PathBuf, plan: Option<Plan>) -> Result<()> 
         .await
     }
     .await;
-    let disposed = root.fiber().dispose().await.map_err(kernel);
+    let disposed = lifetime.finish().await;
     let result = result.and(disposed);
     if let Some(session) = session {
         session.save(&result)?;
@@ -100,6 +105,7 @@ async fn create_controller(
         swap_timeout: lifecycle,
         confirm: Duration::from_millis(settings.confirm_ms),
         retired_image_limit: settings.retired_image_limit as u64,
+        retired_image_basis: settings.retired_image_basis,
         ..ManagerOptions::default()
     };
     let manager = Arc::new(Manager::new(root.clone(), options).await?);
@@ -179,6 +185,7 @@ fn register_services(
 
 /// DOC-15 CP-11：状态发布与管理调度独立进行，启动失败也执行完整退出步骤。
 async fn serve(
+    owner: &Context,
     mut controller: Controller,
     mut requests: mpsc::Receiver<Request>,
     view: View,
@@ -188,16 +195,17 @@ async fn serve(
     candidate: Option<Result<Configuration>>,
 ) -> Result<()> {
     let mut writer = StatusWriter::start(
+        owner,
         view,
         controller.store.directory.join("status.json"),
         controller.logs.clone(),
-    );
+    )?;
     if let Some(session) = session {
         let result = tokio::select! {
             result = session.run(&mut controller, candidate) => result,
             _ = terminate.recv() => Err(WireError::new(7, "契约会话收到终止信号")),
             _ = interrupt.recv() => Err(WireError::new(7, "契约会话收到中断信号")),
-            result = &mut writer.task => writer.observed(result).and(Err(WireError::new(7, "契约会话状态发布任务已结束"))),
+            result = writer.completed() => result.and(Err(WireError::new(7, "契约会话状态发布任务已结束"))),
         };
         return finish(&mut controller, &mut requests, writer, result.map(|_| None)).await;
     }
@@ -263,7 +271,7 @@ async fn dispatch_loop(
             _ = terminate.recv() => return Ok(None),
             _ = interrupt.recv() => return Ok(None),
             _ = admission.wait_for(|open| !*open) => return Ok(None),
-            result = &mut writer.task => return writer.observed(result).map(|_| None),
+            result = writer.completed() => return result.map(|_| None),
             request = requests.recv() => {
                 Work::Manage(request.ok_or_else(|| WireError::new(7, "管理队列已结束"))?)
             }
@@ -294,7 +302,7 @@ async fn dispatch_loop(
                         .manager
                         .checkpoint_instance(name)
                         .await
-                        .and_then(|states| controller.store.checkpoint(&states));
+                        .and_then(|states| controller.store.checkpoint_shared(&states));
                     if let Err(problem) = result {
                         controller
                             .logs
@@ -388,7 +396,7 @@ async fn finish(
             .manager
             .export_shutdown()
             .await
-            .and_then(|states| controller.store.checkpoint(&states)),
+            .and_then(|states| controller.store.checkpoint_shared(&states)),
     };
     // 此时实例仍在目录中，停机后的离线查询可取得最后一次 Active 绑定。
     let sources = controller.confirm_sources();
@@ -425,66 +433,110 @@ async fn finish(
 const STATUS_PERIOD: Duration = Duration::from_secs(1);
 
 struct StatusWriter {
-    stop: watch::Sender<bool>,
     refresh: Arc<Notify>,
-    task: JoinHandle<Result<()>>,
-    result: Option<Result<()>>,
+    lifetime: Effect,
+    completion: Shared<cordis::Task<Result<()>>>,
+    #[cfg(test)]
+    outcome: Arc<Mutex<Option<Result<()>>>>,
+}
+
+#[cfg(test)]
+thread_local! {
+    static STATUS_WAIT_CONSTRUCTIONS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
 impl StatusWriter {
     /// DOC-15 CP-11：停止标记在每次写入前读取，标记到达后写出最终快照再结束。
     /// 周期刷新覆盖异步变化（崩溃恢复、宿主状态），`refresh` 让管理请求的结果立即可见。
-    fn start(view: View, path: PathBuf, logs: Logs) -> Self {
+    fn start(owner: &Context, view: View, path: PathBuf, logs: Logs) -> Result<Self> {
         let (stop, mut stopped) = watch::channel(false);
         let refresh = Arc::new(Notify::new());
         let requested = refresh.clone();
-        let task = tokio::spawn(async move {
-            let mut previous = Vec::new();
-            let mut interval = tokio::time::interval(STATUS_PERIOD);
-            interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
-            loop {
-                let finishing = *stopped.borrow_and_update();
-                let published = status::write(&path, &view, &mut previous).await;
-                if finishing {
-                    return published;
-                }
-                if let Err(problem) = published {
-                    logs.emit(0, "runtime", &format!("状态快照发布失败：{problem}"));
-                }
-                tokio::select! {
-                    _ = interval.tick() => {},
-                    _ = requested.notified() => interval.reset(),
-                    result = stopped.changed() => {
-                        if result.is_err() { return Ok(()); }
-                    }
-                }
-            }
-        });
-        Self {
-            stop,
+        let outcome = Arc::new(Mutex::new(None));
+        let result = outcome.clone();
+        let mut worker = None;
+        let lifetime = owner
+            .effect("runtime-status", |scope| {
+                let task = owner.effect_async("status-publisher", move |_| async move {
+                    let mut previous = Vec::new();
+                    let mut interval = tokio::time::interval(STATUS_PERIOD);
+                    interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
+                    let final_result = loop {
+                        let finishing = *stopped.borrow_and_update();
+                        let published = status::write(&path, &view, &mut previous).await;
+                        if finishing {
+                            break published;
+                        }
+                        if let Err(problem) = published {
+                            logs.emit(0, "runtime", &format!("状态快照发布失败：{problem}"));
+                        }
+                        tokio::select! {
+                            _ = interval.tick() => {},
+                            _ = requested.notified() => interval.reset(),
+                            result = stopped.changed() => {
+                                if result.is_err() { break Ok(()); }
+                            }
+                        }
+                    };
+                    let kernel_result = final_result
+                        .as_ref()
+                        .map(|_| ())
+                        .map_err(|problem| cordis::Error::new(problem.message.clone()));
+                    *result.lock() = Some(final_result);
+                    kernel_result
+                })?;
+                scope.adopt(task.clone())?;
+                // 内核按逆序清理：先请求最终快照，再等待已采用的发布任务。
+                scope.defer(move || {
+                    stop.send_replace(true);
+                    Ok(())
+                })?;
+                worker = Some(task);
+                Ok(())
+            })
+            .map_err(kernel)?;
+        let completion = Self::completion(
+            &worker.expect("publisher effect registered"),
+            outcome.clone(),
+        );
+        Ok(Self {
             refresh,
-            task,
-            result: None,
-        }
+            lifetime,
+            completion,
+            #[cfg(test)]
+            outcome,
+        })
     }
 
-    fn observed(&mut self, result: std::result::Result<Result<()>, JoinError>) -> Result<()> {
-        let result = result
-            .map_err(|problem| WireError::new(1, problem.to_string()))
-            .and_then(|result| result);
-        self.result = Some(result.clone());
-        result
+    fn completion(
+        worker: &Effect,
+        outcome: Arc<Mutex<Option<Result<()>>>>,
+    ) -> Shared<cordis::Task<Result<()>>> {
+        let settled = worker.settled();
+        #[cfg(test)]
+        STATUS_WAIT_CONSTRUCTIONS.with(|count| count.set(count.get() + 1));
+        let completion: cordis::Task<Result<()>> = Box::pin(async move {
+            let settled = settled.await.map(|_| ()).map_err(kernel);
+            outcome.lock().clone().unwrap_or(settled)
+        });
+        completion.shared()
+    }
+
+    /// 等待任务在启动时构造一次；管理调度重复选择只共享该等待者。
+    fn completed(&self) -> Shared<cordis::Task<Result<()>>> {
+        self.completion.clone()
     }
 
     async fn finish(self) -> Result<()> {
-        self.stop.send_replace(true);
-        match self.result {
-            Some(result) => result,
-            None => self
-                .task
-                .await
-                .map_err(|problem| WireError::new(1, problem.to_string()))?,
-        }
+        let cleaned = self.lifetime.dispose().await.map_err(kernel);
+        self.completed().await.and(cleaned)
+    }
+}
+
+impl Drop for StatusWriter {
+    fn drop(&mut self) {
+        // 调用者取消时也由同一个内核效应完成最终写入和释放。
+        drop(self.lifetime.dispose());
     }
 }
 
@@ -510,14 +562,19 @@ mod tests {
                 .unwrap(),
         );
         let diagnostics = Arc::new(Mutex::new(Diagnostics::default()));
-        let view = View::new(&manager, diagnostics);
+        let view = View::new(&manager, diagnostics.clone());
         let writer = StatusWriter::start(
+            &root,
             view,
             directory.join("status.json"),
             Logs(Arc::downgrade(&manager)),
-        );
+        )
+        .unwrap();
         tokio::task::yield_now().await;
-        assert!(!writer.task.is_finished(), "状态写入失败后继续运行发布任务");
+        assert!(
+            writer.outcome.lock().is_none(),
+            "状态写入失败后继续运行发布任务"
+        );
         fs::remove_dir(directory.join("status.json.next")).unwrap();
         writer.refresh.notify_one();
         tokio::time::timeout(Duration::from_secs(2), async {
@@ -527,6 +584,184 @@ mod tests {
         })
         .await
         .unwrap();
+        diagnostics.lock().phase = "stopped".into();
+        writer.finish().await.unwrap();
+        let final_status: serde_json::Value =
+            serde_json::from_slice(&fs::read(directory.join("status.json")).unwrap()).unwrap();
+        assert_eq!(final_status["phase"], "stopped");
+        manager.shutdown().await.unwrap();
+        root.fiber().dispose().await.unwrap();
+        case.success();
+    }
+
+    #[tokio::test]
+    async fn root_dispose_stops_publisher_before_its_first_poll() {
+        let case =
+            TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "status-root-owner");
+        let path = case.directory("status-root-owner").join("status.json");
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let root = Context::new(Arc::new(Executor::new()));
+        let manager = Arc::new(
+            Manager::new(root.clone(), ManagerOptions::default())
+                .await
+                .unwrap(),
+        );
+        let diagnostics = Arc::new(Mutex::new(Diagnostics {
+            phase: "stopped".into(),
+            ..Diagnostics::default()
+        }));
+        let writer = StatusWriter::start(
+            &root,
+            View::new(&manager, diagnostics),
+            path.clone(),
+            Logs(Arc::downgrade(&manager)),
+        )
+        .unwrap();
+        tokio::time::timeout(Duration::from_secs(2), root.fiber().dispose())
+            .await
+            .unwrap()
+            .unwrap();
+        writer.completed().await.unwrap();
+        assert!(root.fiber().effects().is_empty());
+        let final_status: serde_json::Value =
+            serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        assert_eq!(final_status["phase"], "stopped");
+        fs::remove_file(&path).unwrap();
+        writer.refresh.notify_one();
+        tokio::task::yield_now().await;
+        assert!(!path.exists(), "released publisher cannot write again");
+        writer.finish().await.unwrap();
+        manager.shutdown().await.unwrap();
+        case.success();
+    }
+
+    #[tokio::test]
+    async fn dropping_status_owner_completes_final_snapshot() {
+        let case =
+            TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "status-drop-owner");
+        let path = case.directory("status-drop-owner").join("status.json");
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let root = Context::new(Arc::new(Executor::new()));
+        let manager = Arc::new(
+            Manager::new(root.clone(), ManagerOptions::default())
+                .await
+                .unwrap(),
+        );
+        let view = View::new(
+            &manager,
+            Arc::new(Mutex::new(Diagnostics {
+                phase: "cancelled".into(),
+                ..Diagnostics::default()
+            })),
+        );
+        let writer =
+            StatusWriter::start(&root, view, path.clone(), Logs(Arc::downgrade(&manager))).unwrap();
+        let completion = writer.completed();
+        let outcome = writer.outcome.clone();
+        drop(writer);
+        tokio::time::timeout(Duration::from_secs(2), completion)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(outcome.lock().as_ref().unwrap().is_ok());
+        let final_status: serde_json::Value =
+            serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        assert_eq!(final_status["phase"], "cancelled");
+        manager.shutdown().await.unwrap();
+        root.fiber().dispose().await.unwrap();
+        case.success();
+    }
+
+    #[tokio::test]
+    async fn final_status_error_is_repeatable_and_preserves_wire_error() {
+        let case =
+            TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "status-final-error");
+        let directory = case.directory("status-final-error");
+        fs::create_dir_all(directory.join("status.json.next")).unwrap();
+        let root = Context::new(Arc::new(Executor::new()));
+        let manager = Arc::new(
+            Manager::new(root.clone(), ManagerOptions::default())
+                .await
+                .unwrap(),
+        );
+        let writer = StatusWriter::start(
+            &root,
+            View::new(&manager, Arc::new(Mutex::new(Diagnostics::default()))),
+            directory.join("status.json"),
+            Logs(Arc::downgrade(&manager)),
+        )
+        .unwrap();
+        writer.lifetime.dispose().await.unwrap();
+        let expected = writer.outcome.lock().clone().unwrap().unwrap_err();
+        assert_eq!(writer.completed().await.unwrap_err(), expected);
+        assert_eq!(writer.completed().await.unwrap_err(), expected);
+        assert_eq!(writer.finish().await.unwrap_err(), expected);
+        assert!(
+            root.fiber()
+                .effects()
+                .iter()
+                .all(|effect| effect.label != "runtime-status")
+        );
+        manager.shutdown().await.unwrap();
+        root.fiber().dispose().await.unwrap();
+        case.success();
+    }
+
+    #[tokio::test]
+    async fn publisher_panic_is_reported_without_a_written_outcome() {
+        let root = Context::new(Arc::new(Executor::new()));
+        let worker = root
+            .effect_async("status-publisher", |_| async {
+                panic!("publisher panicked before recording its result");
+            })
+            .unwrap();
+        let lifetime = root
+            .effect("runtime-status", |scope| scope.adopt(worker.clone()))
+            .unwrap();
+        let outcome = Arc::new(Mutex::new(None));
+        let writer = StatusWriter {
+            refresh: Arc::new(Notify::new()),
+            lifetime,
+            completion: StatusWriter::completion(&worker, outcome.clone()),
+            outcome,
+        };
+        let problem = writer.finish().await.unwrap_err();
+        assert_eq!(problem.code, 1);
+        assert_eq!(
+            problem.message,
+            "publisher panicked before recording its result"
+        );
+        assert!(root.fiber().effects().is_empty());
+        root.fiber().dispose().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn cancelled_status_observers_reuse_one_wait_task() {
+        let case =
+            TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "status-observers");
+        let path = case.directory("status-observers").join("status.json");
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let root = Context::new(Arc::new(Executor::new()));
+        let manager = Arc::new(
+            Manager::new(root.clone(), ManagerOptions::default())
+                .await
+                .unwrap(),
+        );
+        let before = STATUS_WAIT_CONSTRUCTIONS.with(std::cell::Cell::get);
+        let writer = StatusWriter::start(
+            &root,
+            View::new(&manager, Arc::new(Mutex::new(Diagnostics::default()))),
+            path,
+            Logs(Arc::downgrade(&manager)),
+        )
+        .unwrap();
+        for _ in 0..1_000 {
+            assert!(writer.completed().now_or_never().is_none());
+        }
+        assert_eq!(
+            STATUS_WAIT_CONSTRUCTIONS.with(std::cell::Cell::get) - before,
+            1
+        );
         writer.finish().await.unwrap();
         manager.shutdown().await.unwrap();
         root.fiber().dispose().await.unwrap();

@@ -438,6 +438,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "cordis-artifact"
+version = "0.1.0"
+dependencies = [
+ "cordis-testkit",
+ "pathdiff",
+]
+
+[[package]]
 name = "cordis-channels"
 version = "0.1.0"
 dependencies = [
@@ -458,6 +466,7 @@ name = "cordis-dev"
 version = "0.3.0"
 dependencies = [
  "clap",
+ "cordis-artifact",
  "cordis-idl",
  "cordis-process",
  "cordis-testkit",
@@ -560,15 +569,18 @@ version = "0.1.11"
 dependencies = [
  "clap",
  "cordis",
+ "cordis-artifact",
  "cordis-supervisor",
  "cordis-testkit",
  "cordis-types",
  "cordis-up",
  "cordis-web-deployment",
+ "futures-util",
  "parking_lot 0.13.0",
  "semver",
  "serde",
  "serde_json",
+ "sha2",
  "tokio",
  "toml 1.2.1+spec-1.1.0",
  "uuid",

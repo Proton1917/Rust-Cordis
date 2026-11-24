@@ -10,6 +10,7 @@ pub(super) struct TargetDeployment {
     instances: BTreeMap<String, Mounted>,
     // 已启动宿主可能继续持有暂时无实例的库，直到整组退役。
     groups: BTreeMap<String, Vec<Package>>,
+    group_references: HashMap<(String, String), String>,
     migrated: bool,
 }
 
@@ -47,7 +48,11 @@ impl Controller {
         }
         self.refresh()?;
         if target.migrated || self.store.accepted_base()?.is_none() {
-            self.sources.observe(&self.manager);
+            self.sources.observe(&InstanceOwners {
+                mounted: &self.mounted,
+                manager: &self.manager,
+                web: &self.web,
+            });
             let decision = self.sources.commit(
                 &self.store,
                 &self.configuration,
@@ -178,12 +183,7 @@ impl Controller {
                     old.settings == item.settings
                         && old.package.reference == item.package.reference
                         && Arc::ptr_eq(&old.scope, &item.scope)
-                }) && (if matches!(item.package.entry, Entry::Web) {
-                    self.web.instance_fiber(name)
-                } else {
-                    self.manager.instance_fiber(name)
-                })
-                .is_ok_and(|fiber| {
+                }) && self.instance_fiber(name).is_ok_and(|fiber| {
                     fiber.is_settled()
                         && matches!(
                             fiber.state(),
@@ -409,6 +409,7 @@ impl Controller {
             overlay,
             instances: BTreeMap::new(),
             groups: BTreeMap::new(),
+            group_references: HashMap::new(),
             migrated: false,
         };
         target.migrated = self
@@ -478,7 +479,7 @@ impl Controller {
         let scope = if remount {
             let view = self.mount_view(&settings)?;
             let manage = self.provide_management(&settings, &view)?;
-            Arc::new(MountScope { view, manage })
+            Arc::new(MountScope::new(view, manage, self.logs.clone()))
         } else {
             old.expect("existing view").scope.clone()
         };
@@ -520,13 +521,20 @@ impl Controller {
             settings.plugin = package.reference.clone();
         }
         if !matches!(package.entry, Entry::Web) {
-            let packages = target.groups.entry(group.clone()).or_default();
-            if let Some(previous) = packages.iter().find(|item| item.name == package.name) {
-                if previous.reference != package.reference {
+            let key = (group.clone(), package.name.clone());
+            if let Some(previous) = target.group_references.get(&key) {
+                if previous != &package.reference {
                     return Err(parameter("最终分组包含同逻辑插件的不同来源"));
                 }
             } else {
-                packages.push(package.clone());
+                target
+                    .group_references
+                    .insert(key, package.reference.clone());
+                target
+                    .groups
+                    .entry(group.clone())
+                    .or_default()
+                    .push(package.clone());
             }
         }
         Ok((package, group))
@@ -534,29 +542,35 @@ impl Controller {
 
     /// DOC-15 §3.2、DOC-11 §7：保存原始成员条目及实际装载引用，继承的scope信息继续由配置展开。
     fn record_batch_version(&self, target: &mut TargetDeployment, name: &str, package: &Package) {
-        let raw = target.configuration.entries(&target.overlay);
-        let mut entry = OverlayEntry::from(&raw[name]);
+        let raw = target
+            .configuration
+            .entry(&target.overlay, name)
+            .expect("target member");
+        let mut entry = OverlayEntry::from(&raw);
         entry.plugin = package.reference.clone();
         target.overlay.instance.insert(name.into(), entry);
         if let Some(previous) = self.mounted.get(name) {
-            let raw = self.configuration.entries(&self.overlay);
-            let mut previous_entry = OverlayEntry::from(&raw[name]);
-            previous_entry.plugin = previous.package.reference.clone();
-            target.overlay.previous.insert(name.into(), previous_entry);
+            target.overlay.previous.insert(
+                name.into(),
+                OverlayEntry::previous(previous.package.reference.clone()),
+            );
         }
     }
 
     /// ADR-0031：已有实例使用实际组件名和原视图，供批次失败时恢复相同部署。
     fn batch_current_instances(&self) -> Result<Vec<BatchInstance>> {
         let snapshot = self.manager.snapshot();
+        let actual: HashMap<_, _> = snapshot
+            .instances
+            .iter()
+            .map(|instance| (instance.name.as_str(), instance))
+            .collect();
         self.mounted
             .iter()
             .filter(|(_, item)| !matches!(item.package.entry, Entry::Web))
             .map(|(name, item)| {
-                let actual = snapshot
-                    .instances
-                    .iter()
-                    .find(|instance| instance.name == *name)
+                let actual = actual
+                    .get(name.as_str())
                     .ok_or_else(|| WireError::new(4, "运行目录缺少已挂载实例"))?;
                 item.registration(name, Some(&actual.component), false)
             })
@@ -588,23 +602,26 @@ impl Controller {
         let mut replacements = Vec::new();
         for (group, packages) in target {
             let previous = self.groups.get(group);
-            let native = packages
-                .iter()
-                .all(|package| matches!(package.entry, Entry::Native { .. }))
-                && previous.is_some_and(|old| {
-                    old.len() == packages.len()
-                        && old
-                            .iter()
-                            .all(|item| matches!(item.entry, Entry::Native { .. }))
-                        && old
-                            .iter()
-                            .all(|item| packages.iter().any(|package| package.name == item.name))
+            let old_by_name: HashMap<_, _> = previous
+                .into_iter()
+                .flatten()
+                .map(|package| (package.name.as_str(), package))
+                .collect();
+            let old_references: BTreeSet<_> = previous
+                .into_iter()
+                .flatten()
+                .map(|package| package.reference.as_str())
+                .collect();
+            let native = previous.is_some_and(|old| old.len() == packages.len())
+                && packages.iter().all(|package| {
+                    matches!(package.entry, Entry::Native { .. })
+                        && old_by_name
+                            .get(package.name.as_str())
+                            .is_some_and(|old| matches!(old.entry, Entry::Native { .. }))
                 });
             if native {
                 for package in packages {
-                    if previous.is_some_and(|old| {
-                        old.iter().any(|item| item.reference == package.reference)
-                    }) {
+                    if old_references.contains(package.reference.as_str()) {
                         continue;
                     }
                     let Entry::Native { library } = &package.entry else {
@@ -620,7 +637,7 @@ impl Controller {
                 old.len() != packages.len()
                     || packages
                         .iter()
-                        .any(|package| !old.iter().any(|item| item.reference == package.reference))
+                        .any(|package| !old_references.contains(package.reference.as_str()))
             }) {
                 replacements.push(BatchReplacement::Process(self.group_plan(group, packages)?));
             }
@@ -643,7 +660,11 @@ impl Controller {
                 .iter()
                 .map(|(name, item)| (name, &item.settings, &item.package)),
         );
-        next.observe(&self.manager);
+        next.observe(&InstanceOwners {
+            mounted: &target.instances,
+            manager: &self.manager,
+            web: &self.web,
+        });
         let decision = next.commit(&self.store, &target.configuration, &target.overlay, states);
         self.record_decision(decision)?;
         self.sources = next;
@@ -704,8 +725,8 @@ impl Mounted {
     }
 
     pub(super) async fn release(self) -> Result<()> {
-        if let Some(grant) = Arc::into_inner(self.scope).and_then(|scope| scope.manage) {
-            grant.dispose().await.map_err(kernel)?;
+        if let Some(scope) = Arc::into_inner(self.scope) {
+            scope.release().await?;
         }
         Ok(())
     }

@@ -1,0 +1,13 @@
+[package]
+name = "cordis-artifact"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[dependencies]
+pathdiff = "=0.2.3"
+
+[dev-dependencies]
+cordis-testkit.workspace = true

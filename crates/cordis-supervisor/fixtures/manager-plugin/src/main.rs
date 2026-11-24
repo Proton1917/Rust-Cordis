@@ -46,6 +46,7 @@ struct Config {
     invalid: bool,
     service_file: Option<std::path::PathBuf>,
     export_gate: Option<std::path::PathBuf>,
+    thaw_error: bool,
     metadata_size: usize,
     scoped: bool,
     refs: Vec<u64>,
@@ -59,6 +60,7 @@ impl Default for Config {
             invalid: false,
             service_file: None,
             export_gate: None,
+            thaw_error: false,
             metadata_size: 0,
             scoped: false,
             refs: Vec::new(),
@@ -1057,6 +1059,9 @@ impl Handler for Program {
                     let session = session
                         .upgrade()
                         .ok_or_else(|| WireError::new(4, "context retired"))?;
+                    if session.config.thaw_error {
+                        return Err(WireError::new(1001, "fixture thaw failed"));
+                    }
                     session.counter.data.lock().frozen = false;
                     Value::Null
                 }
