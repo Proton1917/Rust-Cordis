@@ -98,9 +98,41 @@ fn publish(path: &Path, bytes: &[u8], durable: bool) -> Result<()> {
 }
 
 fn sync_directory(path: &Path) -> Result<()> {
+    #[cfg(test)]
+    sync_test::before(path)?;
     File::open(path)
         .and_then(|directory| directory.sync_all())
         .map_err(io_error)
+}
+
+#[cfg(test)]
+pub(crate) mod sync_test {
+    use super::*;
+    use std::cell::RefCell;
+
+    thread_local! {
+        static CALLS: RefCell<Vec<PathBuf>> = const { RefCell::new(Vec::new()) };
+        static FAILURE: RefCell<Option<PathBuf>> = const { RefCell::new(None) };
+    }
+
+    pub(crate) fn fail_next(path: &Path) {
+        FAILURE.with(|failure| *failure.borrow_mut() = Some(path.to_owned()));
+    }
+
+    pub(crate) fn calls(path: &Path) -> usize {
+        CALLS.with(|calls| calls.borrow().iter().filter(|call| *call == path).count())
+    }
+
+    pub(super) fn before(path: &Path) -> Result<()> {
+        CALLS.with(|calls| calls.borrow_mut().push(path.to_owned()));
+        if FAILURE.with(|failure| failure.borrow().as_deref() == Some(path)) {
+            FAILURE.with(|failure| failure.borrow_mut().take());
+            return Err(io_error(std::io::Error::other(
+                "injected directory sync failure",
+            )));
+        }
+        Ok(())
+    }
 }
 
 /// CP-8、CP-9：状态块使用 UP/1 受限 CBOR 解码器和共享 State 数据定义。
@@ -127,6 +159,7 @@ struct PublishedCheckpoint {
 
 #[derive(Default)]
 struct CheckpointCache {
+    directory: PathBuf,
     entries: HashMap<String, PublishedCheckpoint>,
     order: BTreeMap<u64, String>,
     bytes: usize,
@@ -140,6 +173,17 @@ struct CheckpointCache {
 }
 
 impl CheckpointCache {
+    fn bind(&mut self, directory: &Path) {
+        if self.directory != directory {
+            self.clear();
+            self.directory = directory.to_owned();
+        } else if !directory.is_absolute() {
+            // The public Store path may be reassigned. A relative spelling can
+            // resolve differently after a process cwd change, so it is not a key.
+            self.clear();
+        }
+    }
+
     fn remove(&mut self, name: &str) {
         if let Some(old) = self.entries.remove(name) {
             self.order.remove(&old.age);
@@ -229,7 +273,14 @@ fn value_heap(value: &Value) -> usize {
 }
 
 // Equality used to skip encoding preserves signed zero and floating bit patterns.
+#[cfg(test)]
+thread_local! {
+    static VALUE_COMPARISONS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
 fn same_value(left: &Value, right: &Value) -> bool {
+    #[cfg(test)]
+    VALUE_COMPARISONS.with(|count| count.set(count.get() + 1));
     match (left, right) {
         (Value::Float(left), Value::Float(right)) => left.to_bits() == right.to_bits(),
         (Value::Array(left), Value::Array(right)) => {
@@ -248,6 +299,9 @@ fn same_value(left: &Value, right: &Value) -> bool {
 }
 
 fn same_state(left: &payload::State, right: &payload::State) -> bool {
+    if std::ptr::eq(left, right) {
+        return true;
+    }
     left.schema == right.schema
         && left.version == right.version
         && same_value(&left.data, &right.data)
@@ -607,7 +661,18 @@ impl Store {
     /// DOC-15 §3.2：序列化已提交部署并原子发布 instances.toml。
     pub fn save_overlay(&self, overlay: &Overlay) -> Result<()> {
         let bytes = encode_overlay(overlay)?;
-        write(&self.directory.join("instances.toml"), bytes.as_bytes())
+        self.publish_record("instances.toml", bytes.as_bytes())
+    }
+
+    /// ADR-0054：来源确认与离线读取使用同一写入边界，目录同步后才确认成功。
+    pub(crate) fn save_sources(&self, bytes: &[u8]) -> Result<()> {
+        self.publish_record("sources.json", bytes)
+    }
+
+    fn publish_record(&self, name: &str, bytes: &[u8]) -> Result<()> {
+        let _lock = self.lock_deployment()?;
+        write(&self.directory.join(name), bytes)?;
+        sync_directory(&self.directory)
     }
 
     /// CP-11：实例重启时读取最近一次保存的检查点。
@@ -655,7 +720,9 @@ impl Store {
     ) -> Result<()> {
         let _lock = self.lock_deployment()?;
         let mut cache = self.checkpoints.lock();
+        cache.bind(&self.directory);
         let mut failure = None;
+        let mut needs_sync = false;
         for (name, state, shared) in states {
             let result: Result<()> = (|| {
                 config::instance_name(name)?;
@@ -673,6 +740,7 @@ impl Store {
                     .map_err(parameter)?
                     .into();
                 let path = self.directory.join(format!("{name}.state"));
+                let published = cache.entries.contains_key(name);
                 let unchanged = match cache.entries.get(name) {
                     Some(previous) => previous.bytes == bytes,
                     None => {
@@ -690,7 +758,17 @@ impl Store {
                         cache.writes += 1;
                     }
                     write(&path, &bytes)?;
+                    needs_sync = true;
+                } else if !published {
+                    // A readable file can come from a publication whose directory
+                    // sync failed. Confirm both its contents and name once before
+                    // making it eligible for the warm-cache fast path.
+                    File::open(&path)
+                        .and_then(|file| file.sync_all())
+                        .map_err(io_error)?;
+                    needs_sync = true;
                 }
+                // The cache lock keeps this batch private until directory sync.
                 cache.remember(name, shared.cloned(), bytes);
                 Ok(())
             })();
@@ -702,6 +780,10 @@ impl Store {
                     )
                 });
             }
+        }
+        if needs_sync && let Err(problem) = sync_directory(&self.directory) {
+            cache.clear();
+            failure.get_or_insert(problem);
         }
         failure.map_or(Ok(()), Err)
     }
@@ -722,6 +804,9 @@ impl Store {
             } else {
                 remove_file(&self.directory.join(format!("{name}.state")))?;
             }
+        }
+        if !states.is_empty() {
+            sync_directory(&self.directory)?;
         }
         Ok(())
     }
@@ -782,6 +867,123 @@ mod tests {
             store.load("panel").unwrap().unwrap().data,
             Value::from(42u64)
         );
+        case.success();
+    }
+
+    #[test]
+    fn checkpoint_shared_identity_skips_value_scans() {
+        let case = TestGuard::for_package(
+            Path::new(env!("CARGO_MANIFEST_DIR")),
+            "checkpoint-shared-identity",
+        );
+        let store = Store::create(case.directory("checkpoint-shared-identity")).unwrap();
+        let original = snapshot(Value::Array(
+            (0..256)
+                .map(|index| Value::Bytes(vec![index as u8; 4096]))
+                .collect(),
+        ));
+        let states = HashMap::from([("panel".into(), original.clone())]);
+        store.checkpoint_shared(&states).unwrap();
+        let comparisons = VALUE_COMPARISONS.with(std::cell::Cell::get);
+        for _ in 0..1_000 {
+            store.checkpoint_shared(&states).unwrap();
+        }
+        assert_eq!(VALUE_COMPARISONS.with(std::cell::Cell::get), comparisons);
+        let distinct = HashMap::from([("panel".into(), snapshot(original.data.clone()))]);
+        store.checkpoint_shared(&distinct).unwrap();
+        assert_eq!(
+            VALUE_COMPARISONS.with(std::cell::Cell::get),
+            comparisons + 257
+        );
+        let cache = store.checkpoints.lock();
+        assert_eq!((cache.encodes, cache.reads, cache.writes), (1, 1, 1));
+        drop(cache);
+        case.success();
+    }
+
+    #[test]
+    fn checkpoint_cache_follows_each_stores_directory() {
+        let case = TestGuard::for_package(
+            Path::new(env!("CARGO_MANIFEST_DIR")),
+            "checkpoint-directory-owner",
+        );
+        let first = Store::create(case.directory("checkpoint-directory-first")).unwrap();
+        let second = Store::create(case.directory("checkpoint-directory-second")).unwrap();
+        let mut moved = first.clone();
+        let one = HashMap::from([("panel".into(), snapshot(1u64.into()))]);
+        first.checkpoint_shared(&one).unwrap();
+        moved.directory = second.directory;
+        moved.checkpoint_shared(&one).unwrap();
+        assert_eq!(moved.load("panel").unwrap().unwrap().data, 1u64.into());
+        let two = HashMap::from([("panel".into(), snapshot(2u64.into()))]);
+        moved.checkpoint_shared(&two).unwrap();
+        first.checkpoint_shared(&two).unwrap();
+        assert_eq!(first.load("panel").unwrap().unwrap().data, 2u64.into());
+        moved.checkpoint_shared(&two).unwrap();
+        assert_eq!(moved.load("panel").unwrap().unwrap().data, 2u64.into());
+
+        // Relative Store paths remain supported; a reused spelling is not proof
+        // of the same directory when the process can change its working directory.
+        let mut cache = CheckpointCache::default();
+        cache.bind(Path::new("state"));
+        cache.remember("panel", None, Arc::from([0u8]));
+        cache.bind(Path::new("state"));
+        assert!(cache.entries.is_empty());
+        case.success();
+    }
+
+    #[test]
+    fn checkpoint_batch_confirms_directory_before_reusing_published_bytes() {
+        let case = TestGuard::for_package(
+            Path::new(env!("CARGO_MANIFEST_DIR")),
+            "checkpoint-directory-sync",
+        );
+        let store = Store::create(case.directory("checkpoint-directory-sync")).unwrap();
+        let states = HashMap::from([
+            ("first".into(), snapshot(1u64.into())),
+            ("second".into(), snapshot(2u64.into())),
+        ]);
+        sync_test::fail_next(&store.directory);
+        let failure = store.checkpoint_shared(&states).unwrap_err();
+        assert!(failure.message.contains("directory sync failure"));
+        // Real file writes and renames completed before the injected barrier failure.
+        assert_eq!(store.load("first").unwrap().unwrap().data, 1u64.into());
+        assert_eq!(store.load("second").unwrap().unwrap().data, 2u64.into());
+        assert!(store.checkpoints.lock().entries.is_empty());
+        assert_eq!(sync_test::calls(&store.directory), 1);
+
+        store.clone().checkpoint_shared(&states).unwrap();
+        assert_eq!(sync_test::calls(&store.directory), 2);
+        {
+            let cache = store.checkpoints.lock();
+            assert_eq!(cache.entries.len(), 2);
+            assert_eq!((cache.encodes, cache.reads, cache.writes), (4, 4, 2));
+        }
+        store.checkpoint_shared(&states).unwrap();
+        assert_eq!(sync_test::calls(&store.directory), 2);
+        let cache = store.checkpoints.lock();
+        assert_eq!((cache.encodes, cache.reads, cache.writes), (4, 4, 2));
+        drop(cache);
+        case.success();
+    }
+
+    #[test]
+    fn ordinary_records_and_state_restoration_require_directory_confirmation() {
+        let case = TestGuard::for_package(
+            Path::new(env!("CARGO_MANIFEST_DIR")),
+            "record-directory-sync",
+        );
+        let store = Store::create(case.directory("record-directory-sync")).unwrap();
+        sync_test::fail_next(&store.directory);
+        assert!(store.save_overlay(&Overlay::default()).is_err());
+        sync_test::fail_next(&store.directory);
+        assert!(store.save_sources(b"{}").is_err());
+        let states = HashMap::from([("panel".into(), Some(snapshot(1u64.into())))]);
+        sync_test::fail_next(&store.directory);
+        assert!(store.restore_states(&states).is_err());
+        assert_eq!(sync_test::calls(&store.directory), 3);
+        store.restore_states(&states).unwrap();
+        assert_eq!(sync_test::calls(&store.directory), 4);
         case.success();
     }
 
@@ -1227,6 +1429,11 @@ mod tests {
             store.load(healthy).unwrap().unwrap().data,
             Value::from(37u64)
         );
+        assert_eq!(sync_test::calls(&store.directory), 1);
+        let cache = store.checkpoints.lock();
+        assert!(cache.entries.contains_key(healthy));
+        assert!(!cache.entries.contains_key(blocked));
+        drop(cache);
         case.success();
     }
 }

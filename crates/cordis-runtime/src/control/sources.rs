@@ -167,12 +167,52 @@ impl SourceBindings {
         Ok(committed)
     }
 
-    pub(super) fn confirm(&mut self, manager: &Manager) -> Result<()> {
+    pub(super) fn confirm(&mut self, manager: &Manager, store: &Store) -> Result<()> {
         self.observe(manager);
+        self.publish(store)
+    }
+
+    fn publish(&mut self, store: &Store) -> Result<()> {
         if self.dirty {
-            crate::storage::write(&self.path, &self.encoded()?)?;
+            store.save_sources(&self.encoded()?)?;
             self.dirty = false;
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::storage::sync_test;
+    use cordis_testkit::cleanup::TestGuard;
+
+    #[test]
+    fn source_confirmation_remains_dirty_until_directory_sync_succeeds() {
+        let case = TestGuard::for_package(
+            Path::new(env!("CARGO_MANIFEST_DIR")),
+            "source-directory-sync",
+        );
+        let store = Store::create(case.directory("source-directory-sync")).unwrap();
+        let path = store.directory.join("sources.json");
+        let mut sources = SourceBindings::new(path.clone(), "plugins".into());
+        sources.load().unwrap();
+        assert!(sources.dirty);
+        sync_test::fail_next(&store.directory);
+        let failure = sources.publish(&store).unwrap_err();
+        assert!(failure.message.contains("directory sync failure"));
+        assert!(sources.dirty);
+        assert_eq!(sync_test::calls(&store.directory), 1);
+        sources.publish(&store).unwrap();
+        assert!(!sources.dirty);
+        assert_eq!(sync_test::calls(&store.directory), 2);
+        sources.publish(&store).unwrap();
+        assert_eq!(sync_test::calls(&store.directory), 2);
+        let offline = offline_sources(&path, &store.directory).unwrap();
+        assert_eq!(
+            serde_json::to_value(offline).unwrap()["instances"],
+            serde_json::json!({})
+        );
+        case.success();
     }
 }
