@@ -179,7 +179,7 @@ impl Controller {
         if let Some(problem) = &self.recovery_required {
             return Err(problem.clone());
         }
-        self.sources.confirm(&self.manager)
+        self.sources.confirm(&self.manager, &self.store)
     }
 
     fn record_decision(
