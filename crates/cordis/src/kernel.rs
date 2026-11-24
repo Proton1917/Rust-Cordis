@@ -63,6 +63,8 @@ pub(crate) struct State {
     pub draining: bool,
     #[cfg(test)]
     pub panic_on_drain: bool,
+    #[cfg(test)]
+    pub before_mount_effect: Option<Box<dyn FnOnce() + Send>>,
     pub runtimes: HashMap<ComponentId, RuntimeData>,
     pub logger: LoggerState,
     pub aliases: HashMap<ComponentId, ComponentId>,
@@ -117,6 +119,8 @@ impl Kernel {
                     draining: false,
                     #[cfg(test)]
                     panic_on_drain: false,
+                    #[cfg(test)]
+                    before_mount_effect: None,
                     runtimes: HashMap::new(),
                     logger: LoggerState::default(),
                     aliases: HashMap::new(),

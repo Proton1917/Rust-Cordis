@@ -530,7 +530,7 @@ impl Context {
         let location = Location::caller();
         let id = {
             let mut state = self.kernel.state.lock();
-            if !state.fibers[self.scope.fiber].alive {
+            if !self.permits_effect(&state) {
                 return Err(Error::inactive().at(location));
             }
             let target = forward(&state, component.id);
@@ -550,6 +550,7 @@ impl Context {
                 fiber: id,
                 layer: Layer::Fiber,
                 lease: Some(Arc::downgrade(&self.kernel)),
+                has_epoch_guard: false,
             });
             state.fibers[id].canonical_scope = Arc::downgrade(&scope);
             state.fibers[id].scope = Some(scope);
@@ -565,6 +566,13 @@ impl Context {
             id
         };
         let fiber = Fiber::handle(&self.kernel, id, &self.kernel.state.lock());
+        #[cfg(test)]
+        {
+            let before = self.kernel.state.lock().before_mount_effect.take();
+            if let Some(before) = before {
+                before();
+            }
+        }
         let child = fiber.clone();
         let effect = self.effect("ctx.use()", move |fx| {
             child.kernel.state.lock().fibers[child.id].lifetime = Some(fx.effect_id());
@@ -613,4 +621,94 @@ pub(crate) fn unregister(state: &mut State, id: FiberId) -> Option<RuntimeData> 
         }
     }
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{Clock, Spawn};
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::time::{Duration, Instant};
+
+    struct Host {
+        runtime: tokio::runtime::Handle,
+        start: Instant,
+    }
+
+    impl Spawn for Host {
+        fn spawn(&self, task: Task) {
+            self.runtime.spawn(task);
+        }
+    }
+
+    impl Clock for Host {
+        fn now(&self) -> Duration {
+            self.start.elapsed()
+        }
+
+        fn sleep(&self, duration: Duration) -> Task {
+            Box::pin(tokio::time::sleep(duration))
+        }
+    }
+
+    #[test]
+    fn retired_parent_cannot_adopt_child_created_before_effect_admission() {
+        let runtime = Arc::new(
+            tokio::runtime::Builder::new_current_thread()
+                .enable_time()
+                .build()
+                .unwrap(),
+        );
+        let root = Context::new(Arc::new(Host {
+            runtime: runtime.handle().clone(),
+            start: Instant::now(),
+        }));
+        let parent = root.inject(Inject::new(), |_| async { Ok(()) }).unwrap();
+        runtime.block_on(parent.settled()).unwrap();
+        let captured = parent.context().for_epoch(Arc::new(parent.epoch()));
+        let baseline = {
+            let state = root.kernel.state.lock();
+            (
+                state.fibers.len(),
+                state.runtimes.len(),
+                state.effects.len(),
+            )
+        };
+        let applied = Arc::new(AtomicUsize::new(0));
+        let observed = applied.clone();
+        let child = ComponentDef::new("queued-child", Inject::new(), move |_, ()| {
+            observed.fetch_add(1, Ordering::SeqCst);
+            async { Ok(()) }
+        });
+        let restarting = parent.clone();
+        let restart_runtime = runtime.clone();
+        root.kernel.state.lock().before_mount_effect = Some(Box::new(move || {
+            // The old view passed the first check and inserted a child record.
+            // Complete a real unload/reload before the ownership effect registers.
+            restart_runtime.block_on(restarting.restart()).unwrap();
+            assert!(restarting.context().is_current());
+        }));
+
+        let result = captured.mount_with(&child, ());
+        assert!(
+            result.is_err(),
+            "the replacement generation cannot adopt old work"
+        );
+        assert!(!captured.is_current());
+        runtime.block_on(tokio::task::yield_now());
+        assert_eq!(applied.load(Ordering::SeqCst), 0);
+        {
+            let state = root.kernel.state.lock();
+            assert_eq!(
+                (
+                    state.fibers.len(),
+                    state.runtimes.len(),
+                    state.effects.len()
+                ),
+                baseline,
+                "rejected mount releases its precreated fiber, runtime and effects"
+            );
+        }
+        runtime.block_on(root.fiber().dispose()).unwrap();
+    }
 }

@@ -5,16 +5,22 @@ on:
     paths:
       - 'crates/cordis/**'
       - 'crates/cordis-testkit/**'
+      - 'crates/cordis-supervisor/**'
+      - 'crates/cordis-web-deployment/**'
+      - 'crates/cordis-host/tests/driver/**'
       - 'Cargo.toml'
       - 'Cargo.lock'
       - 'rust-toolchain.toml'
       - 'docs/04-conformance.md'
+      - 'docs/01-semantics.md'
       - 'tools/conformance*.py'
       - 'tools/tests/test_conformance_run.py'
       - 'formal/**'
       - 'tools/verify_semantics.py'
       - 'tools/tests/test_verify_semantics.py'
       - 'docs/formal-semantics.md'
+      - 'docs/component-ownership.md'
+      - 'docs/adr/0041-routing-channels-web-deployment.md'
       - '.github/workflows/conformance.yml'
   push:
     branches: [main]
@@ -46,7 +52,11 @@ jobs:
       - name: Check semantic evidence failure paths
         run: python3 -m unittest discover -s tools/tests -p 'test_verify_semantics.py' -v
       - name: Check kernel ownership and epoch query integration
-        run: cargo test -p cordis --lib --test concurrency --test current_epoch --test event_hot_paths
+        run: cargo test -p cordis --lib --test concurrency --test current_epoch --test epoch_context --test event_hot_paths
+      - name: Check committed bindings and lifecycle-owned assembly
+        run: |
+          cargo test -p cordis-web-deployment --lib --tests
+          cargo test -p cordis-supervisor --lib --test manager -- --test-threads=2
       - name: Retrieve the immutable upstream test source
         run: |
           git init cordis

@@ -464,13 +464,13 @@ impl Manager {
         self.submit(
             move |manager| async move {
                 manager.running()?;
+                if !parent.is_current() {
+                    return Err(error(4, "页面 Owner 已进入清理"));
+                }
                 let view = manager.derive_context(&parent, &options)?;
                 let definition = manager
                     .mount_definition(&specification, inherited.as_deref())
                     .await?;
-                if !parent.is_current() {
-                    return Err(error(4, "页面 Owner 已进入清理"));
-                }
                 manager
                     .install_child(&parent, view, specification, definition, inherited)
                     .await

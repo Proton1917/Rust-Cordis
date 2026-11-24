@@ -3,6 +3,7 @@
 mod batch;
 mod generation;
 mod handlers;
+mod instance;
 mod lifecycle;
 mod metadata;
 mod model;
@@ -16,6 +17,7 @@ pub use batch::{
     BatchCompletion, BatchFailure, BatchInstance, BatchReplacement, DeploymentDecision,
 };
 pub use cordis_routing::{Arguments, CallContext, LocalReply, LocalService};
+pub use instance::{InstanceGeneration, InstanceLifecycle};
 pub use lifecycle::FrozenSnapshot;
 pub use model::{
     Failure, GroupSnapshot, GroupSpec, InstanceSnapshot, InstanceSpec, LogOrigin, LogRecord,
