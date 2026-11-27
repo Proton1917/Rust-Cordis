@@ -47,6 +47,64 @@ class SemanticEvidenceFailures(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "repeated"):
             verify.parse_vectors("idle\t0\tDisposed\nidle\t0\tDisposed\n")
 
+    def test_new_lean_module_cannot_escape_closed_inventory(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "Proof.lean").write_text("import Std\nnamespace Cordis.Proof\ntheorem valid : True := by trivial\nend Cordis.Proof\n")
+            (root / "Audit.lean").write_text("import Lean\n")
+            (root / "lakefile.toml").write_text(
+                'defaultTargets = ["Proof", "Audit"]\n'
+                '[[lean_lib]]\nname = "Proof"\n[[lean_lib]]\nname = "Audit"\n')
+            (root / "lake-manifest.json").write_text('{"packages": []}')
+            with patch.object(verify, "FORMAL", root), \
+                    patch.object(verify, "PROOFS", {"Proof.lean": "Cordis.Proof"}), \
+                    patch.object(verify, "PROGRAMS", {"Audit.lean"}):
+                verify.check_module_inventory()
+                (root / "Unregistered.lean").write_text("import Std\n")
+                with self.assertRaisesRegex(RuntimeError, "unregistered.*Unregistered"):
+                    verify.check_module_inventory()
+
+    def test_private_helper_axiom_is_audited_even_when_not_in_public_theorem_list(self):
+        declarations = [
+            {"name": "Cordis.Proof.valid", "module": "Proof", "theorem": True, "compiler_auxiliary": False, "partial_definition": False, "axioms": []},
+            {"name": "_private.Proof.0.hidden", "module": "Proof", "theorem": False,
+             "compiler_auxiliary": False, "partial_definition": False, "axioms": ["sorryAx"]},
+        ]
+        with patch.object(verify, "PROOFS", {"Proof.lean": "Cordis.Proof"}):
+            with self.assertRaisesRegex(RuntimeError, "unapproved axiom dependency.*hidden"):
+                verify.parse_declaration_audit("CORDIS_AUDIT\t" + json.dumps(declarations), ["Cordis.Proof.valid"])
+
+    def test_kernel_census_must_include_every_proof_module_and_public_theorem(self):
+        declaration = {"name": "Cordis.Proof.valid", "module": "Proof", "theorem": True, "compiler_auxiliary": False, "partial_definition": False, "axioms": []}
+        output = "CORDIS_AUDIT\t" + json.dumps([declaration])
+        with patch.object(verify, "PROOFS", {"Proof.lean": "Cordis.Proof", "Missing.lean": "Cordis.Missing"}):
+            with self.assertRaisesRegex(RuntimeError, "module mismatch"):
+                verify.parse_declaration_audit(output, ["Cordis.Proof.valid"])
+        with patch.object(verify, "PROOFS", {"Proof.lean": "Cordis.Proof"}):
+            with self.assertRaisesRegex(RuntimeError, "omitted source theorems"):
+                verify.parse_declaration_audit(output, ["Cordis.Proof.unchecked"])
+
+    def test_kernel_census_rejects_duplicate_or_missing_receipts(self):
+        with self.assertRaisesRegex(RuntimeError, "exactly one census"):
+            verify.parse_declaration_audit("", [])
+        row = {"name": "Cordis.Proof.valid", "module": "Proof", "theorem": True, "compiler_auxiliary": False, "partial_definition": False, "axioms": []}
+        with self.assertRaisesRegex(RuntimeError, "duplicate kernel declaration"):
+            verify.parse_declaration_audit("CORDIS_AUDIT\t" + json.dumps([row, row]), [])
+
+    def test_compiler_erasure_is_never_admitted_as_a_logical_axiom(self):
+        proof = {"name": "Cordis.Proof.valid", "module": "Proof", "theorem": True,
+                 "compiler_auxiliary": False, "partial_definition": False, "axioms": []}
+        generated = {"name": "_private.Proof.compiler_stage", "module": "Proof", "theorem": False,
+                     "compiler_auxiliary": True, "partial_definition": False, "axioms": ["lcProof"]}
+        with patch.object(verify, "PROOFS", {"Proof.lean": "Cordis.Proof"}):
+            verify.parse_declaration_audit("CORDIS_AUDIT\t" + json.dumps([proof, generated]), [proof["name"]])
+            for malformed in [dict(proof, axioms=["lcProof"]),
+                              dict(generated, compiler_auxiliary=False),
+                              dict(proof, axioms=["untrusted"]),
+                              dict(generated, theorem=True)]:
+                with self.assertRaises(RuntimeError):
+                    verify.parse_declaration_audit("CORDIS_AUDIT\t" + json.dumps([malformed]), [])
+
 
 if __name__ == "__main__":
     unittest.main()

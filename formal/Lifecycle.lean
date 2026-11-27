@@ -13,15 +13,15 @@ namespace Cordis
 
 inductive Phase where
   | pending | loading | active | failed | disposed | unloading
-  deriving DecidableEq, Repr
+  deriving DecidableEq
 
 inductive Action where
   | keep | idle | load | unload
-  deriving DecidableEq, Repr
+  deriving DecidableEq
 
 inductive Target where
   | keep | resolved | inactive
-  deriving DecidableEq, Repr
+  deriving DecidableEq
 
 /-- A first-order decision program; generation only prints branches and leaves. -/
 inductive Tree (α : Type) (n : Nat) where
@@ -143,14 +143,14 @@ structure State where
   queued : Bool
   notifications : Nat
   effects : Nat
-  deriving DecidableEq, Repr
+  deriving DecidableEq
 
 /-- Outputs at a lock-protected controller boundary, before callbacks execute. -/
 structure Output where
   action : Action := .keep
   status : Option (Phase × Phase) := none
   commit : Option Epoch := none
-  deriving DecidableEq, Repr
+  deriving DecidableEq
 
 inductive Input where
   | refresh (resolved : Epoch)
@@ -162,7 +162,7 @@ inductive Input where
   | resume
   | notified
   | effects (count : Nat)
-  deriving DecidableEq, Repr
+  deriving DecidableEq
 
 structure Decisions where
   idle : Bool → Bool → Bool → Phase

@@ -4,8 +4,10 @@ import Admission
 Immutable context derivation and its cached guard-presence bit. The cache records
 view shape, never owner liveness or an epoch's current validity. Root and Fiber
 layers terminate the owning fiber's guard segment while retaining the parent
-chain for ordinary service lookup. Rust's FiberId boundary test and construction
-of these layers remain an explicit representation-refinement obligation.
+chain for ordinary service lookup. KernelRefinement proves the FiberId boundary
+projection for constructor-generated views and the same-snapshot registration
+update. Arena identity freshness, Arc representation and mutex semantics are
+the corresponding runtime contracts.
 -/
 
 namespace Cordis.Scopes
@@ -15,12 +17,12 @@ inductive Layer where
   | fiber
   | plain
   | epoch (captured : Epoch)
-  deriving DecidableEq, Repr
+  deriving DecidableEq
 
 structure Node where
   layer : Layer
   hasEpochGuard : Bool
-  deriving DecidableEq, Repr
+  deriving DecidableEq
 
 abbrev Scope := List Node
 

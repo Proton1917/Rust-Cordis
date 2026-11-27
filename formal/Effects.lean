@@ -15,13 +15,11 @@ structure State (α : Type) where
   cleaning : Bool := false
   pending : List α := []
   starts : Nat := 0
-  deriving Repr
 
 inductive Command (α : Type) where
   | defer (operation : α)
   | dispose
   | finish (failed : Bool)
-  deriving Repr
 
 /-- Only the cleanup claimant takes the owned stack. -/
 def claim (guard : Bool → Bool → Bool) (s : State α) : State α × List α :=

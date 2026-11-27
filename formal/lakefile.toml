@@ -1,6 +1,6 @@
 name = "cordis_semantics"
 version = "0.1.0"
-defaultTargets = ["Lifecycle", "Effects", "Admission", "Scopes"]
+defaultTargets = ["Lifecycle", "Effects", "Admission", "Scopes", "DecisionProgram", "KernelRefinement", "Bindings", "Execution", "NativeOwnership", "Routing", "Protocol", "Persistence", "SdkProtocol", "Deployment", "Upstream", "Audit"]
 
 [[lean_lib]]
 name = "Lifecycle"
@@ -13,3 +13,39 @@ name = "Admission"
 
 [[lean_lib]]
 name = "Scopes"
+
+[[lean_lib]]
+name = "DecisionProgram"
+
+[[lean_lib]]
+name = "KernelRefinement"
+
+[[lean_lib]]
+name = "Bindings"
+
+[[lean_lib]]
+name = "Execution"
+
+[[lean_lib]]
+name = "NativeOwnership"
+
+[[lean_lib]]
+name = "Routing"
+
+[[lean_lib]]
+name = "Protocol"
+
+[[lean_lib]]
+name = "Persistence"
+
+[[lean_lib]]
+name = "SdkProtocol"
+
+[[lean_lib]]
+name = "Deployment"
+
+[[lean_lib]]
+name = "Upstream"
+
+[[lean_lib]]
+name = "Audit"

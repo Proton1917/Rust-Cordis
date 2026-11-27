@@ -1,0 +1,24 @@
+{
+  "bridges": [
+    {
+      "domain": "pinned-typescript-lifecycle-observations",
+      "module": "Upstream",
+      "production_paths": ["cordis/packages/core/src/fiber.ts", "crates/cordis/src/lifecycle.rs", "crates/cordis/src/fiber.rs", "tools/conformance.py", "tools/conformance_run.py", "docs/04-conformance.md"],
+      "entrypoints": ["Fiber._getState", "Fiber._setEpoch", "Fiber._reload", "Fiber._unload"],
+      "theorems": ["Cordis.Upstream.state_observation_refines", "Cordis.Upstream.set_epoch_observation_refines", "Cordis.Upstream.load_completion_refines", "Cordis.Upstream.drained_unload_completion_refines", "Cordis.Upstream.failure_refines", "Cordis.Upstream.arbitrary_observation_trace_refines"],
+      "assumptions": [
+        "The upstream checkout is exactly 261c5fdae6edb54e7ed4f071024f530acd18903b; a working-tree edit of fiber.ts causes bridge rejection.",
+        "The shared refresh domain is a live, unsuspended owner. Stable Rust idle and the TypeScript early return both project to no load/unload event.",
+        "An unload completion has drained its effect collection; Rust's additional retry for effects registered during cleanup belongs to the kernel model.",
+        "Identity equality is exact. JavaScript numerical identities must remain within its exact integer range; the model does not extend that range to all Rust u64 values.",
+        "The probe executes extracted method bodies with controlled callbacks and empty service/teardown collections. The only removed in-body TypeScript syntax is the Promise<void> type parameter.",
+        "Full JavaScript/Rust language-level equivalence, callback implementations and all public API behavior are outside the shared observation theorem; the pinned conformance suite checks its separately defined scenario matrix."
+      ],
+      "evidence_level": "proved-shared-observation-contract-and-executed-pinned-method-bodies",
+      "evidence_commands": [
+        {"argv": ["python3", "formal/check_upstream.py"], "purpose": "82 cases, early and in-callback supersession, stale failure ownership and two production-body mutation controls"},
+        {"argv": ["python3", "tools/conformance_run.py", "--output", "target/conformance-report.json"]}
+      ]
+    }
+  ]
+}

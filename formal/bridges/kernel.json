@@ -1,0 +1,131 @@
+{
+  "bridges": [
+    {
+      "domain": "finite-width kernel state, owner scope representation, and lock-boundary registration",
+      "module": "KernelRefinement",
+      "production_paths": [
+        "crates/cordis/src/fiber.rs",
+        "crates/cordis/src/context.rs",
+        "crates/cordis/src/effect.rs",
+        "crates/cordis/src/registry.rs",
+        "crates/cordis/src/lifecycle.rs",
+        "crates/cordis/src/lifecycle_generated.rs"
+      ],
+      "entrypoints": [
+        "Epoch",
+        "FiberData::idle_state",
+        "FiberData::is_current",
+        "drain::locked_boundary",
+        "finish_transition::locked_boundary",
+        "Context::derive",
+        "Context::permits_effect",
+        "Context::create_effect",
+        "mount_with::child_scope_construction"
+      ],
+      "theorems": [
+        "Cordis.KernelRefinement.word_list_projection_injective",
+        "Cordis.KernelRefinement.epoch_projection_injective",
+        "Cordis.KernelRefinement.epoch_equality_refines",
+        "Cordis.KernelRefinement.inactive_refines",
+        "Cordis.KernelRefinement.active_refines",
+        "Cordis.KernelRefinement.revision_increment_no_wrap",
+        "Cordis.KernelRefinement.revision_increment_changes_identity",
+        "Cordis.KernelRefinement.notification_increment_no_wrap",
+        "Cordis.KernelRefinement.notification_decrement_no_underflow",
+        "Cordis.KernelRefinement.refresh_action_refines",
+        "Cordis.KernelRefinement.publish_refines",
+        "Cordis.KernelRefinement.effect_empty_refines",
+        "Cordis.KernelRefinement.effect_nonempty_refines",
+        "Cordis.KernelRefinement.refresh_action_keeps_count",
+        "Cordis.KernelRefinement.refresh_boundary_simulation",
+        "Cordis.KernelRefinement.finish_never_keeps",
+        "Cordis.KernelRefinement.finish_action_refines",
+        "Cordis.KernelRefinement.finish_boundary_simulation",
+        "Cordis.KernelRefinement.foreign_owner_stops",
+        "Cordis.KernelRefinement.view_projection_wellformed",
+        "Cordis.KernelRefinement.owner_boundary_matches_layer_boundary",
+        "Cordis.KernelRefinement.scope_cache_refines",
+        "Cordis.KernelRefinement.scope_admission_refines",
+        "Cordis.KernelRefinement.locked_registration_simulation",
+        "Cordis.KernelRefinement.locked_registration_preserves_ownership",
+        "Cordis.KernelRefinement.rejected_registration_preserves_both_tables",
+        "Cordis.KernelRefinement.successful_registration_uses_same_snapshot",
+        "Cordis.KernelRefinement.successful_registration_records_view_owner",
+        "Cordis.KernelRefinement.fresh_registration_preserves_unique_effect_ids"
+      ],
+      "assumptions": [
+        "The concrete adapter is Lean code; Rust function-body extraction and finite differential execution connect it to production source, while compiler and Rust semantics remain trusted.",
+        "Notification increment requires count.toNat + 1 < USize.size; decrement requires a positive count. Revision arithmetic uses the corresponding UInt64 bound.",
+        "finish_boundary_simulation assumes inertia = true on entry to an existing transition; complete executor paths preserve this condition outside the theorem.",
+        "Scope constructors retain valid owner records and allocate child identities distinct from the parent owner. The selected FiberData corresponds to the current scope owner.",
+        "Fresh effect allocation, valid arena indices, allocator success, lock implementation, pointer lifetimes, and callback scheduling remain concrete runtime obligations."
+      ],
+      "evidence_commands": [
+        "cd formal && lake build KernelRefinement",
+        "python3 formal/check_kernel_refinement.py --lake lake --rustc rustc --evidence /tmp/cordis-kernel-refinement.json"
+      ]
+    },
+    {
+      "domain": "dependency identities, realm isolation, committed bindings, snapshot revalidation, and consumer retention",
+      "module": "Bindings",
+      "production_paths": [
+        "crates/cordis/src/reflect.rs",
+        "crates/cordis/src/context.rs",
+        "crates/cordis/src/fiber.rs",
+        "crates/cordis/src/registry.rs"
+      ],
+      "entrypoints": [
+        "reflect::epoch_ids",
+        "reflect::commit_locked",
+        "reflect::locate",
+        "reflect::scope_realm",
+        "Context::resolve_realm",
+        "reflect::get_value",
+        "refresh_keys::checked_snapshot_installation",
+        "reflect::wait_dependents",
+        "reflect::release_committed"
+      ],
+      "theorems": [
+        "Cordis.Bindings.slot_meaning",
+        "Cordis.Bindings.collect_meaning",
+        "Cordis.Bindings.slotwise_preserves_length",
+        "Cordis.Bindings.epoch_resolution_spec",
+        "Cordis.Bindings.resolved_epoch_preserves_length",
+        "Cordis.Bindings.required_slot_has_binding",
+        "Cordis.Bindings.zero_identifies_optional_absence",
+        "Cordis.Bindings.committed_membership",
+        "Cordis.Bindings.nearest_isolation_selects_realm",
+        "Cordis.Bindings.unrelated_isolation_preserves_realm",
+        "Cordis.Bindings.unrelated_prefix_preserves_realm",
+        "Cordis.Bindings.own_provision_has_priority",
+        "Cordis.Bindings.latest_matching_provision_wins",
+        "Cordis.Bindings.isolation_seals_ancestors",
+        "Cordis.Bindings.declared_absence_seals_ancestors",
+        "Cordis.Bindings.committed_read_survives_live_replacement",
+        "Cordis.Bindings.snapshot_validation_spec",
+        "Cordis.Bindings.stale_notification_cannot_commit",
+        "Cordis.Bindings.incremented_notification_invalidates_snapshot",
+        "Cordis.Bindings.successful_snapshot_install_has_all_facts",
+        "Cordis.Bindings.retained_membership_spec",
+        "Cordis.Bindings.contains_binding_spec",
+        "Cordis.Bindings.released_membership_spec",
+        "Cordis.Bindings.committed_consumer_retained",
+        "Cordis.Bindings.provider_waits_for_committed_consumer",
+        "Cordis.Bindings.releasing_consumer_preserves_others",
+        "Cordis.Bindings.releasing_committed_consumer_removes_membership"
+      ],
+      "assumptions": [
+        "Implementation and pointer identities preserve equality; the zero-sentinel uniqueness theorem assumes valid implementation UIDs are nonzero.",
+        "Frame lists represent finite owner segments of the actual scope chain; the compiled bridge exercises real pointer traversal on explicit constructed scopes.",
+        "Provider checks and consumer predicates finish outside the lock and supply available; the model proves the subsequent revalidation and installation rule.",
+        "Committed identities remain valid until dependent cleanup releases them; allocation, table memory safety, provider activation, and global scheduler fairness remain runtime obligations.",
+        "getBinding formalizes identity selection. Dynamic value typing, error construction, interceptor metadata, and the entire get_value function are outside its compiled fragment bridge.",
+        "Wait readiness and release membership are proved; executor progress after waking uses the host scheduling contract."
+      ],
+      "evidence_commands": [
+        "cd formal && lake build Bindings",
+        "python3 formal/check_kernel_refinement.py --lake lake --rustc rustc --evidence /tmp/cordis-kernel-refinement.json"
+      ]
+    }
+  ]
+}

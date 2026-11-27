@@ -1,0 +1,155 @@
+{
+  "domains": [
+    {
+      "domain": "executor-custody-and-cleanup",
+      "module": "Execution",
+      "production_paths": [
+        "crates/cordis/src/kernel.rs",
+        "crates/cordis/src/effect.rs",
+        "crates/cordis/tests/concurrency.rs",
+        "crates/cordis/tests/dispose_async.rs"
+      ],
+      "entrypoints": [
+        "Kernel::submit",
+        "Effect::start_cleanup",
+        "Effect::clean_steps",
+        "Effect::continue_cleanup",
+        "Effect::submit_cleanup",
+        "Effect::resume_cleanup"
+      ],
+      "theorems": [
+        "Cordis.Execution.task_trace_preserves",
+        "Cordis.Execution.task_conserved",
+        "Cordis.Execution.first_poll_at_most_once",
+        "Cordis.Execution.running_task_cannot_be_recovered",
+        "Cordis.Execution.double_rejection_is_recoverable",
+        "Cordis.Execution.resume_transfers_same_custody",
+        "Cordis.Execution.cleanup_trace_preserves",
+        "Cordis.Execution.completed_cleanup_is_lifo",
+        "Cordis.Execution.claimed_cleanup_completes_registered_stack",
+        "Cordis.Execution.first_error_trace_preserved",
+        "Cordis.Execution.callback_result_progress"
+      ],
+      "assumptions": [
+        "TaskState counts one submitted Task; a newly constructed continuation is a distinct task token.",
+        "Rust Option::take, Arc::try_unwrap, mutex exclusion and unique mutable Future polling implement the modeled custody transfers; the Rust language semantics are not encoded in Lean.",
+        "A recovered rejection is the branch where the host wrapper has been dropped; retained or already-polled wrappers stay owned by the host.",
+        "Cleanup starts with the LIFO sequence delivered by the existing Effects.claim model. Callback outputs, panic conversion and wakeups are environment events.",
+        "The theorems prove safety for arbitrary finite traces. Eventual completion additionally requires host polling and eventual callback termination."
+      ],
+      "evidence_commands": [
+        {
+          "command": "cargo test -p cordis --test concurrency --test dispose_async",
+          "purpose": "Runs the real scheduler acceptance/rejection, suspended cleanup recovery and serial asynchronous cleanup integration tests."
+        }
+      ]
+    },
+    {
+      "domain": "native-callback-and-library-ownership",
+      "module": "NativeOwnership",
+      "production_paths": [
+        "crates/cordis-host/src/callback.rs",
+        "crates/cordis-host/src/native.rs",
+        "crates/cordis-host/src/lease.rs",
+        "crates/cordis-host/src/library.rs",
+        "crates/cordis-host/tests/native.rs",
+        "crates/cordis-host/tests/driver/src/retirement.rs"
+      ],
+      "entrypoints": [
+        "Admission::acquire",
+        "Permit::drop",
+        "Admitted::poll",
+        "NativeTask::drop",
+        "Owned::drop",
+        "lease::acquire",
+        "lease::release",
+        "Lease::retire",
+        "Lease::reap",
+        "Descriptor::drop",
+        "NativeLibrary::retire"
+      ],
+      "theorems": [
+        "Cordis.NativeOwnership.callback_trace_preserves",
+        "Cordis.NativeOwnership.synchronous_poll_holds_capacity",
+        "Cordis.NativeOwnership.callback_returns_at_most_once",
+        "Cordis.NativeOwnership.return_requires_destroyed_future",
+        "Cordis.NativeOwnership.usage_trace_preserves",
+        "Cordis.NativeOwnership.release_has_capacity",
+        "Cordis.NativeOwnership.admitted_usage_is_bounded",
+        "Cordis.NativeOwnership.lease_trace_preserves",
+        "Cordis.NativeOwnership.image_closes_only_when_safe",
+        "Cordis.NativeOwnership.image_closes_at_most_once",
+        "Cordis.NativeOwnership.retired_zero_cannot_be_reacquired",
+        "Cordis.NativeOwnership.failed_descriptor_pins_image"
+      ],
+      "assumptions": [
+        "Callback destruction is serialized with its synchronous poll. Rust declaration-order field destruction drops Admitted.future before Admitted._permit.",
+        "Usage.held is a ghost ledger of live Permit objects; a release event consumes an owned permit after its future destructor finishes.",
+        "Natural-number bounds are instantiated with the platform usize maximum, configured callback limits and u64 identifiers as applicable.",
+        "Lease acquisition uses count.fetch_update and a separate retired.load. The completed-operation lease model does not establish a Rust memory-model linearization proof for those two atomic objects.",
+        "Valid ABI cloning holds an existing counted lease through acquisition; descriptor release is uniquely owned and its result is published once.",
+        "Tokio abort/drop scheduling, foreign destructors, libloading and operating-system image unmapping remain implementation boundaries."
+      ],
+      "evidence_commands": [
+        {
+          "command": "cargo test -p cordis-host --lib callback::tests",
+          "purpose": "Checks count/byte admission, cancellation during a blocking native poll, and unpolled future destruction order in production types."
+        },
+        {
+          "command": "cargo test -p cordis-host --test native native_retirement_metrics_and_open_handle_policy -- --exact",
+          "purpose": "Runs real dynamic-library retirement, quiescence and unload-policy scenarios through the native driver."
+        }
+      ]
+    },
+    {
+      "domain": "routing-export-ownership",
+      "module": "Routing",
+      "production_paths": [
+        "crates/cordis-routing/src/directory.rs",
+        "crates/cordis-routing/src/directory/tests.rs",
+        "crates/cordis-routing/src/lifetime.rs",
+        "crates/cordis-routing/src/transfer.rs"
+      ],
+      "entrypoints": [
+        "Entries::remove_one",
+        "Entries::unlink",
+        "Entries::remove_recipient",
+        "Router::export",
+        "Router::release",
+        "Router::reclaim",
+        "Router::retire",
+        "Batch::drop",
+        "Batch::outgoing"
+      ],
+      "theorems": [
+        "Cordis.Routing.trace_preserves",
+        "Cordis.Routing.each_export_reference_returned_at_most_once",
+        "Cordis.Routing.live_reference_is_owned_exclusively",
+        "Cordis.Routing.unallocated_reference_absent",
+        "Cordis.Routing.invalid_release_is_atomic",
+        "Cordis.Routing.repeated_release_is_idempotent",
+        "Cordis.Routing.detach_defers_destructors",
+        "Cordis.Routing.committed_batch_survives_rollback",
+        "Cordis.Routing.retired_generation_denies_new_exports",
+        "Cordis.Routing.retirement_sweep_removes_generation",
+        "Cordis.Routing.recipient_namespace_isolation",
+        "Cordis.Routing.indexed_trace_preserves",
+        "Cordis.Routing.indexed_trace_preserves_ownership"
+      ],
+      "assumptions": [
+        "Each Peer models a stable connection identity. The historical allocation frontier is ghost state after recipient reclaim; the concrete Recipient may be removed once that connection is dead.",
+        "Entry.batch is the ghost inverse of the pending IDs in live Batch objects. Commit transfers rollback ownership once the Outgoing commit callback executes.",
+        "The capacityAvailable input is the concrete routes.len() < max_exports decision; this module proves reference conservation and identifier bounds rather than HashMap cardinality accounting.",
+        "Directory mutex mutations are atomic model transitions. Detached references are dropped in a separate step, corresponding to Rust's drop(discarded) outside the lock.",
+        "Retirement marking and indexed sweeping are separate events, preserving the interval in which lifetime.finish has executed but the directory lock has not yet been acquired.",
+        "Directory-owned Arc references are tracked individually; Arc clones returned to callers, value rewriting, network transmission and remote peer cooperation have separate contracts."
+      ],
+      "evidence_commands": [
+        {
+          "command": "cargo test -p cordis-routing --lib directory::tests",
+          "purpose": "Exercises production release, lifetime retirement, batch rollback, both connection ends, every secondary index and destructor execution outside the directory lock."
+        }
+      ]
+    }
+  ]
+}
