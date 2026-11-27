@@ -7,10 +7,7 @@ use crate::{
 use std::{
     any::{Any, TypeId},
     fmt,
-    sync::{
-        Arc, Weak,
-        atomic::{AtomicU64, Ordering},
-    },
+    sync::{Arc, Weak, atomic::AtomicU64},
     time::Duration,
 };
 
@@ -22,9 +19,12 @@ impl Realm {
     /// 上下文在服务键上继承的初始隔离域。
     pub const DEFAULT: Self = Self(0);
     /// 分配一个供独立服务绑定使用的隔离域。
+    ///
+    /// # Panics
+    /// 隔离域身份耗尽时终止本次分配；已分配的身份保持唯一。
     pub fn new() -> Self {
         static NEXT: AtomicU64 = AtomicU64::new(1);
-        Self(NEXT.fetch_add(1, Ordering::Relaxed))
+        Self(crate::identity::allocate(&NEXT).expect("realm identity exhausted"))
     }
 }
 

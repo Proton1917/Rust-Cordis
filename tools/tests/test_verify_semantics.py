@@ -14,6 +14,19 @@ SPEC.loader.exec_module(verify)
 
 
 class SemanticEvidenceFailures(unittest.TestCase):
+    def test_theorem_index_keeps_nested_namespaces_and_attributes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "Proof.lean").write_text(
+                "namespace Cordis.Proof\nnamespace Iso\n"
+                "@[simp] theorem valid : True := by trivial\nend Iso\n"
+                "section\nmutual\ndef value : Nat := 0\nend\n"
+                "theorem visible : True := by trivial\nend\nend Cordis.Proof\n")
+            with patch.object(verify, "FORMAL", root), \
+                    patch.object(verify, "PROOFS", {"Proof.lean": "Cordis.Proof"}):
+                self.assertEqual(verify.theorems(),
+                                 ["Cordis.Proof.Iso.valid", "Cordis.Proof.visible"])
+
     def test_source_bridge_requires_named_rejected_controls(self):
         valid = {"status": "passed", "compiled_input_cases": 12,
                  "negative_controls": {"mutated_guard": "rejected",

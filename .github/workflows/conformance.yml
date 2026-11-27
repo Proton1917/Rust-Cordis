@@ -29,6 +29,8 @@ on:
       - 'tools/execution_semantics_probe.py'
       - 'tools/storage_program_probe.py'
       - 'tools/architecture_probe.py'
+      - 'tools/plugin_principle_probe.py'
+      - 'docs/context-paradigm.md'
       - 'tools/tests/test_verify_semantics.py'
       - 'docs/formal-semantics.md'
       - 'docs/component-ownership.md'

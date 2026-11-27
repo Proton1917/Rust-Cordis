@@ -1,6 +1,6 @@
 name = "cordis_semantics"
 version = "0.1.0"
-defaultTargets = ["Lifecycle", "Effects", "Admission", "Scopes", "DecisionProgram", "KernelRefinement", "Bindings", "Execution", "NativeOwnership", "Routing", "Protocol", "Persistence", "SdkProtocol", "Deployment", "Upstream", "KernelSemantics", "BindingGraph", "UpstreamSimulation", "Concurrency", "AsyncSemantics", "WireSemantics", "RequestSemantics", "CborSemantics", "StorageProgram", "StorageControlFlow", "DirectoryInitialization", "Architecture", "Composition", "Audit"]
+defaultTargets = ["Lifecycle", "Effects", "Admission", "Scopes", "DecisionProgram", "KernelRefinement", "Bindings", "Execution", "NativeOwnership", "Routing", "Protocol", "Persistence", "SdkProtocol", "Deployment", "Upstream", "KernelSemantics", "BindingGraph", "UpstreamSimulation", "Concurrency", "AsyncSemantics", "WireSemantics", "RequestSemantics", "CborSemantics", "StorageProgram", "StorageControlFlow", "DirectoryInitialization", "Architecture", "Composition", "RevertibleEffects", "ReactiveCoeffects", "PluginPrinciple", "Audit"]
 
 [[lean_lib]]
 name = "Lifecycle"
@@ -85,6 +85,15 @@ name = "Architecture"
 
 [[lean_lib]]
 name = "Composition"
+
+[[lean_lib]]
+name = "RevertibleEffects"
+
+[[lean_lib]]
+name = "ReactiveCoeffects"
+
+[[lean_lib]]
+name = "PluginPrinciple"
 
 [[lean_lib]]
 name = "Audit"

@@ -52,10 +52,13 @@ PROOFS = {
     "DirectoryInitialization.lean": "Cordis.DirectoryInitialization",
     "Architecture.lean": "Cordis.Architecture",
     "Composition.lean": "Cordis.Composition",
+    "RevertibleEffects.lean": "Cordis.RevertibleEffects",
+    "ReactiveCoeffects.lean": "Cordis.ReactiveCoeffects",
+    "PluginPrinciple.lean": "Cordis.PluginPrinciple",
 }
 PROGRAMS = {"Generate.lean", "Audit.lean", "KernelVectors.lean", "ProtocolProbe.lean",
             "UpstreamVectors.lean", "BindingGraphVectors.lean", "NativeVectors.lean",
-            "StorageVectors.lean", "ArchitectureVectors.lean"}
+            "StorageVectors.lean", "ArchitectureVectors.lean", "PluginSourceVectors.lean"}
 ARITIES = {"idle": 3, "target": 2, "refresh": 7, "finish": 5, "settled": 4, "current": 2, "current_epoch": 3, "cleanup": 2}
 ALLOWED_AXIOMS = {"propext", "Quot.sound", "Classical.choice"}
 
@@ -98,7 +101,31 @@ def theorems() -> list[str]:
         forbidden = re.search(r"\b(sorry|admit|axiom|native_decide|unsafe|implemented_by|skipKernelTC)\b", code)
         if forbidden:
             raise RuntimeError(f"proof escape in {filename}: {forbidden.group(0)}")
-        names += [f"{namespace}.{name}" for name in re.findall(r"^theorem\s+(\w+)", code, re.M)]
+        # Source names are a reporting/coverage index. The independent Lean
+        # environment census below still audits every logical declaration.
+        scopes: list[tuple[str, str]] = []
+        for line in code.splitlines():
+            declaration = re.match(r"^(namespace|section|mutual)(?:\s+([\w.]+))?\s*$", line)
+            if declaration:
+                scopes.append((declaration[1], declaration[2] or ""))
+                continue
+            ending = re.match(r"^end(?:\s+([\w.]+))?\s*$", line)
+            if ending:
+                if not scopes:
+                    raise RuntimeError(f"unbalanced declaration scope in {filename}")
+                _, label = scopes.pop()
+                if ending[1] and ending[1] != label:
+                    raise RuntimeError(f"mismatched declaration scope in {filename}: {ending[1]}")
+                continue
+            theorem = re.match(r"^(?:@\[[^\]]*\]\s*)*theorem\s+([\w.']+)", line)
+            if theorem:
+                prefix = ".".join(label for kind, label in scopes if kind == "namespace")
+                name = f"{prefix}.{theorem[1]}" if prefix else theorem[1]
+                if not name.startswith(namespace + "."):
+                    raise RuntimeError(f"theorem outside declared namespace in {filename}: {name}")
+                names.append(name)
+        if scopes:
+            raise RuntimeError(f"unclosed declaration scope in {filename}")
     if not names or len(names) != len(set(names)):
         raise RuntimeError("proof declarations must be nonempty and unique")
     return names
@@ -238,6 +265,9 @@ def source_paths() -> list[Path]:
         ROOT / "tools/protocol_storage_probe.py", ROOT / "tools/sdk_terminal_probe.py",
         ROOT / "tools/execution_semantics_probe.py", ROOT / "tools/storage_program_probe.py",
         ROOT / "tools/architecture_probe.py",
+        ROOT / "tools/plugin_principle_probe.py",
+        ROOT / "crates/cordis/tests/plugin_principle.rs",
+        ROOT / "docs/context-paradigm.md",
         ROOT / "sdks/python/requirements.txt", ROOT / "sdks/typescript/package-lock.json",
         ROOT / "tools/tests/test_verify_semantics.py",
         ROOT / ".github/workflows/conformance.yml",
@@ -400,6 +430,7 @@ def verify(args: argparse.Namespace, evidence: dict) -> dict:
             ("cbor_semantics", FORMAL / "check_cbor_semantics.py", ["--lake", lake, "--rustc", rustc]),
             ("storage_program", ROOT / "tools/storage_program_probe.py", ["--lake", lake, "--rustc", rustc]),
             ("architecture", ROOT / "tools/architecture_probe.py", ["--lake", lake, "--rustc", rustc]),
+            ("plugin_principle", ROOT / "tools/plugin_principle_probe.py", ["--lake", lake, "--rustc", rustc]),
         ]:
             evidence["current_stage"] = f"source_bridge_{label}"
             receipt = temp / f"{label}.json"
@@ -427,6 +458,7 @@ def verify(args: argparse.Namespace, evidence: dict) -> dict:
         "cbor_value_codec": bridges["cbor_semantics"]["compiled_input_cases"],
         "storage_io_and_recovery": bridges["storage_program"]["compiled_input_cases"],
         "supervisor_provenance": bridges["architecture"]["compiled_input_cases"],
+        "plugin_context_composition": bridges["plugin_principle"]["compiled_input_cases"],
     }
     return {
         "status": "passed",
@@ -455,6 +487,7 @@ def verify(args: argparse.Namespace, evidence: dict) -> dict:
             "productive scheduler dispatch and callback return are explicit assumptions only for eventual cleanup, with arbitrary-schedule safety proved separately",
             "operating-system file-sync, directory-sync, atomic-rename, process/network and dynamic-loader contracts, under exclusive store ownership",
             "the recursive CBOR grammar is proved; ciborium/cbor2/JavaScript codec implementations, UTF-8 and floating-point conversion primitives have their declared dependency contracts",
+            "effect restoration assumes each application-supplied inverse restores its own completed step; selective removal additionally uses ownership or commutation, and metadata regrouping requires the declared Merge algebra laws",
         ],
     }
 
