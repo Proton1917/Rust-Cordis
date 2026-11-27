@@ -362,4 +362,113 @@ theorem indexed_trace_preserves_ownership (s t : IndexedPeer) (trace : IndexTrac
   | insert entry trace ih => exact issue_preserves _ entry ih
   | unlink selected trace ih => exact detach_preserves _ selected ih
 
+
+/-! The finite key set represents the concrete HashMap's domain. Cardinality
+admission is derived from that domain, with insertion freshness proved from the
+allocation frontier. Detach covers release, rollback, owner reclaim and sweeping.
+-/
+
+structure BoundedPeer where
+  peer : Peer := {}
+  keys : List Nat := []
+
+def CapacityInvariant (capacity : Nat) (s : BoundedPeer) : Prop :=
+  PeerInvariant s.peer ∧ s.keys.Nodup ∧
+  (∀ id, id ∈ s.keys ↔ (s.peer.entries id).isSome = true) ∧ s.keys.length ≤ capacity
+
+def boundedIssue (s : BoundedPeer) (entry : Entry) : BoundedPeer :=
+  { peer := issue s.peer entry, keys := s.peer.next :: s.keys }
+
+def boundedDetach (s : BoundedPeer) (selected : Nat → Bool) : BoundedPeer :=
+  { peer := detach s.peer selected, keys := s.keys.filter fun id => !selected id }
+
+def boundedCommit (s : BoundedPeer) (batch : Nat) : BoundedPeer :=
+  { peer := commit s.peer batch, keys := s.keys }
+
+theorem initial_capacity_invariant (capacity : Nat) : CapacityInvariant capacity {} := by
+  refine ⟨initial_peer_invariant, by simp, ?_, by simp⟩
+  intro id
+  simp
+
+theorem allocation_frontier_is_fresh (capacity : Nat) (s : BoundedPeer)
+    (h : CapacityInvariant capacity s) : s.peer.next ∉ s.keys := by
+  intro present
+  have presentEntry := (h.2.2.1 s.peer.next).mp present
+  have count := h.1.2 s.peer.next
+  cases entry : s.peer.entries s.peer.next with
+  | none => simp [entry] at presentEntry
+  | some value =>
+    simp [referenceCount, allocated, entry, occupied] at count
+
+theorem bounded_issue_preserves (capacity : Nat) (s : BoundedPeer) (entry : Entry)
+    (h : CapacityInvariant capacity s) (room : s.keys.length < capacity) :
+    CapacityInvariant capacity (boundedIssue s entry) := by
+  refine ⟨issue_preserves s.peer entry h.1,
+    List.nodup_cons.mpr ⟨allocation_frontier_is_fresh capacity s h, h.2.1⟩, ?_, ?_⟩
+  · intro id
+    have old := h.2.2.1 id
+    by_cases fresh : id = s.peer.next
+    · simp [boundedIssue, issue, fresh]
+    · simpa [boundedIssue, issue, fresh] using old
+  · simp [boundedIssue]
+    omega
+
+theorem bounded_detach_preserves (capacity : Nat) (s : BoundedPeer)
+    (selected : Nat → Bool) (h : CapacityInvariant capacity s) :
+    CapacityInvariant capacity (boundedDetach s selected) := by
+  refine ⟨detach_preserves s.peer selected h.1, h.2.1.filter _, ?_, ?_⟩
+  · intro id
+    have old := h.2.2.1 id
+    cases chosen : selected id <;> simp_all [boundedDetach, detach]
+  · exact Nat.le_trans (List.length_filter_le _ _) h.2.2.2
+
+theorem bounded_commit_preserves (capacity : Nat) (s : BoundedPeer)
+    (batch : Nat) (h : CapacityInvariant capacity s) :
+    CapacityInvariant capacity (boundedCommit s batch) := by
+  refine ⟨commit_preserves s.peer batch h.1, h.2.1, ?_, h.2.2.2⟩
+  intro id
+  have old := h.2.2.1 id
+  cases found : s.peer.entries id with
+  | none => simpa [boundedCommit, commit, found] using old
+  | some entry => simpa [boundedCommit, commit, found] using old
+
+inductive CapacityTrace (capacity : Nat) : BoundedPeer → BoundedPeer → Prop where
+  | refl (s) : CapacityTrace capacity s s
+  | insert {s t} (entry) (room : t.keys.length < capacity) :
+      CapacityTrace capacity s t → CapacityTrace capacity s (boundedIssue t entry)
+  | detach {s t} (selected) :
+      CapacityTrace capacity s t → CapacityTrace capacity s (boundedDetach t selected)
+  | commit {s t} (batch) :
+      CapacityTrace capacity s t → CapacityTrace capacity s (boundedCommit t batch)
+
+theorem capacity_trace_preserves (capacity : Nat) (s t : BoundedPeer)
+    (trace : CapacityTrace capacity s t) (h : CapacityInvariant capacity s) :
+    CapacityInvariant capacity t := by
+  induction trace with
+  | refl => exact h
+  | insert entry room trace ih => exact bounded_issue_preserves capacity _ entry ih room
+  | detach selected trace ih => exact bounded_detach_preserves capacity _ selected ih
+  | commit batch trace ih => exact bounded_commit_preserves capacity _ batch ih
+
+theorem concrete_directory_capacity_is_bounded (capacity : Nat) (s : BoundedPeer)
+    (trace : CapacityTrace capacity {} s) : s.keys.length ≤ capacity :=
+  (capacity_trace_preserves capacity {} s trace (initial_capacity_invariant capacity)).2.2.2
+
+theorem finite_directory_keeps_reference_ownership (capacity : Nat) (s : BoundedPeer)
+    (trace : CapacityTrace capacity {} s) : PeerInvariant s.peer :=
+  (capacity_trace_preserves capacity {} s trace (initial_capacity_invariant capacity)).1
+
+theorem finite_export_refines_directory_step (maxId capacity : Nat) (s : BoundedPeer)
+    (entry : Entry) (room : s.keys.length < capacity) (alive : s.peer.alive = true)
+    (generation : generationAllowed s.peer entry = true) (identifier : s.peer.next < maxId) :
+    (boundedIssue s entry).peer =
+      step maxId s.peer (.exportRef entry (decide (s.keys.length < capacity))) := by
+  simp [boundedIssue, step, room, alive, generation, identifier]
+
+theorem full_directory_denies_export (maxId capacity : Nat) (s : BoundedPeer)
+    (entry : Entry) (full : capacity ≤ s.keys.length) :
+    step maxId s.peer (.exportRef entry (decide (s.keys.length < capacity))) = s.peer := by
+  have noRoom : ¬ s.keys.length < capacity := by omega
+  simp [step, noRoom]
+
 end Cordis.Routing

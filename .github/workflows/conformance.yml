@@ -26,6 +26,9 @@ on:
       - 'tools/verify_semantics.py'
       - 'tools/protocol_storage_probe.py'
       - 'tools/sdk_terminal_probe.py'
+      - 'tools/execution_semantics_probe.py'
+      - 'tools/storage_program_probe.py'
+      - 'tools/architecture_probe.py'
       - 'tools/tests/test_verify_semantics.py'
       - 'docs/formal-semantics.md'
       - 'docs/component-ownership.md'
@@ -68,7 +71,9 @@ jobs:
           git -C cordis fetch --depth=1 https://github.com/cordiverse/cordis.git 261c5fdae6edb54e7ed4f071024f530acd18903b
           git -C cordis checkout --detach FETCH_HEAD
       - name: Check proofs and production source bridges
-        run: python3 tools/verify_semantics.py --evidence target/formal-semantics.json
+        run: |
+          python3 -m pip install -r sdks/python/requirements.txt
+          python3 tools/verify_semantics.py --evidence target/formal-semantics.json
       - name: Check semantic evidence failure paths
         run: python3 -m unittest discover -s tools/tests -p 'test_verify_semantics.py' -v
       - name: Check kernel ownership and epoch query integration

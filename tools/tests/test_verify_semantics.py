@@ -14,6 +14,19 @@ SPEC.loader.exec_module(verify)
 
 
 class SemanticEvidenceFailures(unittest.TestCase):
+    def test_source_bridge_requires_named_rejected_controls(self):
+        valid = {"status": "passed", "compiled_input_cases": 12,
+                 "negative_controls": {"mutated_guard": "rejected",
+                                       "source_certificate": {"status": "rejected", "disagreements": 3}}}
+        verify.validate_source_bridge("source", valid)
+        for changes in [dict(status="running"), dict(compiled_input_cases=True),
+                        dict(compiled_input_cases=0), dict(negative_controls=4),
+                        dict(negative_controls={}),
+                        dict(negative_controls={"mutated_guard": "passed"}),
+                        dict(negative_controls={"mutated_guard": {"status": "unknown"}})]:
+            with self.subTest(changes=changes), self.assertRaises(RuntimeError):
+                verify.validate_source_bridge("source", dict(valid, **changes))
+
     def test_failed_attempt_replaces_previous_passed_evidence(self):
         with tempfile.TemporaryDirectory() as directory:
             evidence = Path(directory) / "evidence.json"

@@ -19,7 +19,9 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[1]
 FORMAL = ROOT / "formal"
 EXPECTED_CASES = {"refresh": 24576, "finish": 12288, "register": 7680, "epoch": 5362,
-                  "commit": 484, "locate": 1024, "snapshot": 256, "counter": 576, "release": 7744}
+                  "commit": 484, "locate": 1024, "snapshot": 512, "counter": 576, "release": 7744,
+                  "get_value": 4096, "typed_handle": 48, "identity": 12, "notification": 12,
+                  "metadata": 16384}
 
 
 def run(command: list[str], *, input_text: str | None = None) -> str:
@@ -95,7 +97,7 @@ def sha256(text: str) -> str:
 
 def extract_source() -> tuple[str, list[dict[str, object]]]:
     sources = {name: (ROOT / f"crates/cordis/src/{name}.rs").read_text()
-               for name in ["fiber", "context", "effect", "reflect"]}
+               for name in ["fiber", "context", "effect", "reflect", "service"]}
     fragments: list[dict[str, object]] = []
 
     def item(file: str, anchor: str, entrypoint: str) -> str:
@@ -112,6 +114,9 @@ def extract_source() -> tuple[str, list[dict[str, object]]]:
     context_methods = "\n".join([
         item("context", "pub(crate) fn derive(&self", "Context::derive"),
         item("context", "pub(crate) fn permits_effect(&self", "Context::permits_effect"),
+        item("context", "pub(crate) fn resolve_realm(&self", "Context::resolve_realm"),
+        item("context", "pub(crate) fn merge_meta<K:", "Context::merge_meta"),
+        item("reflect", "fn get_value(&self", "Context::get_value"),
         item("effect", "fn create_effect(&self", "Context::create_effect"),
     ])
     reflect_functions = "\n".join([
@@ -121,7 +126,23 @@ def extract_source() -> tuple[str, list[dict[str, object]]]:
         item("reflect", "fn scope_realm(", "reflect::scope_realm"),
         item("reflect", "pub(crate) fn wait_dependents(", "reflect::wait_dependents"),
         item("reflect", "pub(crate) fn release_committed(", "reflect::release_committed"),
+        item("reflect", "pub(crate) fn injected_value(", "reflect::injected_value"),
+        item("reflect", "pub(crate) fn injected_meta<K:", "reflect::injected_meta"),
     ])
+    candidate = item("reflect", "fn current_candidate(", "reflect::current_candidate")
+    from_binding = item("service", "pub(crate) fn from_binding(", "Scoped::from_binding")
+    scoped_meta = item("service", "pub fn meta(&self)", "Scoped::meta")
+    provision = braced(sources["reflect"], "fn provide_value(")
+    start = unique(provision, "let uid = state\n                    .impl_counter")
+    end = unique(provision, "let id = state.impls.insert(ImplData {")
+    reservation = provision[start:end]
+    fragments.append({"entrypoint": "provide_value::checked_identity_reservation",
+                      "path": "crates/cordis/src/reflect.rs", "sha256": sha256(reservation),
+                      "bytes": len(reservation.encode()), "scope": "checked allocation before registry mutations"})
+    notification = braced(braced(sources["reflect"], "fn notify("),
+                          "if let Some(id) = state.store.get(&(key.clone(), realm)).copied()")
+    fragments.append({"entrypoint": "notify::revision_advance", "path": "crates/cordis/src/reflect.rs",
+                      "sha256": sha256(notification), "bytes": len(notification.encode())})
 
     def core(function_anchor: str, start_anchor: str, end_anchor: str, name: str) -> str:
         function = braced(sources["fiber"], function_anchor)
@@ -151,7 +172,10 @@ def extract_source() -> tuple[str, list[dict[str, object]]]:
     template = (FORMAL / "kernel_refinement_probe.rs").read_text()
     replacements = {"EPOCH": epoch, "FIBER_METHODS": fiber_methods,
                     "CONTEXT_METHODS": context_methods, "REFLECT_FUNCTIONS": reflect_functions,
-                    "REFRESH_CORE": refresh, "FINISH_CORE": finish, "SNAPSHOT_LOOP": snapshot}
+                    "REFRESH_CORE": refresh, "FINISH_CORE": finish, "SNAPSHOT_LOOP": snapshot,
+                    "CURRENT_CANDIDATE": candidate, "FROM_BINDING": from_binding,
+                    "RESERVE_IDENTITY": reservation, "ADVANCE_NOTIFICATION": notification,
+                    "SCOPED_META": scoped_meta}
     for name, body in replacements.items():
         marker = f"// @SOURCE:{name}@"
         unique(template, marker)
@@ -190,8 +214,14 @@ def in_domain(family: str, values: list[int]) -> bool:
                  or (length > 0 and declarations == length - 1 and required == 0)))
     if family == "commit":
         return len(values) == 3 and values[0] < 5 and values[1] < 3 ** values[0] and values[2] < 4
-    if family in {"locate", "snapshot"}:
-        return len(values) == 1 and values[0] < (1024 if family == "locate" else 256)
+    if family in {"locate", "snapshot", "get_value"}:
+        return len(values) == 1 and values[0] < {"locate": 1024, "snapshot": 512, "get_value": 4096}[family]
+    if family == "typed_handle":
+        return len(values) == 3 and values[0] < 4 and values[1] < 3 and values[2] < 4
+    if family == "metadata":
+        return len(values) == 2 and values[0] < 1024 and values[1] < 16
+    if family in {"identity", "notification"}:
+        return len(values) == 2 and values[0] < 6 and values[1] < 2
     if family == "counter":
         return (len(values) == 6 and values[0] < 6 and values[1] in {1, 5, 35}
                 and values[2] < 4 and values[3] == values[2] and values[4] < 4 and values[5] < 2)
@@ -240,13 +270,14 @@ def write_evidence(path: Path | None, evidence: dict[str, object]) -> None:
 
 def verify(args: argparse.Namespace) -> dict[str, object]:
     tracked = [FORMAL / path for path in ["Lifecycle.lean", "Admission.lean", "Scopes.lean",
-                                         "KernelRefinement.lean", "Bindings.lean", "KernelVectors.lean",
+                                         "KernelRefinement.lean", "Bindings.lean", "KernelSemantics.lean", "KernelVectors.lean",
                                          "lakefile.toml", "lake-manifest.json", "lean-toolchain",
                                          "kernel_refinement_probe.rs", "check_kernel_refinement.py"]]
     tracked += [ROOT / f"crates/cordis/src/{path}.rs"
-                for path in ["fiber", "context", "effect", "reflect", "lifecycle", "lifecycle_generated"]]
+                for path in ["fiber", "context", "effect", "reflect", "service", "lifecycle", "lifecycle_generated"]]
     before = {str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest() for path in tracked}
     run([args.lake, "build", "KernelRefinement", "Bindings"])
+    run([args.lake, "env", "lean", "-o", ".lake/build/lib/lean/KernelSemantics.olean", "KernelSemantics.lean"])
     code, fragments = extract_source()
     expected = run([args.lake, "env", "lean", "--run", "KernelVectors.lean"])
     lines = expected.splitlines()
@@ -283,6 +314,23 @@ def verify(args: argparse.Namespace) -> dict[str, object]:
             ("one_sided_production_dependency_length_guard", "epoch",
              "fiber.bindings.len() != fiber.inject.entries.len()",
              "fiber.bindings.len() < fiber.inject.entries.len()"),
+            ("exhausted_notification_candidate_reused", "snapshot",
+             "!state.impls[*id].notification_exhausted", "true"),
+            ("optional_absence_classified_as_required", "get_value",
+             "entry.key == *key && !entry.required", "entry.key == *key && entry.required"),
+            ("typed_definition_origin_replaced", "typed_handle",
+             "definition: definition(),", "definition: caller.clone(),"),
+            ("identity_wraparound", "identity",
+             'let uid = state\n                    .impl_counter\n                    .checked_add(1)\n                    .ok_or_else(|| Error::new("service identity exhausted").at(location))?;',
+             "let uid = state.impl_counter.wrapping_add(1);"),
+            ("notification_wraparound", "notification",
+             "binding.notification_revision.checked_add(1)",
+             "Some(binding.notification_revision.wrapping_add(1))"),
+            ("metadata_layer_order_reversed", "metadata",
+             ".rev()\n            .fold(initial,", ".fold(initial,"),
+            ("metadata_declaration_uses_caller", "metadata",
+             "crate::reflect::injected_meta::<K>(&self.requester)",
+             "crate::reflect::injected_meta::<K>(&self.caller)"),
         ]
         for name, family, mutation, replacement in mutations:
             unique(code, mutation)
@@ -314,6 +362,8 @@ def verify(args: argparse.Namespace) -> dict[str, object]:
             "Kernel State uses std::sync::Mutex with an infallible lock adapter; OS scheduling, parking_lot implementation, reentrancy, and poisoning are outside this bridge",
             "Lifecycle task/error payloads are opaque unit/error values; snapshot availability is an input. wait_dependents uses std::future::poll_fn and real no-op Wakers with explicit single polls",
             "Implementation::is_active is an input Boolean; predicate/value identities use actual Arc::ptr_eq on constructed pointer pools",
+            "Typed handles use real std Any downcasts for u32, String, dyn Counter and wrong wrapper types, preserving actual Arc identity and lazy definition construction",
+            "Metadata uses a noncommutative Vec concatenation Merge implementation; arbitrary user Merge code remains an environment contract. Real wrong-type declaration metadata defaults and wrong-type matching interception panics are observed",
             "Root/child scope constructors use explicit distinct owner identities; Context::derive is the exact production body",
             "Source lock-held update blocks are wrapped as single-step functions; callback dispatch, lifetime disposal, and transition-loop scheduling remain separate obligations",
         ],

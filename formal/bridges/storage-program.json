@@ -1,0 +1,171 @@
+{
+  "bridges": [
+    {
+      "domain": "storage-io-cursor-and-constructed-journal-recovery",
+      "module": "StorageProgram",
+      "production_paths": [
+        "crates/cordis-runtime/src/storage.rs"
+      ],
+      "entrypoints": [
+        "Store::commit_deployment",
+        "Store::lock_deployment",
+        "publish",
+        "write",
+        "Store::prepare_deployment",
+        "Store::commit_prepared",
+        "Store::move_decision_marker",
+        "Store::sync_decision",
+        "Store::restore_deployment_files"
+      ],
+      "theorems": [
+        "Cordis.StorageProgram.advance_simulates_model",
+        "Cordis.StorageProgram.step_simulates_model",
+        "Cordis.StorageProgram.source_order_projects_reachable",
+        "Cordis.StorageProgram.source_order_backups_cover_changes",
+        "Cordis.StorageProgram.source_order_published_journal_is_complete",
+        "Cordis.StorageProgram.actual_recovery_uses_constructed_journal",
+        "Cordis.StorageProgram.complete_source_transaction_recovers_old_or_new",
+        "Cordis.StorageProgram.successful_acknowledgement_is_durable",
+        "Cordis.StorageProgram.failed_invocation_stops_io",
+        "Cordis.StorageProgram.rename_requires_file_sync",
+        "Cordis.StorageProgram.decision_requires_data_sync"
+      ],
+      "assumptions": [
+        "The source probe invokes the unchanged commit_deployment entry, including encode-before-lock, the real exclusive filesystem lock, prepare_deployment(prepared.states.keys()) and commit_prepared(&prepared). The encoding adapter supplies validated opaque fixture bytes; serialization and OS lock semantics remain environment contracts.",
+        "Backup order and publication order are independent lists. StorageControlFlow derives coverage from the same Prepared value used by the actual entry for both plans. The model constructs journal contents from the original image.",
+        "A successful file barrier makes staged bytes durable; an atomic rename publishes one name; a successful directory barrier makes preceding name updates durable. The initialized directory ancestry and original committed image are durable under these filesystem contracts.",
+        "Exclusive lock acquisition, version-file publication, staging creation and staging cleanup precede/follow the modeled transaction cursor as explicit stutters. Their actual wrapped I/O failures and process exits are exercised by the unchanged-source probe.",
+        "The fault campaign injects one I/O error or exits before one selected I/O without unwinding, then starts a fresh process for recovery. It verifies process restart over a retained real filesystem; physical power loss and storage-device barrier implementation remain OS contracts.",
+        "Checkpoint-cache clearing, byte encoding and error-code values are support adapters. Path::try_exists, canonicalize, metadata and directory-entry collection use real std behavior; the injection matrix enumerates the wrapped I/O calls documented in the receipt. Persistent failures may defer recovery."
+      ],
+      "evidence_commands": [
+        {
+          "argv": [
+            "python3",
+            "tools/storage_program_probe.py",
+            "--evidence",
+            "target/storage-program.json"
+          ]
+        },
+        {
+          "argv": [
+            "cargo",
+            "test",
+            "-p",
+            "cordis-runtime",
+            "--lib",
+            "storage::tests"
+          ]
+        }
+      ]
+    },
+    {
+      "domain": "storage-source-control-flow-certificate",
+      "module": "StorageControlFlow",
+      "production_paths": [
+        "crates/cordis-runtime/src/storage.rs"
+      ],
+      "entrypoints": [
+        "Store::commit_deployment",
+        "Store::lock_deployment",
+        "deployment_lock_file",
+        "publish",
+        "write",
+        "Store::prepare_deployment",
+        "Store::commit_prepared",
+        "Store::move_decision_marker",
+        "Store::sync_decision",
+        "Store::restore_deployment_files",
+        "remove_file",
+        "sync_directory",
+        "sync_directory_contents"
+      ],
+      "theorems": [
+        "Cordis.StorageControlFlow.backups_execute",
+        "Cordis.StorageControlFlow.changes_execute",
+        "Cordis.StorageControlFlow.canonical_code_follows_every_io",
+        "Cordis.StorageControlFlow.source_certificate_covers_arbitrary_loops",
+        "Cordis.StorageControlFlow.execution_uses_actual_cursor",
+        "Cordis.StorageControlFlow.execution_consumes_returns",
+        "Cordis.StorageControlFlow.execution_prefix",
+        "Cordis.StorageControlFlow.certified_source_prefix_recovers_from_its_journal",
+        "Cordis.StorageControlFlow.source_groups_cover_arbitrary_state_count",
+        "Cordis.StorageControlFlow.entry_keeps_same_prepared",
+        "Cordis.StorageControlFlow.prepared_keys_cover_every_write",
+        "Cordis.StorageControlFlow.source_entry_constructs_both_plans",
+        "Cordis.StorageControlFlow.source_entry_derives_backup_coverage",
+        "Cordis.StorageControlFlow.certified_file_restore_uses_journal_bytes",
+        "Cordis.StorageControlFlow.certified_recovery_loop_refines_replay",
+        "Cordis.StorageControlFlow.certified_recovery_restores_every_original_name",
+        "Cordis.StorageControlFlow.certified_recovery_matches_actual_recovery",
+        "Cordis.StorageControlFlow.certified_entry_transaction_recovers_old_or_new"
+      ],
+      "assumptions": [
+        "The extractor accepts a restricted method-body grammar and rejects every unrecognized statement. It checks the entire commit_deployment and restore_deployment_files body structure, field/path bindings, iteration and skip conditions, absent/present branches, state write/delete branches, ordered barriers and error propagation. Parsing and the mapping from real filesystem entries to valid modeled names remain explicit source-bridge contracts.",
+        "The generated Lean certificate equates the extracted entry/publication/journal/group/finish/file-recovery template with canonical code. Entry interpretation retains one Prepared value and derives backup coverage for every modified name. A separate inductive Execution relation checks every I/O constructor against StorageProgram.nextIo for arbitrary backup and write/delete lists.",
+        "Recovery interpretation executes temporary removal, linking the original journal bytes, publication and cleanup, or deletion for an absent entry. Its arbitrary-name loop refines journal replay. The final entry-and-recovery theorem derives the complete old-or-new result for every transaction event trace from the same Prepared value, without accepting backup coverage as a caller premise.",
+        "The complete recovery grammar fixes journal validation, root/consumed folder traversal, the permitted version-file/directory skips, and destination/decision barriers. Successful recovery and arbitrary valid name lists are covered by the replay theorem; injected recovery errors, interrupted recovery and retry are additionally checked by the real-filesystem execution matrix.",
+        "Five source mutations independently fail both the source certificate and compiled execution: omitted file synchronization, a decision before data synchronization, ignored write errors, omitted state backup keys at the actual entry, and skipping the valid recovery name z.state. Two further mutations cover directory-initialization barriers.",
+        "The formal interpretation covers the declared Rust subset and primitive contracts. Byte serialization, the complete Rust language, standard-library implementations and physical persistence are supported by their stated environment contracts and separate source-execution evidence."
+      ],
+      "evidence_commands": [
+        {
+          "argv": [
+            "python3",
+            "tools/storage_program_probe.py",
+            "--evidence",
+            "target/storage-program.json"
+          ]
+        }
+      ]
+    },
+    {
+      "domain": "durable-directory-tree-initialization-and-retry",
+      "module": "DirectoryInitialization",
+      "production_paths": [
+        "crates/cordis-runtime/src/storage.rs"
+      ],
+      "entrypoints": [
+        "prepare_directory_tree",
+        "sync_directory_contents",
+        "Store::create"
+      ],
+      "theorems": [
+        "Cordis.DirectoryInitialization.arbitrary_returns_preserve_invariant",
+        "Cordis.DirectoryInitialization.confirmation_is_an_ordered_prefix",
+        "Cordis.DirectoryInitialization.successful_initialization_confirms_entire_path",
+        "Cordis.DirectoryInitialization.failed_barrier_rejects_initialization",
+        "Cordis.DirectoryInitialization.failure_stops_remaining_barriers",
+        "Cordis.DirectoryInitialization.retry_repeats_every_barrier",
+        "Cordis.DirectoryInitialization.existing_durable_names_do_not_skip_confirmation",
+        "Cordis.DirectoryInitialization.children_and_ancestors_all_confirmed"
+      ],
+      "assumptions": [
+        "Real filesystem creation and canonicalization determine the consumed/data children and ancestor path. The model represents these names by an ordered list; the probe derives the list from real canonical paths.",
+        "The unchanged prepare_directory_tree body synchronizes both children before the root and every ancestor. Every sync point is failed separately, failure stops that attempt, and retry repeats the entire sequence even for existing names.",
+        "Successful directory synchronization has its documented OS durability meaning. The protocol derives confirmation from successful calls; it does not infer durability from directory existence.",
+        "Independent source mutations that skip a child barrier or ignore its error are rejected by compiled execution and Lean-vector comparison."
+      ],
+      "evidence_commands": [
+        {
+          "argv": [
+            "python3",
+            "tools/storage_program_probe.py",
+            "--evidence",
+            "target/storage-program.json"
+          ]
+        },
+        {
+          "argv": [
+            "cargo",
+            "test",
+            "-p",
+            "cordis-runtime",
+            "--lib",
+            "storage::tests"
+          ]
+        }
+      ]
+    }
+  ]
+}

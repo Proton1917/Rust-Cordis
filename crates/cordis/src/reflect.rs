@@ -94,6 +94,7 @@ impl Event for InternalSet {
 pub(crate) struct ImplData {
     pub uid: u64,
     pub notification_revision: u64,
+    pub notification_exhausted: bool,
     pub key: Arc<str>,
     pub realm: Realm,
     pub scope: Arc<Scope>,
@@ -205,12 +206,16 @@ impl Context {
                     ))
                     .at(location));
                 }
+                let uid = state
+                    .impl_counter
+                    .checked_add(1)
+                    .ok_or_else(|| Error::new("service identity exhausted").at(location))?;
                 state.names.insert(key.clone(), kind);
-                state.impl_counter += 1;
-                let uid = state.impl_counter;
+                state.impl_counter = uid;
                 let id = state.impls.insert(ImplData {
                     uid,
                     notification_revision: 0,
+                    notification_exhausted: false,
                     key: key.clone(),
                     realm,
                     scope,
@@ -578,7 +583,14 @@ fn notify(kernel: &Arc<Kernel>, key: &Arc<str>, realm: Realm) {
     let fibers = {
         let mut state = kernel.state.lock();
         if let Some(id) = state.store.get(&(key.clone(), realm)).copied() {
-            state.impls[id].notification_revision += 1;
+            let binding = &mut state.impls[id];
+            if let Some(revision) = binding.notification_revision.checked_add(1) {
+                binding.notification_revision = revision;
+            } else {
+                // A saturated revision cannot authenticate another callback snapshot.
+                // Retire it from resolution until the owner provides a fresh binding.
+                binding.notification_exhausted = true;
+            }
         }
         let fibers = state
             .consumers
@@ -637,6 +649,14 @@ pub(crate) fn refresh(kernel: &Arc<Kernel>, id: FiberId) {
     refresh_keys(kernel, id, None);
 }
 
+fn current_candidate(state: &State, pair: &(Arc<str>, Realm)) -> Option<ImplId> {
+    state
+        .store
+        .get(pair)
+        .copied()
+        .filter(|id| !state.impls[*id].notification_exhausted)
+}
+
 fn refresh_keys(kernel: &Arc<Kernel>, id: FiberId, key: Option<&Arc<str>>) {
     let candidates = {
         let state = kernel.state.lock();
@@ -653,7 +673,7 @@ fn refresh_keys(kernel: &Arc<Kernel>, id: FiberId, key: Option<&Arc<str>>) {
             .filter(|(_, entry)| key.is_none_or(|key| &entry.key == key))
             .map(|(index, entry)| {
                 let pair = (entry.key.clone(), scope_realm(scope, &entry.key));
-                let binding = state.store.get(&pair).copied();
+                let binding = current_candidate(&state, &pair);
                 let revision = binding.map(|id| state.impls[id].notification_revision);
                 let active = binding.is_some_and(|id| state.impls[id].is_active(&state));
                 let check = binding.and_then(|binding| state.impls[binding].check.clone());
@@ -716,7 +736,7 @@ fn refresh_keys(kernel: &Arc<Kernel>, id: FiberId, key: Option<&Arc<str>>) {
             {
                 continue;
             }
-            let current = state.store.get(pair).copied();
+            let current = current_candidate(&state, pair);
             let current_active = current.is_some_and(|id| state.impls[id].is_active(&state));
             let current_predicate = &state.fibers[id].inject.entries[*index].predicate;
             let same_predicate = match (predicate.as_ref(), current_predicate.as_ref()) {
@@ -865,6 +885,63 @@ mod tests {
     struct ObserveDrop {
         kernel: Weak<Kernel>,
         observed: Arc<AtomicU8>,
+    }
+
+    #[tokio::test]
+    async fn exhausted_service_identity_preserves_registry() {
+        let root = Context::new(Arc::new(Host(Instant::now())));
+        root.kernel.state.lock().impl_counter = u64::MAX;
+        let before = root.kernel.state.lock().impls.len();
+        let failure = root.provide_named("exhausted", Arc::new(()));
+        assert!(
+            failure
+                .err()
+                .unwrap()
+                .to_string()
+                .contains("service identity exhausted")
+        );
+        let state = root.kernel.state.lock();
+        assert_eq!(state.impl_counter, u64::MAX);
+        assert_eq!(state.impls.len(), before);
+        assert!(!state.names.contains_key("exhausted"));
+        assert!(
+            !state
+                .store
+                .keys()
+                .any(|(key, _)| key.as_ref() == "exhausted")
+        );
+        drop(state);
+        root.fiber().dispose().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn exhausted_notification_retires_candidate_until_reprovided() {
+        let root = Context::new(Arc::new(Host(Instant::now())));
+        let provision = root.provide_named("versioned", Arc::new(())).unwrap();
+        let component = ComponentDef::new(
+            "consumer",
+            Inject::new().with_named("versioned"),
+            |_, ()| async { Ok(()) },
+        );
+        let fiber = root.mount_with(&component, ()).unwrap();
+        fiber.settled().await.unwrap();
+        assert_eq!(fiber.state(), crate::FiberState::Active);
+        let id = root.kernel.state.lock().store[&("versioned".into(), crate::Realm::DEFAULT)];
+        root.kernel.state.lock().impls[id].notification_revision = u64::MAX;
+        provision.notify();
+        fiber.settled().await.unwrap();
+        assert_eq!(fiber.state(), crate::FiberState::Pending);
+        provision.notify();
+        assert!(root.kernel.state.lock().impls[id].notification_exhausted);
+        assert_eq!(
+            root.kernel.state.lock().impls[id].notification_revision,
+            u64::MAX
+        );
+        provision.dispose().await.unwrap();
+        let _replacement = root.provide_named("versioned", Arc::new(())).unwrap();
+        fiber.settled().await.unwrap();
+        assert_eq!(fiber.state(), crate::FiberState::Active);
+        root.fiber().dispose().await.unwrap();
     }
 
     #[tokio::test]

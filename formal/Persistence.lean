@@ -205,6 +205,14 @@ theorem reachable_invariant (before : Image) (writes : List Change) (s : State)
   | initial => exact initial_invariant before writes
   | next previous step ih => exact step_preserves before writes _ _ ih step
 
+theorem preparing_preserves_original_contents (before : Image) (writes : List Change)
+    (s : State) (reachable : Reachable before writes s) (preparing : s.phase = .preparing) :
+    s.visible = before := by
+  induction reachable with
+  | initial => rfl
+  | next previous transition ih =>
+    cases transition <;> simp_all
+
 /-- A crash between moving the decision marker and syncing its directory may
 retain or lose that move. Both choices are legal; the data was already synced. -/
 def recover (before : Image) (keys : List Nat) (s : State)

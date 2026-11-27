@@ -56,7 +56,7 @@
       "assumptions": [
         "The concrete adapter is Lean code; Rust function-body extraction and finite differential execution connect it to production source, while compiler and Rust semantics remain trusted.",
         "Notification increment requires count.toNat + 1 < USize.size; decrement requires a positive count. Revision arithmetic uses the corresponding UInt64 bound.",
-        "finish_boundary_simulation assumes inertia = true on entry to an existing transition; complete executor paths preserve this condition outside the theorem.",
+        "KernelSemantics derives the finish-entry inertia condition from reachable control traces. Mapping host-owned task execution to those control events uses the documented scheduler custody contract; the compiled bridge checks the actual lock-held finish body.",
         "Scope constructors retain valid owner records and allocate child identities distinct from the parent owner. The selected FiberData corresponds to the current scope owner.",
         "Fresh effect allocation, valid arena indices, allocator success, lock implementation, pointer lifetimes, and callback scheduling remain concrete runtime obligations."
       ],
@@ -115,16 +115,98 @@
         "Cordis.Bindings.releasing_committed_consumer_removes_membership"
       ],
       "assumptions": [
-        "Implementation and pointer identities preserve equality; the zero-sentinel uniqueness theorem assumes valid implementation UIDs are nonzero.",
+        "Production checked_add allocation gives strictly positive, never-reused service UIDs until exhaustion. KernelSemantics proves that allocator property and failure preservation; actual UINT64_MAX regressions and extracted reservation code are checked.",
         "Frame lists represent finite owner segments of the actual scope chain; the compiled bridge exercises real pointer traversal on explicit constructed scopes.",
         "Provider checks and consumer predicates finish outside the lock and supply available; the model proves the subsequent revalidation and installation rule.",
         "Committed identities remain valid until dependent cleanup releases them; allocation, table memory safety, provider activation, and global scheduler fairness remain runtime obligations.",
-        "getBinding formalizes identity selection. Dynamic value typing, error construction, interceptor metadata, and the entire get_value function are outside its compiled fragment bridge.",
+        "KernelSemantics and the compiled bridge cover complete get_value branches, Scoped::from_binding dynamic typing and Arc/origin preservation, and declaration/requester plus outer-to-inner caller metadata merging. Arbitrary user middleware and Merge implementations retain their declared contracts.",
         "Wait readiness and release membership are proved; executor progress after waking uses the host scheduling contract."
       ],
       "evidence_commands": [
         "cd formal && lake build Bindings",
         "python3 formal/check_kernel_refinement.py --lake lake --rustc rustc --evidence /tmp/cordis-kernel-refinement.json"
+      ]
+    },
+    {
+      "domain": "reachable kernel control, checked finite identities, complete service access and dynamic handle typing",
+      "module": "KernelSemantics",
+      "production_paths": [
+        "crates/cordis/src/fiber.rs",
+        "crates/cordis/src/reflect.rs",
+        "crates/cordis/src/service.rs",
+        "crates/cordis/src/context.rs"
+      ],
+      "entrypoints": [
+        "drain::locked_boundary",
+        "finish_transition::locked_boundary",
+        "submit_cleanup",
+        "resume_cleanup",
+        "Fiber::restart",
+        "provide_value::checked_identity_reservation",
+        "notify::revision_advance",
+        "reflect::current_candidate",
+        "Context::get_value",
+        "Context::resolve_realm",
+        "Scoped::from_binding",
+        "Context::merge_meta",
+        "reflect::injected_value",
+        "reflect::injected_meta",
+        "Scoped::meta"
+      ],
+      "theorems": [
+        "Cordis.KernelSemantics.control_step_preserves",
+        "Cordis.KernelSemantics.control_trace_preserves",
+        "Cordis.KernelSemantics.reachable_finish_has_inertia",
+        "Cordis.KernelSemantics.suspended_task_has_no_runner",
+        "Cordis.KernelSemantics.finish_boundary_from_execution",
+        "Cordis.KernelSemantics.successful_identity_is_fresh",
+        "Cordis.KernelSemantics.allocated_identity_is_nonzero",
+        "Cordis.KernelSemantics.exhausted_allocation_preserves_registry",
+        "Cordis.KernelSemantics.allocations_never_reuse",
+        "Cordis.KernelSemantics.exhaustion_is_permanent",
+        "Cordis.KernelSemantics.exhausted_snapshot_rejected",
+        "Cordis.KernelSemantics.root_reads_live",
+        "Cordis.KernelSemantics.committed_value_retains_definition",
+        "Cordis.KernelSemantics.optional_absence_has_distinct_error",
+        "Cordis.KernelSemantics.required_absence_has_distinct_error",
+        "Cordis.KernelSemantics.typed_success_preserves_identity",
+        "Cordis.KernelSemantics.typed_handle_preserves_origins",
+        "Cordis.KernelSemantics.wrong_type_does_not_evaluate_definition",
+        "Cordis.KernelSemantics.own_provision_has_default_metadata",
+        "Cordis.KernelSemantics.committed_metadata_uses_requester_declaration",
+        "Cordis.KernelSemantics.metadata_inner_layer_applies_last",
+        "Cordis.KernelSemantics.metadata_unrelated_key_is_ignored",
+        "Cordis.KernelSemantics.malformed_matching_metadata_fails",
+        "Cordis.KernelSemantics.empty_interception_preserves_declaration"
+      ],
+      "assumptions": [
+        "Control events represent scheduler custody at launch, retained cleanup, explicit resume and finish. Host task ownership and the source-to-control-event mapping remain explicit runtime contracts; no conclusion is supplied as a step premise.",
+        "checkedNext uses a natural limit. UINT64_MAX instantiates service/revision capacity; actual checked_add calls reject exhaustion before the modeled registry writes. Revision restart failure is tested through the real Fiber API.",
+        "An exhausted service notification revision permanently removes that implementation from candidate resolution. Captured snapshots are revalidated against absence; a freshly provided implementation obtains a fresh UID.",
+        "The complete get_value body and Scoped::from_binding are copied unchanged into the compiled probe. Stable arenas, scope owner correspondence and lookups supply valid records. Any downcast and Arc pointer identity use the Rust standard library.",
+        "get_value error categories preserve optional/required/unauthorized distinctions. Metadata declaration lookup uses requester; outer-to-inner intercepts use caller. Declaration metadata of another dynamic type defaults; a matching interception of another type triggers the existing production panic. User-defined Merge code, middleware behavior and error location/display formatting remain environment behavior.",
+        "Finite notification-count addition still uses the USize capacity premise in KernelRefinement. Arena generation reuse, allocation failure, compiler, language memory safety and host scheduling are part of the trusted runtime boundary."
+      ],
+      "evidence_commands": [
+        {
+          "argv": [
+            "python3",
+            "formal/check_kernel_refinement.py"
+          ],
+          "purpose": "80,798 exact-source observations over 25 extracted entrypoints; 12 domain and production mutation controls"
+        },
+        {
+          "argv": [
+            "cargo",
+            "test",
+            "--locked",
+            "-p",
+            "cordis",
+            "--lib",
+            "exhausted_"
+          ],
+          "purpose": "real service UID exhaustion, restart revision exhaustion and permanent notification invalidation/reprovide regressions"
+        }
       ]
     }
   ]

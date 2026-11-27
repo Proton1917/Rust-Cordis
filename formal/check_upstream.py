@@ -14,7 +14,7 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[1]
 PIN = "261c5fdae6edb54e7ed4f071024f530acd18903b"
 SOURCE = ROOT / "cordis/packages/core/src/fiber.ts"
-DOMAINS = {"idle": 8, "set_epoch": 64, "reload": 8, "unload": 2}
+DOMAINS = {"idle": 8, "set_epoch": 64, "reload": 8, "unload": 2, "cleanup": 32}
 
 
 def run(command: list[str], cwd: Path = ROOT) -> str:
@@ -81,7 +81,8 @@ const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
 const getState = new Function("FiberState", "INACTIVE", methods.getState);
 const setEpoch = new Function("epoch", "FiberState", "INACTIVE", methods.setEpoch);
 const reload = new AsyncFunction("FiberState", "INACTIVE", methods.reload);
-const unload = new AsyncFunction("FiberState", "INACTIVE", methods.unload);
+const unload = new AsyncFunction("FiberState", "INACTIVE", "composeError", methods.unload);
+const composeError = callback => callback({error: undefined});
 const epochs = [INACTIVE, "0", "1:2", "9007199254740991:9007199254740990"];
 const bit = (mask, field) => Boolean(mask & (1 << field));
 function state(epoch) {
@@ -128,8 +129,41 @@ async function main() {
   }
   for (let mask = 0; mask < 2; mask++) {
     const value = state(mask ? "0" : INACTIVE);
-    await unload.call(value, FiberState, INACTIVE);
+    await unload.call(value, FiberState, INACTIVE, composeError);
     console.log(`unload\t${mask}\t${value.observation}`);
+  }
+  for (let mask = 0; mask < 32; mask++) {
+    const count = mask % 4;
+    const value = state(bit(mask, 2) ? "next" : INACTIVE);
+    const starts = [], gates = [];
+    let errors = 0, releases = 0, fiberReleases = 0;
+    value._runner.getOuterStack = () => [];
+    value.ctx.logger.error = () => { errors++; };
+    value._disposables.clear = () => Array.from({length: count}, (_, index) => async () => {
+      starts.push(index);
+      await new Promise(resolve => {gates[index] = resolve;});
+      if (bit(mask, 3) && index === 0) throw new Error("cleanup");
+    });
+    const blocker = {dependents: new Set(bit(mask, 4) ? ["child"] : [])};
+    value.provisions = [blocker];
+    const provider = extra => ({dependents: new Set(extra ? [value, "other"] : [value]),
+      release: () => {releases++;}, ctx: {fiber: {_release: () => {fiberReleases++;}}}});
+    const exclusive = provider(false), shared = provider(true);
+    value.committed = {exclusive, shared};
+    const task = unload.call(value, FiberState, INACTIVE, composeError);
+    for (let turn = 0; turn < 8; turn++) await Promise.resolve();
+    const waited = bit(mask, 4) ? starts.length === 0 : true;
+    blocker.dependents.clear();
+    value._release?.();
+    for (let turn = 0; turn < 32 && starts.length < count; turn++) await Promise.resolve();
+    if (starts.length !== count) throw new Error("cleanup did not launch its complete batch");
+    for (let index = 0; index < count; index++) {
+      gates[index]();
+      await Promise.resolve();
+    }
+    await task;
+    const retained = exclusive.dependents.has(value) || shared.dependents.has(value);
+    console.log(`cleanup\t${mask}\t${value.observation}|${starts.join(",")}|${value.committed === undefined}|${releases}|${fiberReleases}|${errors}|${waited}|${retained}`);
   }
 }
 main().catch(error => {console.error(error); process.exitCode = 1;});
@@ -153,9 +187,10 @@ def check(args: argparse.Namespace) -> dict:
     run(["git", "diff", "--exit-code", PIN, "--", "packages/core/src/fiber.ts"], ROOT / "cordis")
     source = SOURCE.read_text()
     source_hash = hashlib.sha256(source.encode()).hexdigest()
-    proof_inputs = [ROOT / "formal" / name for name in ("Lifecycle.lean", "Upstream.lean", "UpstreamVectors.lean", "lakefile.toml", "lake-manifest.json", "lean-toolchain", "check_upstream.py")]
+    proof_inputs = [ROOT / "formal" / name for name in ("Lifecycle.lean", "Upstream.lean", "UpstreamSimulation.lean", "UpstreamVectors.lean", "lakefile.toml", "lake-manifest.json", "lean-toolchain", "check_upstream.py")]
     proof_before = {str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest() for path in proof_inputs}
     run([lake, "build", "Upstream"], ROOT / "formal")
+    run([lake, "env", "lean", "-o", ".lake/build/lib/lean/UpstreamSimulation.olean", "UpstreamSimulation.lean"], ROOT / "formal")
     methods = {
         "getState": method_body(source, "private _getState()"),
         "setEpoch": method_body(source, "private _setEpoch(epoch: string)"),
@@ -186,6 +221,16 @@ def check(args: argparse.Namespace) -> dict:
         corrupted["reload"] = methods["reload"].replace(stale_guard, "if (true) {\n        this._error = reason")
         if observe(node, corrupted, temporary) == expected:
             raise RuntimeError("upstream bridge accepted an obsolete callback failure")
+        for name, original, replacement in [
+            ("cleanup_registration_order", ".clear().reverse()", ".clear()"),
+            ("provider_release_membership", "impl.dependents.delete(this)", "impl.dependents.has(this)"),
+        ]:
+            if methods["unload"].count(original) != 1:
+                raise RuntimeError(f"upstream cleanup mutation site missing: {name}")
+            corrupted = dict(methods)
+            corrupted["unload"] = methods["unload"].replace(original, replacement)
+            if observe(node, corrupted, temporary) == expected:
+                raise RuntimeError(f"upstream cleanup mutation escaped: {name}")
     if hashlib.sha256(SOURCE.read_bytes()).hexdigest() != source_hash:
         raise RuntimeError("upstream source changed during verification")
     proof_after = {str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest() for path in proof_inputs}
@@ -195,11 +240,11 @@ def check(args: argparse.Namespace) -> dict:
         "status": "passed", "upstream_commit": PIN, "source_sha256": source_hash,
         "proof_inputs_sha256": proof_after,
         "node": run([node, "--version"]).strip(), "compiled_input_cases": len(expected),
-        "negative_controls": {"inverted_upstream_inertia_guard": "rejected", "stale_callback_failure_guard_removed": "rejected"},
+        "negative_controls": {"inverted_upstream_inertia_guard": "rejected", "stale_callback_failure_guard_removed": "rejected", "cleanup_registration_order": "rejected", "provider_release_membership": "rejected"},
         "extracted_production_functions": ["Fiber._getState", "Fiber._setEpoch", "Fiber._reload", "Fiber._unload"],
-        "support_stubs": ["empty service/cleanup collections", "transition launch observation", "controlled callback completion/error", "logger sink"],
+        "support_stubs": ["constructed service/dependent collections and nonempty cleanup callbacks", "transition launch observation", "controlled callback completion/error", "composeError invokes its callback; stack decoration is outside the probe", "logger sink"],
         "syntax_erasure": "new Promise<void> becomes new Promise; method signatures are supplied by Function/AsyncFunction",
-        "scope": "shared lifecycle observations at source method boundaries, including a superseded awaited load; full JavaScript/Rust language semantics remain outside this bridge",
+        "scope": "stateful shared lifecycle protocol, erased Rust status/yield microsteps, nonempty cleanup and committed-provider release; source methods execute bounded controlled scenarios while arbitrary protocol traces are proved in UpstreamSimulation; full JavaScript/Rust language semantics remain outside this bridge",
     }
 
 

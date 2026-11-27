@@ -1,4 +1,4 @@
-import Bindings
+import KernelSemantics
 
 /-! Executable observations for the independently compiled production fragments.
     These finite vectors supplement the universal theorems; their size is not a
@@ -100,10 +100,64 @@ def optionCode : Option Nat → String
 
 def snapshotCase (mask : Nat) : String :=
   let old : Snapshot := ⟨some 0, some 1, true, some 0, if bit mask 6 then none else some 0⟩
-  let now : Current := ⟨some (if bit mask 0 then 1 else 0), some (if bit mask 1 then 2 else 1),
-    !bit mask 2, if bit mask 3 then some 1 else some 0, if bit mask 4 then some 1 else some 0⟩
+  let now : Current := ⟨if bit mask 8 then none else some (if bit mask 0 then 1 else 0),
+    if bit mask 8 then none else some (if bit mask 1 then 2 else 1),
+    !(bit mask 2 || bit mask 8), if bit mask 3 then some 1 else some 0,
+    if bit mask 8 then none else if bit mask 4 then some 1 else some 0⟩
   optionCode (installChecked (some 9) "svc" (if bit mask 5 then "other" else "svc")
     old now (bit mask 7))
+
+def getValueCase (mask : Nat) : String :=
+  let store := fun id =>
+    {identity := 0, typeId := 0, definition := if id == 2 || id == 5 then 0 else 1 : KernelSemantics.Value}
+  let optional := fun owner => owner == 1 && !bit mask 11
+  let value := KernelSemantics.getValue (bit mask 10) (if bit mask 2 then some 0 else none)
+    (frames mask) "svc" (if bit mask 0 then 2 else 0) optional store
+  match value with
+  | .ok value => "ok:" ++ csv [value.identity, value.definition]
+  | .error .optionalAbsent => "optional"
+  | .error .requiredInactive => "required"
+  | .error _ => "unauthorized"
+
+def typedHandleCase (actual expected mask : Nat) : String :=
+  let caller := if bit mask 0 then 1 else 0
+  let definition := if bit mask 1 then 1 else 0
+  let value : KernelSemantics.Value := ⟨19, actual, definition⟩
+  match KernelSemantics.fromBinding caller expected value with
+  | none => "wrong:0"
+  | some result => "ok:" ++ csv [result.value.identity, result.caller,
+      result.value.definition, result.requester, 1, KernelSemantics.definitionCalls expected value]
+
+def boundaryCounter : Nat → Nat
+  | 0 => 0 | 1 => 1 | 2 => 18446744073709551613
+  | 3 => 18446744073709551614 | 4 => 18446744073709551615 | _ => 9007199254740992
+
+def identityCase (index existing : Nat) : String :=
+  let current := boundaryCounter index
+  match KernelSemantics.checkedNext 18446744073709551615 current with
+  | none => csv [0, current, 1 + existing]
+  | some next => csv [1, next, 2]
+
+def notificationCase (index poisoned : Nat) : String :=
+  let after := KernelSemantics.advanceNotification 18446744073709551615
+    ⟨boundaryCounter index, poisoned == 1⟩
+  csv [after.revision, number after.exhausted]
+
+def metadataCase (mask intercept : Nat) : String :=
+  let metadata := fun owner =>
+    if bit intercept 1 then none
+    else if owner == 1 && bit mask 5 || owner == 0 && bit mask 8 then some [100, owner]
+    else none
+  let base := KernelSemantics.declarationMetadata []
+    (locate "svc" (if bit mask 0 then 2 else 0) (frames mask)) metadata
+  let layers : List (String × Option (List Nat)) :=
+    (if bit intercept 3 then [("svc", none)] else []) ++
+    (if bit intercept 2 then [("svc", some [20])] else []) ++
+    (if bit intercept 1 then [("other", none)] else []) ++
+    (if bit intercept 0 then [("svc", some [10])] else [])
+  match KernelSemantics.checkedMetadata "svc" List.append base layers with
+  | none => "panic"
+  | some values => "ok:" ++ csv values
 
 def releaseCase (length code beforeMask provisionMask : Nat) : String :=
   let committed := commitPairs (dependencies length 0) (bindingList length 3 code)
@@ -164,7 +218,19 @@ def vectors : IO Unit := do
             (releaseCase length code beforeMask provisionMask)
   for mask in List.range 1024 do
     emit "locate" [mask] (locationCode (locate "svc" (if bit mask 0 then 2 else 0) (frames mask)))
-  for mask in List.range 256 do emit "snapshot" [mask] (snapshotCase mask)
+  for mask in List.range 512 do emit "snapshot" [mask] (snapshotCase mask)
+  for mask in List.range 4096 do emit "get_value" [mask] (getValueCase mask)
+  for actual in List.range 4 do
+    for expected in List.range 3 do
+      for mask in List.range 4 do
+        emit "typed_handle" [actual, expected, mask] (typedHandleCase actual expected mask)
+  for mask in List.range 1024 do
+    for intercept in List.range 16 do
+      emit "metadata" [mask, intercept] (metadataCase mask intercept)
+  for index in List.range 6 do
+    for flag in List.range 2 do
+      emit "identity" [index, flag] (identityCase index flag)
+      emit "notification" [index, flag] (notificationCase index flag)
   for state in List.range 6 do
     for mask in [1, 5, 35] do
       for target in List.range 4 do

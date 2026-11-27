@@ -134,12 +134,18 @@
         "Cordis.Routing.retirement_sweep_removes_generation",
         "Cordis.Routing.recipient_namespace_isolation",
         "Cordis.Routing.indexed_trace_preserves",
-        "Cordis.Routing.indexed_trace_preserves_ownership"
+        "Cordis.Routing.indexed_trace_preserves_ownership",
+        "Cordis.Routing.allocation_frontier_is_fresh",
+        "Cordis.Routing.capacity_trace_preserves",
+        "Cordis.Routing.concrete_directory_capacity_is_bounded",
+        "Cordis.Routing.finite_directory_keeps_reference_ownership",
+        "Cordis.Routing.finite_export_refines_directory_step",
+        "Cordis.Routing.full_directory_denies_export"
       ],
       "assumptions": [
         "Each Peer models a stable connection identity. The historical allocation frontier is ghost state after recipient reclaim; the concrete Recipient may be removed once that connection is dead.",
         "Entry.batch is the ghost inverse of the pending IDs in live Batch objects. Commit transfers rollback ownership once the Outgoing commit callback executes.",
-        "The capacityAvailable input is the concrete routes.len() < max_exports decision; this module proves reference conservation and identifier bounds rather than HashMap cardinality accounting.",
+        "BoundedPeer represents the exact finite domain of the concrete routes HashMap; fresh insertion, filtering and commit preserve its bijective membership and cardinality. The existing export decision receives capacityAvailable computed from keys.length < max_exports. Rust HashMap memory/layout/hash implementation remains external.",
         "Directory mutex mutations are atomic model transitions. Detached references are dropped in a separate step, corresponding to Rust's drop(discarded) outside the lock.",
         "Retirement marking and indexed sweeping are separate events, preserving the interval in which lifetime.finish has executed but the directory lock has not yet been acquired.",
         "Directory-owned Arc references are tracked individually; Arc clones returned to callers, value rewriting, network transmission and remote peer cooperation have separate contracts."

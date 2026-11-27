@@ -1,0 +1,200 @@
+{
+  "bridges": [
+    {
+      "domain": "up-envelope-stream-and-source-integer-writer",
+      "module": "WireSemantics",
+      "production_paths": [
+        "crates/cordis-up/src/message.rs",
+        "crates/cordis-up/src/codec.rs",
+        "crates/cordis-up/src/rpc.rs",
+        "sdks/typescript/cordis-sdk/src/wire.ts",
+        "sdks/python/cordis_sdk/wire.py"
+      ],
+      "entrypoints": [
+        "Message",
+        "codec::envelope",
+        "integer_width",
+        "update_budget",
+        "Connection::request",
+        "write_frames"
+      ],
+      "theorems": [
+        "Cordis.WireSemantics.envelope_roundtrip",
+        "Cordis.WireSemantics.decoded_message_has_valid_shape",
+        "Cordis.WireSemantics.envelope_encoding_injective",
+        "Cordis.WireSemantics.zero_request_rejected",
+        "Cordis.WireSemantics.empty_method_rejected",
+        "Cordis.WireSemantics.zero_error_rejected",
+        "Cordis.WireSemantics.frame_roundtrip_with_tail",
+        "Cordis.WireSemantics.oversized_header_rejected_before_body",
+        "Cordis.WireSemantics.incomplete_body_rejected",
+        "Cordis.WireSemantics.frames_roundtrip",
+        "Cordis.WireSemantics.chunked_frames_roundtrip",
+        "Cordis.WireSemantics.unsigned_integer_roundtrip",
+        "Cordis.WireSemantics.decreasing_budget_never_grows_encoding",
+        "Cordis.WireSemantics.replacing_budget_preserves_message_prefix",
+        "Cordis.WireSemantics.replacement_frame_roundtrip",
+        "Cordis.WireSemantics.hello_accepts_exact_version",
+        "Cordis.WireSemantics.capability_comes_from_accepted_hello",
+        "Cordis.WireSemantics.allocated_id_advances_frontier",
+        "Cordis.WireSemantics.exhausted_request_ids_reject",
+        "Cordis.WireSemantics.consecutive_allocations_never_reuse"
+      ],
+      "assumptions": [
+        "The envelope grammar uses CBOR maps with exact named fields and preserves arbitrary field order. Serde's additional sequence representations are a dependency boundary, while the published map form is covered.",
+        "The source extractor accepts a closed Rust grammar for integer_width, update_budget and the checked atomic request frontier. Generated Lean certificates quantify the width, appended integer bytes and allocator arithmetic. Truncation/header statements pass a closed syntax check; prefix and frame replacement require a valid old frame, offset and representable length. Complete unchanged functions also execute in the probe. Rust Vec, casts, atomic linearization, compiler and extractor correctness are explicit translation boundaries.",
+        "Frame theorems range over arbitrary finite bodies, tails, message lists and chunk partitions, subject to configured maximum and u32 length bounds. Transport fairness and eventual byte delivery remain environment properties.",
+        "The current protocol has fixed UP/1 compatibility and an invoke_budget_v1 capability. The hello relation records acceptance of version 1; it does not introduce version-range negotiation or same-connection reconnection.",
+        "Rust allocates successful request IDs from 1 through u64::MAX-1 and rejects exhaustion without wrapping. Python integers and TypeScript bigint frontiers increase without arithmetic wrap; their value validators enforce the wire u64 range."
+      ],
+      "evidence_level": "all-input-source-reflection-plus-independent-compiled-executions",
+      "evidence_commands": [
+        {
+          "argv": [
+            "python3",
+            "formal/check_wire_semantics.py"
+          ]
+        }
+      ]
+    },
+    {
+      "domain": "complete-sdk-request-and-transport-ownership",
+      "module": "RequestSemantics",
+      "production_paths": [
+        "crates/cordis-up/src/rpc.rs",
+        "sdks/typescript/cordis-sdk/src/wire.ts",
+        "sdks/python/cordis_sdk/wire.py",
+        "tests/python-sdk/test_cancellation.py"
+      ],
+      "entrypoints": [
+        "Connection::request",
+        "RequestWrite::cancel",
+        "write_frames",
+        "Connection.request",
+        "Connection.send",
+        "Connection.response",
+        "Connection.claimPending",
+        "Connection._response"
+      ],
+      "theorems": [
+        "Cordis.RequestSemantics.all_request_traces_conserve_payloads",
+        "Cordis.RequestSemantics.result_returned_at_most_once",
+        "Cordis.RequestSemantics.exited_request_has_no_orphan_payload",
+        "Cordis.RequestSemantics.response_then_cancel_closes_received_python",
+        "Cordis.RequestSemantics.response_then_failed_send_closes_received_typescript",
+        "Cordis.RequestSemantics.successful_request_transfers_exactly_one",
+        "Cordis.RequestSemantics.any_nesting_keeps_root_deadline",
+        "Cordis.RequestSemantics.earlier_parent_is_monotone",
+        "Cordis.RequestSemantics.later_write_never_increases_budget",
+        "Cordis.RequestSemantics.inherited_deadline_health_owner",
+        "Cordis.RequestSemantics.complete_request_trace_conserves_all_owners",
+        "Cordis.RequestSemantics.expired_before_first_write_rolls_back",
+        "Cordis.RequestSemantics.parent_cancel_returns_every_held_descendant"
+      ],
+      "assumptions": [
+        "Events are completed event-loop sections or lock-linearized transport actions. The shared Session trace distinguishes queue admission, positive write, write completion, response settlement and return.",
+        "The request's received result remains owned by the coroutine until successful return. Python finally closes a settled result when cancellation or send failure wins before return; TypeScript catch closes received when Promise.all fails.",
+        "The finite Python probe runs the full production request and response methods with real asyncio Task/Future scheduling and a controlled send. The finite TypeScript probe executes the whole source Connection class using Node TypeScript transform, real Promise/Map/AbortController/timers, and explicit CBOR, payload and transport adapters.",
+        "Cancellation follows active await or inherited signal edges supplied by each runtime. The descendant theorem covers every member of the supplied descendant list; discovery of that runtime graph and scheduler fairness remain environment boundaries.",
+        "Deadline timestamps share one monotone clock. Duration conversion, floating-clock precision and millisecond rounding are separate representation boundaries; the shrinking budget order is proved over natural ticks."
+      ],
+      "evidence_level": "arbitrary-composed-event-traces-plus-whole-production-coroutine-execution",
+      "evidence_commands": [
+        {
+          "argv": [
+            "python3",
+            "formal/check_wire_semantics.py"
+          ]
+        },
+        {
+          "argv": [
+            "python3",
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            "tests/python-sdk",
+            "-p",
+            "test_cancellation.py"
+          ],
+          "environment": {
+            "PYTHONPATH": "sdks/python"
+          }
+        }
+      ]
+    },
+    {
+      "domain": "recursive-cbor-values-and-dependency-normalization",
+      "module": "CborSemantics",
+      "production_paths": [
+        "crates/cordis-up/src/codec.rs",
+        "crates/cordis-up/src/payload.rs",
+        "crates/cordis-up/src/message.rs",
+        "crates/cordis-up/Cargo.toml",
+        "Cargo.lock"
+      ],
+      "entrypoints": [
+        "encode_value",
+        "decode_value",
+        "validate_value_counted",
+        "resource_tag",
+        "persistent_value",
+        "ciborium::Value::serialize",
+        "ciborium::Deserializer::deserialize_any",
+        "ciborium_ll::Header"
+      ],
+      "theorems": [
+        "Cordis.CborSemantics.arbitrary_recursive_roundtrip",
+        "Cordis.CborSemantics.actual_float_encoding_parses",
+        "Cordis.CborSemantics.recursive_short_float_roundtrip",
+        "Cordis.CborSemantics.every_float_bit_pattern_survives_shortening",
+        "Cordis.CborSemantics.both_float_serialization_layers_preserve_bits",
+        "Cordis.CborSemantics.signed_zero_stays_distinct",
+        "Cordis.CborSemantics.resource_requires_positive_u64",
+        "Cordis.CborSemantics.persistent_rejects_resource_at_map_key",
+        "Cordis.CborSemantics.persistent_rejects_resource_under_array",
+        "Cordis.CborSemantics.accepted_graph_nodes_are_bounded",
+        "Cordis.CborSemantics.root_collection_overflow_rejected",
+        "Cordis.CborSemantics.container_at_depth_limit_rejected",
+        "Cordis.CborSemantics.tag_two_is_a_number",
+        "Cordis.CborSemantics.excessive_negative_bignum_is_rejected",
+        "Cordis.CborSemantics.long_tag_bytes_remain_tagged",
+        "Cordis.CborSemantics.every_u128_has_integer_roundtrip",
+        "Cordis.CborSemantics.every_negative_i128_has_integer_roundtrip",
+        "Cordis.CborSemantics.encoded_tag_has_dependency_meaning",
+        "Cordis.CborSemantics.recursive_encoding_composes_with_normalization",
+        "Cordis.CborSemantics.normalization_precedes_resource_validation",
+        "Cordis.CborSemantics.nested_numeric_resource_reference_is_accepted",
+        "Cordis.CborSemantics.map_key_bignum_overflow_rejects",
+        "Cordis.CborSemantics.dropping_leading_zeroes_preserves_magnitude",
+        "Cordis.CborSemantics.minimal128_preserves_magnitude",
+        "Cordis.CborSemantics.minimal128_length",
+        "Cordis.CborSemantics.lowering_u128_preserves_integer",
+        "Cordis.CborSemantics.lowering_negative_i128_preserves_integer",
+        "Cordis.CborSemantics.every_lowered_tree_fits",
+        "Cordis.CborSemantics.every_lowered_tree_is_normalized",
+        "Cordis.CborSemantics.every_lowered_tree_preserves_meaning",
+        "Cordis.CborSemantics.recursive_integer_tree_roundtrip"
+      ],
+      "assumptions": [
+        "Parses is an independent byte grammar. Its recursive values include scalar integers, IEEE float bits, valid UTF-8 text, arbitrary byte strings, arrays, arbitrary-key ordered maps and tags. It includes all argument widths, half/single/double float productions, indefinite containers and segmented byte/text input.",
+        "The structural roundtrip proves parsing of arbitrary bounded recursive values in this grammar, including suffix preservation. It is not an arbitrary-program equivalence theorem for the entire ciborium byte parser, serde visitor, UTF-8 library or Rust compiler.",
+        "FloatCodec is the fixed dependency interpretation of IEEE conversions. The model quantifies over every bit pattern and only allows narrowing after exact expanded-bit equality; primitive results fit their u16/u32 widths. Source reflection checks both ciborium float guards and the integer/tag predicates; finite codec probes independently cover NaN payloads, infinities, subnormals and signed zero.",
+        "CBOR tags 2 and 3 with definite byte strings of at most 16 bytes have integer semantics in ciborium. Negative magnitudes at least 2^127 reject; larger byte strings remain ordinary tags. The integer theorems compose byte parsing with this interpretation, and do not claim raw Value::Tag constructor identity for numeric tags.",
+        "The u128/i128 witness encodings use legal fixed 16-byte bignum bodies. The dependency may remove leading zero bytes; the semantic interpretation agrees, while byte-for-byte canonical equality is not asserted.",
+        "Codec limits, persistent resource exclusion and resource tag shape are explicit value-tree policies. Operating-system allocation, panic behavior and recursive parser implementation remain separate dependency boundaries.",
+        "Recursive normalization is applied before resource validation for the definite-length encodings generated by the model. Indefinite byte bodies under tags 2/3 retain their wire-form distinction in the dependency parser and are checked independently; the normalized-encoding relation is restricted to generated definite-length encodings.",
+        "MathValue integer leaves range from i128::MIN through u128::MAX. The recursive lowering theorem preserves mathematical integers throughout arrays, map keys/values and ordinary tags, proves Fits and a normalization fixed point, and composes with the byte grammar. Ordinary tag 2/3 requires a body outside the short definite byte-string numeric form; successful decode additionally requires the resource policy. Leading-zero removal is proved to preserve magnitude and the 16-byte bound."
+      ],
+      "evidence_level": "recursive-byte-grammar-proof-with-all-input-source-guards-and-real-codec-executions",
+      "evidence_commands": [
+        {
+          "argv": [
+            "python3",
+            "formal/check_cbor_semantics.py"
+          ]
+        }
+      ]
+    }
+  ]
+}

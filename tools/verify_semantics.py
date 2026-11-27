@@ -39,8 +39,23 @@ PROOFS = {
     "SdkProtocol.lean": "Cordis.SdkProtocol",
     "Deployment.lean": "Cordis.Deployment",
     "Upstream.lean": "Cordis.Upstream",
+    "KernelSemantics.lean": "Cordis.KernelSemantics",
+    "BindingGraph.lean": "Cordis.BindingGraph",
+    "UpstreamSimulation.lean": "Cordis.UpstreamSimulation",
+    "Concurrency.lean": "Cordis.Concurrency",
+    "AsyncSemantics.lean": "Cordis.AsyncSemantics",
+    "WireSemantics.lean": "Cordis.WireSemantics",
+    "RequestSemantics.lean": "Cordis.RequestSemantics",
+    "CborSemantics.lean": "Cordis.CborSemantics",
+    "StorageProgram.lean": "Cordis.StorageProgram",
+    "StorageControlFlow.lean": "Cordis.StorageControlFlow",
+    "DirectoryInitialization.lean": "Cordis.DirectoryInitialization",
+    "Architecture.lean": "Cordis.Architecture",
+    "Composition.lean": "Cordis.Composition",
 }
-PROGRAMS = {"Generate.lean", "Audit.lean", "KernelVectors.lean", "ProtocolProbe.lean", "UpstreamVectors.lean"}
+PROGRAMS = {"Generate.lean", "Audit.lean", "KernelVectors.lean", "ProtocolProbe.lean",
+            "UpstreamVectors.lean", "BindingGraphVectors.lean", "NativeVectors.lean",
+            "StorageVectors.lean", "ArchitectureVectors.lean"}
 ARITIES = {"idle": 3, "target": 2, "refresh": 7, "finish": 5, "settled": 4, "current": 2, "current_epoch": 3, "cleanup": 2}
 ALLOWED_AXIOMS = {"propext", "Quot.sound", "Classical.choice"}
 
@@ -206,7 +221,14 @@ def source_paths() -> list[Path]:
                      and not any(part in {".lake", "__pycache__"} for part in path.relative_to(FORMAL).parts)
                      and path.suffix not in {".olean", ".ilean", ".pyc"}]
     contracts = bridge_contracts()
-    return sorted(set(formal_inputs + [ROOT / filename for row in contracts for filename in row["production_paths"]] + [
+    # Whole-module probes import SDK support code and the compiled UP crate.
+    # Bind their production dependency closure, including modules that a probe
+    # does not extract directly, to the same before/after source snapshot.
+    runtime_inputs = list(ROOT.glob("crates/*/src/**/*.rs")) + list(ROOT.glob("crates/*/Cargo.toml"))
+    sdk_inputs = list((ROOT / "sdks/python/cordis_sdk").rglob("*.py"))
+    sdk_inputs += list((ROOT / "sdks/typescript/cordis-sdk/src").rglob("*.ts"))
+    return sorted(set(formal_inputs + runtime_inputs + sdk_inputs +
+                      [ROOT / filename for row in contracts for filename in row["production_paths"]] + [
         GENERATED, ROOT / "Cargo.toml", ROOT / "Cargo.lock",
         ROOT / "rust-toolchain.toml", ROOT / "crates/cordis/src/lifecycle.rs",
         ROOT / "crates/cordis/src/fiber.rs", ROOT / "crates/cordis/src/effect.rs",
@@ -214,6 +236,9 @@ def source_paths() -> list[Path]:
         ROOT / "crates/cordis/tests/epoch_context.rs",
         ROOT / "crates/cordis/src/lib.rs", Path(__file__).resolve(),
         ROOT / "tools/protocol_storage_probe.py", ROOT / "tools/sdk_terminal_probe.py",
+        ROOT / "tools/execution_semantics_probe.py", ROOT / "tools/storage_program_probe.py",
+        ROOT / "tools/architecture_probe.py",
+        ROOT / "sdks/python/requirements.txt", ROOT / "sdks/typescript/package-lock.json",
         ROOT / "tools/tests/test_verify_semantics.py",
         ROOT / ".github/workflows/conformance.yml",
     ]))
@@ -241,6 +266,21 @@ def write_evidence(path: Path | None, evidence: dict) -> None:
         os.replace(temporary, path)
     finally:
         temporary.unlink(missing_ok=True)
+
+
+def validate_source_bridge(label: str, result: dict) -> None:
+    count = result.get("compiled_input_cases")
+    if result.get("status") != "passed" or type(count) is not int or count <= 0:
+        raise RuntimeError(f"source bridge did not return complete evidence: {label}")
+    if label == "protocol_storage" and not result.get("sdk", {}).get("cases"):
+        raise RuntimeError("protocol bridge omitted the SDK execution traces")
+    controls = result.get("negative_controls", {})
+    if not isinstance(controls, dict) or not controls:
+        raise RuntimeError(f"source bridge negative controls incomplete: {label}")
+    for name, control in controls.items():
+        status = control.get("status") if isinstance(control, dict) else control
+        if not name or status != "rejected":
+            raise RuntimeError(f"source bridge negative control incomplete: {label}/{name}")
 
 
 def verify(args: argparse.Namespace, evidence: dict) -> dict:
@@ -354,18 +394,18 @@ def verify(args: argparse.Namespace, evidence: dict) -> dict:
             ("kernel_refinement", FORMAL / "check_kernel_refinement.py", ["--lake", lake, "--rustc", rustc]),
             ("protocol_storage", ROOT / "tools/protocol_storage_probe.py", ["--lake", lake, "--rustc", rustc, "--node", args.node]),
             ("upstream", FORMAL / "check_upstream.py", ["--lake", lake, "--node", args.node]),
+            ("binding_graph", FORMAL / "check_binding_graph.py", ["--lake", lake, "--rustc", rustc]),
+            ("execution_semantics", ROOT / "tools/execution_semantics_probe.py", ["--lake", lake, "--rustc", rustc]),
+            ("wire_semantics", FORMAL / "check_wire_semantics.py", ["--lake", lake, "--rustc", rustc, "--node", args.node]),
+            ("cbor_semantics", FORMAL / "check_cbor_semantics.py", ["--lake", lake, "--rustc", rustc]),
+            ("storage_program", ROOT / "tools/storage_program_probe.py", ["--lake", lake, "--rustc", rustc]),
+            ("architecture", ROOT / "tools/architecture_probe.py", ["--lake", lake, "--rustc", rustc]),
         ]:
             evidence["current_stage"] = f"source_bridge_{label}"
             receipt = temp / f"{label}.json"
             run([sys.executable, str(script), *arguments, "--evidence", str(receipt)], cwd=ROOT)
             result = json.loads(receipt.read_text())
-            if result.get("status") != "passed" or not result.get("compiled_input_cases"):
-                raise RuntimeError(f"source bridge did not return complete evidence: {label}")
-            if label == "protocol_storage" and not result.get("sdk", {}).get("cases"):
-                raise RuntimeError("protocol bridge omitted the SDK execution traces")
-            controls = result.get("negative_controls", {})
-            if not controls or any(value != "rejected" for value in controls.values()):
-                raise RuntimeError(f"source bridge negative controls incomplete: {label}")
+            validate_source_bridge(label, result)
             bridges[label] = result
             evidence["completed_stages"].append(f"source_bridge_{label}")
 
@@ -381,6 +421,12 @@ def verify(args: argparse.Namespace, evidence: dict) -> dict:
         "protocol_budget": bridges["protocol_storage"]["compiled_input_cases"],
         "sdk_terminal_traces": bridges["protocol_storage"]["sdk"]["cases"],
         "upstream_lifecycle": bridges["upstream"]["compiled_input_cases"],
+        "binding_graph": bridges["binding_graph"]["compiled_input_cases"],
+        "execution_microsteps": bridges["execution_semantics"]["compiled_input_cases"],
+        "wire_and_request": bridges["wire_semantics"]["compiled_input_cases"],
+        "cbor_value_codec": bridges["cbor_semantics"]["compiled_input_cases"],
+        "storage_io_and_recovery": bridges["storage_program"]["compiled_input_cases"],
+        "supervisor_provenance": bridges["architecture"]["compiled_input_cases"],
     }
     return {
         "status": "passed",
@@ -404,10 +450,11 @@ def verify(args: argparse.Namespace, evidence: dict) -> dict:
         "current_stage": "complete",
         "integration_scope": "production regression commands in bridge contracts run separately from this proof-and-source checker",
         "unproved_boundaries": [
-            "Rust and JavaScript language-level refinement outside the extracted method bodies; source extraction support types and printers are checked by finite execution",
-            "mutex and atomic memory-model semantics, scheduler fairness, callback termination, foreign code and operating-system resource destruction",
-            "filesystem file-sync, directory-sync and atomic-rename guarantees under the deployment lock",
-            "wire encoding, operating-system/network I/O and the full TypeScript/Rust program equivalence beyond the shared observation domain",
+            "complete Rust/JavaScript/Python language and compiler semantics; restricted source parsers, extraction adapters, and dependency implementations form the translation boundary",
+            "std mutex/atomic/pointer contracts and valid foreign ABI ownership; the proved microstep model permits stale atomic observations but does not formalize the Rust memory model",
+            "productive scheduler dispatch and callback return are explicit assumptions only for eventual cleanup, with arbitrary-schedule safety proved separately",
+            "operating-system file-sync, directory-sync, atomic-rename, process/network and dynamic-loader contracts, under exclusive store ownership",
+            "the recursive CBOR grammar is proved; ciborium/cbor2/JavaScript codec implementations, UTF-8 and floating-point conversion primitives have their declared dependency contracts",
         ],
     }
 

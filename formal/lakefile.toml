@@ -1,6 +1,6 @@
 name = "cordis_semantics"
 version = "0.1.0"
-defaultTargets = ["Lifecycle", "Effects", "Admission", "Scopes", "DecisionProgram", "KernelRefinement", "Bindings", "Execution", "NativeOwnership", "Routing", "Protocol", "Persistence", "SdkProtocol", "Deployment", "Upstream", "Audit"]
+defaultTargets = ["Lifecycle", "Effects", "Admission", "Scopes", "DecisionProgram", "KernelRefinement", "Bindings", "Execution", "NativeOwnership", "Routing", "Protocol", "Persistence", "SdkProtocol", "Deployment", "Upstream", "KernelSemantics", "BindingGraph", "UpstreamSimulation", "Concurrency", "AsyncSemantics", "WireSemantics", "RequestSemantics", "CborSemantics", "StorageProgram", "StorageControlFlow", "DirectoryInitialization", "Architecture", "Composition", "Audit"]
 
 [[lean_lib]]
 name = "Lifecycle"
@@ -46,6 +46,45 @@ name = "Deployment"
 
 [[lean_lib]]
 name = "Upstream"
+
+[[lean_lib]]
+name = "KernelSemantics"
+
+[[lean_lib]]
+name = "BindingGraph"
+
+[[lean_lib]]
+name = "UpstreamSimulation"
+
+[[lean_lib]]
+name = "Concurrency"
+
+[[lean_lib]]
+name = "AsyncSemantics"
+
+[[lean_lib]]
+name = "WireSemantics"
+
+[[lean_lib]]
+name = "RequestSemantics"
+
+[[lean_lib]]
+name = "CborSemantics"
+
+[[lean_lib]]
+name = "StorageProgram"
+
+[[lean_lib]]
+name = "StorageControlFlow"
+
+[[lean_lib]]
+name = "DirectoryInitialization"
+
+[[lean_lib]]
+name = "Architecture"
+
+[[lean_lib]]
+name = "Composition"
 
 [[lean_lib]]
 name = "Audit"

@@ -38,8 +38,22 @@ including cycles, duplicate roots and self edges.
 
 The final Rust code sorts selected names and removes names absent from the
 catalog snapshot. `returned_iff_reachable_and_present` proves the corresponding
-membership condition. The graph-construction rules, concrete hashing, sorting,
-snapshot synchronization and `Arc` representation remain Rust refinement
-boundaries. The machine-readable bridge records these boundaries and the real
+membership condition. `BindingGraph.lean` constructs the graph from the typed source facts described below. Concrete hashing, sorting, snapshot synchronization and `Arc` representation remain implementation contracts. The machine-readable bridge records these boundaries and the real
 manager test entrypoint. The existing Python graph enumeration remains useful
 as a small independent regression check; the Lean proof has no three-node bound.
+
+## Constructing dependency edges
+
+`BindingGraph.Snapshot` holds parent edges, consumers, current/incoming providers, replacement names and named-realm mappings. Providers from an incoming replacement suppress the current provider with the same instance identity. Each unresolved consumer accepts candidates only when the full major-version key matches, the offered minor version meets its requirement, and the provider inherits the consumer realm or belongs to its named namespace.
+
+Committed bindings have three distinct representations: unresolved; a bound root service with no instance generation; and a bound instance generation. The latter creates one provider-to-consumer edge. A root binding seals candidate fallback while creating no instance edge. This distinction follows the complete production match branch.
+
+`constructed_edges_exact` proves edge membership exactly matches those rules. `reachability_refines` and `selection_from_source_facts` connect the constructed edges to the arbitrary finite worklist proof. `selected_existing_instances_exact` includes the final catalog filter; `constructed_graph_terminates` preserves termination for all finite snapshots.
+
+## Source predicate and complete builder execution
+
+`check_binding_graph.py` extracts the candidate closure and parses three bound comparisons, boolean conjunction/disjunction and parentheses into `BindingGraph.Predicate`. A generated Lean certificate checks this source-derived syntax equals `candidateProgram`; `candidate_program_spec` then supplies its minor/realm specification for arbitrary parameters. The parser rejects unsupported syntax. The trusted boundary contains this restricted parser, source extraction, primitive comparisons, the u32 projection and the compiler; it is not a general Rust parser or memory model.
+
+The checker also compiles the entire `Manager::select_instances` function body unchanged over stable snapshot APIs. Its 32,768 inputs cover current and fallback components, a missing fallback, parent chains, replacements, key/minor/realm compatibility, dynamic type failure, root and instance commitments, sibling plugin declarations and roots. Six source mutations alter minor direction, named-realm logic, replacement exclusion, committed-minor checking, parent direction and root-binding fallback; all are rejected. An AST operator mutation fails the Lean certificate, and unsupported predicate syntax fails parsing.
+
+Context resolution, interface parsing and catalog locks supply the explicitly recorded environment facts. Input hashes are checked before and after execution; receipts use running/passed/failed states. Run `python3 formal/check_binding_graph.py --evidence target/binding-graph-certificate.json` to reproduce the bridge.

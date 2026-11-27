@@ -1,9 +1,11 @@
 // Support types and input/output adapters for extracted production functions.
 // check_kernel_refinement.py replaces each SOURCE marker with the current,
 // uniquely matched Rust source text before compilation. The containers below
-// model valid indices; they do not verify SlotMap allocation or Rust memory.+#![allow(dead_code)]
+// model valid indices; they do not verify SlotMap allocation or Rust memory.
+#![allow(dead_code)]
 
 use std::collections::{HashMap, HashSet};
+use std::any::Any;
 use std::future::{Future, poll_fn};
 use std::io::{self, BufRead};
 use std::ops::{Index, IndexMut};
@@ -70,6 +72,7 @@ struct Dependency {
     key: Arc<str>,
     required: bool,
     predicate: Option<Arc<u8>>,
+    meta: Option<AnyArc>,
 }
 #[derive(Clone)]
 struct Inject {
@@ -112,7 +115,9 @@ enum Layer {
     Plain,
     Isolate(Arc<str>, Realm),
     Epoch(Arc<Epoch>),
+    Intercept(Arc<str>, AnyArc),
 }
+#[derive(Clone)]
 struct Context {
     kernel: Arc<Kernel>,
     scope: Arc<Scope>,
@@ -121,11 +126,52 @@ impl Context {
     // @SOURCE:CONTEXT_METHODS@
 }
 
+type AnyArc = Arc<dyn Any + Send + Sync>;
+trait Merge: Clone + Default { fn merge(&self, next:&Self)->Self; }
+impl Merge for Vec<u32> {
+    fn merge(&self,next:&Self)->Self {let mut result=self.clone();result.extend(next);result}
+}
+trait ServiceKey {
+    const NAME:&'static str;
+    type Value: ?Sized + Send + Sync + 'static;
+    type Meta: Merge + 'static;
+}
+struct Scoped<K: ServiceKey> {
+    value: Arc<K::Value>, caller: Context, definition: Context, requester: Context,
+}
+impl<K: ServiceKey> Scoped<K> {
+    // @SOURCE:FROM_BINDING@
+    // @SOURCE:SCOPED_META@
+}
+trait Counter: Send + Sync { fn number(&self) -> u32; }
+impl Counter for u32 { fn number(&self) -> u32 { *self } }
+struct NumberKey;
+impl ServiceKey for NumberKey {const NAME:&'static str="svc";type Value=u32;type Meta=Vec<u32>;}
+struct TextKey;
+impl ServiceKey for TextKey {const NAME:&'static str="svc";type Value=String;type Meta=Vec<u32>;}
+struct DynamicKey;
+impl ServiceKey for DynamicKey {const NAME:&'static str="svc";type Value=dyn Counter;type Meta=Vec<u32>;}
+
+struct IdentityState {impl_counter:u64,names:HashMap<Arc<str>,Option<u32>>}
+fn reserve_identity(state:&mut IdentityState)->Result<u64> {
+    let key:Arc<str>="svc".into();
+    let kind=Some(1);
+    let location=Location::caller();
+    // @SOURCE:RESERVE_IDENTITY@
+    Ok(uid)
+}
+fn advance_notification(state:&mut State,key:&Arc<str>,realm:Realm) {
+    // @SOURCE:ADVANCE_NOTIFICATION@
+}
+
 #[derive(Clone)]
-struct Error;
+struct Error(String);
 impl Error {
     fn inactive() -> Self {
-        Self
+        Self("inactive".into())
+    }
+    fn new(message: impl Into<String>) -> Self {
+        Self(message.into())
     }
     fn at(self, _: &'static Location<'static>) -> Self {
         self
@@ -162,6 +208,7 @@ struct ImplData {
     dependents: HashSet<FiberId>,
     waiters: Vec<Waker>,
     notification_revision: u64,
+    notification_exhausted: bool,
     active: bool,
     value: Arc<u8>,
 }
@@ -169,6 +216,13 @@ impl ImplData {
     fn is_active(&self, _state: &State) -> bool {
         self.active
     }
+    fn definition(&self, kernel: &Arc<Kernel>) -> Context {
+        Context { kernel: kernel.clone(), scope: self.scope.clone() }
+    }
+}
+struct ServiceValue {
+    value: Arc<u8>,
+    definition: Context,
 }
 struct State {
     fibers: Vec<FiberData>,
@@ -193,6 +247,8 @@ mod reflect {
     use super::*;
     // @SOURCE:REFLECT_FUNCTIONS@
 }
+use reflect::locate;
+// @SOURCE:CURRENT_CANDIDATE@
 
 fn refresh_boundary(
     mut state: &mut State,
@@ -295,7 +351,7 @@ fn fiber(state: usize, mask: usize, target: usize, running: usize) -> FiberData 
     FiberData {
         state: phase(state),
         alive: bit(mask, 0),
-        error: bit(mask, 1).then_some(Error),
+        error: bit(mask, 1).then(|| Error::inactive()),
         target: epoch(target),
         running_epoch: epoch(running),
         inertia: bit(mask, 2),
@@ -346,6 +402,7 @@ fn implementation(uid: u64, key: &str, realm: u64, owner: usize) -> ImplData {
         dependents: HashSet::new(),
         waiters: vec![],
         notification_revision: 1,
+        notification_exhausted: false,
         active: true,
         value: Arc::new(0),
     }
@@ -357,7 +414,7 @@ fn resolved_state(mut data: FiberData, resolved: usize) -> State {
             data.inject.entries.push(Dependency {
                 key: "missing".into(),
                 required: true,
-                predicate: None,
+                predicate: None,                meta: None,
             });
             data.bindings.push(None);
         }
@@ -368,7 +425,7 @@ fn resolved_state(mut data: FiberData, resolved: usize) -> State {
                 data.inject.entries.push(Dependency {
                     key: key.clone().into(),
                     required: uid != 0,
-                    predicate: None,
+                    predicate: None,                    meta: None,
                 });
                 data.bindings.push(
                     (uid != 0).then(|| implementations.insert(implementation(uid, &key, 0, 1))),
@@ -444,7 +501,7 @@ fn dependencies(length: usize, mask: usize) -> Vec<Dependency> {
         .map(|index| Dependency {
             key: format!("k{index}").into(),
             required: bit(mask, index),
-            predicate: None,
+            predicate: None,            meta: None,
         })
         .collect()
 }
@@ -579,7 +636,7 @@ fn execute(family: &str, input: &[usize]) -> String {
                 )
             }
         }
-        "locate" => {
+        "locate" | "get_value" | "metadata" => {
             let mask = input[0];
             let realm = if bit(mask, 0) { 2 } else { 0 };
             let root = root_scope(0);
@@ -611,8 +668,8 @@ fn execute(family: &str, input: &[usize]) -> String {
             if bit(mask, 5) {
                 state.fibers[1].inject.entries.push(Dependency {
                     key: "svc".into(),
-                    required: false,
-                    predicate: None,
+                    required: bit(mask, 11),
+                    predicate: None,                    meta: None,
                 });
             }
             if bit(mask, 6) {
@@ -625,21 +682,54 @@ fn execute(family: &str, input: &[usize]) -> String {
                 state.fibers[0].inject.entries.push(Dependency {
                     key: "svc".into(),
                     required: true,
-                    predicate: None,
+                    predicate: None,                    meta: None,
                 });
+            }
+            if family == "metadata" {
+                for owner in 0..2 {
+                    for entry in &mut state.fibers[owner].inject.entries {
+                        entry.meta = Some(if bit(input[1], 1) {Arc::new(99_u32)}
+                            else {Arc::new(vec![100_u32, owner as u32])});
+                    }
+                }
             }
             let kernel = Arc::new(Kernel {
                 state: Lock(Mutex::new(state)),
             });
             let mut ctx = Context {
                 kernel: kernel.clone(),
-                scope: child,
+                scope: if family == "get_value" && bit(mask, 10) { kernel.state.lock().fibers[1].parent_scope.clone().unwrap() } else { child },
             };
             if bit(mask, 0) {
                 ctx = ctx.derive(Layer::Isolate("svc".into(), Realm(2)));
             }
             if bit(mask, 1) {
                 ctx = ctx.derive(Layer::Isolate("other".into(), Realm(3)));
+            }
+            if family == "metadata" {
+                let flags=input[1];
+                let mut caller=Context{kernel:kernel.clone(),scope:root_scope(0)};
+                if bit(flags,0){caller=caller.derive(Layer::Intercept("svc".into(),Arc::new(vec![10_u32])));}
+                if bit(flags,1){caller=caller.derive(Layer::Intercept("other".into(),Arc::new(99_u32)));}
+                if bit(flags,2){caller=caller.derive(Layer::Intercept("svc".into(),Arc::new(vec![20_u32])));}
+                if bit(flags,3){caller=caller.derive(Layer::Intercept("svc".into(),Arc::new(99_u32)));}
+                let handle=Scoped::<NumberKey>{value:Arc::new(19),caller,definition:ctx.clone(),requester:ctx};
+                let hook=std::panic::take_hook();
+                std::panic::set_hook(Box::new(|_|{}));
+                let result=std::panic::catch_unwind(std::panic::AssertUnwindSafe(||handle.meta()));
+                std::panic::set_hook(hook);
+                return match result {Ok(values)=>format!("ok:{}",values.iter().map(ToString::to_string).collect::<Vec<_>>().join(",")),Err(_)=>"panic".into()};
+            }
+            if family == "get_value" {
+                if bit(mask, 2) {
+                    kernel.state.lock().store.insert(("svc".into(), Realm(realm)), 0);
+                }
+                return match ctx.get_value(&"svc".into()) {
+                    Ok(value) => format!("ok:{},{}", *value.value, value.definition.scope.fiber),
+                    Err(error) if error.0.starts_with("optional service") => "optional".into(),
+                    Err(error) if error.0.starts_with("cannot get required") => "required".into(),
+                    Err(_) => "unauthorized".into(),
+                };
             }
             match reflect::locate(&kernel.state.lock(), &ctx.scope, "svc") {
                 None => "none".into(),
@@ -691,6 +781,41 @@ fn execute(family: &str, input: &[usize]) -> String {
                 ready_after as usize,
             ])
         }
+        "typed_handle" => {
+            let [actual, expected, mask] = *input else {panic!("bad typed handle input")};
+            let kernel=Arc::new(Kernel{state:Lock(Mutex::new(state(fiber(2,1,1,1))))});
+            let caller=Context{kernel:kernel.clone(),scope:root_scope(bit(mask,0) as usize)};
+            let definition=Context{kernel,scope:root_scope(bit(mask,1) as usize)};
+            let value:AnyArc=match actual {
+                0=>Arc::new(Arc::new(19_u32)),
+                1=>Arc::new(Arc::new("19".to_owned())),
+                2=>Arc::new(Arc::new(19_u32) as Arc<dyn Counter>),
+                _=>Arc::new(19_u32),
+            };
+            match expected {
+                0=>handle_observation::<NumberKey>(&caller,&definition,&value,|v|*v),
+                1=>handle_observation::<TextKey>(&caller,&definition,&value,|v|v.parse().unwrap()),
+                _=>handle_observation::<DynamicKey>(&caller,&definition,&value,|v|v.number()),
+            }
+        }
+        "identity" => {
+            let [index,existing]=*input else{panic!("bad identity input")};
+            let mut state=IdentityState{impl_counter:boundary_counter(index),names:HashMap::from([("other".into(),Some(2))])};
+            if existing==1{state.names.insert("svc".into(),Some(1));}
+            let result=reserve_identity(&mut state);
+            format!("{},{},{}",result.is_ok() as u8,state.impl_counter,state.names.len())
+        }
+        "notification" => {
+            let [index,poisoned]=*input else{panic!("bad notification input")};
+            let mut state=state(fiber(2,1,1,1));
+            let mut value=implementation(1,"svc",0,0);
+            value.notification_revision=boundary_counter(index);
+            value.notification_exhausted=poisoned==1;
+            state.impls.insert(value);
+            state.store.insert(("svc".into(),Realm::DEFAULT),0);
+            advance_notification(&mut state,&"svc".into(),Realm::DEFAULT);
+            format!("{},{}",state.impls[0].notification_revision,state.impls[0].notification_exhausted as u8)
+        }
         "snapshot" => {
             let mask = input[0];
             let mut state = state(fiber(2, 1, 1, 1));
@@ -699,6 +824,7 @@ fn execute(family: &str, input: &[usize]) -> String {
             for _ in 0..2 {
                 let mut implementation = implementation(1, "svc", 0, 1);
                 implementation.notification_revision = if bit(mask, 1) { 2 } else { 1 };
+                implementation.notification_exhausted = bit(mask, 8);
                 implementation.active = !bit(mask, 2);
                 implementation.value = if bit(mask, 4) {
                     Arc::new(1)
@@ -720,6 +846,7 @@ fn execute(family: &str, input: &[usize]) -> String {
                 } else {
                     predicate.clone()
                 }),
+                meta: None,
             }];
             install_checked(
                 &mut state,
@@ -740,6 +867,22 @@ fn execute(family: &str, input: &[usize]) -> String {
                 .unwrap_or_else(|| "none".into())
         }
         _ => panic!("unknown family: {family}"),
+    }
+}
+
+fn boundary_counter(index:usize)->u64 {
+    [0,1,u64::MAX-2,u64::MAX-1,u64::MAX,9_007_199_254_740_992][index]
+}
+
+fn handle_observation<K:ServiceKey>(caller:&Context, definition:&Context, value:&AnyArc,
+    read:impl Fn(&K::Value)->u32)->String {
+    let called=std::cell::Cell::new(0);
+    let result=Scoped::<K>::from_binding(caller,value,||{called.set(called.get()+1);definition.clone()});
+    match result {
+        None=>format!("wrong:{}",called.get()),
+        Some(result)=>format!("ok:{}",csv(&[read(&result.value) as usize,result.caller.scope.fiber,
+            result.definition.scope.fiber,result.requester.scope.fiber,
+            Arc::ptr_eq(&result.value,value.downcast_ref::<Arc<K::Value>>().unwrap()) as usize,called.get()])),
     }
 }
 

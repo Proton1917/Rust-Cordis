@@ -31,7 +31,7 @@
       "assumptions": [
         "Each model event is a completed mutex critical section; actual locking and scheduling are integration boundaries.",
         "The first-write token counts transfer of the right to execute a hook; the callback itself executes outside the lock.",
-        "Pending ownership is projected onto one fresh request id; request-id reuse across u64 wraparound is outside this model.",
+        "Pending ownership is projected onto one fresh request id. The production Rust allocator starts at 1 and atomically uses checked_add(1), so successful IDs are strictly increasing through u64::MAX-1 and exhaustion rejects with code 8 without rewinding the frontier. WireSemantics and Architecture record this monotone frontier contract.",
         "The FIFO theorem counts accepted/dequeued frames; transport completion, fairness and eventual delivery remain external.",
         "Health arithmetic abstracts saturating u32 increments; uniqueness and inherited-deadline rules apply before saturation."
       ],
@@ -130,8 +130,8 @@
         "Each terminal method runs synchronously within its JavaScript/asyncio event loop.",
         "Payload.close and runtime import ownership are separate resource implementations; this model identifies the unique close owner.",
         "The probe executes exact response/claim bodies, real asyncio.Future and JavaScript Map; validators, error construction and payload accounting are adapters.",
-        "Explicit map cleanup events project entry removal; the probe covers response sections rather than whole async request coroutines.",
-        "The TypeScript delivery-owner model assumes Promise.all transfers a received payload only after send success."
+        "Explicit map cleanup events project entry removal. RequestSemantics composes complete request/send/response/cleanup ownership; check_wire_semantics.py executes the full Python request coroutine and the entire TypeScript Connection class with controlled I/O adapters.",
+        "RequestSemantics proves the send/response/return ownership composition. The whole TypeScript request probe exercises Promise.all success, cancellation, timeout and failed-send races, with a received.close removal negative control."
       ],
       "evidence_level": "executed-production-body-differential",
       "evidence_commands": [
@@ -191,9 +191,9 @@
       ],
       "assumptions": [
         "Successful file sync preserves complete file contents; rename is atomic per name; successful directory sync persists its directory entries.",
-        "The existing deployment directory and its prior committed image are durable at the start of one transaction.",
-        "The exclusive deployment lock excludes competing writers; journal backups preserve the original contents of every changed name.",
-        "All changed names occur in the supplied write plan; unchanged names obey the frame condition.",
+        "DirectoryInitialization proves that successful initialization preserves the deployment directory; the prior committed image is durable under the completed initialization and synchronization contract.",
+        "The exclusive deployment lock excludes competing writers. StorageProgram and StorageControlFlow prove journal coverage and preservation of the original bytes, connected to production code by generated source certificates.",
+        "StorageProgram and StorageControlFlow establish complete changed-name coverage for the supplied write plan; unchanged names obey the frame condition.",
         "Recovery conclusions describe successful completion, including restarting after any partial replay; persistent I/O failure may keep recovery pending.",
         "Marker removal before its final directory sync may persist or be lost; both outcomes are explicitly allowed.",
         "Rust filesystem calls, OS and device guarantees remain the source-to-model environment boundary."

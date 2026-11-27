@@ -1,6 +1,6 @@
 # 内核表示关系与服务绑定精化
 
-`KernelRefinement.lean` 将有限宽纪元、`FiberData` 字段、持久作用域和锁内效应登记映射到现有生命周期与准入语义。`Bindings.lean` 给出依赖身份解析、隔离域查找、已提交绑定、快照重验和消费者保留的逻辑规格。两组定理由 Lean 4.19.0 内核检查。
+`KernelRefinement.lean` 将有限宽纪元、`FiberData` 字段、持久作用域和锁内效应登记映射到现有生命周期与准入语义。`Bindings.lean` 给出依赖身份解析、隔离域查找、已提交绑定、快照重验和消费者保留的逻辑规格。`KernelSemantics.lean` 补充执行控制、耗尽分配、完整服务访问和类型化元数据。这些定理由 Lean 4.19.0 内核检查。
 
 生产代码连接由 `check_kernel_refinement.py` 执行：从当前 Rust 文件唯一定位并提取函数体或锁内代码段，将原文放入独立探针，编译执行，并与 `KernelVectors.lean` 的可执行结果逐行比较。Lean 定理覆盖任意长度的对应数学对象；编译探针提供有限输入上的源码连接证据。Rust 语言语义、编译器和容器实现处于本模型的可信边界。
 
@@ -24,21 +24,23 @@ Scope 的 `Constructed` 关系包含实际构造条件：普通派生和纪元�
 
 `refresh_boundary_simulation` 证明下面两种计算得到相同的抽象状态和输出：先运行具体字段更新再投影；先投影再运行 `Lifecycle.step generated` 的 refresh 分支。证明同时处理目标选择、旧目标比较、队列标志清除、加载或卸载状态、运行纪元、惯性和通知计数。加载输出携带本次目标，供 `commit_locked` 固定对应绑定。
 
-`finish_boundary_simulation` 对一次 `finish_transition` 锁内迭代给出相同关系。其入口条件包括 `inertia = true`：生产实现继续已有转换时保留惯性，refresh 的启动分支设置惯性。完整运行时必须保证进入转换迭代时满足这个条件。`finish_never_keeps` 证明生成的 finish 决策不会返回 Keep，因而 Rust 将 Keep/Idle 合为无下一转换的分支与本模型一致。
+`finish_boundary_simulation` 对一次 `finish_transition` 锁内迭代给出相同关系。`KernelSemantics` 的执行控制状态记录运行者、暂停任务和惯性；start、park、resume、finish 的任意可达轨迹保持运行者与惯性一致。`reachable_finish_has_inertia` 从实际执行入口的运行者状态推出 `inertia = true`，`finish_boundary_from_execution` 将它传给字段精化定理。生产的启动、保留清理、显式恢复和 finish 对应这些控制事件；宿主对任务的唯一持有和调度入口映射仍是所列运行时契约。`finish_never_keeps` 证明生成的 finish 决策不会返回 Keep，因而 Rust 将 Keep/Idle 合为无下一转换的分支与本模型一致。
 
-通知自增的条件为 `notifications.toNat + 1 < USize.size`。这一条件使有限宽加法与自然数加法一致；通知自减的条件为 `0 < notifications.toNat`。修订号的对应条件使用 `UInt64.size`。这些是数学表示关系的运行前提，检查脚本同时执行零计数和 `usize::MAX - 1` 附近的生产更新。跨越整数回绕、分配失败或无效表身份的行为由运行时实现及其独立测试负责。
+通知自增的条件为 `notifications.toNat + 1 < USize.size`。这一条件使有限宽加法与自然数加法一致；通知自减的条件为 `0 < notifications.toNat`。通知计数的容量与正值条件属于有限宽表示契约，检查脚本执行零计数和 `usize::MAX - 1` 附近的生产更新。服务 UID 和 Fiber 修订号采用 `checked_add`：耗尽返回错误，并保持对应分配状态。服务通知修订号耗尽后设置永久失效位，该实现退出候选解析，已有快照也无法通过重验；重新提供服务取得新的 UID。
 
 `locked_registration_simulation` 证明具体准入和 owner 效应列表更新精化 `Admission.register`。`successful_registration_uses_same_snapshot` 给出成功登记对应的准入事实及两个表中的新增记录；`successful_registration_records_view_owner` 在所选记录的 owner 与当前视图 owner 一致时建立视图所有权。`fresh_registration_preserves_unique_effect_ids` 把分配器提供的新鲜身份条件传递到 owner 列表的无重复性。生产桥接直接执行 `Context::create_effect` 的原函数体，其中锁在准入检查与两张表插入之间一直保持。
 
 ## 依赖与服务绑定
 
-`epoch_resolution_spec` 是依赖解析的双向规格。成功结果当且仅当绑定槽数与声明数相同，并且结果中的每个位置满足 `SlotMeaning`：该槽查到了相同的实现 UID，或者该依赖可选、实现缺失且该位置为零。`collect_meaning` 对任意输入列表归纳证明这个关系；`resolved_epoch_preserves_length` 给出结果长度保持。`required_slot_has_binding` 从必需依赖位置的规格中提取真实实现表记录。零作为缺失标记的唯一性通过 `zero_identifies_optional_absence` 表达，其前提是有效实现 UID 为非零值。
+`epoch_resolution_spec` 是依赖解析的双向规格。成功结果当且仅当绑定槽数与声明数相同，并且结果中的每个位置满足 `SlotMeaning`：该槽查到了相同的实现 UID，或者该依赖可选、实现缺失且该位置为零。`collect_meaning` 对任意输入列表归纳证明这个关系；`resolved_epoch_preserves_length` 给出结果长度保持。`required_slot_has_binding` 从必需依赖位置的规格中提取真实实现表记录。零作为缺失标记的唯一性通过 `zero_identifies_optional_absence` 表达；`allocated_identity_is_nonzero` 与 `allocations_never_reuse` 从 checked 分配规则导出所需身份性质，`exhausted_allocation_preserves_registry` 证明耗尽路径发生在登记写入之前。
 
 `committed_membership` 刻画 `commit_locked` 的 zip/filter-map 结果，包括列表长度不一致时的 zip 截断行为。`latest_matching_provision_wins` 证明最近登记的同键同域本地供给优先。`isolation_seals_ancestors` 和 `declared_absence_seals_ancestors` 刻画隔离屏障与可选依赖缺失的作用。`realmFor` 证明最近匹配隔离层决定域，其余键的隔离层保持当前服务的域。
 
-`committed_read_survives_live_replacement` 证明组件已提交绑定在 live store 替换后保持相同身份。根上下文读取 live store 的分支保留在 `getBinding` 中。此定理刻画查找的身份选择；`get_value` 的动态类型转换、错误对象和元数据合并继续由生产集成测试验证。
+`committed_read_survives_live_replacement` 证明组件已提交绑定在 live store 替换后保持相同身份。根上下文读取 live store 的分支保留在 `getBinding` 中。`KernelSemantics.getValue` 随后完整区分根的 live store、组件 provision/committed 结果、可选缺失、必需未激活和未授权。返回值保留存储中的 value 与 definition 身份。`Scoped::from_binding` 的类型化映射使用真实 `Any` 下转；成功保持原 Arc 和 caller/definition/requester，错类型提前返回而不求值 definition 闭包。
 
 `snapshot_validation_spec` 给出刷新快照可提交的完整条件：依赖索引仍对应原服务键，当前 binding、通知修订号、活跃状态和 predicate 身份均匹配，已捕获的 value 身份也匹配。`stale_notification_cannot_commit` 证明通知版本变化会保留此前绑定槽。`incremented_notification_invalidates_snapshot` 将有限宽自增的表示条件与这一提交规则连接。提供方检查和消费者 predicate 的运行结果作为 `available` 输入进入模型；模型保留回调在锁外执行、返回锁内重验后写入的边界。
+
+元数据从 requester 的最近依赖声明取得初始值，再按 caller 的外层到内层顺序合并。自供服务或查找截断使用默认初始值。`metadata_inner_layer_applies_last` 对任意元数据类型和二元合并函数证明最内层最后应用；它无需把用户的合并函数预设为可交换。无关键的拦截保持结果，声明元数据下转失败使用默认值；匹配键的拦截元数据下转失败保留生产实现的 panic 结果。`collectMetadata`/`checkedMetadata` 表示这一失败边界，源码探针实际捕获并比较该结果。用户定义 Merge 函数的内部行为遵循其接口契约。
 
 消费者集合使用任意身份上的成员关系。`retained_membership_spec` 与 `released_membership_spec` 连接可执行成员位与集合规格；`provider_waits_for_committed_consumer` 证明提供方仍有外部已提交消费者时等待条件尚未成立。释放规则保留其他消费者，并删除本次 committed 列表中的当前消费者。源码桥接运行完整 `wait_dependents`、`release_committed` 函数体，以真实 Waker 和显式轮询观察等待与释放的结果。
 
@@ -47,12 +49,13 @@ Scope 的 `Constructed` 关系包含实际构造条件：普通派生和纪元�
 | 源码文件 | 实际提取并编译的内容 |
 |---|---|
 | `crates/cordis/src/fiber.rs` | `Epoch` 类型、`FiberData::idle_state`、`FiberData::is_current`、`drain` 锁内更新段、`finish_transition` 锁内更新段 |
-| `crates/cordis/src/context.rs` | `Context::derive`、`Context::permits_effect` |
+| `crates/cordis/src/context.rs` | `Context::derive`、`Context::permits_effect`、`Context::resolve_realm`、`Context::merge_meta` |
 | `crates/cordis/src/effect.rs` | `Context::create_effect` |
-| `crates/cordis/src/reflect.rs` | `epoch_ids`、`commit_locked`、`locate`、`scope_realm`、`wait_dependents`、`release_committed`、`refresh_keys` 的完整重验写入循环 |
+| `crates/cordis/src/reflect.rs` | `epoch_ids`、`commit_locked`、`locate`、`scope_realm`、`wait_dependents`、`release_committed`、完整 `get_value`、`current_candidate`、`injected_value`、`injected_meta`、checked UID 分配、通知版本更新、`refresh_keys` 的完整重验写入循环 |
+| `crates/cordis/src/service.rs` | `Scoped::from_binding`、`Scoped::meta` |
 | `crates/cordis/src/lifecycle.rs` 与生成模块 | 由探针直接引入，执行生产决策函数 |
 
-每个提取项在证据 JSON 中记录入口、源路径、字节数和 SHA-256。缺失、重复或顺序不符合要求的锚点会使提取失败。验证前后比较输入文件摘要，保证向量、证明模型、探针和生产源码属于同一快照。
+25 个提取项分别在证据 JSON 中记录入口、源路径、字节数和 SHA-256。缺失、重复或顺序不符合要求的锚点会使提取失败。验证前后比较输入文件摘要，保证向量、证明模型、探针和生产源码属于同一快照。
 
 探针的支持层将 SlotMap 身份表示为有效且稳定的 `usize` 索引，把所观察的 `DisposableList` 接口表示为有序 Vec，并用 `std::sync::Mutex` 提供锁。异步提供方等待使用 `std::future::poll_fn` 和显式单次轮询；生命周期任务、回调和错误负载采用只保留存在性的值。快照重验使用实际 `Arc::ptr_eq`。这些适配器、SlotMap 的分配和代次复用、停车锁实现、执行器调度、内存安全、宿主回调行为以及唤醒后的执行公平性，均列在 JSON 的 `support_stubs` 中。
 
@@ -60,13 +63,13 @@ Scope 的 `Constructed` 关系包含实际构造条件：普通派生和纪元�
 
 ```sh
 cd formal
-lake build KernelRefinement Bindings
+lake build KernelRefinement Bindings KernelSemantics
 cd ..
 python3 formal/check_kernel_refinement.py \
   --lake lake --rustc rustc --evidence /tmp/cordis-kernel-refinement.json
 ```
 
-检查器先构建当前 `KernelRefinement` 与 `Bindings` 源码，再执行向量模块，并核对每族的输入域、基数及唯一性。当前向量生成器产生 59,990 个独立输入：
+检查器先构建当前 `KernelRefinement` 与 `Bindings` 源码，再执行向量模块，并核对每族的输入域、基数及唯一性。当前向量生成器产生 80,798 个独立输入：
 
 | 操作 | 输入数 | 主要变化维度 |
 |---|---:|---|
@@ -76,8 +79,15 @@ python3 formal/check_kernel_refinement.py \
 | 依赖身份解析 | 5,362 | 长度 0 至 4、必需/可选、存在/缺失/失效身份、绑定槽比声明长或短一位 |
 | committed 固定 | 484 | 可选槽、重复使用绑定、提供方与消费者是否相同 |
 | 隔离与绑定查找 | 1,024 | 本地供给优先、较新供给、隔离屏障、祖先、已提交和声明缺失 |
-| 快照重验 | 256 | binding、revision、active、predicate、value、服务键及 available |
+| 快照重验 | 512 | binding、revision、active、predicate、value、服务键、available 及永久失效位 |
 | 消费者释放与等待 | 7,744 | committed 列表、两个绑定、当前与其他消费者、提供方资源集合 |
 | 通知计数边界 | 576 | 零值、最大值前一位及状态是否变化 |
+| 完整服务读取 | 4,096 | 根或组件、live/committed、可选或必需缺失、定义点来源 |
+| 类型化句柄 | 48 | u32、String、dyn Trait、错误包裹类型、调用方和定义方 |
+| UID 耗尽分配 | 12 | 零值、普通值、2 的 53 次方、u64 最大值附近、既有名称登记 |
+| 通知修订号耗尽 | 12 | u64 边界和既有失效位 |
+| 类型化元数据 | 16,384 | 作用域声明、自供屏障、外内层顺序、无关键、错误动态类型 |
 
-源码负控制反转 `Context::permits_effect` 存活分支，并将 `epoch_ids` 的双向长度不等检查改为单向小于检查。前一项在 2,680 个登记输入上检出变化，后一项由绑定槽长于声明的向量检出。检查器还拒绝向量缺项、重复和越域。正常源码与 Lean 的观察结果逐项相同，证据分别记录负控制拒绝状态和具体见证。证据文件通过原子替换从 running 进入 passed 或 failed，失败重跑会撤销旧的成功状态。
+12 个负控包括向量缺项、重复和越域，以及反转准入存活分支、破坏依赖长度检查、复用失效候选、混淆可选缺失、替换定义点、UID/通知版本回绕、反转元数据层次、错误使用 caller 声明。元数据顺序变异在 2,048 例上被检出，声明来源变异在 1,696 例上被检出。证据记录每个拒绝状态与具体见证，并通过原子替换从 running 进入 passed 或 failed。
+
+真实运行时回归 `cargo test --locked -p cordis --lib exhausted_` 覆盖服务 UID 耗尽后的登记保持、Fiber 修订号耗尽后的纪元与队列保持，以及通知版本永久失效、等待消费者和重新提供后恢复。错误继续通过现有 `Result`/任务通道返回；核心错误结构保持原有字段和传播方式。

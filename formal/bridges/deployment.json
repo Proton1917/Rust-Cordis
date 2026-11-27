@@ -31,7 +31,7 @@
         "Cordis.Deployment.returned_iff_reachable_and_present"
       ],
       "assumptions": [
-        "Adjacency is the finite snapshot already assembled from committed binding, parent-child and candidate-provider facts. Correct graph construction, realm/minor matching and snapshot concurrency are separate source obligations.",
+        "BindingGraph constructs parent, committed-generation and candidate edges from a finite typed snapshot, distinguishes bound root services from unresolved injections, and proves construction exactness. Its predicate AST is extracted from source and checked by Lean; the complete production graph builder is separately executed. Lock/snapshot acquisition remains a runtime contract.",
         "The abstract pending list is the reverse of Rust's Vec stack; each adjacency list is represented in the corresponding pop order. Reversal preserves edge and root membership.",
         "Rust HashSet membership/insertion corresponds to selected-list membership guarded by fresh insertion. dependents.remove corresponds to takeNeighbors on the finite map representation.",
         "The proof has no fixed vertex, edge, path-length or root-count bound. Cycles, duplicate roots, self edges and absent catalog names are included.",
@@ -45,6 +45,50 @@
         {
           "command": "cargo test -p cordis-supervisor --test manager selected_checkpoint_detach_and_shutdown_freeze_use_real_process_state -- --exact",
           "purpose": "Exercises selected-instance checkpoint, detach and shutdown freeze through the real process manager."
+        }
+      ]
+    },
+    {
+      "domain": "deployment-graph-construction-and-source-predicate-certificate",
+      "module": "BindingGraph",
+      "production_paths": [
+        "crates/cordis-supervisor/src/manager/transition.rs",
+        "crates/cordis-routing/src/interface.rs"
+      ],
+      "entrypoints": [
+        "Manager::select_instances",
+        "provided.minor >= *minor",
+        "named_realms.get(realm) == Some(&namespace)"
+      ],
+      "theorems": [
+        "Cordis.BindingGraph.provider_membership",
+        "Cordis.BindingGraph.replaced_current_excluded",
+        "Cordis.BindingGraph.candidate_program_spec",
+        "Cordis.BindingGraph.candidate_program_refines_compatibility",
+        "Cordis.BindingGraph.consumer_edge_spec",
+        "Cordis.BindingGraph.constructed_edges_exact",
+        "Cordis.BindingGraph.committed_binding_seals_candidates",
+        "Cordis.BindingGraph.bound_root_service_has_no_instance_edge",
+        "Cordis.BindingGraph.adjacency_membership",
+        "Cordis.BindingGraph.reachability_refines",
+        "Cordis.BindingGraph.selection_from_source_facts",
+        "Cordis.BindingGraph.selected_existing_instances_exact",
+        "Cordis.BindingGraph.constructed_graph_terminates"
+      ],
+      "assumptions": [
+        "Finite source snapshots supply key, minor, resolved realm, namespace, nearest configured parent and bound generation identity. The source probe executes real Any downcasts over constructed immutable lookup APIs.",
+        "A bound service with no generation contributes no instance edge and prevents candidate fallback. The model represents this separately from an unresolved binding.",
+        "The restricted source predicate parser accepts three bound comparison atoms with parentheses, && and ||; unsupported syntax fails closed. Lean checks the parsed AST equals candidateProgram and proves its specification for arbitrary parameters. Extraction/parser implementation, u32-to-Nat projection, rustc and standard collections are trusted.",
+        "The complete select_instances body is compiled byte-for-byte over stable catalog/context support APIs. Its 32,768 cases are regression evidence for snapshot construction; the unbounded graph construction/traversal proof is over the declared Snapshot representation.",
+        "Interface declaration parsing, catalog concurrency, allocator behavior and final sort ordering are separate contracts; the selection theorem describes exact set membership."
+      ],
+      "evidence_commands": [
+        {
+          "argv": [
+            "python3",
+            "formal/check_binding_graph.py"
+          ],
+          "purpose": "source-derived Lean AST certificate, 32,768 complete graph-builder executions and eight negative controls"
         }
       ]
     }
