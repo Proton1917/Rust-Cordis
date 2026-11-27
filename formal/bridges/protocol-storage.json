@@ -1,0 +1,251 @@
+{
+  "bridges": [
+    {
+      "domain": "up-first-write-and-terminal-ownership",
+      "module": "Protocol",
+      "production_paths": [
+        "crates/cordis-up/src/rpc.rs"
+      ],
+      "entrypoints": [
+        "RequestWrite::cancel",
+        "write_frames",
+        "Inner::claim_pending",
+        "Connection::cancel_pending",
+        "receive_response",
+        "register_inbound",
+        "cancel_request",
+        "serve_request"
+      ],
+      "theorems": [
+        "Cordis.Protocol.write_trace_unique_owner",
+        "Cordis.Protocol.cancelled_before_start_never_writes",
+        "Cordis.Protocol.cancel_after_start_keeps_commit_owner",
+        "Cordis.Protocol.first_positive_write_takes_token",
+        "Cordis.Protocol.terminal_trace_single_claim",
+        "Cordis.Protocol.duplicate_terminal_is_noop",
+        "Cordis.Protocol.inherited_timeout_keeps_health",
+        "Cordis.Protocol.queue_trace_is_fifo",
+        "Cordis.Protocol.inbound_trace_has_single_reply_owner",
+        "Cordis.Protocol.cancellation_preserves_serving_tasks_reply_right"
+      ],
+      "assumptions": [
+        "Each model event is a completed mutex critical section; actual locking and scheduling are integration boundaries.",
+        "The first-write token counts transfer of the right to execute a hook; the callback itself executes outside the lock.",
+        "Pending ownership is projected onto one fresh request id. The production Rust allocator starts at 1 and atomically uses checked_add(1), so successful IDs are strictly increasing through u64::MAX-1 and exhaustion rejects with code 8 without rewinding the frontier. WireSemantics and Architecture record this monotone frontier contract.",
+        "The FIFO theorem counts accepted/dequeued frames; transport completion, fairness and eventual delivery remain external.",
+        "Health arithmetic abstracts saturating u32 increments; uniqueness and inherited-deadline rules apply before saturation."
+      ],
+      "evidence_level": "source-mapped-transition-model",
+      "evidence_commands": [
+        {
+          "argv": [
+            "cargo",
+            "test",
+            "-p",
+            "cordis-up",
+            "--test",
+            "queued_deadlines",
+            "--test",
+            "rpc_deadlines",
+            "--test",
+            "byte_admission"
+          ]
+        }
+      ]
+    },
+    {
+      "domain": "up-allocated-byte-admission",
+      "module": "Protocol",
+      "production_paths": [
+        "crates/cordis-up/src/rpc/buffer.rs",
+        "crates/cordis-up/src/rpc.rs"
+      ],
+      "entrypoints": [
+        "Lease::capacity",
+        "Lease::grow",
+        "Lease::drop",
+        "ConnectionOptions::validate"
+      ],
+      "theorems": [
+        "Cordis.Protocol.allocation_conserves",
+        "Cordis.Protocol.grow_preserves_bound",
+        "Cordis.Protocol.grow_total_bound",
+        "Cordis.Protocol.successful_growth_charges_exact_capacity",
+        "Cordis.Protocol.normal_frames_leave_reserve_unchanged",
+        "Cordis.Protocol.rejected_growth_preserves_usage",
+        "Cordis.Protocol.release_conserves_usage",
+        "Cordis.Protocol.budget_trace_bounded",
+        "Cordis.Protocol.live_owner_is_charged",
+        "Cordis.Protocol.dropping_owner_returns_exact_credits",
+        "Cordis.Protocol.all_owned_traces_are_bounded"
+      ],
+      "assumptions": [
+        "maximum + reserve fits usize, as checked by ConnectionOptions::validate.",
+        "The live Rust Lease objects correspond to model list cells: allocation changes one cell and Drop removes it; the model derives ownership bounds and exact credit return for all legal owner traces.",
+        "The compiled differential probe uses exact production struct/impl blocks with a sequential std Mutex adapter.",
+        "Allocation rounding, allocator failure and thread scheduling are covered by their separate implementation/test boundaries."
+      ],
+      "evidence_level": "compiled-production-body-differential",
+      "evidence_commands": [
+        {
+          "argv": [
+            "python3",
+            "tools/protocol_storage_probe.py"
+          ]
+        },
+        {
+          "argv": [
+            "cargo",
+            "test",
+            "-p",
+            "cordis-up",
+            "--test",
+            "byte_admission"
+          ]
+        }
+      ]
+    },
+    {
+      "domain": "script-sdk-response-terminal-ownership",
+      "module": "SdkProtocol",
+      "production_paths": [
+        "sdks/typescript/cordis-sdk/src/wire.ts",
+        "sdks/python/cordis_sdk/wire.py"
+      ],
+      "entrypoints": [
+        "Connection.claimPending",
+        "Connection.response",
+        "Connection.request",
+        "Connection._response"
+      ],
+      "theorems": [
+        "Cordis.SdkProtocol.every_sdk_trace_has_single_settlement",
+        "Cordis.SdkProtocol.typescript_claim_removes_entry",
+        "Cordis.SdkProtocol.python_settlement_retains_entry_until_finally",
+        "Cordis.SdkProtocol.repeated_terminal_cannot_settle_again",
+        "Cordis.SdkProtocol.late_payload_has_one_release_owner",
+        "Cordis.SdkProtocol.accepted_payload_never_returns_and_closes"
+      ],
+      "assumptions": [
+        "Each terminal method runs synchronously within its JavaScript/asyncio event loop.",
+        "Payload.close and runtime import ownership are separate resource implementations; this model identifies the unique close owner.",
+        "The probe executes exact response/claim bodies, real asyncio.Future and JavaScript Map; validators, error construction and payload accounting are adapters.",
+        "Explicit map cleanup events project entry removal. RequestSemantics composes complete request/send/response/cleanup ownership; check_wire_semantics.py executes the full Python request coroutine and the entire TypeScript Connection class with controlled I/O adapters.",
+        "RequestSemantics proves the send/response/return ownership composition. The whole TypeScript request probe exercises Promise.all success, cancellation, timeout and failed-send races, with a received.close removal negative control."
+      ],
+      "evidence_level": "executed-production-body-differential",
+      "evidence_commands": [
+        {
+          "argv": [
+            "python3",
+            "tools/protocol_storage_probe.py"
+          ]
+        },
+        {
+          "argv": [
+            "node",
+            "--test",
+            "tests/typescript-sdk/terminal-ownership.mjs",
+            "tests/typescript-sdk/queued-timeout.mjs"
+          ]
+        },
+        {
+          "argv": [
+            "python3",
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            "tests/python-sdk",
+            "-p",
+            "test_cancellation.py"
+          ],
+          "environment": {
+            "PYTHONPATH": "sdks/python"
+          }
+        }
+      ]
+    },
+    {
+      "domain": "deployment-journal-crash-recovery",
+      "module": "Persistence",
+      "production_paths": [
+        "crates/cordis-runtime/src/storage.rs"
+      ],
+      "entrypoints": [
+        "publish",
+        "Store::prepare_deployment",
+        "Store::commit_prepared",
+        "Store::move_decision_marker",
+        "Store::sync_decision",
+        "Store::restore_deployment_files"
+      ],
+      "theorems": [
+        "Cordis.Persistence.restore_at",
+        "Cordis.Persistence.recovery_replays_complete_image",
+        "Cordis.Persistence.interrupted_recovery_can_restart",
+        "Cordis.Persistence.reachable_invariant",
+        "Cordis.Persistence.crash_recovery_is_atomic",
+        "Cordis.Persistence.acknowledged_deployment_survives_crash",
+        "Cordis.Persistence.unfinished_decision_restores_previous"
+      ],
+      "assumptions": [
+        "Successful file sync preserves complete file contents; rename is atomic per name; successful directory sync persists its directory entries.",
+        "DirectoryInitialization proves that successful initialization preserves the deployment directory; the prior committed image is durable under the completed initialization and synchronization contract.",
+        "The exclusive deployment lock excludes competing writers. StorageProgram and StorageControlFlow prove journal coverage and preservation of the original bytes, connected to production code by generated source certificates.",
+        "StorageProgram and StorageControlFlow establish complete changed-name coverage for the supplied write plan; unchanged names obey the frame condition.",
+        "Recovery conclusions describe successful completion, including restarting after any partial replay; persistent I/O failure may keep recovery pending.",
+        "Marker removal before its final directory sync may persist or be lost; both outcomes are explicitly allowed.",
+        "Rust filesystem calls, OS and device guarantees remain the source-to-model environment boundary."
+      ],
+      "evidence_level": "source-mapped-transition-model-with-filesystem-contract",
+      "evidence_commands": [
+        {
+          "argv": [
+            "cargo",
+            "test",
+            "-p",
+            "cordis-runtime",
+            "storage::tests::"
+          ]
+        }
+      ]
+    },
+    {
+      "domain": "checkpoint-cache-durability",
+      "module": "Persistence",
+      "production_paths": [
+        "crates/cordis-runtime/src/storage.rs"
+      ],
+      "entrypoints": [
+        "Store::checkpoint_entries",
+        "CheckpointCache::bind",
+        "Store::restore_states"
+      ],
+      "theorems": [
+        "Cordis.Persistence.begin_checkpoint_invalidates_cache",
+        "Cordis.Persistence.synced_file_records_candidate",
+        "Cordis.Persistence.confirmed_checkpoint_is_durable",
+        "Cordis.Persistence.failed_directory_sync_clears_reusable_fact",
+        "Cordis.Persistence.cache_trace_preserves_durability"
+      ],
+      "assumptions": [
+        "The checkpoint mutex hides provisional cache candidates until directory confirmation.",
+        "The per-entry projection is invalidated before changing its visible bytes or rebinding its directory.",
+        "The existing content/state equality and cache eviction implementation are separate representation obligations."
+      ],
+      "evidence_level": "source-mapped-transition-model",
+      "evidence_commands": [
+        {
+          "argv": [
+            "cargo",
+            "test",
+            "-p",
+            "cordis-runtime",
+            "storage::tests::checkpoint"
+          ]
+        }
+      ]
+    }
+  ]
+}

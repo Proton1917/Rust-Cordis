@@ -1,0 +1,49 @@
+{
+  "bridges": [
+    {
+      "domain": "authoritative-facts-versioned-boundaries-and-resource-custody",
+      "module": "Architecture",
+      "production_paths": [
+        "docs/component-ownership.md",
+        "crates/cordis-supervisor/src/manager.rs",
+        "crates/cordis-supervisor/src/manager/trusted.rs",
+        "crates/cordis-supervisor/src/manager/routing.rs",
+        "crates/cordis-supervisor/src/manager/generation.rs",
+        "crates/cordis-up/src/rpc.rs"
+      ],
+      "entrypoints": [
+        "Manager::scoped_metadata", "Manager::generation", "Manager::request_origin",
+        "Generation::active", "call_origin", "Connection::request",
+        "component-ownership authority and custody contracts"
+      ],
+      "theorems": [
+        "Cordis.Architecture.compatible_transitive",
+        "Cordis.Architecture.write_has_single_authority",
+        "Cordis.Architecture.delivered_facts_have_authority",
+        "Cordis.Architecture.current_snapshot_matches_authoritative_value",
+        "Cordis.Architecture.acquired_resource_has_unique_custody",
+        "Cordis.Architecture.resource_returned_at_most_once",
+        "Cordis.Architecture.distinct_resource_steps_commute",
+        "Cordis.Architecture.trusted_metadata_has_authoritative_source",
+        "Cordis.Architecture.business_metadata_is_preserved",
+        "Cordis.Architecture.every_trusted_field_is_delivered",
+        "Cordis.Architecture.successful_origin_is_core_owned",
+        "Cordis.Architecture.foreign_connection_origin_rejected",
+        "Cordis.Architecture.inactive_origin_rejected"
+      ],
+      "assumptions": [
+        "The authority table is the executable architecture contract from component-ownership.md; each modeled component must use the specified write, publication and custody events.",
+        "Fact values and version identifiers use mathematical identities. Published snapshots are read from owner state, with monotonic revisions and interface/major equality plus minor compatibility.",
+        "Resource transfer stamps use a monotonic natural frontier; finite production request identifiers stop on checked exhaustion, and connection ownership separates distinct identifier domains.",
+        "The restricted source certificate parses the complete supported scoped_metadata/request_origin shapes, metadata and trusted-context receivers, interface/context argument forwarding, reserved-key predicate and origin initializer. It proves their equality for arbitrary contexts, interface keys, field lists and generations; unsupported surrounding control flow fails closed.",
+        "Complete scoped_metadata, generation, request_origin, is_current, active and call_origin bodies run unchanged over std Arc/Weak/Any/Mutex/atomics in the probe; context and connection observation APIs are explicitly supplied support contracts.",
+        "The calculus and composed transition theorems quantify their modeled events. Full language-level refinement of every repository component requires its language and dependency semantics."
+      ],
+      "evidence_commands": [
+        {"argv": ["python3", "tools/architecture_probe.py", "--evidence", "target/architecture-provenance.json"]},
+        {"argv": ["cargo", "test", "-p", "cordis-supervisor", "--lib", "--test", "manager", "--", "--test-threads=2"]},
+        {"argv": ["cargo", "test", "-p", "cordis-web-deployment", "--lib", "--tests"]}
+      ]
+    }
+  ]
+}

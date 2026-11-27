@@ -12,10 +12,7 @@ use std::{
     fmt,
     future::Future,
     panic::Location,
-    sync::{
-        Arc,
-        atomic::{AtomicU64, Ordering},
-    },
+    sync::{Arc, atomic::AtomicU64},
 };
 
 /// 原始配置与配置事件解析结果的共享容器。
@@ -238,6 +235,9 @@ impl ComponentDef {
     ///
     /// `name` 决定组件名称，`inject` 声明依赖，`apply` 接收实例上下文及配置副本。
     /// 每次构造分配一个新的组件身份。
+    ///
+    /// # Panics
+    /// 闭包组件身份耗尽时终止本次构造；已分配的身份保持唯一。
     pub fn new<R, F, Fut>(name: impl Into<Arc<str>>, inject: Inject, apply: F) -> Self
     where
         R: Clone + Send + Sync + 'static,
@@ -252,6 +252,9 @@ impl ComponentDef {
     /// `resolve` 将原始输入 `R` 同步解析为 `C`，`apply` 接收实例上下文及解析值。
     /// `name` 与 `inject` 给出名称和依赖规格；每次构造分配一个新的组件身份。
     /// 解析错误通过实例的等待任务返回，并保留 [`ValidationError`] 的问题列表。
+    ///
+    /// # Panics
+    /// 闭包组件身份耗尽时终止本次构造；已分配的身份保持唯一。
     pub fn validated<R, C, V, F, Fut>(
         name: impl Into<Arc<str>>,
         inject: Inject,
@@ -267,7 +270,9 @@ impl ComponentDef {
     {
         static NEXT: AtomicU64 = AtomicU64::new(1);
         Self {
-            id: ComponentId::Closure(NEXT.fetch_add(1, Ordering::Relaxed)),
+            id: ComponentId::Closure(
+                crate::identity::allocate(&NEXT).expect("component identity exhausted"),
+            ),
             name: name.into(),
             inject,
             resolve: Arc::new(move |raw| {

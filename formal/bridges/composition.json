@@ -1,0 +1,89 @@
+{
+  "bridges": [
+    {
+      "domain": "cross-subsystem-first-write-batch-cleanup-and-journal-composition",
+      "module": "Composition",
+      "production_paths": [
+        "crates/cordis-up/src/rpc.rs",
+        "crates/cordis-routing/src/directory.rs",
+        "crates/cordis-routing/src/directory/tests.rs",
+        "crates/cordis-runtime/src/storage.rs",
+        "crates/cordis/src/effect.rs"
+      ],
+      "entrypoints": [
+        "Router::export",
+        "Batch::outgoing",
+        "Batch::drop",
+        "Outgoing::with_commit",
+        "Connection::request",
+        "RequestWrite::cancel",
+        "write_frames",
+        "Effect::clean_steps",
+        "prepare_deployment",
+        "commit_prepared",
+        "sync_decision"
+      ],
+      "theorems": [
+        "Cordis.Composition.handoff_preserves",
+        "Cordis.Composition.transfer_step_preserves",
+        "Cordis.Composition.callbacks_have_one_original_owner",
+        "Cordis.Composition.commit_and_rollback_are_exclusive",
+        "Cordis.Composition.queued_commit_survives_cancellation",
+        "Cordis.Composition.preparation_records_the_callback_batch",
+        "Cordis.Composition.preparation_after_handoff_is_rejected",
+        "Cordis.Composition.rollback_moves_prepared_reference_out_of_lock",
+        "Cordis.Composition.each_prepared_reference_has_one_owner",
+        "Cordis.Composition.reachable_nonempty_batch_commits",
+        "Cordis.Composition.reachable_nonempty_batch_rolls_back",
+        "Cordis.Composition.all_reachable_systems_satisfy_contracts",
+        "Cordis.Composition.global_storage_trace_projection",
+        "Cordis.Composition.global_crash_recovery_is_atomic",
+        "Cordis.Composition.cleanup_release_requires_finished_work",
+        "Cordis.Composition.cleanup_release_keeps_resource_identity",
+        "Cordis.Composition.raw_resource_event_cannot_release"
+      ],
+      "assumptions": [
+        "One Transfer is one outgoing request and its captured Batch. prepare executes Routing.exportRef with that batch identity; the first-write token guard prevents further preparation after the callback right is transferred. Peer capacity and lifetime admission follow the Routing contract.",
+        "The production FnOnce closure owns the concrete Batch. RequestWrite moves the closure out under its mutex; callback invocation or destruction occurs afterwards. commitDue and rollbackDue represent that interval and are incremented only by the actual ownership decision.",
+        "Architecture facts/resources use explicit frame rules. Cleanup completion can return only the designated cleanupResource and cleanupOwner, after the corresponding LIFO work is terminal; raw completeCleanup resource events are excluded from the system interface.",
+        "The global storage projection erases non-storage events. Recovery uses StorageProgram.actualRecovery and its constructed journal, with backup coverage derived from the initial write-name list. I/O atomicity and durability primitives use the StorageProgram source contract.",
+        "The system theorem is for these declared events and handoffs. Full Rust/OS scheduling and object-representation semantics are supplied by the implementation bridges and runtime contracts."
+      ],
+      "evidence_commands": [
+        {
+          "argv": [
+            "cargo",
+            "test",
+            "--locked",
+            "-p",
+            "cordis-routing",
+            "--lib",
+            "outgoing_batch_cancellation_observes_first_positive_write"
+          ],
+          "purpose": "real Batch.outgoing closure through Connection.request, controlled writer Pending/first byte, caller cancellation, committed reference retention, rollback and destructor outside directory lock"
+        },
+        {
+          "argv": [
+            "cargo",
+            "test",
+            "--locked",
+            "-p",
+            "cordis-up",
+            "--test",
+            "queued_deadlines",
+            "--test",
+            "rpc_deadlines"
+          ],
+          "purpose": "actual writer/request cancellation and reply terminal ownership"
+        },
+        {
+          "argv": [
+            "python3",
+            "tools/storage_program_probe.py"
+          ],
+          "purpose": "source I/O sequence and constructed journal recovery bridge"
+        }
+      ]
+    }
+  ]
+}

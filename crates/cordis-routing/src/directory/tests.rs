@@ -2,6 +2,53 @@ use super::*;
 use cordis_up::rpc::{ConnectionOptions, Handler, HandlerFuture, Payload};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+struct WriteGate {
+    permits: AtomicUsize,
+    bytes: AtomicUsize,
+    blocked: tokio::sync::Notify,
+    waiter: Mutex<Option<std::task::Waker>>,
+}
+
+struct GatedWriter(Arc<WriteGate>);
+
+impl tokio::io::AsyncWrite for GatedWriter {
+    fn poll_write(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        bytes: &[u8],
+    ) -> std::task::Poll<std::io::Result<usize>> {
+        if self
+            .0
+            .permits
+            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |value| {
+                value.checked_sub(1)
+            })
+            .is_ok()
+        {
+            let written = bytes.len().min(1);
+            self.0.bytes.fetch_add(written, Ordering::SeqCst);
+            return std::task::Poll::Ready(Ok(written));
+        }
+        *self.0.waiter.lock() = Some(cx.waker().clone());
+        self.0.blocked.notify_one();
+        std::task::Poll::Pending
+    }
+
+    fn poll_flush(
+        self: std::pin::Pin<&mut Self>,
+        _: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        std::task::Poll::Ready(Ok(()))
+    }
+
+    fn poll_shutdown(
+        self: std::pin::Pin<&mut Self>,
+        _: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        std::task::Poll::Ready(Ok(()))
+    }
+}
+
 struct Idle;
 impl Handler for Idle {
     fn request(&self, _: Connection, _: String, _: Payload) -> HandlerFuture<'_, Result<Outgoing>> {
@@ -70,6 +117,67 @@ fn export(
             batch,
         )
         .unwrap()
+}
+
+#[tokio::test]
+async fn outgoing_batch_cancellation_observes_first_positive_write() {
+    for written_before_cancel in [false, true] {
+        let router = Router::new(8, Duration::from_secs(1));
+        let dropped = Arc::new(AtomicUsize::new(0));
+        let gate = Arc::new(WriteGate {
+            permits: AtomicUsize::new(0),
+            bytes: AtomicUsize::new(0),
+            blocked: tokio::sync::Notify::new(),
+            waiter: Mutex::new(None),
+        });
+        let (local, _remote) = tokio::io::duplex(64);
+        let (read, _keep_read_open) = tokio::io::split(local);
+        let recipient = Connection::attach(
+            17,
+            read,
+            GatedWriter(gate.clone()),
+            ConnectionOptions::default(),
+            Arc::new(Idle),
+        )
+        .unwrap();
+        let mut batch = router.batch(recipient.id());
+        let id = export(&router, &recipient, Some(9), None, &dropped, &mut batch);
+        let outgoing = batch.outgoing(Value::Null);
+        let request_peer = recipient.clone();
+        let request = tokio::spawn(async move {
+            request_peer
+                .request("probe", outgoing, Duration::from_secs(60))
+                .await
+        });
+        tokio::time::timeout(Duration::from_secs(2), gate.blocked.notified())
+            .await
+            .unwrap();
+        assert_eq!(gate.bytes.load(Ordering::SeqCst), 0);
+        if written_before_cancel {
+            gate.permits.store(1, Ordering::SeqCst);
+            gate.waiter.lock().take().unwrap().wake();
+            // The second blocked write occurs after the first-write callback.
+            tokio::time::timeout(Duration::from_secs(2), gate.blocked.notified())
+                .await
+                .unwrap();
+            assert_eq!(gate.bytes.load(Ordering::SeqCst), 1);
+        }
+        request.abort();
+        assert!(matches!(request.await, Err(problem) if problem.is_cancelled()));
+        assert_eq!(
+            router.route(recipient.id(), id).is_ok(),
+            written_before_cancel
+        );
+        assert_eq!(
+            dropped.load(Ordering::Relaxed),
+            usize::from(!written_before_cancel)
+        );
+        if written_before_cancel {
+            router.release(recipient.id(), &[id]).unwrap();
+            assert_eq!(dropped.load(Ordering::Relaxed), 1);
+        }
+        recipient.terminate("test finished");
+    }
 }
 
 #[tokio::test]

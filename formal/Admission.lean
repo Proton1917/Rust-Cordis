@@ -14,7 +14,7 @@ structure Guard where
   target : Epoch
   running : Epoch
   captured : Epoch
-  deriving DecidableEq, Repr
+  deriving DecidableEq
 
 def permits (g : Guard) : Bool :=
   currentEpoch g.alive (g.target == g.running) (g.target == g.captured)
@@ -33,7 +33,7 @@ structure State where
   ownerAlive : Bool
   guards : List Guard
   owned : List Nat
-  deriving DecidableEq, Repr
+  deriving DecidableEq
 
 def admitted (s : State) : Bool := s.ownerAlive && s.guards.all permits
 

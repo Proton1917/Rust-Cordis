@@ -77,7 +77,9 @@ class Connection:
     async def request(self, method, params, offers=()):
         """DOC-16 §10：截止时间覆盖背压等待，取消通过控制通知交回核心。"""
         request_id = None
+        future = None
         delivered = False
+        returned = False
         try:
             loop = asyncio.get_running_loop()
             deadline = loop.time() + self.timeout
@@ -107,7 +109,9 @@ class Connection:
                         budget_deadline=budget_deadline,
                     )
                     delivered = True
-                    return await future
+                    payload = await future
+                    returned = True
+                    return payload
         except (TimeoutError, asyncio.CancelledError) as problem:
             if delivered:
                 self.notify_soon("cancel", {"id": request_id})
@@ -117,6 +121,11 @@ class Connection:
         finally:
             if request_id is not None:
                 self.pending.pop(request_id, None)
+            # A response can settle the Future just before cancellation resumes
+            # this coroutine. It owns that payload until the return above.
+            if (not returned and future is not None and future.done()
+                    and not future.cancelled() and future.exception() is None):
+                future.result().close()
             if not delivered:
                 self.runtime.release_exports(offers)
 

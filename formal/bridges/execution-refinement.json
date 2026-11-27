@@ -1,0 +1,33 @@
+{
+  "bridges": [
+    {
+      "domain": "native-atomic-modification-history-and-clone-custody",
+      "module": "Concurrency",
+      "production_paths": ["crates/cordis-host/src/lease.rs", "crates/cordis-host/src/library.rs", "crates/cordis-abi/src/environment.rs"],
+      "entrypoints": ["lease::acquire", "lease::release", "Lease::retire", "Lease::reap", "Descriptor::drop"],
+      "theorems": ["Cordis.Concurrency.step_preserves", "Cordis.Concurrency.trace_preserves", "Cordis.Concurrency.zero_is_absorbing", "Cordis.Concurrency.borrowed_anchor_blocks_zero", "Cordis.Concurrency.stale_zero_is_current_zero", "Cordis.Concurrency.cas_clone_has_live_anchor", "Cordis.Concurrency.image_take_has_no_inflight_clone", "Cordis.Concurrency.arbitrary_interleavings_keep_image_safe", "Cordis.Concurrency.image_take_occurs_at_most_once", "Cordis.Concurrency.exchange_refines_abstract_acquire", "Cordis.Concurrency.release_refines_abstract_release"],
+      "assumptions": [
+        "An ABI clone borrows an existing counted source lease for the duration of acquisition; source release consumes a distinct unborrowed owner. This ownership transfer is modeled explicitly.",
+        "Atomic count RMWs follow one modification order. Reads may return any prior modification, an overapproximation of coherent stale reads; no cross-object sequentially consistent order is assumed for count and retired.",
+        "The model proves arbitrary interleavings of borrow, load, CAS success/retry/overflow, source release, retired observation, zero observation and image take. The successful RMWs are count linearization points.",
+        "The source probe executes exact count, retired, reap, acquire and release bodies with real atomic/Arc/HashMap primitives. Dynamic library and cache destructors record invocation; operating-system unmapping is tested separately.",
+        "Rust pointer validity, the correctness of std atomics/Arc/mutex, valid foreign ABI calls and compiler semantics remain runtime contracts; the module does not encode all Rust or C++ language semantics."
+      ],
+      "evidence_commands": [{"argv": ["python3", "tools/execution_semantics_probe.py", "--evidence", "target/execution-semantics.json"]}, {"argv": ["cargo", "test", "-p", "cordis-host", "--test", "native", "native_retirement_metrics_and_open_handle_policy", "--", "--exact"]}]
+    },
+    {
+      "domain": "future-microsteps-and-conditional-cleanup-liveness",
+      "module": "AsyncSemantics",
+      "production_paths": ["crates/cordis/src/kernel.rs", "crates/cordis/src/effect.rs", "crates/cordis-host/src/callback.rs", "crates/cordis-host/src/native.rs"],
+      "entrypoints": ["Kernel::submit", "Effect::clean_steps", "Effect::continue_cleanup", "Effect::submit_cleanup", "Effect::resume_cleanup", "Admitted::poll", "NativeTask::drop", "Owned::drop"],
+      "theorems": ["Cordis.AsyncSemantics.future_trace_preserves", "Cordis.AsyncSemantics.destruction_and_permit_return_are_unique", "Cordis.AsyncSemantics.active_poll_excludes_destruction", "Cordis.AsyncSemantics.wake_during_poll_survives_pending", "Cordis.AsyncSemantics.return_follows_destruction", "Cordis.AsyncSemantics.projection_satisfies_native_ownership", "Cordis.AsyncSemantics.cleanup_rank_never_increases", "Cordis.AsyncSemantics.productive_cleanup_step_decreases", "Cordis.AsyncSemantics.fair_cleanup_eventually_finishes", "Cordis.AsyncSemantics.fair_cleanup_returns_all_registered_work"],
+      "assumptions": [
+        "The scheduler owns one mutable Future poll at a time and preserves notifications emitted during that poll. The model separates Pending, Ready, cancellation, native destruction and permit return.",
+        "FairCleanup requires every nonterminal suffix eventually to execute an enabled start, return the current callback, or publish terminal completion. It allows unbounded intervening pending polls and observer drops; permanent host rejection and nonterminating callbacks violate this explicit liveness contract.",
+        "The rank counts each unstarted callback twice, the active callback once and terminal publication once. Safety holds for arbitrary event traces; eventual LIFO completion uses the stated fairness/termination contract.",
+        "Real Future/Waker/Pin/Arc and exact Admitted/Permit bodies execute in the probe. Tokio's internal scheduler and foreign destructor implementation are external contracts."
+      ],
+      "evidence_commands": [{"argv": ["python3", "tools/execution_semantics_probe.py", "--evidence", "target/execution-semantics.json"]}, {"argv": ["cargo", "test", "-p", "cordis", "--test", "concurrency", "--test", "dispose_async"]}, {"argv": ["cargo", "test", "-p", "cordis-host", "--lib", "callback::tests"]}]
+    }
+  ]
+}

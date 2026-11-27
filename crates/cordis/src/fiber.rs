@@ -375,6 +375,7 @@ impl Fiber {
     /// 已加载实例先卸载再加载，依赖欠缺时保持 `Pending`。
     /// 失活实例或保留清理的派发错误通过返回任务交回；加载失败的恢复入口为
     /// [`Fiber::update`] 或 [`crate::Registry::replace`]。
+    /// 修订号耗尽时返回错误，并保留当前纪元和调和队列。
     pub fn restart(&self) -> Task<Result> {
         {
             let mut state = self.kernel.state.lock();
@@ -386,7 +387,10 @@ impl Fiber {
                 let error = error.clone();
                 return Box::pin(async move { Err(error) });
             }
-            data.revision += 1;
+            let Some(revision) = data.revision.checked_add(1) else {
+                return Box::pin(async { Err(Error::new("fiber revision exhausted")) });
+            };
+            data.revision = revision;
             enqueue_locked(&mut state, self.id);
         }
         drain(&self.kernel);
@@ -1036,6 +1040,23 @@ mod tests {
     }
 
     // A-5：内部 panic 交还调和权，后续请求接续原有队列。
+    #[tokio::test(flavor = "current_thread")]
+    async fn exhausted_revision_preserves_running_generation() {
+        let root = Context::new(Arc::new(Host(Instant::now())));
+        let fiber = root.inject(Inject::new(), |_| async { Ok(()) }).unwrap();
+        fiber.settled().await.unwrap();
+        let before = fiber.epoch();
+        root.kernel.state.lock().fibers[fiber.id].revision = u64::MAX;
+        let error = fiber.restart().await.unwrap_err();
+        assert!(error.to_string().contains("fiber revision exhausted"));
+        assert_eq!(fiber.epoch(), before);
+        let state = root.kernel.state.lock();
+        assert_eq!(state.fibers[fiber.id].revision, u64::MAX);
+        assert!(!state.fibers[fiber.id].queued);
+        drop(state);
+        root.fiber().dispose().await.unwrap();
+    }
+
     #[tokio::test(flavor = "current_thread")]
     async fn drain_panic_releases_ownership_and_resumes_restart() {
         let root = Context::new(Arc::new(Host(Instant::now())));

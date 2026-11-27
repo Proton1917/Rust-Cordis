@@ -1,0 +1,213 @@
+{
+  "bridges": [
+    {
+      "domain": "finite-width kernel state, owner scope representation, and lock-boundary registration",
+      "module": "KernelRefinement",
+      "production_paths": [
+        "crates/cordis/src/fiber.rs",
+        "crates/cordis/src/context.rs",
+        "crates/cordis/src/effect.rs",
+        "crates/cordis/src/registry.rs",
+        "crates/cordis/src/lifecycle.rs",
+        "crates/cordis/src/lifecycle_generated.rs"
+      ],
+      "entrypoints": [
+        "Epoch",
+        "FiberData::idle_state",
+        "FiberData::is_current",
+        "drain::locked_boundary",
+        "finish_transition::locked_boundary",
+        "Context::derive",
+        "Context::permits_effect",
+        "Context::create_effect",
+        "mount_with::child_scope_construction"
+      ],
+      "theorems": [
+        "Cordis.KernelRefinement.word_list_projection_injective",
+        "Cordis.KernelRefinement.epoch_projection_injective",
+        "Cordis.KernelRefinement.epoch_equality_refines",
+        "Cordis.KernelRefinement.inactive_refines",
+        "Cordis.KernelRefinement.active_refines",
+        "Cordis.KernelRefinement.revision_increment_no_wrap",
+        "Cordis.KernelRefinement.revision_increment_changes_identity",
+        "Cordis.KernelRefinement.notification_increment_no_wrap",
+        "Cordis.KernelRefinement.notification_decrement_no_underflow",
+        "Cordis.KernelRefinement.refresh_action_refines",
+        "Cordis.KernelRefinement.publish_refines",
+        "Cordis.KernelRefinement.effect_empty_refines",
+        "Cordis.KernelRefinement.effect_nonempty_refines",
+        "Cordis.KernelRefinement.refresh_action_keeps_count",
+        "Cordis.KernelRefinement.refresh_boundary_simulation",
+        "Cordis.KernelRefinement.finish_never_keeps",
+        "Cordis.KernelRefinement.finish_action_refines",
+        "Cordis.KernelRefinement.finish_boundary_simulation",
+        "Cordis.KernelRefinement.foreign_owner_stops",
+        "Cordis.KernelRefinement.view_projection_wellformed",
+        "Cordis.KernelRefinement.owner_boundary_matches_layer_boundary",
+        "Cordis.KernelRefinement.scope_cache_refines",
+        "Cordis.KernelRefinement.scope_admission_refines",
+        "Cordis.KernelRefinement.locked_registration_simulation",
+        "Cordis.KernelRefinement.locked_registration_preserves_ownership",
+        "Cordis.KernelRefinement.rejected_registration_preserves_both_tables",
+        "Cordis.KernelRefinement.successful_registration_uses_same_snapshot",
+        "Cordis.KernelRefinement.successful_registration_records_view_owner",
+        "Cordis.KernelRefinement.fresh_registration_preserves_unique_effect_ids"
+      ],
+      "assumptions": [
+        "The concrete adapter is Lean code; Rust function-body extraction and finite differential execution connect it to production source, while compiler and Rust semantics remain trusted.",
+        "Notification increment requires count.toNat + 1 < USize.size; decrement requires a positive count. Revision arithmetic uses the corresponding UInt64 bound.",
+        "KernelSemantics derives the finish-entry inertia condition from reachable control traces. Mapping host-owned task execution to those control events uses the documented scheduler custody contract; the compiled bridge checks the actual lock-held finish body.",
+        "Scope constructors retain valid owner records and allocate child identities distinct from the parent owner. The selected FiberData corresponds to the current scope owner.",
+        "Fresh effect allocation, valid arena indices, allocator success, lock implementation, pointer lifetimes, and callback scheduling remain concrete runtime obligations."
+      ],
+      "evidence_commands": [
+        "cd formal && lake build KernelRefinement",
+        "python3 formal/check_kernel_refinement.py --lake lake --rustc rustc --evidence /tmp/cordis-kernel-refinement.json"
+      ]
+    },
+    {
+      "domain": "dependency identities, realm isolation, committed bindings, snapshot revalidation, and consumer retention",
+      "module": "Bindings",
+      "production_paths": [
+        "crates/cordis/src/reflect.rs",
+        "crates/cordis/src/context.rs",
+        "crates/cordis/src/fiber.rs",
+        "crates/cordis/src/registry.rs"
+      ],
+      "entrypoints": [
+        "reflect::epoch_ids",
+        "reflect::commit_locked",
+        "reflect::locate",
+        "reflect::scope_realm",
+        "Context::resolve_realm",
+        "reflect::get_value",
+        "refresh_keys::checked_snapshot_installation",
+        "reflect::wait_dependents",
+        "reflect::release_committed"
+      ],
+      "theorems": [
+        "Cordis.Bindings.slot_meaning",
+        "Cordis.Bindings.collect_meaning",
+        "Cordis.Bindings.slotwise_preserves_length",
+        "Cordis.Bindings.epoch_resolution_spec",
+        "Cordis.Bindings.resolved_epoch_preserves_length",
+        "Cordis.Bindings.required_slot_has_binding",
+        "Cordis.Bindings.zero_identifies_optional_absence",
+        "Cordis.Bindings.committed_membership",
+        "Cordis.Bindings.nearest_isolation_selects_realm",
+        "Cordis.Bindings.unrelated_isolation_preserves_realm",
+        "Cordis.Bindings.unrelated_prefix_preserves_realm",
+        "Cordis.Bindings.own_provision_has_priority",
+        "Cordis.Bindings.latest_matching_provision_wins",
+        "Cordis.Bindings.isolation_seals_ancestors",
+        "Cordis.Bindings.declared_absence_seals_ancestors",
+        "Cordis.Bindings.committed_read_survives_live_replacement",
+        "Cordis.Bindings.snapshot_validation_spec",
+        "Cordis.Bindings.stale_notification_cannot_commit",
+        "Cordis.Bindings.incremented_notification_invalidates_snapshot",
+        "Cordis.Bindings.successful_snapshot_install_has_all_facts",
+        "Cordis.Bindings.retained_membership_spec",
+        "Cordis.Bindings.contains_binding_spec",
+        "Cordis.Bindings.released_membership_spec",
+        "Cordis.Bindings.committed_consumer_retained",
+        "Cordis.Bindings.provider_waits_for_committed_consumer",
+        "Cordis.Bindings.releasing_consumer_preserves_others",
+        "Cordis.Bindings.releasing_committed_consumer_removes_membership"
+      ],
+      "assumptions": [
+        "Production checked_add allocation gives strictly positive, never-reused service UIDs until exhaustion. KernelSemantics proves that allocator property and failure preservation; actual UINT64_MAX regressions and extracted reservation code are checked.",
+        "Frame lists represent finite owner segments of the actual scope chain; the compiled bridge exercises real pointer traversal on explicit constructed scopes.",
+        "Provider checks and consumer predicates finish outside the lock and supply available; the model proves the subsequent revalidation and installation rule.",
+        "Committed identities remain valid until dependent cleanup releases them; allocation, table memory safety, provider activation, and global scheduler fairness remain runtime obligations.",
+        "KernelSemantics and the compiled bridge cover complete get_value branches, Scoped::from_binding dynamic typing and Arc/origin preservation, and declaration/requester plus outer-to-inner caller metadata merging. Arbitrary user middleware and Merge implementations retain their declared contracts.",
+        "Wait readiness and release membership are proved; executor progress after waking uses the host scheduling contract."
+      ],
+      "evidence_commands": [
+        "cd formal && lake build Bindings",
+        "python3 formal/check_kernel_refinement.py --lake lake --rustc rustc --evidence /tmp/cordis-kernel-refinement.json"
+      ]
+    },
+    {
+      "domain": "reachable kernel control, checked finite identities, complete service access and dynamic handle typing",
+      "module": "KernelSemantics",
+      "production_paths": [
+        "crates/cordis/src/fiber.rs",
+        "crates/cordis/src/reflect.rs",
+        "crates/cordis/src/service.rs",
+        "crates/cordis/src/context.rs"
+      ],
+      "entrypoints": [
+        "drain::locked_boundary",
+        "finish_transition::locked_boundary",
+        "submit_cleanup",
+        "resume_cleanup",
+        "Fiber::restart",
+        "provide_value::checked_identity_reservation",
+        "notify::revision_advance",
+        "reflect::current_candidate",
+        "Context::get_value",
+        "Context::resolve_realm",
+        "Scoped::from_binding",
+        "Context::merge_meta",
+        "reflect::injected_value",
+        "reflect::injected_meta",
+        "Scoped::meta"
+      ],
+      "theorems": [
+        "Cordis.KernelSemantics.control_step_preserves",
+        "Cordis.KernelSemantics.control_trace_preserves",
+        "Cordis.KernelSemantics.reachable_finish_has_inertia",
+        "Cordis.KernelSemantics.suspended_task_has_no_runner",
+        "Cordis.KernelSemantics.finish_boundary_from_execution",
+        "Cordis.KernelSemantics.successful_identity_is_fresh",
+        "Cordis.KernelSemantics.allocated_identity_is_nonzero",
+        "Cordis.KernelSemantics.exhausted_allocation_preserves_registry",
+        "Cordis.KernelSemantics.allocations_never_reuse",
+        "Cordis.KernelSemantics.exhaustion_is_permanent",
+        "Cordis.KernelSemantics.exhausted_snapshot_rejected",
+        "Cordis.KernelSemantics.root_reads_live",
+        "Cordis.KernelSemantics.committed_value_retains_definition",
+        "Cordis.KernelSemantics.optional_absence_has_distinct_error",
+        "Cordis.KernelSemantics.required_absence_has_distinct_error",
+        "Cordis.KernelSemantics.typed_success_preserves_identity",
+        "Cordis.KernelSemantics.typed_handle_preserves_origins",
+        "Cordis.KernelSemantics.wrong_type_does_not_evaluate_definition",
+        "Cordis.KernelSemantics.own_provision_has_default_metadata",
+        "Cordis.KernelSemantics.committed_metadata_uses_requester_declaration",
+        "Cordis.KernelSemantics.metadata_inner_layer_applies_last",
+        "Cordis.KernelSemantics.metadata_unrelated_key_is_ignored",
+        "Cordis.KernelSemantics.malformed_matching_metadata_fails",
+        "Cordis.KernelSemantics.empty_interception_preserves_declaration"
+      ],
+      "assumptions": [
+        "Control events represent scheduler custody at launch, retained cleanup, explicit resume and finish. Host task ownership and the source-to-control-event mapping remain explicit runtime contracts; no conclusion is supplied as a step premise.",
+        "checkedNext uses a natural limit. UINT64_MAX instantiates service/revision capacity; actual checked_add calls reject exhaustion before the modeled registry writes. Revision restart failure is tested through the real Fiber API.",
+        "An exhausted service notification revision permanently removes that implementation from candidate resolution. Captured snapshots are revalidated against absence; a freshly provided implementation obtains a fresh UID.",
+        "The complete get_value body and Scoped::from_binding are copied unchanged into the compiled probe. Stable arenas, scope owner correspondence and lookups supply valid records. Any downcast and Arc pointer identity use the Rust standard library.",
+        "get_value error categories preserve optional/required/unauthorized distinctions. Metadata declaration lookup uses requester; outer-to-inner intercepts use caller. Declaration metadata of another dynamic type defaults; a matching interception of another type triggers the existing production panic. User-defined Merge code, middleware behavior and error location/display formatting remain environment behavior.",
+        "Finite notification-count addition still uses the USize capacity premise in KernelRefinement. Arena generation reuse, allocation failure, compiler, language memory safety and host scheduling are part of the trusted runtime boundary."
+      ],
+      "evidence_commands": [
+        {
+          "argv": [
+            "python3",
+            "formal/check_kernel_refinement.py"
+          ],
+          "purpose": "80,798 exact-source observations over 25 extracted entrypoints; 12 domain and production mutation controls"
+        },
+        {
+          "argv": [
+            "cargo",
+            "test",
+            "--locked",
+            "-p",
+            "cordis",
+            "--lib",
+            "exhausted_"
+          ],
+          "purpose": "real service UID exhaustion, restart revision exhaustion and permanent notification invalidation/reprovide regressions"
+        }
+      ]
+    }
+  ]
+}

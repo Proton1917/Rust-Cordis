@@ -7,7 +7,14 @@ on:
       - 'crates/cordis-testkit/**'
       - 'crates/cordis-supervisor/**'
       - 'crates/cordis-web-deployment/**'
-      - 'crates/cordis-host/tests/driver/**'
+      - 'crates/cordis-host/**'
+      - 'crates/cordis-routing/**'
+      - 'crates/cordis-up/**'
+      - 'crates/cordis-runtime/**'
+      - 'sdks/typescript/**'
+      - 'sdks/python/**'
+      - 'tests/typescript-sdk/**'
+      - 'tests/python-sdk/**'
       - 'Cargo.toml'
       - 'Cargo.lock'
       - 'rust-toolchain.toml'
@@ -17,6 +24,13 @@ on:
       - 'tools/tests/test_conformance_run.py'
       - 'formal/**'
       - 'tools/verify_semantics.py'
+      - 'tools/protocol_storage_probe.py'
+      - 'tools/sdk_terminal_probe.py'
+      - 'tools/execution_semantics_probe.py'
+      - 'tools/storage_program_probe.py'
+      - 'tools/architecture_probe.py'
+      - 'tools/plugin_principle_probe.py'
+      - 'docs/context-paradigm.md'
       - 'tools/tests/test_verify_semantics.py'
       - 'docs/formal-semantics.md'
       - 'docs/component-ownership.md'
@@ -31,7 +45,7 @@ permissions:
 jobs:
   conformance:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     env:
       CARGO_PROFILE_DEV_DEBUG: '0'
       CARGO_PROFILE_TEST_DEBUG: '0'
@@ -39,7 +53,13 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - name: Install pinned Rust
-        run: rustup toolchain install 1.96.0 --profile minimal --component rustfmt --component clippy
+        run: |
+          rustup toolchain install 1.96.0 --profile minimal --component rustfmt --component clippy
+          rustup toolchain install 1.85.0 --profile minimal
+      - name: Install JavaScript source-bridge runtime
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24.22.3'
       - name: Install pinned Lean proof checker
         run: |
           mkdir -p "$RUNNER_TEMP/lean"
@@ -47,21 +67,38 @@ jobs:
           printf '%s  %s\n' 6fe3ce97a58f44e2b3567d455b994eacec5bfe9ae7774f2a573444480ba813fe "$RUNNER_TEMP/lean.tar.zst" | sha256sum --check
           tar --zstd -xf "$RUNNER_TEMP/lean.tar.zst" -C "$RUNNER_TEMP/lean" --strip-components=1
           printf '%s\n' "$RUNNER_TEMP/lean/bin" >> "$GITHUB_PATH"
-      - name: Check proofs and compiled production decisions
-        run: python3 tools/verify_semantics.py --evidence target/formal-semantics.json
-      - name: Check semantic evidence failure paths
-        run: python3 -m unittest discover -s tools/tests -p 'test_verify_semantics.py' -v
-      - name: Check kernel ownership and epoch query integration
-        run: cargo test -p cordis --lib --test concurrency --test current_epoch --test epoch_context --test event_hot_paths
-      - name: Check committed bindings and lifecycle-owned assembly
-        run: |
-          cargo test -p cordis-web-deployment --lib --tests
-          cargo test -p cordis-supervisor --lib --test manager -- --test-threads=2
-      - name: Retrieve the immutable upstream test source
+      - name: Retrieve the immutable upstream source
         run: |
           git init cordis
           git -C cordis fetch --depth=1 https://github.com/cordiverse/cordis.git 261c5fdae6edb54e7ed4f071024f530acd18903b
           git -C cordis checkout --detach FETCH_HEAD
+      - name: Check proofs and production source bridges
+        run: |
+          python3 -m pip install -r sdks/python/requirements.txt
+          python3 tools/verify_semantics.py --evidence target/formal-semantics.json
+      - name: Check semantic evidence failure paths
+        run: python3 -m unittest discover -s tools/tests -p 'test_verify_semantics.py' -v
+      - name: Check kernel ownership and epoch query integration
+        run: cargo test -p cordis --lib --tests
+      - name: Check protocol, routing and native ownership
+        run: |
+          cargo test -p cordis-up -p cordis-routing --lib --tests
+          cargo test -p cordis-host --lib
+          cargo test -p cordis-host --test native native_retirement_metrics_and_open_handle_policy -- --exact
+      - name: Check script SDK terminal ownership
+        run: |
+          npm ci --ignore-scripts --prefix sdks/typescript
+          npm run build --workspace cordis-sdk --prefix sdks/typescript
+          node --test tests/typescript-sdk/terminal-ownership.mjs tests/typescript-sdk/queued-timeout.mjs
+          python3 -m pip install -r sdks/python/requirements.txt
+          PYTHONPATH=sdks/python python3 -m unittest discover -s tests/python-sdk -p 'test_cancellation.py' -v
+      - name: Check persistence and crash recovery
+        run: |
+          cargo test -p cordis-runtime --lib storage::tests::
+      - name: Check committed bindings and lifecycle-owned assembly
+        run: |
+          cargo test -p cordis-web-deployment --lib --tests
+          cargo test -p cordis-supervisor --lib --test manager -- --test-threads=2
       - name: Check evidence failure paths
         run: python3 -m unittest discover -s tools/tests -p 'test_conformance_run.py' -v
       - name: Execute every applicable conformance row

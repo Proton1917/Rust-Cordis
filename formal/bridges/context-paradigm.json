@@ -1,0 +1,170 @@
+{
+  "bridges": [
+    {
+      "domain": "paper-revertible-effects-track-homomorphism-and-owned-lifo-restoration",
+      "module": "RevertibleEffects",
+      "production_paths": [
+        "crates/cordis/src/effect.rs",
+        "crates/cordis/src/registry.rs",
+        "crates/cordis/tests/plugin_principle.rs",
+        "docs/context-paradigm.md"
+      ],
+      "entrypoints": [
+        "Context::effect", "Context::effect_async", "EffectScope::defer",
+        "EffectScope::defer_async", "Effect::finish_run", "Effect::start_cleanup",
+        "Effect::clean_steps", "registered_inverses_restore_context_state"
+      ],
+      "theorems": [
+        "Cordis.RevertibleEffects.track_projection",
+        "Cordis.RevertibleEffects.track_composition",
+        "Cordis.RevertibleEffects.track_injective",
+        "Cordis.RevertibleEffects.recover_idempotent",
+        "Cordis.RevertibleEffects.tracking_recovers_initial_state",
+        "Cordis.RevertibleEffects.strict_composition",
+        "Cordis.RevertibleEffects.iso_lift_is_strict",
+        "Cordis.RevertibleEffects.iso_lift_composition",
+        "Cordis.RevertibleEffects.operational_lift_is_strict",
+        "Cordis.RevertibleEffects.operational_lift_composition",
+        "Cordis.RevertibleEffects.strict_inverse_need_not_be_injective",
+        "Cordis.RevertibleEffects.completed_prefix_recovers",
+        "Cordis.RevertibleEffects.lifo_execution_recovers",
+        "Cordis.RevertibleEffects.separated_removal_preserves_other",
+        "Cordis.RevertibleEffects.fifo_recovery_counterexample",
+        "Cordis.RevertibleEffects.claimed_cleanup_recovers_callbacks"
+      ],
+      "assumptions": [
+        "The source paper is identified by SHA-256 in docs/context-paradigm.md; this module covers its definitions 1-9 and theorems 3, 4, 8, 10 and 11 with explicit domains.",
+        "A Strict callback returns an inverse that restores the state at that completed application. The runtime supplies registration, ownership and order; correctness of an arbitrary user callback or an external I/O compensation is its own contract.",
+        "The literal track(g) formula requires a globally invertible g. IsoEffect proves that formula; Journal/lift gives the general state-capturing, single-use LIFO interpretation used by Rust FnOnce callbacks.",
+        "Independent selective removal uses the stated commutation or separated-state frame condition. Shared dependencies retain providers until committed consumers finish cleanup.",
+        "The existing Effects/Execution source bridges establish the cleanup guard and stack order. The plugin integration test additionally runs noncommuting real callbacks and checks restored state; finite execution complements the arbitrary-length algebraic theorem.",
+        "Asynchronous completion uses the existing executor progress and callback return assumptions; the restored state theorem applies after the completed callback prefix is cleaned."
+      ],
+      "evidence_commands": [
+        {"argv": ["python3", "tools/plugin_principle_probe.py", "--evidence", "target/plugin-principle.json"]},
+        {"argv": ["python3", "tools/execution_semantics_probe.py", "--evidence", "target/execution-semantics.json"]},
+        {"argv": ["cargo", "test", "--locked", "-p", "cordis", "--lib", "--tests"]}
+      ]
+    },
+    {
+      "domain": "paper-typed-finite-coeffects-notification-captured-isolation-and-interception",
+      "module": "ReactiveCoeffects",
+      "production_paths": [
+        "crates/cordis/src/context.rs", "crates/cordis/src/reflect.rs",
+        "crates/cordis/src/service.rs", "crates/cordis/src/registry.rs",
+        "crates/cordis/tests/plugin_principle.rs", "docs/context-paradigm.md"
+      ],
+      "entrypoints": [
+        "Context::provide_value", "Context::get_value", "reflect::withdraw",
+        "reflect::notify", "reflect::refresh_keys", "reflect::epoch_ids",
+        "Context::isolate_named", "Context::resolve_realm", "Context::merge_meta",
+        "Scoped::meta", "coeffect_views_preserve_parent_metadata_and_registration_realm"
+      ],
+      "theorems": [
+        "Cordis.ReactiveCoeffects.insertion_preserves_finite_support",
+        "Cordis.ReactiveCoeffects.removal_preserves_finite_support",
+        "Cordis.ReactiveCoeffects.get_returns_registered_value",
+        "Cordis.ReactiveCoeffects.satisfaction_iff",
+        "Cordis.ReactiveCoeffects.provision_inverse_restores",
+        "Cordis.ReactiveCoeffects.independent_registration_removal",
+        "Cordis.ReactiveCoeffects.registration_trace_recovers",
+        "Cordis.ReactiveCoeffects.notify_activating_iff",
+        "Cordis.ReactiveCoeffects.notify_deactivating_iff",
+        "Cordis.ReactiveCoeffects.notify_neutral_iff",
+        "Cordis.ReactiveCoeffects.isolation_preserves_store",
+        "Cordis.ReactiveCoeffects.derived_isolation_recovers_parent",
+        "Cordis.ReactiveCoeffects.captured_revoke_ignores_later_redirection",
+        "Cordis.ReactiveCoeffects.captured_revoke_preserves_other_realm",
+        "Cordis.ReactiveCoeffects.current_realm_disposer_counterexample",
+        "Cordis.ReactiveCoeffects.intercept_preserves_providers",
+        "Cordis.ReactiveCoeffects.intercept_same_key",
+        "Cordis.ReactiveCoeffects.context_scalar_takes_priority",
+        "Cordis.ReactiveCoeffects.interception_effect_strict"
+      ],
+      "assumptions": [
+        "Each key has a fixed value family, modeled dependently. Rust typed ServiceKey values and Any downcasts use the existing KernelSemantics representation contract; arbitrary raw named metadata must honor its selected key's metadata type.",
+        "Satisfaction is executable for finite dependency specifications, matching Inject. A finite store alone does not provide an enumeration of an arbitrary mathematical subset specification.",
+        "The paper's mandatory presence predicate is modeled directly. Optional dependencies, readiness predicates, committed identities and revision validation retain the existing Bindings/KernelSemantics models.",
+        "Realm stores are indexed by both key and realm. Disposal captures the acquired slot, and immutable derived views retain their parent; destructive view updates capture the previous mapping.",
+        "The metadata regrouping theorem requires the stated associative merge and identity laws. Rust Merge is an open implementation contract; the source always guarantees declaration/outer/inner evaluation order, and the concrete right-biased algebra has its own proved precedence.",
+        "Registration recovery is LIFO or uses the independent-key/realm ownership frame condition; an unrelated writer is not allowed to replace the owned slot silently."
+      ],
+      "evidence_commands": [
+        {"argv": ["python3", "tools/plugin_principle_probe.py", "--evidence", "target/plugin-principle.json"]},
+        {"argv": ["python3", "formal/check_kernel_refinement.py", "--evidence", "target/kernel-refinement.json"]},
+        {"argv": ["cargo", "test", "--locked", "-p", "cordis", "--lib", "--tests"]}
+      ]
+    },
+    {
+      "domain": "rust-cordis-everything-is-a-plugin-unified-context-composition-and-fresh-identities",
+      "module": "PluginPrinciple",
+      "production_paths": [
+        "crates/cordis/Cargo.toml", "crates/cordis/src/lib.rs",
+        "crates/cordis/src/context.rs", "crates/cordis/src/identity.rs",
+        "crates/cordis/src/registry.rs", "crates/cordis/src/fiber.rs",
+        "crates/cordis/src/effect.rs", "crates/cordis/src/reflect.rs",
+        "crates/cordis-supervisor/src/manager.rs",
+        "crates/cordis-supervisor/src/manager/generation.rs",
+        "crates/cordis-web-deployment/src/lib.rs",
+        "crates/cordis-runtime/src/runtime/owner.rs",
+        "crates/cordis/tests/plugin_principle.rs", "docs/context-paradigm.md"
+      ],
+      "entrypoints": [
+        "ComponentDef::new", "ComponentDef::validated", "Context::mount_with",
+        "Context::inject", "Context::derive", "Context::permits_effect",
+        "reflect::epoch_ids", "fiber::drain", "identity::allocate", "Realm::new",
+        "Manager::new", "Manager::initialize", "manager::generation::definition",
+        "Manager::apply_generation", "web::Deployment::mount", "RuntimeRoot::finish", "RuntimeRoot::drop"
+      ],
+      "theorems": [
+        "Cordis.PluginPrinciple.implementation_does_not_choose_epoch",
+        "Cordis.PluginPrinciple.resolution_depends_on_declared_boundary",
+        "Cordis.PluginPrinciple.instance_projection",
+        "Cordis.PluginPrinciple.system_controller_refinement",
+        "Cordis.PluginPrinciple.equal_boundary_traces_preserve_instance",
+        "Cordis.PluginPrinciple.extension_preserves_existing_instance",
+        "Cordis.PluginPrinciple.finite_program_compilation",
+        "Cordis.PluginPrinciple.replacement_preserves_structural_execution",
+        "Cordis.PluginPrinciple.nested_program_extension_preserves_instance",
+        "Cordis.PluginPrinciple.instance_identity_equivariance",
+        "Cordis.PluginPrinciple.selective_recovery_preserves_surviving_resources",
+        "Cordis.PluginPrinciple.owned_callback_trace_recovers",
+        "Cordis.PluginPrinciple.component_target_iff",
+        "Cordis.PluginPrinciple.composed_component_is_revertible",
+        "Cordis.PluginPrinciple.nested_completed_prefix_recovers",
+        "Cordis.PluginPrinciple.raising_preserves_revertibility",
+        "Cordis.PluginPrinciple.raising_preserves_composition",
+        "Cordis.PluginPrinciple.same_layer_provision_is_strict",
+        "Cordis.PluginPrinciple.same_layer_registration_recovers",
+        "Cordis.PluginPrinciple.every_derived_context_uses_owner_admission",
+        "Cordis.PluginPrinciple.generated_effect_disposes_at_most_once",
+        "Cordis.PluginPrinciple.admitted_generation_uses_fresh_guard",
+        "Cordis.PluginPrinciple.every_generated_guard_is_fresh",
+        "Cordis.PluginPrinciple.generation_preserves_existing_guards",
+        "Cordis.PluginPrinciple.cloned_handle_routes_to_same_guard",
+        "Cordis.PluginPrinciple.private_guard_cleanup_starts_at_most_once",
+        "Cordis.PluginPrinciple.allocation_trace_strictly_increases",
+        "Cordis.PluginPrinciple.positive_identity_frontier_reserves_default",
+        "Cordis.PluginPrinciple.separate_identity_traces_never_reuse",
+        "Cordis.PluginPrinciple.exhausted_identity_frontier_stays_closed"
+      ],
+      "assumptions": [
+        "Definitions retain arbitrary opaque implementations. State-machine observations are made at existing lock/callback boundaries; the model starts after assigning valid instance identities and does not interpret arbitrary Rust callback instructions.",
+        "Replacement equivalence requires equal declared dependency observations and callback boundary traces. An extension that changes an existing component's selected service may intentionally change its epoch and lifecycle.",
+        "Program compilation covers arbitrary finite nested composition of generic lifecycle operations. The separate synchronous Component composition uses joint prerequisites; dynamic provider/consumer activation remains in the lifecycle and binding boundary interpreter.",
+        "The finite context tower realizes current context, recovery journal and typed coeffects at arbitrary finite depth. Source Scope chains, Fiber handles and shared state tables provide the concrete representation through existing Scopes/Admission bridges.",
+        "A new effect gets a private guard, and handles share that guard. GuardArena interprets SlotMap's fresh-key contract with an abstract history serial, separately from the finite AtomicU64 allocator for Realm/ComponentId. FnOnce ownership and the state mutex prevent duplicate callback claims; arbitrary callback restoration still requires Strict or the stated owned-state frame condition.",
+        "Checked identity allocation is linearized by the standard AtomicU64 fetch_update contract. Successful identities start at one, advance strictly and stop permanently at u64::MAX; allocation does not wrap.",
+        "The source certificate translates the complete supported constructor delegation, checked allocator and apply RPC projection to Lean for arbitrary parameters. Closed framework body checks establish reviewed construction/ownership placement, while real integration tests exercise the helpers.",
+        "The core library executes generic framework apply closures. Deployed business bodies execute in their selected host through the generation's UP/1 connection; the production dependency closure and full apply projection are checked separately.",
+        "JS module cache classification in the reference paper remains host-specific. This repository's finite deployment graph and transactional storage use the existing Deployment, BindingGraph and StorageProgram proof domains."
+      ],
+      "evidence_commands": [
+        {"argv": ["python3", "tools/plugin_principle_probe.py", "--evidence", "target/plugin-principle.json"]},
+        {"argv": ["cargo", "test", "--locked", "-p", "cordis", "--lib", "--tests"]},
+        {"argv": ["cargo", "test", "--locked", "-p", "cordis-supervisor", "--lib", "--test", "manager"]},
+        {"argv": ["cargo", "test", "--locked", "-p", "cordis-web-deployment", "--lib", "--tests"]}
+      ]
+    }
+  ]
+}

@@ -1,0 +1,61 @@
+{
+  "bridges": [
+    {
+      "domain": "lifecycle-decisions-and-observation-traces",
+      "module": "Lifecycle",
+      "production_paths": ["crates/cordis/src/lifecycle.rs", "crates/cordis/src/lifecycle_generated.rs", "crates/cordis/src/fiber.rs"],
+      "entrypoints": ["lifecycle::idle", "lifecycle::target", "lifecycle::refresh", "lifecycle::finish", "lifecycle::current_epoch", "lifecycle::settled", "lifecycle::cleanup"],
+      "theorems": ["Cordis.decisions_equiv", "Cordis.step_equiv", "Cordis.trace_equiv", "Cordis.stream_prefix_equiv", "Cordis.current_epoch_equiv"],
+      "assumptions": [
+        "The reference decision order is taken from fiber.rs at 7e4dd5e41445be82af10def53fae315b5b83f7ea.",
+        "Epochs and observation counters are abstract mathematical values; KernelRefinement separately states concrete word bounds and state representation conditions.",
+        "External completions become model inputs. Their scheduling and termination belong to the host contract."
+      ],
+      "evidence_level": "generated-production-code-with-exhaustive-input-check",
+      "evidence_commands": [{"argv": ["python3", "tools/verify_semantics.py"], "purpose": "204 decision cases, callback read counts, source generation comparison and mutated-branch rejection"}]
+    },
+    {
+      "domain": "one-shot-decision-predicate-execution",
+      "module": "DecisionProgram",
+      "production_paths": ["crates/cordis/src/lifecycle.rs", "crates/cordis/src/lifecycle_generated.rs"],
+      "entrypoints": ["FnOnce equality predicates in refresh, finish, current and current_epoch"],
+      "theorems": ["Cordis.DecisionProgram.execute_preserves_result_and_calls", "Cordis.DecisionProgram.calls_are_fresh", "Cordis.DecisionProgram.certified_calls_once", "Cordis.DecisionProgram.repeated_call_rejected"],
+      "assumptions": [
+        "Generate.rustFunction accepts a Certified tree and a Vector of exactly the required number of argument names.",
+        "The Rust printer and compiler are connected by exhaustive execution of the actual production module; the Rust parser and compiler are trusted implementation tools."
+      ],
+      "evidence_level": "certified-generator-input-with-compiled-call-count-check",
+      "evidence_commands": [{"argv": ["python3", "tools/verify_semantics.py"]}]
+    },
+    {
+      "domain": "effect-cleanup-claim-and-rollback-order",
+      "module": "Effects",
+      "production_paths": ["crates/cordis/src/effect.rs", "crates/cordis/tests/dispose_async.rs"],
+      "entrypoints": ["Effect::start_cleanup", "Effect::clean_steps", "Effect::cancel"],
+      "theorems": ["Cordis.Effects.cleanup_starts_at_most_once", "Cordis.Effects.cancel_waits_for_execution", "Cordis.Effects.final_defer_retained", "Cordis.Effects.complete_rollback"],
+      "assumptions": ["The kernel lock linearizes cleanup claims; operation completion and errors are inputs supplied by the executor."],
+      "evidence_level": "transition-model-and-production-integration",
+      "evidence_commands": [{"argv": ["cargo", "test", "-p", "cordis", "--test", "dispose_async", "--test", "concurrency"]}]
+    },
+    {
+      "domain": "generation-bound-effect-admission",
+      "module": "Admission",
+      "production_paths": ["crates/cordis/src/context.rs", "crates/cordis/src/effect.rs", "crates/cordis/tests/epoch_context.rs"],
+      "entrypoints": ["Context::permits_effect", "Context::create_effect"],
+      "theorems": ["Cordis.Admission.successful_registration", "Cordis.Admission.stale_guard_denies_registration", "Cordis.Admission.inactive_owner_denies_registration"],
+      "assumptions": ["The same locked state supplies all guards and receives the new ownership records; KernelRefinement models and probes this boundary."],
+      "evidence_level": "transition-model-refined-by-kernel-boundary",
+      "evidence_commands": [{"argv": ["cargo", "test", "-p", "cordis", "--test", "epoch_context"]}]
+    },
+    {
+      "domain": "immutable-scope-guard-cache",
+      "module": "Scopes",
+      "production_paths": ["crates/cordis/src/context.rs", "crates/cordis/src/registry.rs", "crates/cordis/tests/epoch_context.rs"],
+      "entrypoints": ["Context::derive", "Context::for_epoch", "Context::permits_effect", "Context::mount_with"],
+      "theorems": ["Cordis.Scopes.cache_matches_guards", "Cordis.Scopes.cached_admission_equiv", "Cordis.Scopes.cached_registration_equiv", "Cordis.Scopes.binding_cannot_restore_rejected_view", "Cordis.Scopes.child_starts_own_guard_segment"],
+      "assumptions": ["The scope chain is immutable and each child receives a fresh owner identity. KernelRefinement proves the FiberId-boundary projection under these construction conditions."],
+      "evidence_level": "constructor-and-admission-refinement",
+      "evidence_commands": [{"argv": ["cargo", "test", "-p", "cordis", "--lib", "--test", "epoch_context"]}]
+    }
+  ]
+}

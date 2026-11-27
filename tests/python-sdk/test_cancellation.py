@@ -183,6 +183,107 @@ class CancellationTest(unittest.IsolatedAsyncioTestCase):
                 await plugin.wait()
         self.assertEqual(plugin.returncode, 0)
 
+class ResponseOwnershipTest(unittest.IsolatedAsyncioTestCase):
+    class Payload:
+        def __init__(self):
+            self.closes = 0
+
+        def close(self):
+            self.closes += 1
+
+    class Runtime:
+        def __init__(self):
+            self.payloads = []
+            self.released = []
+
+        def payload(self, value):
+            result = ResponseOwnershipTest.Payload()
+            self.payloads.append(result)
+            return result
+
+        def release_exports(self, offers):
+            self.released.extend(offers)
+
+    class Writer:
+        def __init__(self):
+            self.sent = asyncio.Event()
+
+        async def drain(self):
+            pass
+
+        def write(self, data):
+            self.sent.set()
+
+    def connection(self):
+        from cordis_sdk.wire import Connection
+        runtime = self.Runtime()
+        connection = Connection(runtime)
+        connection.writer = self.Writer()
+        return connection, runtime
+
+    async def test_settled_response_cancelled_before_request_resumes_is_closed(self):
+        connection, runtime = self.connection()
+        request = asyncio.create_task(connection.request("echo", {}, (17,)))
+        await connection.writer.sent.wait()
+        connection._response({"id": 1, "result": {"ok": {}}})
+        request.cancel()
+        with self.assertRaises(asyncio.CancelledError):
+            await request
+        self.assertEqual(runtime.payloads[0].closes, 1)
+        self.assertEqual(runtime.released, [])
+        self.assertEqual(connection.pending, {})
+
+    async def test_successful_response_transfers_payload_to_caller(self):
+        connection, runtime = self.connection()
+        request = asyncio.create_task(connection.request("echo", {}, (17,)))
+        await connection.writer.sent.wait()
+        connection._response({"id": 1, "result": {"ok": {}}})
+        result = await request
+        self.assertIs(result, runtime.payloads[0])
+        self.assertEqual(result.closes, 0)
+        self.assertEqual(runtime.released, [])
+        self.assertEqual(connection.pending, {})
+        result.close()
+        self.assertEqual(result.closes, 1)
+
+    async def test_response_during_failed_send_is_closed_and_offers_rolled_back(self):
+        connection, runtime = self.connection()
+
+        async def failed_send(*args, **kwargs):
+            connection._response({"id": 1, "result": {"ok": {}}})
+            raise CordisError(4, "write failed")
+
+        connection.send = failed_send
+        with self.assertRaises(CordisError):
+            await connection.request("echo", {}, (17,))
+        self.assertEqual(runtime.payloads[0].closes, 1)
+        self.assertEqual(runtime.released, [17])
+        self.assertEqual(connection.pending, {})
+
+    async def test_cancelled_future_and_late_response_have_one_release(self):
+        connection, runtime = self.connection()
+        request = asyncio.create_task(connection.request("echo", {}))
+        await connection.writer.sent.wait()
+        request.cancel()
+        with self.assertRaises(asyncio.CancelledError):
+            await request
+        connection._response({"id": 1, "result": {"ok": {}}})
+        self.assertEqual(runtime.payloads[0].closes, 1)
+        self.assertEqual(connection.pending, {})
+
+    async def test_settled_error_cancelled_before_resume_has_no_payload(self):
+        connection, runtime = self.connection()
+        request = asyncio.create_task(connection.request("echo", {}))
+        await connection.writer.sent.wait()
+        connection._response({"id": 1, "result": {"error": {
+            "code": 4, "message": "closed", "detail": None,
+        }}})
+        request.cancel()
+        with self.assertRaises(asyncio.CancelledError):
+            await request
+        self.assertEqual(runtime.payloads, [])
+        self.assertEqual(connection.pending, {})
+
 
 async def deadline_peer():
     runtime = Runtime("relay", "1.0.0", [])

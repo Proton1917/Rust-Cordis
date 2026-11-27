@@ -1,0 +1,104 @@
+{
+  "bridges": [
+    {
+      "domain": "pinned-typescript-lifecycle-observations",
+      "module": "Upstream",
+      "production_paths": [
+        "cordis/packages/core/src/fiber.ts",
+        "crates/cordis/src/lifecycle.rs",
+        "crates/cordis/src/fiber.rs",
+        "tools/conformance.py",
+        "tools/conformance_run.py",
+        "docs/04-conformance.md"
+      ],
+      "entrypoints": [
+        "Fiber._getState",
+        "Fiber._setEpoch",
+        "Fiber._reload",
+        "Fiber._unload"
+      ],
+      "theorems": [
+        "Cordis.Upstream.state_observation_refines",
+        "Cordis.Upstream.set_epoch_observation_refines",
+        "Cordis.Upstream.load_completion_refines",
+        "Cordis.Upstream.drained_unload_completion_refines",
+        "Cordis.Upstream.failure_refines",
+        "Cordis.Upstream.arbitrary_observation_trace_refines"
+      ],
+      "assumptions": [
+        "The upstream checkout is exactly 261c5fdae6edb54e7ed4f071024f530acd18903b; a working-tree edit of fiber.ts causes bridge rejection.",
+        "The shared refresh domain is a live, unsuspended owner. Stable Rust idle and the TypeScript early return both project to no load/unload event.",
+        "An unload completion has drained its effect collection; Rust's additional retry for effects registered during cleanup belongs to the kernel model.",
+        "Identity equality is exact. JavaScript numerical identities must remain within its exact integer range; the model does not extend that range to all Rust u64 values.",
+        "The probe executes extracted method bodies with controlled awaited callbacks, nonempty teardown collections, blocked provider dependents, callback errors and committed-provider release. The only removed in-body TypeScript syntax is the Promise<void> type parameter.",
+        "Full JavaScript/Rust language-level equivalence, callback implementations and all public API behavior are outside the shared observation theorem; the pinned conformance suite checks its separately defined scenario matrix."
+      ],
+      "evidence_level": "proved-shared-observation-contract-and-executed-pinned-method-bodies",
+      "evidence_commands": [
+        {
+          "argv": [
+            "python3",
+            "formal/check_upstream.py"
+          ],
+          "purpose": "114 cases, awaited supersession, stale failure, nonempty reverse-order cleanup, dependency waiting and four production-body mutation controls"
+        },
+        {
+          "argv": [
+            "python3",
+            "tools/conformance_run.py",
+            "--output",
+            "target/conformance-report.json"
+          ]
+        }
+      ]
+    },
+    {
+      "domain": "stateful-shared-upstream-lifecycle-with-stuttering",
+      "module": "UpstreamSimulation",
+      "production_paths": [
+        "cordis/packages/core/src/fiber.ts",
+        "crates/cordis/src/fiber.rs",
+        "crates/cordis/src/lifecycle.rs",
+        "crates/cordis/src/reflect.rs"
+      ],
+      "entrypoints": [
+        "Fiber._setEpoch",
+        "Fiber._reload",
+        "Fiber._unload",
+        "drain",
+        "transition_loop",
+        "finish_transition",
+        "reflect::release_committed"
+      ],
+      "theorems": [
+        "Cordis.UpstreamSimulation.refresh_simulation",
+        "Cordis.UpstreamSimulation.load_finish_simulation",
+        "Cordis.UpstreamSimulation.unload_finish_simulation",
+        "Cordis.UpstreamSimulation.state_step_simulation",
+        "Cordis.UpstreamSimulation.silent_steps_preserve_state",
+        "Cordis.UpstreamSimulation.arbitrary_microtrace_simulation",
+        "Cordis.UpstreamSimulation.trace_concatenation",
+        "Cordis.UpstreamSimulation.stale_callback_preserves_new_target",
+        "Cordis.UpstreamSimulation.nonempty_cleanup_keeps_commit",
+        "Cordis.UpstreamSimulation.cleanup_starts_in_reverse_order",
+        "Cordis.UpstreamSimulation.completed_unload_releases_providers"
+      ],
+      "assumptions": [
+        "The shared protocol keeps target and attempted epochs, failure state, active transition phase, collected effects, pending cleanup and committed providers. Live unsuspended owners, exact identity equality and corresponding external callbacks define the common domain.",
+        "Rust status publication and executor yield are silent events only when their callbacks have no externally visible action. Any reentrant target or effect change is represented by its visible event.",
+        "Cleanups retain committed providers until all outstanding callbacks complete. The shared unload-completion domain has no late top-level effects; Rust retrying effects added during cleanup is a separate runtime extension.",
+        "Commit, collect, callback completion and recovery events correspond to legal environment operations. The shared model includes their state guards; allocation, callback implementations and scheduling are supplied by the environment.",
+        "The theorem covers arbitrary finite protocol traces and permits a different count of silent Rust microsteps. The source bridge executes the pinned TypeScript functions and generated Rust lifecycle decisions on controlled cases. This does not assert full language or all-public-API equivalence."
+      ],
+      "evidence_commands": [
+        {
+          "argv": [
+            "python3",
+            "formal/check_upstream.py"
+          ],
+          "purpose": "114 source-method cases including nonempty teardown/provider release; four production mutation controls"
+        }
+      ]
+    }
+  ]
+}

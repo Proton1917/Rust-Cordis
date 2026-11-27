@@ -5,6 +5,7 @@ mod effect;
 mod error;
 mod events;
 mod fiber;
+mod identity;
 mod kernel;
 mod lifecycle;
 mod list;

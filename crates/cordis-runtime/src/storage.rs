@@ -100,9 +100,31 @@ fn publish(path: &Path, bytes: &[u8], durable: bool) -> Result<()> {
 fn sync_directory(path: &Path) -> Result<()> {
     #[cfg(test)]
     sync_test::before(path)?;
+    sync_directory_contents(path)
+}
+
+fn sync_directory_contents(path: &Path) -> Result<()> {
     File::open(path)
         .and_then(|directory| directory.sync_all())
         .map_err(io_error)
+}
+
+/// Confirm the new directories and every name that makes the store reachable.
+/// An earlier failed attempt may have left readable directories behind, so each
+/// attempt repeats the complete sequence, including existing ancestors.
+fn prepare_directory_tree(
+    directory: &Path,
+    mut sync: impl FnMut(&Path) -> Result<()>,
+) -> Result<PathBuf> {
+    fs::create_dir_all(directory.join("consumed")).map_err(io_error)?;
+    fs::create_dir_all(directory.join("data")).map_err(io_error)?;
+    let directory = directory.canonicalize().map_err(io_error)?;
+    sync(&directory.join("consumed"))?;
+    sync(&directory.join("data"))?;
+    for ancestor in directory.ancestors() {
+        sync(ancestor)?;
+    }
+    Ok(directory)
 }
 
 #[cfg(test)]
@@ -635,11 +657,9 @@ impl Store {
         }
     }
 
-    /// CP-11、PR-7：准备部署锁目录和插件数据目录，并固定存储根路径。
+    /// CP-11、PR-7：持久确认部署锁目录、插件数据目录和祖先路径，固定存储根路径。
     pub fn create(directory: PathBuf) -> Result<Self> {
-        fs::create_dir_all(directory.join("consumed")).map_err(io_error)?;
-        fs::create_dir_all(directory.join("data")).map_err(io_error)?;
-        let directory = directory.canonicalize().map_err(io_error)?;
+        let directory = prepare_directory_tree(&directory, sync_directory_contents)?;
         Ok(Self {
             directory,
             checkpoints: Arc::new(Mutex::new(CheckpointCache::default())),
@@ -840,6 +860,65 @@ mod tests {
             version: 1,
             data: value,
         })
+    }
+
+    #[test]
+    fn directory_initialization_confirms_children_before_ancestors() {
+        let case = TestGuard::for_package(
+            Path::new(env!("CARGO_MANIFEST_DIR")),
+            "directory-initialization-order",
+        );
+        let directory = case.directory("initialization").join("nested/state");
+        let mut calls = Vec::new();
+        let canonical = prepare_directory_tree(&directory, |path| {
+            calls.push(path.to_owned());
+            sync_directory_contents(path)
+        })
+        .unwrap();
+        let expected: Vec<_> = [canonical.join("consumed"), canonical.join("data")]
+            .into_iter()
+            .chain(canonical.ancestors().map(Path::to_owned))
+            .collect();
+        assert_eq!(calls, expected);
+        assert!(canonical.is_absolute());
+        assert!(canonical.join("consumed").is_dir());
+        assert!(canonical.join("data").is_dir());
+        case.success();
+    }
+
+    #[test]
+    fn directory_initialization_retries_every_barrier_after_failure() {
+        let case = TestGuard::for_package(
+            Path::new(env!("CARGO_MANIFEST_DIR")),
+            "directory-initialization-retry",
+        );
+        let directory = case.directory("initialization").join("nested/state");
+        fs::create_dir_all(&directory).unwrap();
+        let canonical = directory.canonicalize().unwrap();
+        let expected: Vec<_> = [canonical.join("consumed"), canonical.join("data")]
+            .into_iter()
+            .chain(canonical.ancestors().map(Path::to_owned))
+            .collect();
+        for failed in 0..expected.len() {
+            let mut attempted = Vec::new();
+            let result = prepare_directory_tree(&directory, |path| {
+                attempted.push(path.to_owned());
+                if attempted.len() == failed + 1 {
+                    return Err(io_error(std::io::Error::other("initialization barrier")));
+                }
+                sync_directory_contents(path)
+            });
+            assert!(result.is_err());
+            assert_eq!(attempted, expected[..=failed]);
+            let mut retried = Vec::new();
+            prepare_directory_tree(&directory, |path| {
+                retried.push(path.to_owned());
+                sync_directory_contents(path)
+            })
+            .unwrap();
+            assert_eq!(retried, expected);
+        }
+        case.success();
     }
 
     #[test]

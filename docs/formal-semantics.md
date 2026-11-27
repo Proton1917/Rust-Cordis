@@ -1,127 +1,180 @@
-# 生命周期决策与效应所有权的形式化验证
+# 运行时语义的形式化验证
 
-内核依据实例存活性、依赖绑定纪元、迁移进度和效应所有权决定下一步。`formal/Lifecycle.lean` 给出这部分决策的参考语义、可执行决策树及等价证明；`formal/Effects.lean` 给出取消、执行完成与清理所有权的协议和不变量；`formal/Admission.lean` 给出绑定到捕获纪元的效应准入条件；`formal/Scopes.lean` 证明不可变上下文派生链的守卫收集和缓存准入与完整遍历相等。实际 Rust 生命周期路径调用由生命周期决策树生成的 `crates/cordis/src/lifecycle_generated.rs`。
+形式化工程覆盖上下文范式的效应代数、反应式依赖与插件组合，以及生命周期决策、内核字段与上下文表示、依赖图构造、原子与异步执行、资源所有权、CBOR 与协议请求、持久化程序及恢复、上游状态模拟、组件事实来源和跨模块组合。Lean 4.19.0 检查状态模型与表示精化的定理；受限源码解析器为实际表达式和控制流生成任意参数证书；原样源码探针及 Rust、TypeScript、Python 回归检查具体执行。各类证据分别记录，并绑定到当前源码摘要。
 
-证明的基线为 `7e4dd5e41445be82af10def53fae315b5b83f7ea` 的 `fiber.rs` 和 `effect.rs`。对应的产品语义来自[行为规格](01-semantics.md)中的 T-LIF、S-FBR、T-EFF、S-EFF；[上游一致性矩阵](04-conformance.md)继续验证真实实例、服务、事件及异步执行。
+`formal/` 包含 31 个证明模块。生命周期生产路径使用 `formal/Generate.lean` 生成的 `crates/cordis/src/lifecycle_generated.rs`。其余模块给出具体表示的投影、转移关系和所有权不变量，各模块的源文件、入口、定理、前提与回归命令列在 `formal/bridges/*.json`。`tools/verify_semantics.py` 检查模块清单、桥接清单、全部 Lean 声明、公理依赖和实际源码探针，并将结果绑定到文件内容摘要。论文定义及其 Rust 对应关系见[上下文范式](context-paradigm.md)。
 
-## 证明域和事实所有者
+生命周期参考分支的来源是提交 `7e4dd5e41445be82af10def53fae315b5b83f7ea` 的 `fiber.rs` 和 `effect.rs`。上游 TypeScript 来源固定为 `261c5fdae6edb54e7ed4f071024f530acd18903b`。行为条款见[组件组合的行为规格](01-semantics.md)，实际场景映射见[上游一致性矩阵](04-conformance.md)。
 
-`Kernel` 保持实例状态、目标纪元、运行纪元、排队标记、通知计数和效应集合的唯一所有权。`lifecycle` 模块接收锁内读取的事实，返回纯决策，既不保存实例表，也不启动任务。调和队列、提交绑定、状态通知和宿主任务仍由各自原有入口执行。
+## 证明对象与结论
 
-`Fiber::is_current_epoch(&Epoch)` 在同一把内核锁内同时检查存活性、目标纪元与运行纪元相同、目标纪元与调用方捕获的纪元相同。调用方借用已有纪元，省去组合 `Context::is_current()` 与 `Fiber::epoch()` 所需的第二次锁读取和依赖向量克隆。监管器通过绑定纪元的 `Context::is_current()` 读取同一组内核事实，捕获纪元由上下文持有。
-
-本证明完整量化**生命周期决策接口的全部输入分类**，并证明所定义状态机在任意输入序列上的最终状态和输出序列相同。它为本次纯决策提取建立精化关系。Rust 的锁操作、状态字段适配、回调执行、服务解析和外部系统具有独立的实现义务；这些义务的当前证据是源码审查与实际回归。完整框架、原生宿主、协议和 TypeScript 上游实现之间的整体形式化等价仍需要进一步建立这些实现的操作语义与精化证明。
-
-## 对象、输入与观察
-
-Lean 的 `Epoch` 是 `Option (Nat × List Nat)`。`none` 表示非活跃目标；有值时依次包含修订号和按声明顺序排列的绑定身份。证明允许任意长度的身份向量和任意自然数标识。Rust 使用的 `u64` 身份是其中的子集，本次决策只读取相等关系和是否非活跃。
-
-`State` 包含六种公开状态 `Pending`、`Loading`、`Active`、`Failed`、`Disposed`、`Unloading`，以及 `alive`、`failed`、`target`、`running`、`inertia`、`suspended`、`queued`、`notifications` 和 `effects`。后两项是任意自然数。错误的载荷、配置内容、回调函数和绑定对象保留在各自实现中，模型只使用决定迁移的事实。
-
-| 输入 | 锁内状态变化 | 实际入口 |
+| 模块 | 对象与主要结论 | 生产连接 |
 |---|---|---|
-| `refresh(resolved)` | 根据存活性和失败状态选择目标，撤下排队标记，决定保留、空闲、加载或卸载 | `fiber::drain` |
-| `finish(loading)` | 比较目标和运行纪元，处理卸载期间新增效应，串联迁移或进入稳定状态 | `fiber::finish_transition` |
-| `fail(attempt)` | 加载仍对应当前目标时记录失败并撤回目标；过时失败保留新目标 | `fiber::transition_loop` |
-| `dispose` | 撤回实例存活性并请求调和 | `Fiber::begin_dispose` |
-| `recover` | 清除加载错误并请求调和 | 需要重启的配置恢复、组件替换 |
-| `suspend`、`resume` | 保存派发受阻的清理或恢复同一清理，改变迁移状态 | `submit_cleanup`、`resume_cleanup` |
-| `notified` | 记录一次状态通知完成 | `status_changed` |
-| `effects(count)` | 提供当前效应集合的基数 | 效应登记、转移与清理完成 |
+| `Lifecycle` | 六种状态、纪元、迁移标记与输出；参考决策和决策树在全部输入、任意有限迹及无限流的有限前缀上相等 | 生成并直接编译生产决策模块，穷尽 204 个输入分类 |
+| `DecisionProgram` | 参数读取的所有权；求值保留结果和读取次序，每条合法路径至多读取一次同一参数 | 生成器只接收 `Certified` 树，参数名用定长 `Vector`；Rust 探针核对 `FnOnce` 调用次数 |
+| `KernelRefinement` | `UInt64`/`USize` 到数学值的投影、refresh/finish 字段更新、`FiberId` 守卫边界、同快照双表登记 | 从实际源文件提取字段适配和锁内更新片段，编译后与 Lean 向量比较 |
+| `Bindings` | 任意长度依赖向量、可选缺席、提交绑定、隔离访问、通知快照校验、消费者保留与释放 | 提取 `epoch_ids`、`commit_locked`、`locate`、快照安装、依赖等待与释放入口 |
+| `Effects` | 唯一清理申请者、取消后的在途步骤、最后交回的逆变换、清理栈顺序 | 生产清理守卫、异步释放及拒收恢复回归 |
+| `Admission` | 存活性与全部捕获纪元守卫在一次登记中共同成立 | 同锁登记投影与生产片段 |
+| `Scopes` | 任意合法不可变派生链的缓存与完整遍历相等；追加守卫保留旧约束；子纤程建立自身范围 | 构造链投影及实际 `Context::derive`、`permits_effect` |
+| `Execution` | 任意任务事件轨迹保持唯一 token；拒收、悬挂和恢复保持任务归属；异步清理保持 LIFO 与首次错误 | 实际调度器接受、拒收、异常与恢复回归 |
+| `NativeOwnership` | Future 存活和同步 poll 期间保留 permit；额度有界；动态库关闭条件与关闭至多一次 | native callback 测试及真实动态库退休驱动 |
+| `Routing` | 每个出口引用至多归还一次；非法 release 原子拒绝；批次提交/回退、退休清扫、索引一致性 | 路由目录真实类型、析构锁外执行及各次级索引回归 |
+| `Protocol` | 首次写入与取消的权利交接、单次终态记账、回复权、FIFO、字节预算和 live-lease 账本 | 实际 `Lease` 方法差分及首字节、超时、背压回归 |
+| `SdkProtocol` | TypeScript 移除 pending 与 Python `future.done()` 两种终态机制的单次结算和载荷归属 | 原样提取响应方法，使用真实 `Map` 与 `asyncio.Future` 执行 |
+| `Persistence` | 任意合法写入轨迹的旧/新版本崩溃原子性、确认后的持久性、可重放恢复及检查点缓存事实 | 实际存储故障注入、日志恢复与目录同步回归 |
+| `Deployment` | 任意有限依赖图上的选择恰为可达闭包；最小性、无重复、终止与目录过滤 | `select_instances` 工作栈映射及实际进程管理回归 |
+| `Upstream` | 共享生命周期输入域上的状态、迁移动作与过时错误归属；任意输入列表上的逐点观测相等 | 固定上游四个真实方法体及独立的一致性场景矩阵 |
+| `KernelSemantics` | 控制循环入口不变量、机器身份耗尽、通知快照永久失效、完整服务读取与动态类型结果 | 实际内核入口、`Any` 下转与整数边界差分，生产边界回归 |
+| `BindingGraph` | 当前与提交绑定、root 服务、隔离域、接口次版本、替换提供者及父子边构造，接入可达闭包 | 完整 `select_instances` 原样编译；候选条件 AST 的任意参数证书 |
+| `Concurrency` | clone 借用、过时读取、CAS、释放、退休观察和映像取出之间的任意交错 | 真实标准库原子及 `Arc`；完整 lease 方法源码探针 |
+| `AsyncSemantics` | poll、wake、Pending、取消、析构、permit 归还的微步骤；公平调度下清理最终完成 | 完整 `Admitted`/`Permit` 实现和实际 Future/Waker；清理集成测试 |
+| `WireSemantics` | UP/1 信封、长度前缀、分片、多帧、整数宽度、剩余截止时间和请求标识前沿 | 真实 `integer_width`/`update_budget`/allocator 源证书及编译运行 |
+| `RequestSemantics` | 整段请求的响应结算、发送完成、恢复执行、交付和取消；嵌套截止时间 | 实际 Python request 和 TypeScript Connection 的异步执行及泄漏负控 |
+| `CborSemantics` | 任意递归数据的 CBOR 字节语法、浮点位模式、bignum 归一化、资源标签和节点/深度预算 | 实际 `cordis-up` codec 与支撑库行为；资源检查源码证书 |
+| `StorageProgram` | 逐 I/O 程序位置、错误返回、实际日志构造与原字节重放；任意前缀的恢复原子性 | 实际文件系统、逐调用失败与进程中断、恢复重试 |
+| `StorageControlFlow` | 文件发布、日志确认、写入分组、提交屏障的有序程序，任意长度计划和删除项 | 当前源码的受限控制流证书与完整方法执行 |
+| `DirectoryInitialization` | 子目录到祖先目录的同步顺序、失败停止和完整重试 | 原样初始化函数，实际目录与每个屏障失败测试 |
+| `UpstreamSimulation` | 目标、尝试纪元、失败、忙碌阶段、清理栈和绑定提供者的状态关系；停顿步模拟 | 非空清理和提供者释放的真实上游方法执行 |
+| `Architecture` | 事实权威、修订快照、版本契约、资源守恒、单调转移标识和可信来源 | 元数据过滤及来源字段的任意参数证书；完整监管器方法 |
+| `Composition` | 首次写入权与延后 hook、非空路由批次、清理身份和实际日志恢复之间的组合不变量 | 跨组件源码映射与真实路由/协议联动回归 |
+| `RevertibleEffects` | track 同态、严格效应组合、单次恢复与全局双射的适用域、任意已完成前缀的 LIFO 恢复 | 复用 `Effects` 的实际清理栈；非交换回调在真实内核上恢复状态 |
+| `ReactiveCoeffects` | 按键定型的有限服务表、依赖满足与通知、捕获 Realm 的回收、派生隔离和元数据代数 | 实际服务与上下文入口、类型元数据、父视图及跨域回收回归 |
+| `PluginPrinciple` | 任意实例迹的通用控制器投影、嵌套插件组合、相同边界下替换、统一上下文、效应生成及身份不复用 | 构造器与 apply RPC 的任意参数证书；框架装配、依赖边界、检查过的身份分配和真实插件集成 |
 
-`Output` 记录锁边界产生的迁移动作、状态变化对和待提交的纪元。`run` 同时返回最终 `State` 和逐步 `Output`。状态通知调用的用户代码发生在锁外，可以在随后输入中再次改变目标。证明覆盖这些输入的任意交错次序，不额外假定它们按照某个测试时钟到达。
+定理的量化范围由 Lean 声明确定。容量可以是任意自然数，依赖向量、清理栈和输入迹可以有任意有限长度，部署图可以有任意有限规模。具体机器字的增减和投影具有相应界限条件。有限差分用例用于检查源程序连接，其用例数单独记录。
 
-`notified` 与 `effects` 是环境事实入口。实际代码只在存在对应通知或效应时产生这些事实。模型在更大的输入域上证明两种决策程序相等；输入可达性与真实调度的对应关系仍由适配层义务约束。
+## 内核状态、纪元与字段精化
 
-## 证明结构
+数学纪元 `Epoch` 是 `Option (Nat × List Nat)`：`none` 表示非活跃目标；有值时包含修订号和按声明顺序排列的绑定身份。`KernelRefinement.Epoch64` 使用 `UInt64` 表示实际修订号和身份。投影的单射性证明两个具体纪元相等恰好对应两个数学纪元相等，保留非活跃分类及依赖向量的全部元素。
 
-`idleRef`、`targetRef`、`refreshRef`、`finishRef` 保留基线分支的优先级。对应的 `Tree` 程序采用显式字段读取和分支节点，独立定义执行形式。Lean 内核检查两者对所有布尔输入均相等；其中 `refresh` 有 128 种、`finish` 有 32 种输入，其他决策补齐剩余输入分类。
+`Lifecycle.State` 保存公开状态 `Pending`、`Loading`、`Active`、`Failed`、`Disposed`、`Unloading`，以及 `alive`、`failed`、`target`、`running`、`inertia`、`suspended`、`queued`、通知数和效应数。`Output` 记录迁移动作、状态变化对和待提交纪元。状态机输入包括刷新、迁移完成、加载失败、释放、恢复、清理悬挂/恢复、通知完成和效应集合变化。
 
-`step` 把决策结果应用于模型状态。参考程序与生成程序共享保持不变的状态字段更新，`step_equiv` 证明单步结果相同。`trace_equiv` 对输入列表归纳，保留最终状态与每个输出；`stream_prefix_equiv` 证明无限输入流的任意有限观察前缀相同。这里没有探索深度、实例数量或纪元向量长度的上界。
+`trace_equiv` 保留最终状态与逐步输出；`stream_prefix_equiv` 保留无限输入流的任意有限观察前缀。`KernelRefinement` 分别定义实际字段更新与数学更新，证明刷新、迁移完成和通知发布的模拟关系。`KernelSemantics` 进一步从控制器轨迹推出迁移循环入口的 `inertia = true` 条件。机器计数仍具有容量边界，减法由相应通知所有者提供前提。
 
-| 定理 | 语义结果 | 对应条款 |
-|---|---|---|
-| `decisions_equiv`、`step_equiv`、`trace_equiv` | 参考决策与生成决策在全部输入及任意有限迹上保持状态和输出 | T-LIF-3～7、S-FBR-1、6、8、14 |
-| `stream_prefix_equiv` | 每个无限执行的有限观察前缀保持相同 | T-LIF-6 |
-| `failed_refresh_preserves_target` | 依赖刷新保持已失败实例的目标 | S-FBR-7 |
-| `stale_failure_preserves_state` | 过时加载的错误保留当前目标 | S-FBR-11 |
-| `inertia_preserves_transition`、`suspended_preserves_transition` | 在途或已保留的清理继续拥有迁移 | T-LIF-6、派发恢复契约 |
-| `active_epoch_change_unloads` | 活跃纪元之间的变化先卸载 | S-FBR-8 |
-| `current_epoch_equiv` | 同一快照中的存活性、运行目标与捕获纪元联合判定 | T-LIF-7、实例换代所有权 |
-| `Admission.successful_registration`、`stale_guard_denies_registration` | 登记使用当前所有者事实，满足全部代际守卫；任一守卫过期即拒绝且保留原有归属 | T-CTX-1、T-LIF-7、效应准入 |
-| `Scopes.cache_matches_guards`、`cached_admission_equiv`、`cached_registration_equiv` | 任意合法派生链上的守卫缓存与完整遍历相同，并产生相同的所有权登记结果 | 上下文不可变派生、效应准入 |
-| `Scopes.binding_cannot_restore_rejected_view`、`child_starts_own_guard_segment` | 同一纤程追加纪元约束保留旧约束；子纤程建立自己的守卫范围 | T-CTX-1、T-LIF-7、S-FBR-15 |
-| `Scopes.nonempty_guards_share_current` | 同一快照的多个守卫共享一次当前纪元检查，逐项只比较捕获纪元，结果保持相同 | 联合纪元查询、守卫遍历成本 |
-| `Effects.cleanup_starts_at_most_once` | 任意次取消、完成与再次释放只产生一个清理所有者 | T-EFF-2、S-EFF-4 |
-| `Effects.cancel_waits_for_execution`、`final_defer_retained` | 取消请求保留在途步骤及最后交回的逆变换 | T-EFF-4、5、S-EFF-5 |
-| `Effects.complete_rollback` | 单个效应的已取得逆变换按后进先出顺序交给清理执行 | T-EFF-1、3、S-EFF-3 |
+实际重启修订和实现身份使用检查过的递增，耗尽时返回错误且保持原状态。通知快照的修订号耗尽后永久失效，重新提供服务取得新的实现身份。证明与生产回归同时覆盖这两种策略，避免饱和计数使旧快照重新匹配。完整 `get_value` 模型覆盖缺席、隔离、已提交绑定和动态类型错误，源码桥接实际执行普通类型、字符串及 trait 对象的 `Any` 下转。
 
-效应证明以线性化后的命令序列表示并发请求。实际 `start_cleanup` 在同一把内核锁内检查并取得清理权；它调用生成的 `cleanup` 守卫。模型证明此守卫结合 `running`、`cleaning` 和清理栈转移保持唯一所有者。具体回调的完成、公平调度、异常捕获、资源引用计数及父子效应环检查由实现回归另行检验。
+Realm 与闭包组件定义通过原子检查递增分配身份，达到最大前沿后保持耗尽状态，其构造入口终止本次分配。`PluginPrinciple` 对任意成功分配迹证明严格递增、零值保留和跨批次无重复；源码探针执行整数边界，生产单元测试执行并发分配。
 
-`complete_rollback` 描述清理操作序列，假定各抽象操作完成后继续下一步。它不提供对任意插件回调终止性的证明。多个顶层效应的并发清理继续遵守 S-FBR-12、S-FBR-13。
+`Bindings.epoch_resolution_spec` 将依赖解析写成逐槽关系：必需依赖具有存在、可用的绑定；可选缺席使用保留的零身份；成功结果与依赖列表等长且顺序一致。提交只保存实际绑定。访问优先考虑当前纤程自身的提供项，再处理隔离边界、已提交绑定与声明缺席。通知回调返回后，安装结果需要重新校验键、绑定、修订、活跃状态和可用性快照，过时通知保持当前绑定。
 
-准入模型直接复用 `currentEpoch`。`Admission.register` 在一次状态转换中检查所有者存活性和全部捕获纪元守卫，再把新效应登记给该所有者。`ordinary_context_preserves_alive_contract` 证明没有附加守卫的普通上下文保留原有存活性契约。运行时实现需在取得同一把状态锁后检查与登记，并从正确的上下文层级收集守卫；这两项是对应实现的精化义务。先在锁外查询、随后在另一个状态下登记的路径不满足该模型。
+具体上下文使用不可变父链和 `FiberId`。`owner_boundary_matches_layer_boundary` 证明合法构造链的身份边界与模型层边界收集相同守卫。`locked_registration_simulation` 使用同一 `LockedState` 读取全部准入事实并更新效应表与所有者表。SlotMap 的新鲜身份、`Arc` 的不可变共享和互斥锁语义构成该表示的运行环境契约。
 
-`Scopes` 把上下文表示为由近到远的不可变视图链。`root` 和 `child` 建立纤程边界，`derive` 表示扩展、隔离、拦截等普通派生，`bind` 附加捕获纪元；每层保留一个 `hasEpochGuard` 标记。`WellFormed` 覆盖从根开始经过任意有限次数这些操作得到的链，证明不限制链长、守卫数量或纤程嵌套深度。
+## 决策生成与短路求值
 
-完整遍历收集当前纤程边界内的全部捕获纪元。缓存只记录这段不可变视图是否包含守卫，实例存活性和纪元有效性继续读取同一份内核事实。`cache_matches_guards` 证明标记准确；`cached_admission_equiv` 和 `cached_registration_equiv` 证明带快路的准入及所有权更新与完整遍历和既有 `Admission.register` 相等。守卫非空时，`nonempty_guards_share_current` 证明所有守卫可以共享一次 `target == running` 检查，再逐项比较 `target == captured`，保留全部守卫各自检查 `currentEpoch` 的结果。缓存为空的普通视图继续只要求所有者存活。
+`Tree.eval` 返回决策，`Tree.reads` 返回实际读取的参数序列。`DecisionProgram.execute` 在读取前消费该参数的调用权；第二次读取已消费参数时返回失败。`Safe` 递归要求每条路径上的参数新鲜，允许互斥分支各自使用同一参数。`execute_preserves_result_and_calls` 证明所有合法树的求值结果和读取顺序与参考树一致；`certified_calls_once` 证明读取序列无重复。
 
-普通派生保留已有守卫，追加纪元约束只增加一个合取项；旧视图失效后追加新纪元仍保持拒绝。子纤程终止父级守卫范围，依靠父挂载效应获得生命周期所有权，再使用自己的纪元约束。这里的派生闭包覆盖普通视图操作和追加纪元约束；持有 `Fiber` 的跨代管理者可以显式取得普通上下文，这属于独立的管理入口。
+生成入口接受带有 `Safe [] tree` 证明的 `Certified`，参数名采用长度等于树输入数的 `Vector`，字段选择由 `Fin` 保证有界。打印器产生 Rust 分支与枚举叶子，经固定工具链的 `rustfmt` 排版。验证命令逐字核对生成结果，并直接编译生产 `lifecycle.rs`。
 
-Rust `Scope` 用不可变 `Arc` 链和 `FiberId` 实现这些边界，普通视图通过缓存标记直接保留原来的存活性检查。Rust 构造器与模型构造器的对应、`FiberId` 比较与模型边界的对应，以及检查和登记共享锁的线性化仍属于实现精化义务。`epoch_context.rs` 与登记窗口的实际回归检验这些连接。
+`decision_probe.rs` 穷尽 204 个分类输入，同时核对相等谓词的调用次数。预期决策来自独立书写的参考函数。纪元向量的相等比较继续按分支短路执行；当前查询和联合纪元查询借用原有向量。实际分配预算由核心回归验证。
 
-### 上下文准入的实现映射
+## 任务、原生资源与路由所有权
 
-| Rust 入口或状态 | Lean 对象与关系 | 实现连接 |
-|---|---|---|
-| `Context::new` 创建 `Layer::Root`，缓存为 `false` | `Scopes.root`、`WellFormed.root` | 新根没有捕获纪元守卫 |
-| `Context::derive` 保留 `fiber` 与父 `Arc`；普通层继承缓存 | `Scopes.derive`、`WellFormed.derive` | `Extend`、`Isolate`、`Intercept` 保留同一段已有守卫 |
-| `Context::for_epoch` 通过 `derive(Layer::Epoch)` 设置缓存 | `Scopes.bind`、`WellFormed.bind` | 新守卫加入合取；旧守卫继续保留 |
-| `Context::mount_with` 分配新 `FiberId`、`Layer::Fiber`，缓存重置为 `false` | `Scopes.child`、`WellFormed.child` | 父链保留供服务解析使用；效应守卫遍历在纤程边界结束 |
-| `FiberData.alive`、`target`、`running_epoch` | `Scopes.Facts.alive`、`target`、`running` | 一次准入的所有比较使用调用方持有的同一份 `State` 快照 |
-| `Context::permits_effect` 的父链遍历与 `Layer::Epoch` 比较 | `Scopes.guards`、`fast` 与 `slow` | Rust 在父节点 `fiber` 改变时停止；模型在对应 `Fiber` 层停止；共享当前纪元检查由 `nonempty_guards_share_current` 支持 |
-| `Context::create_effect` 检查准入后插入 `state.effects` 与所有者 `effects` | `Scopes.register` 精化 `Admission.register` | 一把 `kernel.state` 锁覆盖检查和两处归属写入；该临界区是准入的线性化边界 |
-| `mount_with` 的 `ctx.use()` 父效应与 `defer_async` 子清理交接 | 父子效应所有权的实现义务 | 预分配子记录后再次执行效应准入；拒绝时释放子记录，成功时在途父效应保留最后交回的清理 |
+`Execution` 用一个任务 token 表示待提交、宿主持有、正在执行、可恢复、悬挂或已完成的唯一归属。任意事件序列保持 token 守恒。宿主已经开始执行的任务保持宿主归属；可恢复的拒收分支取回原任务。取消改变停止请求，正在执行的 Future 继续持有任务及已取得资源。
 
-映射表约束本次源码审查和回归选择。`Scopes` 的 15 个定理证明模型构造和准入变换，Rust 表示与临界区的语言级证明继续属于下表的实现精化义务。
+清理状态分为已完成、当前步骤和待执行步骤，三段拼接始终等于最初的 LIFO 清理序列。错误保留第一次失败，剩余工作继续归属当前清理者。`claimed_cleanup_completes_registered_stack` 将 `Effects` 的栈移交定理与异步清理完成性质组合起来。
 
-## 生成和实际编译的连接
+`NativeOwnership` 分别描述 callback permit、活跃用量账本和动态库 lease。Future 销毁完成后才归还 permit，同步 poll 保留额度。关闭映像需要满足退休、零活引用、描述符释放完成和允许卸载的策略；任意合法轨迹保持关闭至多一次。
 
-`Generate.lean` 从已证明的树逐节点输出 Rust `if` 分支和枚举叶子，随后用仓库固定 Rust 工具链的 `rustfmt` 排版。生成文件被正常编译进 `cordis`。验证命令逐字比较重新生成的结果与仓库文件，手工改动生成文件会使检查失败。
+实际 lease 的 `count.fetch_update` 与 `retired.load` 涉及两个原子对象。`Concurrency` 分开表示借用源租约、加载旧计数、CAS 成功或重试、归还源锚点、读取退休位、读取零和取得映像锁。计数读取允许观察修改历史中的旧值；借用锚点阻止计数归零，归零后全部克隆入口关闭，因此旧的零观察仍对应当前零。任意交错保持映像取出时没有活跃租约或在途克隆，映像至多取出一次。
 
-`formal/decision_probe.rs` 直接编译生产 `lifecycle.rs`，遍历全部有限输入分类。预期值由 Lean 中独立书写的基线函数产生。这项穷尽执行检查连接了决策树打印器、Rust 编译器和生产模块；无界状态与轨迹结论由 Lean 证明提供。两层证据分别记录。
+`AsyncSemantics` 将轮询中的 wake 保存到通知位，Pending 根据通知重新排队；取消、Future 析构和额度归还分别发生。安全性定理允许任意事件序列。最终清理定理使用明确的活性条件：每个未结束后缀最终得到有效派发、当前回调返回或终态发布。一个自然数秩随这些有效步骤下降，从而推出原清理栈的完整 LIFO 结束。Rust 原子/指针契约、执行器实现与外部析构器作为运行环境条件记录。
 
-纪元相等可能扫描整条绑定向量。生成的 `refresh`、`finish` 和 `current` 接收静态 `FnOnce` 谓词，只在分支确实读取相等关系时执行。`Tree.reads` 的定理保证在途刷新、挂起刷新、卸载结束和失活查询保持短路；Rust 探针对这些入口记录谓词的实际执行次数。该提取保持原有的纪元扫描条件，新增堆分配为零。
+`Routing` 按出口 token 追踪目录、批次、已分离待析构和已归还状态。目录移除与资源析构分成两步，对应实际锁内摘除、锁外 `drop`。退休标记与索引清扫也分成独立事件，保留其间允许的交错。目录外的 `Arc` 克隆由取得它们的调用者持有，网络发送与对端行为具有各自契约。
 
-新增联合纪元查询的八种输入也包含在编译核对中，总共覆盖 204 种决策输入。`current_epoch.rs` 的真实实例回放验证在途旧代、新目标、完成和释放时的判断，并逐项扰动绑定身份；`event_hot_paths.rs` 用同一非空依赖向量分别执行 1,000 次旧组合查询和新借用查询，记录实际分配次数并要求新入口为零。
+## 协议与 SDK 终态
 
-验证还执行两个负控：让 Lean 证明一个错误的加载决策，以及把生成 Rust 的一个加载叶子改为卸载。两者都必须被相应验证环节拒绝。
+`Protocol` 对单个请求分开描述首次写入权、取消通知、提交/回退 hook 和终态领取权。取消在首次写入前发生时阻止帧启动；首次正长度写入已经取得 token 后，后续取消保留原提交所有者。入站取消发送权和 `serve_request` 的回复权分别建模，取消通知保持唯一终态回复的归属。
 
-## 实现精化义务
+预算模型将已分配字节分为普通额度与控制保留额。`allocation_conserves` 给出逐次增长的准确记账，live-lease 账本将用量等式连接到实际所有者；从账本推导释放减法的前置条件，并证明任意获取、增长和释放轨迹有界。配置中的 `maximum + reserve` 需要符合 `Options::validate` 的 `usize` 检查。健康计数模型证明记账次数与继承截止时间规则，源码的 `u32` 饱和算术属于其数值表示边界。
 
-| 边界 | 当前连接与证据 | 进一步形式化所需内容 |
-|---|---|---|
-| `FiberData` 到决策输入 | 所有字段在原有内核锁内读取；全部决策输入穷尽核对；核心回归覆盖状态序列、通知重入、失败和并发更新 | Rust 字段读取、枚举与纪元比较的操作语义及适配映射证明 |
-| 决策结果到状态字段 | 保留 `drain`、`finish_transition` 的更新次序、绑定提交和锁外通知；原有真实生命周期用例执行 | Rust 赋值、锁线性化点及 `publish` 模型更新的一致性证明 |
-| 依赖解析与提交 | 核心拥有 `epoch_ids`、`commit_locked`、已提交绑定和消费者集合；服务替换与逐绑定清理回归 | 服务存储、隔离域、可用性谓词及承诺绑定的精化关系 |
-| 效应回调与执行器 | 清理守卫进入生产路径；同步、异步、取消、失败及宿主拒收场景由真实执行器运行 | Future 轮询、异常、任务归还与模型输入产生规则 |
-| 捕获纪元的效应准入 | `Admission` 检查全部守卫及所有权登记；`Scopes` 证明任意合法视图链的缓存与完整遍历相等、旧约束保留和子纤程范围 | Rust `Scope`/`FiberId` 表示与模型构造器的对应、检查与登记共享锁的线性化、子实例交接的 Rust 精化 |
-| 上游、协议及部署 | 177 行矩阵由实际执行证据绑定；协议、SDK、持久化保持各自回归 | TypeScript 与 Rust 的语言级语义映射，以及跨进程、存储恢复模型 |
+TypeScript 在响应路径先移除 pending 项，Python 通过真实 Future 的完成状态拒绝重复结算并在请求退出时清理项。`SdkProtocol` 分别保留这两种状态变化，证明单次结算、迟到载荷的唯一释放者，以及载荷已交付后的归属。`RequestSemantics` 继续区分响应写入 Future、发送结束、协程恢复、返回结果和中途取消；任意事件序列保持载荷守恒，请求退出时不存在无人持有的载荷。
 
-证明信任基础包括 Lean 4.19.0 的内核及其标准逻辑公理、决策树的 Rust 打印器、固定 Rust 工具链和执行探针的环境。验证以 `--trust=0` 重新类型检查导入模块，逐项输出所有定理的公理依赖，只允许 Lean 的标准 `propext`、`Quot.sound`、`Classical.choice`；拒绝新增公理、未完成证明和绕过内核的求值证明。
+Python 请求保存自己的 Future 与是否交付的标记。响应已经进入 Future、调用协程尚未返回时发生取消或发送失败，由请求的 `finally` 关闭未交付载荷。实际回归覆盖该窗口、正常交付及迟到响应。TypeScript 整段 Connection 通过真实 Promise 调度覆盖发送成功/失败与响应、超时和取消的交错。
+
+协议预算探针提取实际 `buffer.rs` 中的 `Lease` 类型和方法，使用顺序互斥适配器编译。SDK 探针执行当前响应方法及整段请求协程，使用真实 JavaScript `Map`、Promise 和 Python `asyncio.Future`；消息校验、错误构造和载荷计数适配器逐项列在证据中。协议会话模型将 FIFO、首字节提交、回退及响应归属联合起来。嵌套截止时间取父级和本地期限的较小者，任意派生深度保持期限单调。
+
+## 信封、帧与递归 CBOR
+
+`WireSemantics` 给出 UP/1 信封和四字节长度前缀，证明合法输入的编码解析关系以及任意分片重新组装、多帧顺序和错误形状拒绝。实际 Rust 表达式产生整数宽度、追加整数编码和编号分配的任意参数证书。预算写入的截断与头部更新通过封闭语法检查，前缀和帧置换定理具有合法旧帧、偏移量和长度条件；完整函数另经编译执行对照。
+
+`CborSemantics.Data` 保存空值、布尔值、正负整数、浮点位模式、字节串、UTF-8 文本、数组、映射及标签。独立字节语法描述定长编码、不定长集合和分块字符串；递归证明覆盖任意有限树和未消费的输入后缀。值策略同时检查映射键和值中的资源标签，并描述节点、集合长度和嵌套深度限制。
+
+codec 的相等关系遵循实际表示：Rust/ciborium 浮点缩窄在扩展后保持原位模式，包括 NaN 载荷及有符号零；ciborium 对标签 2/3 的定长且最多 16 字节的字节串按大整数解释，负大整数超过其有符号范围时拒绝。递归归一化组合定理适用于生成器的定长编码输出；实际不定长字节串保留普通标签，该行为单独建模并执行验证。资源策略作用于归一化后的树，因此嵌套整数标签的合法资源与溢出传播具有明确结果。依赖库解析器、UTF-8 和浮点转换原语具有相应实现契约。
+
+数学整数树另由 `MathValue` 和独立 `Denotes` 关系描述。去除前导零保持大小值；u128 与负 i128 叶子转成合法 scalar 或数值标签，得到规范化不动点。`recursive_integer_tree_roundtrip` 将这一步推广到任意有限数组、映射的键和值及合法普通标签，随后接上字节解析和资源策略，保留从 `i128::MIN` 到 `u128::MAX` 的逐节点整数语义。
+
+## 持久化与部署选择
+
+`Persistence.Image` 将路径身份映射到文件内容或缺席。写计划给出所有会变化的名字，其余名字满足 frame 条件。模型按备份日志准备、文件写入与同步、逐项改名/删除、数据目录同步、决定标记移动和决定目录同步区分阶段。决定标记移动后、目录同步前的崩溃允许保留或丢失该移动。
+
+`crash_recovery_is_atomic` 证明任意合法转移后完成恢复得到旧映像或完整新映像。`acknowledged_deployment_survives_crash` 证明决定确认后恢复得到新映像。恢复按原日志逐项重放；`interrupted_recovery_can_restart` 证明任意部分恢复后重新开始仍得到原映像。检查点缓存只有在文件与目录事实满足时才能成为可复用事实，目录同步失败清除该缓存事实。
+
+`StorageProgram` 为每个具体 I/O 返回点设置程序位置。备份顺序和数据写入顺序可不同：日志逐项保留原字节，日志发布前所有修改名均已覆盖，恢复直接读取该日志。任意成功/失败返回及允许的落盘事件都投影为 `Persistence` 的可达状态，最终定理因此覆盖实际构造日志的旧/新版本恢复。失败调用停止后续正常 I/O；恢复自身可以在任意重放前缀中断并重试。
+
+`StorageControlFlow` 从受支持的源码控制流提取文件发布、备份与日志确认、BASE/状态/配置/来源写入分组、数据屏障和决定屏障的有序模板。Lean 对任意计划、备份顺序及删除项检查其执行次序与程序位置吻合。原样 Rust 方法另外在真实文件系统上执行，逐个 I/O 注入返回错误和进程中断，再执行实际恢复。
+
+`DirectoryInitialization` 覆盖首次创建与失败后的再次启动。初始化按 `consumed`、`data`、存储根和逐级祖先的顺序确认目录内容；任何失败停止当前尝试，已存在目录也完整重试。初始化成功推出所有必需目录屏障均已成功，后续事务据此取得可达存储根的前提。
+
+文件系统契约要求成功文件同步保留完整内容，单个名字的改名具有原子性，成功目录同步持久化相应目录项，部署锁排除外部写者。结论描述恢复成功完成后的映像；持续 I/O 错误可以使恢复继续待处理。
+
+`Deployment` 接收已构造的依赖图快照，边从提供者或父实例指向依赖者。工作栈弹出名称；首次选中时消费其邻接项并加入后继。终止度量为待处理项数加剩余邻接表中的边条目数，每个非终结步骤使其精确减少一。迭代次数因此至多为初始根条目数加初始边条目数，允许环、自环、重复根和任意有限图大小。
+
+`selected_iff_reachable` 证明选择结果恰为根的可达闭包，`selection_is_minimal` 证明其最小性。`BindingGraph` 构造该图的实际前置阶段，包含当前/回退提供者、替换目录、已提交绑定、接口键与次版本、继承隔离域、命名域和父实例边。绑定到 root 服务会封闭候选查找并保持无实例边；它与未绑定状态具有不同表示。候选条件的源码 AST 经任意参数证书检查，完整 `select_instances` 方法通过 32,768 个输入分类执行对照，随后接上任意规模的可达闭包定理。
+
+## 上游映射与证据范围
+
+`Upstream` 的刷新映射采用存活、未悬挂所有者这一共享输入域。TypeScript 的早返回与 Rust 的稳定空闲决策映射到同一个“无加载/卸载动作”观察。`UpstreamSimulation` 进一步保留目标纪元、已尝试纪元、失败归属、忙碌状态、清理队列和已提交提供者的状态关系。状态发布与执行器让步允许为停顿步；任意共享微步骤轨迹保持模拟关系，并覆盖非空逆序清理、旧回调和提供者释放。
+
+`check_upstream.py` 检查固定提交及未修改的 `fiber.ts`，提取 `_getState`、`_setEpoch`、`_reload`、`_unload` 的实际方法体。探针覆盖旧回调开始前和进入等待后两种纪元替换窗口，检查后续错误保留新目标，并实际执行非空清理和提供者释放。方法签名由执行器提供，方法体内仅去除 `Promise<void>` 的类型参数。回调、日志和服务集合的支撑对象在证据中逐项列出。
+
+## 架构契约与跨模块组合
+
+`Architecture` 为每类事实指定权威写入者，发布从其当前状态取得值并检查版本契约。任意事件迹保持来源合法、修订单调和当前快照一致。资源在实例持有、请求在途、清理及归还状态间转移，单调请求前沿防止旧回调匹配新转移。逐资源守恒和互异资源的 frame 规则支持组合多个实例。
+
+监管器的两个具体连接具有源码证书：保留键过滤保证 `cordis.` 字段全部来自受信上下文；来源字段投影保证连接、上下文、实例、组和插件取自已解析视图。完整方法源码同时覆盖弱引用退役、连接身份、当前纪元、停止及导出状态。
+
+`Composition` 将协议首字节提交与路由 hook 的延后执行分开。准备事件实际建立非空批次；获得发送权后保持唯一提交所有者，取消、断连和回退在回调间隙中交错。回退先从目录摘除再在锁外析构。全局状态同时保持事实来源、资源守恒、协议/路由所有权、清理栈和存储可达性；清理归还还检查资源身份、所有者与完成条件。全局恢复通过存储事件投影调用实际日志重放定理。
+
+验证范围由具体证明域、源程序连接和环境条件共同界定。Lean 内核检查上述模型、表示投影及受限源码证书。完整 Rust/JavaScript/Python 语言与编译器、提取器和依赖库实现、标准库原语、外部插件、操作系统与存储设备构成实现边界；最终清理另使用明确的派发及回调终止条件。桥接清单对每个域分别给出这些条件，证据文件的 `unproved_boundaries` 保留相同范围。
 
 ## 复现与持续验证
 
-需要 Python 3.11 或更新版本、仓库 `rust-toolchain.toml` 指定的 Rust 1.96.0，以及 `formal/lean-toolchain` 固定的 Lean 4.19.0。Lean 项目仅依赖该工具链随附的 `Std`，没有外部证明库。
+证明检查需要 Python 3.11 或更新版本、Lean/Lake 4.19.0、仓库固定的 Rust 1.96.0 与 `rustfmt`，源码探针还需要 Node.js。CI 使用 Node.js 24.22.3。原生跨编译器验收另需 Rust 1.85.0。Python SDK 回归依赖 `sdks/python/requirements.txt`，TypeScript SDK 回归依赖锁定的 npm workspace。
+
+上游源码使用与一致性矩阵相同的固定版本：
 
 ```sh
+git init cordis
+git -C cordis fetch --depth=1 https://github.com/cordiverse/cordis.git 261c5fdae6edb54e7ed4f071024f530acd18903b
+git -C cordis checkout --detach FETCH_HEAD
+python3 -m pip install -r sdks/python/requirements.txt
 python3 tools/verify_semantics.py --evidence target/formal-semantics.json
+python3 -m unittest discover -s tools/tests -p 'test_verify_semantics.py' -v
+```
+
+验证依次检查封闭的 Lean 模块清单、桥接模块和定理归属、清洁构建、逻辑声明的公理依赖、生成文件、实际编译决策、各源码探针和负控。`Audit.lean` 遍历内核环境，覆盖私有声明及生成的安全辅助声明；`--trust=0` 重新检查导入模块。允许的逻辑公理为 Lean 标准的 `propext`、`Quot.sound`、`Classical.choice`。Lean 代码生成器另外产生带内核 `isUnsafe` 标记的编译阶段常量，其元数据和依赖单独保存与计数；内核拒绝逻辑证明依赖这类常量，对应的伪造证明负控也会实际执行。源码层继续检查显式证明逃逸入口。
+
+源码中的新增模块、未登记导入、未完成证明、额外公理和绕过内核的证明求值会使检查失败。桥接输入域需要完整且唯一；错误 Lean 定理、被修改的生产分支、错误预算计算和 SDK 重复结算路径均作为负控运行。验证前后重新枚举文件并比较摘要，覆盖运行过程中新增文件的情况。
+
+每次运行先原子写入 `running`，成功写入 `passed`，失败写入错误阶段与 `failed`。原有通过结果随新尝试开始而失效。独立源码探针采用同样的证据失效策略，并使用当前证明输入。`--write-generated` 只允许预期的生成文件内容变化；工具路径可用 `--lake`、`--rustc`、`--rustfmt`、`--node` 指定。
+
+实际集成检查按 `formal/bridges/*.json` 的命令入口执行，主要包括：
+
+```sh
 cargo test -p cordis --lib --tests
+cargo test -p cordis-up -p cordis-routing --lib --tests
+cargo test -p cordis-host --lib
+cargo test -p cordis-host --test native native_retirement_metrics_and_open_handle_policy -- --exact
+cargo test -p cordis-runtime --lib storage::tests::
+cargo test -p cordis-supervisor --lib --test manager -- --test-threads=2
+cargo test -p cordis-web-deployment --lib --tests
+npm ci --ignore-scripts --prefix sdks/typescript
+npm run build --workspace cordis-sdk --prefix sdks/typescript
+node --test tests/typescript-sdk/terminal-ownership.mjs tests/typescript-sdk/queued-timeout.mjs
+python3 -m pip install -r sdks/python/requirements.txt
+PYTHONPATH=sdks/python python3 -m unittest discover -s tests/python-sdk -p 'test_cancellation.py' -v
 python3 tools/conformance_run.py --output target/conformance-report.json
 ```
 
-`--lake`、`--rustc`、`--rustfmt` 可指定工具的实际路径。修改已证明决策树后，使用 `--write-generated` 同时生成生产模块并执行完整检查。验证会重新构建证明、审核全部定理、核对生成文件、编译并遍历全部决策输入，再执行两个负控；任一步缺少工具、失败或输入域不完整均返回非零退出码。
-
-`formal-semantics.json` 记录实际工具版本、定理名单、公理依赖、编译核对结果、负控结果、耗时和源码摘要。验证前后核对证明、生成器与生产适配文件的摘要；`--write-generated` 只允许本次预期的生成文件变化。每次开始会撤销旧的通过状态，失败时写入失败阶段和错误，避免读取者误用上次结果。摘要用于绑定证据到文件内容。证明、有限输入核对和真实异步回归分别承担各自的接受条件。
-
-组件一致性工作流按上述顺序检查证明、内核基础与并发回归、联合纪元查询、全部适用上游场景，并保存两份独立证据。Lean 二进制版本和下载摘要固定，Rust 版本沿用仓库工具链文件。
+组件一致性工作流自动触发这些证明和实现检查，并保存 `formal-semantics.json` 与 `conformance-report.json`。前者记录模型、公理审计、源程序桥接、负控和源码摘要；后者记录适用上游场景的真实执行证据。持久化测量记录与单次运行数据应连同对应源码摘要使用。
