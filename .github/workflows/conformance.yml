@@ -86,7 +86,8 @@ jobs:
           python3 -m pip install -r sdks/python/requirements.txt
           PYTHONPATH=sdks/python python3 -m unittest discover -s tests/python-sdk -p 'test_cancellation.py' -v
       - name: Check persistence and crash recovery
-        run: cargo test -p cordis-runtime --lib storage::tests::
+        run: |
+          cargo test -p cordis-runtime --lib storage::tests::
       - name: Check committed bindings and lifecycle-owned assembly
         run: |
           cargo test -p cordis-web-deployment --lib --tests
