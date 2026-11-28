@@ -780,6 +780,8 @@ fn pack_command(tools: &Tools, project: &Path) -> Command {
 }
 
 fn inspect_binaries(root: &Path, directory: &Path, project: &Path, evidence: &mut Vec<Value>) {
+    #[cfg(not(target_os = "macos"))]
+    let _ = project;
     for entry in fs::read_dir(directory).unwrap() {
         let entry = entry.unwrap();
         if entry.file_type().unwrap().is_dir() {
@@ -807,6 +809,7 @@ fn inspect_binaries(root: &Path, directory: &Path, project: &Path, evidence: &mu
             "{}",
             entry.path().display()
         );
+        #[cfg_attr(not(target_os = "macos"), allow(unused_mut))]
         let mut row = serde_json::json!({"file":entry.path().strip_prefix(root).unwrap(),"strings_private_matches":0});
         #[cfg(target_os = "macos")]
         inspect_signed_library(root, &entry.path(), project, &mut row);

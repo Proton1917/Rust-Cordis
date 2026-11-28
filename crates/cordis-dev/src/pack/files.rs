@@ -40,7 +40,7 @@ fn copy_entries(
         }
         if kind.is_symlink() {
             let link = cordis_artifact::relative_link(&entry.path(), root)?;
-            std::os::unix::fs::symlink(link, target)?;
+            create_symlink(&entry.path(), &link, &target)?;
         } else if kind.is_dir() {
             fs::create_dir(&target)?;
             copy_entries(&entry.path(), &target, root, excluded)?;
@@ -66,9 +66,10 @@ pub fn archive(source: &Path, out: &Path) -> Result<PathBuf> {
         let mut builder = tar::Builder::new(GzEncoder::new(output, Compression::default()));
         builder.follow_symlinks(false);
         builder.append_dir_all(name, source)?;
-        builder.into_inner()?.finish()?.sync_all()?;
-        use rustix::fs::{CWD, RenameFlags, renameat_with};
-        renameat_with(CWD, &staged, CWD, &archive, RenameFlags::NOREPLACE)?;
+        let file = builder.into_inner()?.finish()?;
+        file.sync_all()?;
+        drop(file);
+        rename_noreplace(&staged, &archive)?;
         Ok(())
     };
     if let Err(problem) = publish() {
@@ -79,6 +80,35 @@ pub fn archive(source: &Path, out: &Path) -> Result<PathBuf> {
     Ok(archive)
 }
 
+#[cfg(unix)]
+fn create_symlink(_source: &Path, link: &Path, target: &Path) -> std::io::Result<()> {
+    std::os::unix::fs::symlink(link, target)
+}
+
+#[cfg(windows)]
+fn create_symlink(source: &Path, link: &Path, target: &Path) -> std::io::Result<()> {
+    if fs::metadata(source)?.is_dir() {
+        std::os::windows::fs::symlink_dir(link, target)
+    } else {
+        std::os::windows::fs::symlink_file(link, target)
+    }
+}
+
+#[cfg(unix)]
+fn rename_noreplace(from: &Path, to: &Path) -> Result<()> {
+    use rustix::fs::{CWD, RenameFlags, renameat_with};
+    renameat_with(CWD, from, CWD, to, RenameFlags::NOREPLACE)?;
+    Ok(())
+}
+
+#[cfg(windows)]
+fn rename_noreplace(from: &Path, to: &Path) -> Result<()> {
+    // NTFS 硬链接在目标已存在时原子返回 AlreadyExists，随后移除暂存名，保持零 unsafe。
+    fs::hard_link(from, to)?;
+    fs::remove_file(from)?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -86,18 +116,37 @@ mod tests {
 
     #[test]
     fn archive_preserves_internal_links_with_the_installable_tree_policy() {
-        use std::os::unix::fs::symlink;
+        let link_file = |src: &Path, dst: &Path| -> std::io::Result<()> {
+            #[cfg(unix)]
+            {
+                std::os::unix::fs::symlink(src, dst)
+            }
+            #[cfg(windows)]
+            {
+                std::os::windows::fs::symlink_file(src, dst)
+            }
+        };
+        let link_dir = |src: &Path, dst: &Path| -> std::io::Result<()> {
+            #[cfg(unix)]
+            {
+                std::os::unix::fs::symlink(src, dst)
+            }
+            #[cfg(windows)]
+            {
+                std::os::windows::fs::symlink_dir(src, dst)
+            }
+        };
         let case = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "pack-links");
         let root = case.directory("pack-links");
         let source = root.join("source");
         fs::create_dir_all(source.join("data")).unwrap();
         let source = source.canonicalize().unwrap();
         fs::write(source.join("data/file"), b"value").unwrap();
-        symlink(source.join("data/file"), source.join("alias")).unwrap();
-        symlink("data", source.join("directory")).unwrap();
+        link_file(&source.join("data/file"), &source.join("alias")).unwrap();
+        link_dir(Path::new("data"), &source.join("directory")).unwrap();
         let secret = root.join("excluded-secret");
         fs::write(&secret, b"secret").unwrap();
-        symlink(&secret, source.join("secret-alias")).unwrap();
+        link_file(&secret, &source.join("secret-alias")).unwrap();
         let staged = root.join("artifact");
         copy_tree(
             &source,
@@ -109,7 +158,7 @@ mod tests {
         fs::remove_file(source.join("secret-alias")).unwrap();
         assert_eq!(
             fs::read_link(staged.join("alias")).unwrap(),
-            Path::new("data/file")
+            Path::new("data").join("file")
         );
         let archive = archive(&staged, &root).unwrap();
         let extracted = root.join("extracted");
@@ -121,7 +170,7 @@ mod tests {
         let artifact = extracted.join("artifact");
         cordis_artifact::validate(&artifact, &BTreeSet::new(), &[]).unwrap();
         assert_eq!(fs::read(artifact.join("directory/file")).unwrap(), b"value");
-        symlink("..", source.join("data/cycle")).unwrap();
+        link_dir(Path::new(".."), &source.join("data/cycle")).unwrap();
         assert!(copy_tree(&source, &root.join("cycle"), &BTreeSet::new()).is_err());
         case.success();
     }

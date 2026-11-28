@@ -9,6 +9,7 @@
 ```sh
 cordis pack --project . --target aarch64-apple-darwin --out dist
 cordis pack --project . --target aarch64-apple-darwin --out dist --app
+cordis pack --project . --target x86_64-pc-windows-msvc --out dist
 ```
 
 `--target-dir` 指定 Cargo 产物目录，相对路径按项目解析；`--runtime-dir` 指定发布核心 cordis 与 cordis-host 的所在目录。目标平台检查使用实际可执行文件的机器类型，核心版本须满足项目 requires_core。
@@ -37,11 +38,11 @@ cordis pack --project . --target aarch64-apple-darwin --out dist
 
 该示例适用于路径以单个命令参数表达的目录；含空格路径或带引号的自定义 CFLAGS，优先使用新工具的环境入口。预构建库、忽略这些环境参数的自定义构建脚本及显式用户覆盖参数仍按最终产物的完整字节检查判定。
 
-普通发布输出 tar.gz，包内包含核心、宿主、插件、配置、资源和服务入口。macOS `.app` 把程序放在 Contents/MacOS，把部署文件放在 Contents/Resources；桌面应用配置 HTTP 与 window 插件，由窗口显示同一网页宿主。
+普通发布输出 tar.gz，包内包含核心、宿主、插件、配置、资源和服务入口（Unix 为 `service/install.sh`，Windows 为 `service/install.cmd`；PE/Mach-O/ELF 二进制均经过目标架构与完整字节隐私路径检查）。macOS `.app` 把程序放在 Contents/MacOS，把部署文件放在 Contents/Resources；桌面应用配置 HTTP 与 window 插件，由窗口显示同一网页宿主。
 
 ## Python 与 Node
 
-pack.runtimes 选择 python、node，pack.runtime_paths 指向各自完整运行时根目录。当前约定的解释器入口为 `bin/python3`、`bin/node`；标准库、扩展模块、动态库和许可证随对应根目录保存。
+pack.runtimes 选择 python、node，pack.runtime_paths 指向各自完整运行时根目录。Unix 约定的解释器入口为 `bin/python3`、`bin/node`；Windows 兼容根目录或 `bin/` 下的 `python.exe`、`node.exe`；标准库、扩展模块、动态库和许可证随对应根目录保存。
 
 打包器把运行时复制到发布部署的 runtimes/python、runtimes/node，并把进程清单中 python、python3、node 的启动项改为指向包内解释器的相对路径。来源中的符号链接需要指向该来源根目录内部，复制后转换为包内相对链接。
 

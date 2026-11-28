@@ -30,7 +30,56 @@ pub(super) fn render(
             unit(configuration),
             unit_environment(environment),
         ),
+        ServicePlatform::WindowsTask => {
+            render_windows_task(name, binary, configuration, project, environment)
+        }
     }
+}
+
+fn render_windows_task(
+    name: &str,
+    binary: &Path,
+    configuration: &Path,
+    project: &Path,
+    environment: &BTreeMap<String, String>,
+) -> String {
+    let strip = |path: &Path| -> String {
+        let text = path.to_string_lossy();
+        text.strip_prefix(r"\\?\").unwrap_or(&text).to_owned()
+    };
+    let project_str = strip(project);
+    let binary_str = strip(binary);
+    let config_str = strip(configuration);
+    let stdout = strip(&project.join("service").join("stdout.log"));
+    let stderr = strip(&project.join("service").join("stderr.log"));
+    let (command, arguments) = if environment.is_empty() {
+        // 直接把 cordis.exe 作为顶层任务进程，schtasks /End 终止核心时由其 Job Object 回收全部插件子进程。
+        (binary_str, format!("run --config \"{config_str}\""))
+    } else {
+        let mut inner = String::new();
+        for (key, value) in environment {
+            inner.push_str(&format!(
+                "set \"{}={}\" && ",
+                cmd_escape(key),
+                cmd_escape(value)
+            ));
+        }
+        inner.push_str(&format!(
+            "\"{binary_str}\" run --config \"{config_str}\" 1>>\"{stdout}\" 2>>\"{stderr}\""
+        ));
+        ("cmd.exe".to_owned(), format!("/d /c \"{inner}\""))
+    };
+    format!(
+        "<?xml version=\"1.0\"?>\n<Task version=\"1.2\" xmlns=\"http://schemas.microsoft.com/windows/2004/02/mit/task\">\n  <RegistrationInfo>\n    <Description>Cordis {}</Description>\n  </RegistrationInfo>\n  <Triggers>\n    <LogonTrigger>\n      <Enabled>true</Enabled>\n    </LogonTrigger>\n  </Triggers>\n  <Settings>\n    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>\n    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>\n    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>\n    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>\n    <RestartOnFailure>\n      <Interval>PT1M</Interval>\n      <Count>999</Count>\n    </RestartOnFailure>\n  </Settings>\n  <Actions Context=\"Author\">\n    <Exec>\n      <Command>{}</Command>\n      <Arguments>{}</Arguments>\n      <WorkingDirectory>{}</WorkingDirectory>\n    </Exec>\n  </Actions>\n</Task>\n",
+        xml(name),
+        xml(&command),
+        xml(&arguments),
+        xml(&project_str),
+    )
+}
+
+fn cmd_escape(value: &str) -> String {
+    value.replace('"', "\"\"")
 }
 
 fn plist_environment(environment: &BTreeMap<String, String>) -> String {

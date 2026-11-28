@@ -327,7 +327,7 @@ impl Desktop {
         let builder = WebViewBuilder::new()
             .with_incognito(true)
             .with_url(&spec.url);
-        #[cfg(target_os = "macos")]
+        #[cfg(any(target_os = "macos", target_os = "windows"))]
         let webview = builder.build(&window).map_err(error)?;
         #[cfg(target_os = "linux")]
         let webview = {
@@ -354,6 +354,8 @@ impl Desktop {
     }
 
     fn show(&mut self, id: u64, target: &EventLoopWindowTarget<Request>) -> Result<()> {
+        #[cfg(not(target_os = "macos"))]
+        let _ = target;
         let view = self
             .windows
             .get_mut(&id)
@@ -376,11 +378,12 @@ fn application_menu(bridge: Bridge) -> Result<muda::Menu> {
         Menu, MenuItem, Submenu,
         accelerator::{Accelerator, Code, Modifiers},
     };
-    let quit = MenuItem::new(
-        "退出",
-        true,
-        Some(Accelerator::new(Modifiers::META, Code::KeyQ)),
-    );
+    let modifier = if cfg!(target_os = "macos") {
+        Modifiers::META
+    } else {
+        Modifiers::CONTROL
+    };
+    let quit = MenuItem::new("退出", true, Some(Accelerator::new(modifier, Code::KeyQ)));
     let quit_id = quit.id().clone();
     let app = Submenu::with_items("Cordis", true, &[&quit]).map_err(error)?;
     let menu = Menu::with_items(&[&app]).map_err(error)?;

@@ -56,9 +56,10 @@ impl TestGuard {
             std::process::id(),
             NEXT.fetch_add(1, Ordering::Relaxed)
         );
+        let workspace = strip_verbatim(workspace);
         Self {
-            workspace: workspace.to_owned(),
             evidence: workspace.join("target/test-evidence").join(&id),
+            workspace,
             id,
             paths: Mutex::new(Vec::new()),
             outcome: Arc::new(Outcome {
@@ -80,6 +81,7 @@ impl TestGuard {
 
     /// 登记本次独占的精确目录；父目录已登记时由同一所有者统一清理。
     pub fn track(&self, path: PathBuf) -> PathBuf {
+        let path = strip_verbatim(&path);
         let target = self.workspace.join("target");
         assert!(
             path.starts_with(&target)
@@ -339,4 +341,12 @@ impl<T> Drop for FixtureLease<T> {
             self.fixture.guard.preserve();
         }
     }
+}
+
+fn strip_verbatim(path: &Path) -> PathBuf {
+    #[cfg(windows)]
+    if let Some(raw) = path.to_str().and_then(|s| s.strip_prefix(r"\\?\")) {
+        return PathBuf::from(raw);
+    }
+    path.to_owned()
 }

@@ -140,9 +140,24 @@ fn sync_path(path: &Path) -> Result<()> {
             "injected artifact sync failure",
         )));
     }
-    File::open(path)
-        .and_then(|file| file.sync_all())
-        .map_err(io_error)
+    #[cfg(unix)]
+    {
+        File::open(path)
+            .and_then(|file| file.sync_all())
+            .map_err(io_error)
+    }
+    #[cfg(windows)]
+    {
+        if path.is_dir() {
+            return Ok(());
+        }
+        fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(path)
+            .and_then(|file| file.sync_all())
+            .map_err(io_error)
+    }
 }
 
 /// Existing artifacts cross the same durable boundary as a newly copied tree.
@@ -213,7 +228,16 @@ fn copy_entry(source: &Path, destination: &Path, root: &Path) -> Result<()> {
         sync_path(destination)?;
     } else if kind.is_symlink() {
         let target = cordis_artifact::relative_link(source, root).map_err(artifact_error)?;
+        #[cfg(unix)]
         std::os::unix::fs::symlink(target, destination).map_err(io_error)?;
+        #[cfg(windows)]
+        {
+            if fs::metadata(source).map_err(io_error)?.is_dir() {
+                std::os::windows::fs::symlink_dir(target, destination).map_err(io_error)?;
+            } else {
+                std::os::windows::fs::symlink_file(target, destination).map_err(io_error)?;
+            }
+        }
     } else {
         return Err(parameter("插件安装来源包含特殊文件"));
     }
@@ -287,7 +311,26 @@ mod tests {
 
     #[test]
     fn internal_file_and_directory_links_keep_identity_after_install_and_reuse() {
-        use std::os::unix::fs::symlink;
+        let link_file = |src: &Path, dst: &Path| -> std::io::Result<()> {
+            #[cfg(unix)]
+            {
+                std::os::unix::fs::symlink(src, dst)
+            }
+            #[cfg(windows)]
+            {
+                std::os::windows::fs::symlink_file(src, dst)
+            }
+        };
+        let link_dir = |src: &Path, dst: &Path| -> std::io::Result<()> {
+            #[cfg(unix)]
+            {
+                std::os::unix::fs::symlink(src, dst)
+            }
+            #[cfg(windows)]
+            {
+                std::os::windows::fs::symlink_dir(src, dst)
+            }
+        };
         let case = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "install-links");
         let root = case.directory("install-links");
         fs::create_dir_all(root.join("source/data")).unwrap();
@@ -297,22 +340,22 @@ mod tests {
         let plugins = root.join("plugins");
         fs::write(source.join("data/first"), b"one").unwrap();
         fs::write(source.join("data/second"), b"two").unwrap();
-        symlink(source.join("data/first"), source.join("alias")).unwrap();
-        symlink("data", source.join("directory")).unwrap();
+        link_file(&source.join("data/first"), &source.join("alias")).unwrap();
+        link_dir(Path::new("data"), &source.join("directory")).unwrap();
         let first = install(&source, &root, &root, &plugins).unwrap();
         let installed = plugins.join(&first);
         assert_eq!(
             fs::read_link(installed.join("alias")).unwrap(),
-            Path::new("data/first")
+            Path::new("data").join("first")
         );
         assert_eq!(fs::read(installed.join("directory/first")).unwrap(), b"one");
         assert!(equal(&source, &installed).unwrap());
         assert_eq!(install(&source, &root, &root, &plugins).unwrap(), first);
         fs::remove_file(source.join("alias")).unwrap();
-        symlink("data/second", source.join("alias")).unwrap();
+        link_file(&Path::new("data").join("second"), &source.join("alias")).unwrap();
         assert!(!equal(&source, &installed).unwrap());
         assert_ne!(install(&source, &root, &root, &plugins).unwrap(), first);
-        symlink("..", source.join("data/cycle")).unwrap();
+        link_dir(Path::new(".."), &source.join("data/cycle")).unwrap();
         assert!(install(&source, &root, &root, &plugins).is_err());
         case.success();
     }

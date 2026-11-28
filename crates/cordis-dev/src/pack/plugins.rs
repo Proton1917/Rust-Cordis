@@ -362,9 +362,11 @@ pub(super) fn runtimes(plan: &Plan, deployment: &Path) -> Result<BTreeMap<String
         requested.insert(runtime.as_str().ok_or("runtimes 元素需要字符串")?);
     }
     for name in requested {
-        let executable = match name {
-            "python" => "python3",
-            "node" => "node",
+        let candidates: &[&str] = match (name, plan.platform.windows()) {
+            ("python", false) => &["bin/python3"],
+            ("node", false) => &["bin/node"],
+            ("python", true) => &["python.exe", "bin/python.exe"],
+            ("node", true) => &["node.exe", "bin/node.exe"],
             _ => return Err(format!("运行时名称支持 python、node，收到 {name}").into()),
         };
         let sources = plan
@@ -376,7 +378,11 @@ pub(super) fn runtimes(plan: &Plan, deployment: &Path) -> Result<BTreeMap<String
         let source = absolute(&plan.project, Path::new(source));
         let destination = deployment.join("runtimes").join(name);
         files::copy_tree(&source, &destination, &plan.secret_paths)?;
-        let binary = destination.join("bin").join(executable);
+        let binary = candidates
+            .iter()
+            .map(|relative| destination.join(relative))
+            .find(|path| path.is_file())
+            .unwrap_or_else(|| destination.join(candidates[0]));
         plan.platform.binary(&binary)?;
         paths.insert(name.to_owned(), binary);
     }
@@ -406,11 +412,15 @@ fn process_command(
         .filter(|value| !value.is_empty())
         .ok_or("command 需要启动程序")?;
     let name = artifacts::filename(Path::new(first))?;
+    let base_name = name
+        .strip_suffix(".exe")
+        .unwrap_or(&name)
+        .to_ascii_lowercase();
     let selection = plan.build.plugins.get(reference);
-    if selection.is_some() && matches!(name.as_str(), "python" | "python3" | "node") {
+    if selection.is_some() && matches!(base_name.as_str(), "python" | "python3" | "node") {
         return Err(format!("进程插件 {reference} 的解释器与 Cargo 可执行目标冲突").into());
     }
-    let runtime = match name.as_str() {
+    let runtime = match base_name.as_str() {
         "python" | "python3" => runtimes.get("python"),
         "node" => runtimes.get("node"),
         _ => None,
@@ -422,11 +432,14 @@ fn process_command(
                 .to_string_lossy()
                 .into_owned(),
         );
-    } else if matches!(name.as_str(), "python" | "python3" | "node") {
+    } else if matches!(base_name.as_str(), "python" | "python3" | "node") {
         return Ok(());
-    } else if let Some(binary) = artifacts.select("bin", &name, selection)? {
+    } else if let Some(binary) =
+        artifacts.select("bin", &plan.platform.executable(&name), selection)?
+    {
         plan.platform.binary(&binary.path)?;
-        let executable = window_binary(&name, destination, app_binaries);
+        let filename = plan.platform.executable(&name);
+        let executable = window_binary(&filename, destination, app_binaries);
         fs::copy(&binary.path, &executable)?;
         binary.publish(destination)?;
         command[0] = Value::String(relative_command(&executable, destination)?);
@@ -435,7 +448,7 @@ fn process_command(
         if binary.is_file() {
             if Path::new(first).is_absolute()
                 || source.join("Cargo.toml").is_file()
-                || (name == "cordis-window" && app_binaries.is_some())
+                || (base_name == "cordis-window" && app_binaries.is_some())
             {
                 let executable = window_binary(&name, destination, app_binaries);
                 let copied = destination.join(first);

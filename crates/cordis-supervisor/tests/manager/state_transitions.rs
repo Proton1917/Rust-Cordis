@@ -319,11 +319,7 @@ async fn crashed_provider_uses_checkpoint_and_preserves_live_downstream() {
         .unwrap()
         .pid
         .unwrap();
-    nix::sys::signal::kill(
-        nix::unistd::Pid::from_raw(pid as i32),
-        nix::sys::signal::Signal::SIGKILL,
-    )
-    .unwrap();
+    kill_pid(pid);
     let provider = control.ready_after("upstream", provider.context).await;
     let consumer = control.ready_after("downstream", consumer.context).await;
     let restored = [
@@ -376,11 +372,7 @@ async fn optional_dependent_keeps_writes_during_provider_restart() {
         .unwrap()
         .pid
         .unwrap();
-    nix::sys::signal::kill(
-        nix::unistd::Pid::from_raw(pid as i32),
-        nix::sys::signal::Signal::SIGKILL,
-    )
-    .unwrap();
+    kill_pid(pid);
     let waiting = control.ready_after("optional", old.context).await;
     // 同一管理队列中的检查点应在上游两秒退避期间完成。
     tokio::time::timeout(
@@ -477,11 +469,7 @@ async fn confirmation_rollback_reports_discarded_dependent_state() {
         .unwrap()
         .pid
         .unwrap();
-    nix::sys::signal::kill(
-        nix::unistd::Pid::from_raw(pid as i32),
-        nix::sys::signal::Signal::SIGKILL,
-    )
-    .unwrap();
+    kill_pid(pid);
     let result = replacement.await.unwrap();
     let provider = control.ready_after("upstream", old_provider.context).await;
     let consumer = control

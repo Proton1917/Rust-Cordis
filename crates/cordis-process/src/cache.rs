@@ -4,7 +4,6 @@ use std::{
     collections::BTreeMap,
     fs::{self, File, OpenOptions, TryLockError},
     io::{self, Write},
-    os::unix::fs::MetadataExt,
     path::{Path, PathBuf},
     time::{Duration, Instant},
 };
@@ -42,13 +41,7 @@ impl CacheDirectory {
         }
         let sequence = next_sequence(&self.0)?;
         let path = self.0.join(format!("candidate-{sequence}.{extension}"));
-        let output = OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(marker_path(&self.0, sequence))?;
-        fs::hard_link(marker_path(&self.0, sequence), &path)?;
-        let marker = File::open(marker_path(&self.0, sequence))?;
-        lock_file(&marker, true, deadline)?;
+        let (output, marker) = create_copy_and_marker(&self.0, sequence, &path, deadline)?;
         drop(directory_lock);
         Ok((
             sequence,
@@ -116,7 +109,7 @@ impl CachePin {
             Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
             Err(error) => return Err(error),
         };
-        if !same_file(&file.metadata()?, &fs::metadata(path)?) {
+        if !marker_matches_copy(&file, &marker, path)? {
             return Ok(None);
         }
         lock_file(&file, true, deadline)?;
@@ -223,19 +216,121 @@ fn next_sequence(directory: &Path) -> io::Result<u64> {
     let mut file = File::create(&staged)?;
     writeln!(file, "{sequence}")?;
     file.sync_all()?;
+    drop(file);
     fs::rename(staged, directory.join(".sequence"))?;
     Ok(sequence)
 }
 
 fn copy_sequence(name: &str) -> Option<u64> {
     let (stem, extension) = name.rsplit_once('.')?;
-    matches!(extension, "dylib" | "so").then_some(())?;
+    matches!(extension, "dylib" | "so" | "dll").then_some(())?;
     stem.rsplit_once('-')?.1.parse().ok()
 }
 
-/// 标记与副本共享同一 inode，旧格式或外部来源的同序号文件保持独立。
-fn same_file(left: &fs::Metadata, right: &fs::Metadata) -> bool {
-    left.dev() == right.dev() && left.ino() == right.ino()
+#[cfg(unix)]
+fn create_copy_and_marker(
+    directory: &Path,
+    sequence: u64,
+    copy_path: &Path,
+    deadline: Instant,
+) -> io::Result<(File, File)> {
+    let marker = marker_path(directory, sequence);
+    let output = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&marker)?;
+    fs::hard_link(&marker, copy_path)?;
+    let lease = File::open(&marker)?;
+    lock_file(&lease, true, deadline)?;
+    Ok((output, lease))
+}
+
+#[cfg(unix)]
+fn marker_matches_copy(marker: &File, _marker_path: &Path, copy_path: &Path) -> io::Result<bool> {
+    use std::os::unix::fs::MetadataExt;
+    let left = marker.metadata()?;
+    let right = fs::metadata(copy_path)?;
+    Ok(left.dev() == right.dev() && left.ino() == right.ino())
+}
+
+#[cfg(windows)]
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct WinFileId {
+    volume: u32,
+    index: u64,
+}
+
+#[cfg(windows)]
+fn win_file_id(file: &File) -> io::Result<WinFileId> {
+    use std::mem::zeroed;
+    use std::os::windows::io::AsRawHandle;
+    use windows_sys::Win32::Storage::FileSystem::{
+        BY_HANDLE_FILE_INFORMATION, GetFileInformationByHandle,
+    };
+    // SAFETY: 零初始化 Win32 BY_HANDLE_FILE_INFORMATION 输出结构体。
+    let mut info: BY_HANDLE_FILE_INFORMATION = unsafe { zeroed() };
+    // SAFETY: file.as_raw_handle() 返回当前有效文件句柄，info 指针有效。
+    let ok = unsafe { GetFileInformationByHandle(file.as_raw_handle(), &mut info) };
+    if ok == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    let index = (u64::from(info.nFileIndexHigh) << 32) | u64::from(info.nFileIndexLow);
+    Ok(WinFileId {
+        volume: info.dwVolumeSerialNumber,
+        index,
+    })
+}
+
+#[cfg(windows)]
+fn create_copy_and_marker(
+    directory: &Path,
+    sequence: u64,
+    copy_path: &Path,
+    deadline: Instant,
+) -> io::Result<(File, File)> {
+    // Windows 文件锁是强制锁，锁文件与 DLL 本体分离，避免阻塞 LoadLibrary/rename/删除。
+    let output = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create_new(true)
+        .open(copy_path)?;
+    let id = win_file_id(&output)?;
+    let marker = marker_path(directory, sequence);
+    {
+        let mut meta = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&marker)?;
+        writeln!(meta, "{}:{}", id.volume, id.index)?;
+        meta.sync_all()?;
+    }
+    let lease = File::open(&marker)?;
+    lock_file(&lease, true, deadline)?;
+    Ok((output, lease))
+}
+
+#[cfg(windows)]
+fn read_win_marker_id(mut marker: &File) -> io::Result<Option<WinFileId>> {
+    use std::io::{Read, Seek, SeekFrom};
+    marker.seek(SeekFrom::Start(0))?;
+    let mut text = String::new();
+    marker.read_to_string(&mut text)?;
+    let Some((volume, index)) = text.trim().split_once(':') else {
+        return Ok(None);
+    };
+    let (Ok(volume), Ok(index)) = (volume.parse::<u32>(), index.parse::<u64>()) else {
+        return Ok(None);
+    };
+    Ok(Some(WinFileId { volume, index }))
+}
+
+#[cfg(windows)]
+fn marker_matches_copy(marker: &File, _marker_path: &Path, copy_path: &Path) -> io::Result<bool> {
+    let Some(expected) = read_win_marker_id(marker)? else {
+        return Ok(false);
+    };
+    let copy = File::open(copy_path)?;
+    Ok(win_file_id(&copy)? == expected)
 }
 
 /// 持有目录锁后按序号归集拥有标记和文件，一次扫描后在独占租约下删除。
@@ -279,22 +374,59 @@ fn prune_owner(path: &Path, copies: Vec<PathBuf>) -> io::Result<usize> {
         Err(TryLockError::Error(error)) => return Err(error),
     }
     let mut removed = 0;
+    #[cfg(windows)]
+    let mut retained = false;
     for copy in copies {
-        if !same_file(&owner.metadata()?, &fs::metadata(&copy)?) {
+        if !marker_matches_copy(&owner, path, &copy)? {
             continue;
         }
-        for suffix in [".verified.json", ".verified.json.pending"] {
-            let mut path = copy.as_os_str().to_owned();
-            path.push(suffix);
-            match fs::remove_file(path) {
-                Ok(()) => {}
-                Err(error) if error.kind() == io::ErrorKind::NotFound => {}
-                Err(error) => return Err(error),
+        #[cfg(windows)]
+        let delete_result = fs::remove_file(&copy);
+        #[cfg(unix)]
+        let delete_result = {
+            for suffix in [".verified.json", ".verified.json.pending"] {
+                let mut sidecar = copy.as_os_str().to_owned();
+                sidecar.push(suffix);
+                match fs::remove_file(sidecar) {
+                    Ok(()) => {}
+                    Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+                    Err(error) => return Err(error),
+                }
             }
+            fs::remove_file(&copy)
+        };
+        match delete_result {
+            Ok(()) => {
+                #[cfg(windows)]
+                for suffix in [".verified.json", ".verified.json.pending"] {
+                    let mut sidecar = copy.as_os_str().to_owned();
+                    sidecar.push(suffix);
+                    match fs::remove_file(sidecar) {
+                        Ok(()) => {}
+                        Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+                        Err(error) => return Err(error),
+                    }
+                }
+                removed += 1;
+            }
+            #[cfg(windows)]
+            Err(error) if error.kind() == io::ErrorKind::PermissionDenied => {
+                // Windows 加载器仍在映射该 DLL，保留标记待宿主退出后的下次 prune 回收。
+                retained = true;
+            }
+            Err(error) => return Err(error),
         }
-        fs::remove_file(copy)?;
-        removed += 1;
     }
-    fs::remove_file(path)?;
+    #[cfg(windows)]
+    if !retained {
+        // Windows 禁止删除当前已打开的锁文件；此时外层持有目录锁，释放句柄后再删安全。
+        drop(owner);
+        fs::remove_file(path)?;
+    }
+    #[cfg(unix)]
+    {
+        drop(owner);
+        fs::remove_file(path)?;
+    }
     Ok(removed)
 }

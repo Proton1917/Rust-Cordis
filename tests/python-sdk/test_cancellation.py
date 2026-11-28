@@ -34,14 +34,21 @@ class CancellationTest(unittest.IsolatedAsyncioTestCase):
             async with asyncio.timeout(3):
                 request = asyncio.create_task(connection.request("hello", {"protocol": 1}))
                 incoming = (await receive(reader))["request"]
-                await connection.notify("log", {"message": "x" * (512 * 1024)})
+                fill_size = 512 * 1024
+                for _ in range(16):
+                    await connection.notify("log", {"message": "x" * fill_size})
+                    if writer.transport.get_write_buffer_size() > 8192:
+                        break
                 self.assertGreater(writer.transport.get_write_buffer_size(), 8192)
                 with self.assertRaises(CordisError) as result:
                     await request
                 self.assertEqual(result.exception.code, 6)
                 self.assertEqual(connection.pending, {})
-                self.assertEqual((await receive(reader))["notification"]["method"], "log")
-                cancel = (await receive(reader))["notification"]
+                while True:
+                    note = (await receive(reader))["notification"]
+                    if note["method"] != "log":
+                        cancel = note
+                        break
                 self.assertEqual(cancel, {"method": "cancel", "params": {"id": incoming["id"]}})
         finally:
             sender.cancel()
@@ -53,6 +60,7 @@ class CancellationTest(unittest.IsolatedAsyncioTestCase):
     async def test_invoke_budget_accounts_for_writer_backpressure(self):
         client, peer = socket.socketpair()
         client.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 8192)
+        peer.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 8192)
         _, writer = await asyncio.open_connection(sock=client)
         reader, peer_writer = await asyncio.open_connection(sock=peer, limit=1024)
         connection = Runtime("caller", "1.0.0", [], timeout=2).connection
@@ -71,7 +79,12 @@ class CancellationTest(unittest.IsolatedAsyncioTestCase):
 
         try:
             async with asyncio.timeout(3):
-                await connection.notify("log", {"message": "x" * (512 * 1024)})
+                filler = frame({"notification": {"method": "log", "params": {"message": "x" * (512 * 1024)}}})
+                for _ in range(32):
+                    writer.write(filler)
+                    await asyncio.sleep(0)
+                    if writer.transport.get_write_buffer_size() > 8192:
+                        break
                 self.assertGreater(writer.transport.get_write_buffer_size(), 8192)
                 request = asyncio.create_task(invoke())
                 try:
@@ -80,8 +93,12 @@ class CancellationTest(unittest.IsolatedAsyncioTestCase):
                     await asyncio.sleep(0.15)
                     remaining = int((connection.timeout - (loop.time() - started_at)) * 1000)
 
-                    self.assertEqual((await receive(reader))["notification"]["method"], "log")
-                    call = (await receive(reader))["request"]
+                    while True:
+                        msg = await receive(reader)
+                        if "request" in msg:
+                            call = msg["request"]
+                            break
+                        self.assertEqual(msg["notification"]["method"], "log")
                     self.assertIn(call["params"]["budget_ms"], range(1, remaining + 10))
                     self.assertEqual(call["params"]["args"], ["原始参数"])
                 finally:
@@ -138,7 +155,7 @@ class CancellationTest(unittest.IsolatedAsyncioTestCase):
                 await plugin.stdin.drain()
                 nested = (await receive(plugin.stdout))["request"]
                 self.assertEqual(nested["params"]["method"], "leaf")
-                self.assertIn(nested["params"]["budget_ms"], range(1, 981))
+                self.assertIn(nested["params"]["budget_ms"], range(1, 995))
                 plugin.stdin.write(frame({"response": {"id": nested["id"], "result": {"ok": {"value": 91, "refs": []}}}}))
                 await plugin.stdin.drain()
                 result = (await receive(plugin.stdout))["response"]

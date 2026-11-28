@@ -304,7 +304,7 @@ fn native(path: &Path) -> bool {
     path.is_file()
         && matches!(
             path.extension().and_then(|value| value.to_str()),
-            Some("dylib" | "so")
+            Some("dylib" | "so" | "dll")
         )
 }
 
@@ -318,12 +318,9 @@ fn native_path(directory: &Path, library: &Path) -> Result<PathBuf> {
             .and_then(|name| name.to_str())
             .ok_or_else(|| parameter("原生库名称需要UTF-8"))?;
         library.with_file_name(format!(
-            "lib{filename}.{}",
-            if cfg!(target_os = "macos") {
-                "dylib"
-            } else {
-                "so"
-            }
+            "{}{filename}.{}",
+            std::env::consts::DLL_PREFIX,
+            std::env::consts::DLL_EXTENSION
         ))
     };
     resolved.canonicalize().map_err(io_error)

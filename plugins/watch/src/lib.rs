@@ -369,7 +369,7 @@ fn optional_image(path: &Path) -> Result<Option<Image>> {
 fn native(path: &Path) -> bool {
     matches!(
         path.extension().and_then(|part| part.to_str()),
-        Some("dylib" | "so")
+        Some("dylib" | "so" | "dll")
     )
 }
 

@@ -87,6 +87,7 @@ pub(crate) fn load_with_state_dir(path: &Path) -> Result<(PathBuf, Result<Config
 fn resolve_application_state(directory: &mut PathBuf, pack: &toml::Table) -> Result<()> {
     if is_app(pack)? && directory.as_path() == Path::new("state") {
         let home = env::var_os("HOME")
+            .or_else(|| env::var_os("USERPROFILE"))
             .map(PathBuf::from)
             .ok_or_else(|| parameter("应用状态需要用户 HOME 路径"))?;
         *directory = application_state(pack, &home)?;

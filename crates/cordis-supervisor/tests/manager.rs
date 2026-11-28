@@ -177,14 +177,10 @@ fn plugin() -> FixtureLease<PathBuf> {
             "{}",
             String::from_utf8_lossy(&result.stderr)
         );
-        cordis_testkit::build::snapshot_artifacts(
-            guard,
-            "manager-fixture",
-            "debug",
-            &["cordis-manager-fixture"],
-        )
-        .unwrap()
-        .join("cordis-manager-fixture")
+        let binary = format!("cordis-manager-fixture{}", std::env::consts::EXE_SUFFIX);
+        cordis_testkit::build::snapshot_artifacts(guard, "manager-fixture", "debug", &[&binary])
+            .unwrap()
+            .join(binary)
     })
 }
 
@@ -836,11 +832,7 @@ async fn process_failure_releases_dependencies_and_restores_checkpoint() {
         .unwrap()
         .pid
         .unwrap();
-    nix::sys::signal::kill(
-        nix::unistd::Pid::from_raw(pid as i32),
-        nix::sys::signal::Signal::SIGKILL,
-    )
-    .unwrap();
+    kill_pid(pid);
     until(Duration::from_secs(5), || a.state() == FiberState::Pending).await;
     assert_eq!(healthy.epoch(), healthy_epoch);
     assert_eq!(integer(&invoke(&independent, "get", Vec::new()).await), 900);
@@ -1030,14 +1022,8 @@ async fn accepted_replacement_survives_waiter_cancellation() {
     })
     .await;
     assert_eq!(new.version, 2);
-    let old_pid = nix::unistd::Pid::from_raw(original.pid.unwrap() as i32);
-    until(Duration::from_secs(5), || {
-        matches!(
-            nix::sys::signal::kill(old_pid, None),
-            Err(nix::errno::Errno::ESRCH)
-        )
-    })
-    .await;
+    let old_pid = original.pid.unwrap();
+    until(Duration::from_secs(5), || pid_exited(old_pid)).await;
     manager.shutdown().await.unwrap();
     case.success();
 }
@@ -1499,13 +1485,7 @@ async fn selected_checkpoint_detach_and_shutdown_freeze_use_real_process_state()
             .iter()
             .all(|instance| instance.name != "b")
     );
-    assert_eq!(
-        nix::sys::signal::kill(
-            nix::unistd::Pid::from_raw(subject.pid.unwrap() as i32),
-            None
-        ),
-        Err(nix::errno::Errno::ESRCH)
-    );
+    assert!(pid_exited(subject.pid.unwrap()));
     assert_eq!(
         integer(&invoke(&independent, "add", vec![2u64.into()]).await),
         42
@@ -1663,4 +1643,40 @@ async fn freeze_thaw_failure_retires_the_connection_once() {
     drop(snapshot);
     manager.shutdown().await.unwrap();
     case.success();
+}
+
+fn kill_pid(pid: u32) {
+    #[cfg(unix)]
+    nix::sys::signal::kill(
+        nix::unistd::Pid::from_raw(pid as i32),
+        nix::sys::signal::Signal::SIGKILL,
+    )
+    .unwrap();
+    #[cfg(windows)]
+    {
+        let status = std::process::Command::new("taskkill")
+            .args(["/F", "/PID", &pid.to_string()])
+            .status()
+            .unwrap();
+        assert!(status.success(), "taskkill failed for pid {pid}");
+    }
+}
+
+fn pid_exited(pid: u32) -> bool {
+    #[cfg(unix)]
+    {
+        matches!(
+            nix::sys::signal::kill(nix::unistd::Pid::from_raw(pid as i32), None),
+            Err(nix::errno::Errno::ESRCH)
+        )
+    }
+    #[cfg(windows)]
+    {
+        let output = std::process::Command::new("tasklist")
+            .args(["/FI", &format!("PID eq {pid}"), "/NH"])
+            .output()
+            .unwrap();
+        let text = String::from_utf8_lossy(&output.stdout);
+        !text.contains(&pid.to_string())
+    }
 }

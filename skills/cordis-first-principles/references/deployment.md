@@ -7,10 +7,10 @@
 | 平台 | 状态 |
 |---|---|
 | macOS（Apple Silicon） | 完整开发、实测与官方发布包验证：构建、运行、热替换、回滚、`service install`（launchd）、`cordis pack` 发布包 |
+| Windows（x86_64 MSVC） | 完整真机验证：Win32 Job Objects 进程树回收、`.dll` 原生宿主与跨版 ABI 1.2 热替换/回滚、`service install`（Task Scheduler）、`cordis pack`（PE 校验与路径隐私检查）、`secrets` NTFS DACL 权限校验、Python/TypeScript SDK 与三语言 IDL 绑定 |
 | Linux | 核心、协议、多语言 SDK、形式化验证与一致性矩阵已在 Ubuntu CI 持续验证；`.so` 插件、systemd 用户单元与 ELF 发布包在目标机首次上线前仍需按“首次上线检查”完整走一遍 |
-| Windows | 不支持 |
 
-不要因为 macOS 上通过就默认 Linux 也通过。
+不同平台首次上线前都应按末尾“首次上线检查”在目标机走一遍。
 
 ## 安装为服务
 
@@ -22,11 +22,11 @@ cordis service install --name com.example.app \
   --inherit-env LANG
 ```
 
-| 项 | macOS | Linux |
-|---|---|---|
-| 服务配置 | `~/Library/LaunchAgents/<name>.plist`；root 用 `/Library/LaunchDaemons/` | systemd 用户单元目录（`~/.config/systemd/user/`），经 `systemctl --user` 启用 |
-| 核心退出后 | launchd `KeepAlive` 重新启动 | systemd `Restart=always`，间隔 1 秒 |
-| 核心的标准输出与标准错误 | 项目的 `service/stdout.log`、`service/stderr.log` | systemd 日志，`journalctl --user -u <单元名>` |
+| 项 | macOS | Linux | Windows |
+|---|---|---|---|
+| 服务配置 | `~/Library/LaunchAgents/<name>.plist`；root 用 `/Library/LaunchDaemons/` | systemd 用户单元目录（`~/.config/systemd/user/`），经 `systemctl --user` 启用 | `%LOCALAPPDATA%\Cordis\service\<name>.xml`，经 `schtasks` 注册为 `Cordis\<name>` 计划任务 |
+| 核心退出后 | launchd `KeepAlive` 重新启动 | systemd `Restart=always`，间隔 1 秒 | 计划任务 `RestartOnFailure` 自动重启；无附加环境变量时直接以 `cordis.exe` 为顶层任务进程，停用时由 Win32 Job Object 回收全部插件子进程 |
+| 核心的标准输出与标准错误 | 项目的 `service/stdout.log`、`service/stderr.log` | systemd 日志，`journalctl --user -u <单元名>` | 使用附加 `--env` 包装时写入 `service\stdout.log`、`service\stderr.log`；推荐配合 `console-log` 插件输出日志 |
 
 - 先用 `--dry-run` 或 `--output service/app.plist` 生成配置检查一遍，再正式安装。
 - `--env` 与 `--inherit-env` 只放 PATH、LANG 这类普通变量。变量名含 SECRET、TOKEN、PASSWORD 或 KEY 时命令报错；机密走 secrets 插件（见 [HTTP](http.md)“页面来源与密钥”）。

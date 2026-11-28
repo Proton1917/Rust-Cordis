@@ -1,7 +1,10 @@
 # DOC-16 §2–6：标准流帧、请求截止时间与发送所有权；连接错误交回运行入口。
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
+import os
 import struct
 import sys
+import threading
 from contextvars import ContextVar
 
 import cbor2
@@ -159,13 +162,16 @@ class Connection:
         """DOC-16 §2、§10：EOF 结束连接，回收本进程持有的请求与对象。"""
         loop = asyncio.get_running_loop()
         reader = asyncio.StreamReader(limit=self.max_frame + 4)
-        transport, _ = await loop.connect_read_pipe(
-            lambda: asyncio.StreamReaderProtocol(reader), sys.stdin.buffer
-        )
-        output, protocol = await loop.connect_write_pipe(
-            asyncio.streams.FlowControlMixin, sys.stdout.buffer
-        )
-        self.writer = asyncio.StreamWriter(output, protocol, None, loop)
+        if sys.platform == "win32":
+            transport, output, self.writer = _connect_windows_stdio(loop, reader)
+        else:
+            transport, _ = await loop.connect_read_pipe(
+                lambda: asyncio.StreamReaderProtocol(reader), sys.stdin.buffer
+            )
+            output, protocol = await loop.connect_write_pipe(
+                asyncio.streams.FlowControlMixin, sys.stdout.buffer
+            )
+            self.writer = asyncio.StreamWriter(output, protocol, None, loop)
         sender = asyncio.create_task(self._control_messages())
         self.notifications.add(sender)
         sender.add_done_callback(self._notification_done)
@@ -287,3 +293,68 @@ class Connection:
             if problem.code != 8:
                 raise
             await self.send({"response": {"id": body["id"], "result": {"error": problem.wire()}}})
+
+
+class _WindowsCloseHandle:
+    def __init__(self, on_close):
+        self._on_close = on_close
+
+    def close(self):
+        self._on_close()
+
+
+class _WindowsStdioWriter:
+    """Windows 匿名管道不支持 ProactorEventLoop 异步句柄，经单线程 FIFO 执行器保序写入。"""
+
+    def __init__(self, loop, stream):
+        self._loop = loop
+        self._stream = stream
+        self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="cordis-stdout")
+        self._pending = None
+        self._closed = False
+
+    def write(self, data):
+        if self._closed:
+            raise BrokenPipeError("stdout closed")
+        payload = bytes(data)
+
+        def _flush():
+            self._stream.write(payload)
+            self._stream.flush()
+
+        self._pending = self._loop.run_in_executor(self._executor, _flush)
+
+    async def drain(self):
+        if self._pending is not None:
+            pending = self._pending
+            self._pending = None
+            await pending
+
+    def close(self):
+        if not self._closed:
+            self._closed = True
+            self._executor.shutdown(wait=False)
+
+
+def _connect_windows_stdio(loop, reader):
+    stdin_fd = sys.stdin.fileno()
+    stop = threading.Event()
+
+    def _pump_stdin():
+        try:
+            while not stop.is_set():
+                chunk = os.read(stdin_fd, 65536)
+                if not chunk:
+                    break
+                if not loop.is_closed():
+                    loop.call_soon_threadsafe(reader.feed_data, chunk)
+        except OSError:
+            pass
+        finally:
+            if not loop.is_closed():
+                loop.call_soon_threadsafe(reader.feed_eof)
+
+    thread = threading.Thread(target=_pump_stdin, name="cordis-stdin", daemon=True)
+    thread.start()
+    writer = _WindowsStdioWriter(loop, sys.stdout.buffer)
+    return _WindowsCloseHandle(stop.set), _WindowsCloseHandle(writer.close), writer

@@ -125,14 +125,19 @@ impl RunOptions {
 
 /// DOC-15 §3.1：优先使用同目录程序，其次查 PATH，缺席时返回可读错误。
 pub fn executable(name: &str) -> Result<PathBuf> {
+    let filename = if cfg!(windows) && Path::new(name).extension().is_none() {
+        format!("{name}{}", env::consts::EXE_SUFFIX)
+    } else {
+        name.to_owned()
+    };
     let current = env::current_exe().map_err(io_error)?;
-    let sibling = current.parent().expect("executable parent").join(name);
+    let sibling = current.parent().expect("executable parent").join(&filename);
     if sibling.is_file() {
         return Ok(sibling);
     }
     if let Some(path) = env::var_os("PATH") {
         for directory in env::split_paths(&path) {
-            let candidate = directory.join(name);
+            let candidate = directory.join(&filename);
             if candidate.is_file() {
                 return Ok(candidate);
             }
@@ -153,10 +158,17 @@ pub fn forward(arguments: &[OsString]) -> Result<i32> {
         .args(arguments)
         .status()
         .map_err(io_error)?;
-    use std::os::unix::process::ExitStatusExt;
-    Ok(status
-        .code()
-        .unwrap_or_else(|| 128 + status.signal().unwrap_or(1)))
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::ExitStatusExt;
+        Ok(status
+            .code()
+            .unwrap_or_else(|| 128 + status.signal().unwrap_or(1)))
+    }
+    #[cfg(not(unix))]
+    {
+        Ok(status.code().unwrap_or(1))
+    }
 }
 
 /// DOC-11 §10：按配置定位已发布状态文件，读取和 JSON 格式错误直接返回。

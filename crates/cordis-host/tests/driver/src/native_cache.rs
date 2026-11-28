@@ -104,14 +104,15 @@ pub(super) async fn rejected_candidates(artifacts: &Artifacts) -> Result<()> {
 }
 
 pub(super) fn copies(directory: &Path) -> Result<Vec<PathBuf>> {
-    Ok(fs::read_dir(directory)?
+    let directory = directory.canonicalize()?;
+    Ok(fs::read_dir(&directory)?
         .map(|item| item.map(|item| item.path()))
         .collect::<std::io::Result<Vec<_>>>()?
         .into_iter()
         .filter(|path| {
             matches!(
                 path.extension().and_then(|value| value.to_str()),
-                Some("dylib" | "so")
+                Some("dylib" | "so" | "dll")
             )
         })
         .collect())
@@ -196,7 +197,9 @@ pub(super) async fn bounded(artifacts: &Artifacts) -> Result<()> {
 
 pub(super) async fn recovery(artifacts: &Artifacts) -> Result<()> {
     let work = artifacts.work.join("cache-recovery");
-    let source = artifacts.work.join("removable-source.dylib");
+    let source = artifacts
+        .work
+        .join(format!("removable-source.{}", std::env::consts::DLL_EXTENSION));
     fs::copy(&artifacts.provider, &source)?;
     let mut specification = group("recovery", &work, artifacts, &[&source])?;
     specification.restart = RestartPolicy {
@@ -231,13 +234,7 @@ async fn recover_and_replace(
     let old = manager.library_snapshots().await?[0].path.clone();
     fs::remove_file(source)?;
     let previous = fiber.epoch();
-    check(
-        Command::new("kill")
-            .args(["-KILL", &snapshot.pid.unwrap().to_string()])
-            .status()?
-            .success(),
-        "终止宿主",
-    )?;
+    check(crate::force_kill(snapshot.pid.unwrap())?, "终止宿主")?;
     let scanner = CacheDirectory::new(&work.join("lib"))?;
     tokio::time::timeout(Duration::from_secs(10), async {
         loop {
@@ -488,13 +485,7 @@ async fn orphan_files(peer: &Peer, artifacts: &Artifacts, work: &Path) -> Result
         copies(&work.join("lib"))?.len() == 2,
         "宿主持有活动和准备副本",
     )?;
-    check(
-        Command::new("kill")
-            .args(["-KILL", &peer.pid().to_string()])
-            .status()?
-            .success(),
-        "SIGKILL 实际宿主",
-    )?;
+    check(crate::force_kill(peer.pid())?, "SIGKILL 实际宿主")?;
     peer.wait_exit().await?;
     CacheDirectory::new(&work.join("lib"))?.prune()?;
     check(

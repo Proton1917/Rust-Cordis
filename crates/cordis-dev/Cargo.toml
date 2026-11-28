@@ -27,6 +27,8 @@ flate2 = "=1.1.11"
 plist = "=1.10.3"
 pathdiff = "=0.2.3"
 memchr = "=2.8.3"
+
+[target.'cfg(unix)'.dependencies]
 rustix = { workspace = true, features = ["fs"] }
 
 [dev-dependencies]

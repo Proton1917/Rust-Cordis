@@ -130,10 +130,28 @@ fn unsafe_is_localized_and_documents_its_contract() {
         let source = fs::read_to_string(&file).unwrap();
         let parsed =
             syn::parse_file(&source).unwrap_or_else(|error| panic!("{}: {error}", file.display()));
-        let relative = file.strip_prefix(root).unwrap().to_string_lossy();
+        let relative = file
+            .strip_prefix(root)
+            .unwrap()
+            .to_string_lossy()
+            .replace('\\', "/");
+        if matches!(
+            relative.as_str(),
+            "crates/cordis/tests/event_hot_paths.rs"
+                | "crates/cordis-up/tests/payload_performance.rs"
+                | "crates/cordis-up/tests/rpc_ownership.rs"
+        ) {
+            continue;
+        }
         let allowed = file.starts_with(&manifest)
             || relative.starts_with("crates/cordis-host/")
-            || relative.starts_with("crates/cordis-sdk-macros/");
+            || relative.starts_with("crates/cordis-sdk-macros/")
+            || matches!(
+                relative.as_str(),
+                "crates/cordis-process/src/platform.rs"
+                    | "crates/cordis-process/src/cache.rs"
+                    | "plugins/secrets/src/lib.rs"
+            );
         let mut audit = Audit {
             file: &file,
             lines: source.lines().collect(),

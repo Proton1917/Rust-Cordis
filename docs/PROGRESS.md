@@ -11,6 +11,7 @@
 | v0.2.10 发行版 | 核心 0.1.9 协调离线读取与部署恢复，在停机撤回实例前保存已激活的来源。 |
 | v0.3.0 发行版 | macOS arm64，核心 0.1.10、宿主 0.1.4、开发工具 0.3.0、Rust SDK 0.3.0。格式 2 默认共用原生宿主，`cordis.manage@2.0` 返回可查询票据。部署决定统一处理配置、程序来源和检查点，开发工具支持跨目录应用打包。原生 ABI 沿用 1.2。[发布页](https://github.com/Proton1917/Rust-Cordis/releases/tag/v0.3.0) · [部署修订与实测](measurements/deployment-revision.md) |
 | v0.3.1 发行版 | 核心 0.1.11 恢复部署后应用当前 TOML，自动票据使用 UUID。监管器 0.1.8 按影响范围捕获检查点，宿主 0.1.5 按接收顺序处理回调登记和释放。Python SDK 0.1.4 将写入等待计入调用预算。[发布页](https://github.com/Proton1917/Rust-Cordis/releases/tag/v0.3.1) |
+| main（开发中） | 新增 Windows `x86_64-pc-windows-msvc` 完整支持并通过 Windows 11 真机验证：Win32 Job Objects 进程树回收、独立锁文件的 `.dll` 工作副本缓存与核心后置回收、Console Ctrl 信号、Task Scheduler `service install`/`uninstall`、`cordis pack`（PE 架构校验与路径隐私检查）、`secrets` NTFS DACL 权限校验、`window` WebView2 支持、Python SDK Windows 匿名管道适配，以及全量 Rust 单元测试、`cordis-supervisor`（26+4）、`cordis-host`（24/24 `.dll` 含跨编译器 1.85.0 ABI 1.2）、Python/TypeScript SDK 与三语言 IDL 实测通过。 |
 
 支撑 v0.3.0 发行的运行验证与对照测量来自 macOS arm64。Linux x86_64 的 PSS 和时延留待该平台测量。实现量报告分别统计手写生产代码、构建工具、交付模板和生成源码。固定入口实验止于标量门槛。[测量范围与统计明细](measurements/deployment-revision.md)
 

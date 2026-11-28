@@ -71,7 +71,7 @@ fn write_native(directory: &Path, name: &str) -> Result<()> {
         .replace("{{name}}", name)
         .replace("{{library}}", &library(name));
     write_new(&directory.join("build.sh"), &script)?;
-    write_new(&directory.join(".gitignore"), "*.dylib\n*.so\n")
+    write_new(&directory.join(".gitignore"), "*.dylib\n*.so\n*.dll\n")
 }
 
 /// DOC-15 §11.4：导出计数状态与 DOM 清理同时进入组件生命周期。

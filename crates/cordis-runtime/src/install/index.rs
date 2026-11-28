@@ -8,7 +8,6 @@ use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
     fs::{self, File},
     io::Read,
-    os::unix::fs::MetadataExt,
     path::Path,
 };
 
@@ -174,16 +173,32 @@ fn walk(path: &Path, root: &Path, hash: &mut Sha256, bytes: bool) -> Result<()> 
     let metadata = fs::symlink_metadata(path).map_err(io_error)?;
     let kind = metadata.file_type();
     if !bytes {
-        for value in [
-            metadata.dev(),
-            metadata.ino(),
-            metadata.len(),
-            metadata.mtime() as u64,
-            metadata.mtime_nsec() as u64,
-            metadata.ctime() as u64,
-            metadata.ctime_nsec() as u64,
-        ] {
-            hash.update(value.to_le_bytes());
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::MetadataExt;
+            for value in [
+                metadata.dev(),
+                metadata.ino(),
+                metadata.len(),
+                metadata.mtime() as u64,
+                metadata.mtime_nsec() as u64,
+                metadata.ctime() as u64,
+                metadata.ctime_nsec() as u64,
+            ] {
+                hash.update(value.to_le_bytes());
+            }
+        }
+        #[cfg(windows)]
+        {
+            use std::os::windows::fs::MetadataExt;
+            for value in [
+                u64::from(metadata.file_attributes()),
+                metadata.file_size(),
+                metadata.creation_time(),
+                metadata.last_write_time(),
+            ] {
+                hash.update(value.to_le_bytes());
+            }
         }
     }
     if kind.is_file() {

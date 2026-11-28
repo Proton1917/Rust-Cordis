@@ -194,12 +194,13 @@ pub async fn build(
         };
         groups.entry(directory).or_default().push(package);
     }
-    let env = build_paths::environment(&workspace.workspace_root, Some(platform))?;
+    let env: Vec<(String, String)> =
+        build_paths::environment(&workspace.workspace_root, Some(platform))?
+            .into_iter()
+            .collect();
     let mut artifacts = Artifacts::default();
     for (directory, members) in groups {
-        let mut command = vec!["env".to_owned()];
-        command.extend(env.iter().map(|(key, value)| format!("{key}={value}")));
-        command.extend([
+        let mut command = vec![
             cargo.clone(),
             "build".into(),
             "--manifest-path".into(),
@@ -210,12 +211,17 @@ pub async fn build(
             "--target-dir".into(),
             directory.to_string_lossy().into_owned(),
             "--message-format=json-render-diagnostics".into(),
-        ]);
+        ];
         for member in &members {
             command.extend(["--package".into(), member.id.clone()]);
         }
-        let messages =
-            tooling::command(command, &workspace.workspace_root, Duration::from_secs(600)).await?;
+        let messages = tooling::command_with_env(
+            command,
+            &env,
+            &workspace.workspace_root,
+            Duration::from_secs(600),
+        )
+        .await?;
         for message in serde_json::Deserializer::from_slice(&messages).into_iter::<Message>() {
             let Message::CompilerArtifact(record) = message? else {
                 continue;
@@ -231,7 +237,7 @@ pub async fn build(
                 _ => record.filenames.into_iter().find(|path| {
                     matches!(
                         path.extension().and_then(|s| s.to_str()),
-                        Some("dylib" | "so")
+                        Some("dylib" | "so" | "dll")
                     )
                 }),
             }

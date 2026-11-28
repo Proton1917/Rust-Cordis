@@ -58,7 +58,33 @@ pub fn snapshot_artifacts(
     fs::create_dir_all(&destination)?;
     let source = shared_target_dir(workspace).join(profile);
     for name in names {
-        fs::copy(source.join(name), destination.join(name))?;
+        let resolved = resolve_artifact_name(&source, name);
+        fs::copy(source.join(&resolved), destination.join(&resolved))?;
     }
     Ok(destination)
+}
+
+fn resolve_artifact_name(directory: &Path, name: &str) -> String {
+    if directory.join(name).is_file() {
+        return name.to_owned();
+    }
+    #[cfg(windows)]
+    {
+        if Path::new(name).extension().is_none() {
+            let exe = format!("{name}.exe");
+            if directory.join(&exe).is_file() {
+                return exe;
+            }
+        }
+        if let Some(stem) = name
+            .strip_prefix("lib")
+            .and_then(|s| s.strip_suffix(".dylib").or_else(|| s.strip_suffix(".so")))
+        {
+            let dll = format!("{stem}.dll");
+            if directory.join(&dll).is_file() {
+                return dll;
+            }
+        }
+    }
+    name.to_owned()
 }

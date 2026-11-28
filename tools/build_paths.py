@@ -7,7 +7,7 @@ import sys
 
 
 def build_environment(project, target=None):
-    home = Path(os.environ["HOME"])
+    home = Path(os.environ.get("HOME") or os.environ["USERPROFILE"])
     sources = {
         "home": str(home),
         "cargo_home": str(Path(os.environ.get("CARGO_HOME", home / ".cargo")).absolute()),
@@ -15,12 +15,15 @@ def build_environment(project, target=None):
         "project": str(Path(project).resolve()),
     }
     rules = json.loads(Path(__file__).with_name("path-remapping.json").read_text())
-    rust = list(rules["rust_flags"])
+    is_windows = "-windows-" in target if target else sys.platform == "win32"
+    is_msvc = target.endswith("-msvc") if target else sys.platform == "win32"
+    rust = [] if is_windows else list(rules["rust_flags"])
     native = []
     for source, destination in rules["prefixes"]:
         rust.append(f"--remap-path-prefix={sources[source]}={destination}")
-        native.extend(flag.replace("{from}", sources[source]).replace("{to}", destination)
-                      for flag in rules["native_flags"])
+        if not is_msvc:
+            native.extend(flag.replace("{from}", sources[source]).replace("{to}", destination)
+                          for flag in rules["native_flags"])
     apple = "-apple-" in target if target else sys.platform == "darwin"
     if apple:
         rust.extend(flag.replace("{home}", sources["home"]) for flag in rules["apple_link_flags"])
@@ -28,6 +31,8 @@ def build_environment(project, target=None):
         rust.extend(flag for flag in os.environ["CARGO_ENCODED_RUSTFLAGS"].split("\x1f") if flag)
     else:
         rust.extend(os.environ.get("RUSTFLAGS", "").split())
+    if is_msvc:
+        return {"CARGO_ENCODED_RUSTFLAGS": "\x1f".join(rust)}
     flags = {"CFLAGS": list(native), "CXXFLAGS": list(native)}
     shell = os.environ.get("CC_SHELL_ESCAPED_FLAGS", "") not in ("", "0", "false", "no")
     for name, value in os.environ.items():

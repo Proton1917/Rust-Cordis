@@ -137,7 +137,25 @@ def source_template(source):
             lock.lock().map_err(io_error)?;
             Ok(lock)
         ''',
-        'fn deployment_lock_file(': 'File::open(directory.join("consumed"))',
+        'fn deployment_lock_file(': '''
+            #[cfg(unix)]
+            {
+                File::open(directory.join("consumed"))
+            }
+            #[cfg(windows)]
+            {
+                let consumed = directory.join("consumed");
+                if !consumed.is_dir() {
+                    return Err(std::io::Error::from(std::io::ErrorKind::NotFound));
+                }
+                fs::OpenOptions::new()
+                    .read(true)
+                    .write(true)
+                    .create(true)
+                    .truncate(false)
+                    .open(consumed.join(".deployment.lock"))
+            }
+        ''',
         'fn remove_file(': '''match fs::remove_file(path) {
             Ok(()) => Ok(()),
             Err(problem) if problem.kind() == std::io::ErrorKind::NotFound => Ok(()),
@@ -148,7 +166,23 @@ def source_template(source):
             sync_directory_contents(path)
         ''',
         'fn sync_directory_contents(': '''
-            File::open(path).and_then(|directory| directory.sync_all()).map_err(io_error)
+            #[cfg(unix)]
+            {
+                File::open(path)
+                    .and_then(|directory| directory.sync_all())
+                    .map_err(io_error)
+            }
+            #[cfg(windows)]
+            {
+                let metadata = fs::metadata(path).map_err(io_error)?;
+                if !metadata.is_dir() {
+                    return Err(io_error(std::io::Error::new(
+                        std::io::ErrorKind::NotADirectory,
+                        format!("路径不是目录：{}", path.display()),
+                    )));
+                }
+                Ok(())
+            }
         ''',
     }
     for marker, expected in helpers.items():
@@ -159,7 +193,7 @@ def source_template(source):
     publication = ordered_nodes(publication, [
         ('let mut file = File::create(&staged).map_err(io_error)?;', 'create'),
         ('file.write_all(bytes).map_err(io_error)?;', 'write'),
-        ('if durable { file.sync_all().map_err(io_error)?; }', 'sync'),
+        ('if durable { file.sync_all().map_err(io_error)?; } drop(file);', 'sync'),
         ('fs::rename(staged, path).map_err(io_error)', 'rename'),
     ], 'publish')
     prepare = consume(method_body(source, "fn prepare_deployment<'a>("), '''

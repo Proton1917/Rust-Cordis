@@ -180,17 +180,21 @@ fn build(host_root: &Path, build: &Path, host: Option<&Path>) -> Result<()> {
         library(&scoped, "loader_fixture"),
     )?;
     let previous = build.join("fixtures-185");
+    let previous_target = current.join("rustc-1.85");
     run(
         Command::new("cargo")
+            .env_remove("CARGO")
+            .env_remove("RUSTC")
+            .env_remove("RUSTUP_TOOLCHAIN")
             .args(["+1.85.0", "build", "--manifest-path"])
             .arg(&fixtures)
             .args(["-p", "loader-fixture-consumer", "--target-dir"])
-            .arg(&current),
+            .arg(&previous_target),
         "用Rust 1.85.0构建使用方动态库",
     )?;
     std::fs::create_dir_all(previous.join("debug"))?;
     std::fs::copy(
-        library(&current, "loader_fixture_consumer"),
+        library(&previous_target, "loader_fixture_consumer"),
         library(&previous, "loader_fixture_consumer"),
     )?;
     Ok(())
@@ -1158,4 +1162,22 @@ async fn main() -> Result<()> {
     }
     eprintln!("所选原生宿主验收场景全部通过");
     Ok(())
+}
+
+
+pub(crate) fn force_kill(pid: u32) -> std::io::Result<bool> {
+    #[cfg(unix)]
+    {
+        Ok(std::process::Command::new("kill")
+            .args(["-KILL", &pid.to_string()])
+            .status()?
+            .success())
+    }
+    #[cfg(windows)]
+    {
+        Ok(std::process::Command::new("taskkill")
+            .args(["/F", "/PID", &pid.to_string()])
+            .status()?
+            .success())
+    }
 }

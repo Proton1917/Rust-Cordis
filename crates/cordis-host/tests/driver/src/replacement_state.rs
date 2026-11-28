@@ -93,13 +93,7 @@ async fn exercise(manager: &Manager, artifacts: &Artifacts) -> Result<()> {
         .find(|group| group.name == "upstream")
         .and_then(|group| group.pid)
         .ok_or_else(|| std::io::Error::other("上游宿主PID缺席"))?;
-    check(
-        Command::new("kill")
-            .args(["-KILL", &pid.to_string()])
-            .status()?
-            .success(),
-        "终止候选宿主",
-    )?;
+    check(crate::force_kill(pid)?, "终止候选宿主")?;
     check(replacement.await?.is_err(), "候选宿主退出使替换失败")?;
     let restored = manager
         .invoke_service("host.downstream@1.0", "add", vec![0u64.into()])

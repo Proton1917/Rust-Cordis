@@ -26,12 +26,15 @@ pub enum ServiceAction {
 pub enum ServicePlatform {
     Launchd,
     Systemd,
+    WindowsTask,
 }
 
 impl Default for ServicePlatform {
     fn default() -> Self {
         if cfg!(target_os = "macos") {
             Self::Launchd
+        } else if cfg!(target_os = "windows") {
+            Self::WindowsTask
         } else {
             Self::Systemd
         }
@@ -43,6 +46,7 @@ impl ServicePlatform {
         let suffix = match self {
             Self::Launchd => "plist",
             Self::Systemd => "service",
+            Self::WindowsTask => "xml",
         };
         format!("{name}.{suffix}")
     }
@@ -184,12 +188,30 @@ fn environment_name(name: &str) -> Result<()> {
 
 struct Location {
     platform: ServicePlatform,
+    name: String,
     uid: u32,
     path: PathBuf,
 }
 
 impl Location {
     fn current(platform: ServicePlatform, name: &str) -> Result<Self> {
+        if matches!(platform, ServicePlatform::WindowsTask) {
+            let local_app_data = env::var_os("LOCALAPPDATA")
+                .map(PathBuf::from)
+                .or_else(|| {
+                    env::var_os("USERPROFILE")
+                        .or_else(|| env::var_os("HOME"))
+                        .map(|home| PathBuf::from(home).join("AppData").join("Local"))
+                })
+                .ok_or_else(|| parameter("Windows 服务用户的 LOCALAPPDATA 路径缺席"))?;
+            let path = installation_path(platform, name, 0, &local_app_data, None);
+            return Ok(Self {
+                platform,
+                name: name.to_owned(),
+                uid: 0,
+                path,
+            });
+        }
         let user = Command::new("id").arg("-u").output().map_err(io_error)?;
         if !user.status.success() {
             return Err(cordis_up::WireError::new(1, "读取服务运行用户失败"));
@@ -210,6 +232,7 @@ impl Location {
         let path = installation_path(platform, name, uid, &home, config_home.as_deref());
         Ok(Self {
             platform,
+            name: name.to_owned(),
             uid,
             path,
         })
@@ -221,6 +244,10 @@ impl Location {
         } else {
             format!("gui/{}", self.uid)
         }
+    }
+
+    fn task_name(&self) -> String {
+        format!("Cordis\\{}", self.name)
     }
 
     /// DOC-15 §5.1：在持久目录写入后启动任务，管理器报告决定安装结果。
@@ -235,6 +262,17 @@ impl Location {
                 run(Command::new("systemctl")
                     .args(["--user", "enable", "--now"])
                     .arg(self.path.file_name().expect("service filename")))
+            }
+            ServicePlatform::WindowsTask => {
+                run(Command::new("schtasks")
+                    .args(["/Create", "/TN"])
+                    .arg(self.task_name())
+                    .arg("/XML")
+                    .arg(&self.path)
+                    .arg("/F"))?;
+                run(Command::new("schtasks")
+                    .args(["/Run", "/TN"])
+                    .arg(self.task_name()))
             }
         }
     }
@@ -255,13 +293,23 @@ impl Location {
             ServicePlatform::Systemd => run(Command::new("systemctl")
                 .args(["--user", "disable", "--now"])
                 .arg(self.path.file_name().expect("service filename")))?,
+            ServicePlatform::WindowsTask => {
+                let _ = Command::new("schtasks")
+                    .args(["/End", "/TN"])
+                    .arg(self.task_name())
+                    .output();
+                run(Command::new("schtasks")
+                    .args(["/Delete", "/TN"])
+                    .arg(self.task_name())
+                    .arg("/F"))?;
+            }
         }
         fs::remove_file(&self.path).map_err(io_error)?;
         Ok(self.path)
     }
 }
 
-/// DOC-15 §5.1：路径计算可独立验证；macOS root 使用系统目录，Linux 遵守 XDG 配置目录。
+/// DOC-15 §5.1：路径计算可独立验证；macOS root 使用系统目录，Linux 遵守 XDG，Windows 用 LOCALAPPDATA。
 fn installation_path(
     platform: ServicePlatform,
     name: &str,
@@ -276,6 +324,7 @@ fn installation_path(
             .map(Path::to_path_buf)
             .unwrap_or_else(|| home.join(".config"))
             .join("systemd/user"),
+        ServicePlatform::WindowsTask => home.join("Cordis").join("service"),
     };
     directory.join(platform.filename(name))
 }

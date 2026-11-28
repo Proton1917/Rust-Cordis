@@ -74,10 +74,24 @@ impl Manager {
     /// ADR-0053：计划更新只在锁内转交所有权，旧来源在锁外归还并提交有界回收。
     pub(super) async fn replace_plan(&self, group: &Group, next: Option<LaunchPlan>) {
         let previous = std::mem::replace(&mut *group.specification.lock(), next);
-        let directories: std::collections::BTreeSet<_> = previous
+        let mut directories: std::collections::BTreeSet<_> = previous
             .iter()
             .flat_map(|plan| plan._pins.iter().map(|pin| pin.directory().to_owned()))
             .collect();
+        // Windows 宿主在退出前无法删除自身仍映射的 DLL，宿主退出后由核心一并回收其缓存目录。
+        if let Some(plan) = &previous {
+            let mut args = plan.specification.command.iter();
+            while let Some(arg) = args.next() {
+                if arg == "--cache-dir"
+                    && let Some(dir) = args.next()
+                {
+                    let path = std::path::Path::new(dir);
+                    if path.is_dir() {
+                        directories.insert(path.to_owned());
+                    }
+                }
+            }
+        }
         drop(previous);
         if !directories.is_empty()
             && let Err(problem) = cordis_process::cache::prune_directories(

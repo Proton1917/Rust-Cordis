@@ -82,9 +82,14 @@ async fn run(args: Arguments) -> cordis_host::Result<i32> {
                 directory: args.cache_dir,
                 verified_dirs: args.verified_dirs,
                 require_verified: args.require_verified,
-                unload: match args.unload {
-                    Unload::Never => UnloadPolicy::Never,
-                    Unload::WhenUnleased => UnloadPolicy::WhenUnleased,
+                unload: if args.describe.is_some() && cfg!(windows) {
+                    // Windows 下探测模式退出前先 FreeLibrary 再回收临时 DLL 副本。
+                    UnloadPolicy::WhenUnleased
+                } else {
+                    match args.unload {
+                        Unload::Never => UnloadPolicy::Never,
+                        Unload::WhenUnleased => UnloadPolicy::WhenUnleased,
+                    }
                 },
                 allow_panic_abort: args.allow_panic_abort,
             },

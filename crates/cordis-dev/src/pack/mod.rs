@@ -102,8 +102,14 @@ pub async fn run(options: Options) -> Result<()> {
     };
     fs::create_dir(&destination)?;
     let (binaries, deployment) = layout(&destination, options.app)?;
-    fs::copy(&plan.core, binaries.join("cordis"))?;
-    fs::copy(&plan.host, binaries.join("cordis-host"))?;
+    fs::copy(
+        &plan.core,
+        binaries.join(plan.platform.executable("cordis")),
+    )?;
+    fs::copy(
+        &plan.host,
+        binaries.join(plan.platform.executable("cordis-host")),
+    )?;
     let runtimes = plugins::runtimes(&plan, &deployment)?;
     let native = plugins::assemble(
         &mut plan,
@@ -326,7 +332,9 @@ fn assets(plan: &Plan, deployment: &Path) -> Result<()> {
             ".cordis",
             "state",
             "cordis",
+            "cordis.exe",
             "cordis-host",
+            "cordis-host.exe",
             "cordis.toml",
         ];
         if path.is_absolute()
@@ -363,11 +371,25 @@ fn assets(plan: &Plan, deployment: &Path) -> Result<()> {
 }
 
 fn service(plan: &Plan, binaries: &Path, deployment: &Path) -> Result<()> {
-    use std::os::unix::fs::PermissionsExt;
     let directory = deployment.join("service");
     fs::create_dir(&directory)?;
-    let core = pathdiff::diff_paths(binaries.join("cordis"), deployment)
-        .ok_or("服务与核心需要共同发布根目录")?;
+    let core = pathdiff::diff_paths(
+        binaries.join(plan.platform.executable("cordis")),
+        deployment,
+    )
+    .ok_or("服务与核心需要共同发布根目录")?;
+    if plan.platform.windows() {
+        let installer = directory.join("install.cmd");
+        fs::write(
+            &installer,
+            format!(
+                "@echo off\r\nsetlocal\r\nfor %%I in (\"%~dp0..\") do set \"PROJECT=%%~fI\"\r\n\"%PROJECT%\\{}\" service install --name \"{}\" --config \"%PROJECT%\\cordis.toml\" %*\r\n",
+                core.display(),
+                plan.identifier
+            ),
+        )?;
+        return Ok(());
+    }
     let installer = directory.join("install.sh");
     fs::write(
         &installer,
@@ -377,7 +399,11 @@ fn service(plan: &Plan, binaries: &Path, deployment: &Path) -> Result<()> {
             plan.identifier
         ),
     )?;
-    fs::set_permissions(&installer, fs::Permissions::from_mode(0o755))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&installer, fs::Permissions::from_mode(0o755))?;
+    }
     Ok(())
 }
 

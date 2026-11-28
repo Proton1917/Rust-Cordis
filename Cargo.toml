@@ -60,6 +60,7 @@ proc-macro2 = { version = "=1.0.107", features = ["span-locations"] }
 quote = "=1.0.47"
 nix = { version = "=0.31.3", features = ["signal", "process"] }
 rustix = { version = "=1.1.5", features = ["process"] }
+windows-sys = "=0.61.2"
 semver = "=1.0.28"
 tokio = { version = "=1.54.1", features = ["rt-multi-thread", "macros", "time", "sync"] }
 cordis = { path = "crates/cordis" }

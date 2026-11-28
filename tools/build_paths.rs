@@ -11,15 +11,27 @@ struct Rules {
 }
 
 fn sources(project: &Path) -> io::Result<BTreeMap<&'static str, String>> {
-    let home = env::var("HOME").map_err(io::Error::other)?;
-    let cargo =
-        std::path::absolute(env::var("CARGO_HOME").unwrap_or_else(|_| format!("{home}/.cargo")))?;
+    let home = env::var("HOME")
+        .or_else(|_| env::var("USERPROFILE"))
+        .map_err(io::Error::other)?;
+    let cargo = std::path::absolute(env::var("CARGO_HOME").unwrap_or_else(|_| {
+        Path::new(&home)
+            .join(".cargo")
+            .to_string_lossy()
+            .into_owned()
+    }))?;
     let output = Command::new(env::var_os("RUSTC").unwrap_or_else(|| "rustc".into()))
         .args(["--print", "sysroot"])
         .output()?;
     if !output.status.success() {
         return Err(io::Error::other("读取 Rust sysroot 失败"));
     }
+    let project_path = project.canonicalize()?.to_string_lossy().into_owned();
+    // Windows canonicalize 返回 \\?\ 前缀，同时去除前缀以覆盖普通路径字符串。
+    let project_path = project_path
+        .strip_prefix(r"\\?\")
+        .unwrap_or(&project_path)
+        .to_owned();
     Ok(BTreeMap::from([
         ("home", home),
         ("cargo_home", cargo.to_string_lossy().into_owned()),
@@ -30,27 +42,36 @@ fn sources(project: &Path) -> io::Result<BTreeMap<&'static str, String>> {
                 .trim()
                 .to_owned(),
         ),
-        (
-            "project",
-            project.canonicalize()?.to_string_lossy().into_owned(),
-        ),
+        ("project", project_path),
     ]))
 }
 
-/// ADR-0049：在实际 Cargo 命令边界生成完整环境，目标平台决定 Apple 链接参数。
+/// ADR-0049：在实际 Cargo 命令边界生成完整环境，目标平台决定 Apple/Windows 链接参数。
 pub fn environment(project: &Path, target: Option<&str>) -> io::Result<BTreeMap<String, String>> {
     let rules: Rules =
         serde_json::from_str(include_str!("path-remapping.json")).map_err(io::Error::other)?;
     let sources = sources(project)?;
-    let mut rust = rules.rust_flags;
+    let is_windows = target.map_or(cfg!(target_os = "windows"), |target| {
+        target.contains("-windows-")
+    });
+    let is_msvc = target.map_or(cfg!(target_env = "msvc"), |target| {
+        target.ends_with("-msvc")
+    });
+    let mut rust = if is_windows {
+        Vec::new()
+    } else {
+        rules.rust_flags
+    };
     let mut native = Vec::new();
     for [source, destination] in rules.prefixes {
         let prefix = sources
             .get(source.as_str())
             .ok_or_else(|| io::Error::other("路径映射来源无效"))?;
         rust.push(format!("--remap-path-prefix={prefix}={destination}"));
-        for flag in &rules.native_flags {
-            native.push(flag.replace("{from}", prefix).replace("{to}", &destination));
+        if !is_msvc {
+            for flag in &rules.native_flags {
+                native.push(flag.replace("{from}", prefix).replace("{to}", &destination));
+            }
         }
     }
     if target.map_or(cfg!(target_os = "macos"), |target| {
@@ -73,7 +94,11 @@ pub fn environment(project: &Path, target: Option<&str>) -> io::Result<BTreeMap<
     } else if let Ok(existing) = env::var("RUSTFLAGS") {
         rust.extend(existing.split_whitespace().map(str::to_owned));
     }
-    let mut result = native_environment(native)?;
+    let mut result = if is_msvc {
+        BTreeMap::new()
+    } else {
+        native_environment(native)?
+    };
     result.insert("CARGO_ENCODED_RUSTFLAGS".into(), rust.join("\u{1f}"));
     Ok(result)
 }

@@ -272,7 +272,7 @@ fn native_checkpoints_recover_after_core_sigkill() {
         .map(|entry| entry.unwrap().path())
         .filter(|path| {
             path.extension()
-                .is_some_and(|ext| ext == "dylib" || ext == "so")
+                .is_some_and(|ext| ext == "dylib" || ext == "so" || ext == "dll")
         })
         .count();
     assert_eq!(remaining, 0);

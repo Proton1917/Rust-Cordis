@@ -14,6 +14,7 @@ use std::{
 const OWNER: &str = "runtime.pid";
 
 /// 核心持有状态目录的写入权，进程退出时操作系统释放文件锁。
+#[cfg(unix)]
 pub(crate) fn claim(directory: &Path) -> Result<(File, File)> {
     fs::create_dir_all(directory).map_err(io_error)?;
     let writer = File::open(directory).map_err(io_error)?;
@@ -37,6 +38,7 @@ pub(crate) fn claim(directory: &Path) -> Result<(File, File)> {
     Ok((writer, owner))
 }
 
+#[cfg(unix)]
 pub(crate) fn owner_pid(directory: &Path) -> Result<Option<u32>> {
     let mut file = match File::open(directory.join(OWNER)) {
         Ok(file) => file,
@@ -49,6 +51,67 @@ pub(crate) fn owner_pid(directory: &Path) -> Result<Option<u32>> {
             let mut pid = String::new();
             file.read_to_string(&mut pid).map_err(io_error)?;
             Ok(Some(pid.parse().map_err(parameter)?))
+        }
+        Err(TryLockError::Error(error)) => Err(io_error(error)),
+    }
+}
+
+/// Windows 禁止打开目录句柄加锁且文件锁为强制锁，拆分目录锁与 PID 锁避免阻塞读者。
+#[cfg(windows)]
+pub(crate) fn claim(directory: &Path) -> Result<(File, File)> {
+    fs::create_dir_all(directory).map_err(io_error)?;
+    let writer = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(directory.join(".runtime.lock"))
+        .map_err(io_error)?;
+    match writer.try_lock() {
+        Ok(()) => {}
+        Err(TryLockError::WouldBlock) => {
+            return Err(parameter(format!(
+                "状态目录已有运行中的核心：{}",
+                directory.display()
+            )));
+        }
+        Err(TryLockError::Error(error)) => return Err(io_error(error)),
+    }
+    let owner = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(directory.join("runtime.pid.lock"))
+        .map_err(io_error)?;
+    owner.try_lock().map_err(|error| io_error(error.into()))?;
+    remove_file(&directory.join("status.json"))?;
+    publish(
+        &directory.join(OWNER),
+        std::process::id().to_string().as_bytes(),
+        false,
+    )?;
+    Ok((writer, owner))
+}
+
+#[cfg(windows)]
+pub(crate) fn owner_pid(directory: &Path) -> Result<Option<u32>> {
+    let lock = match File::open(directory.join("runtime.pid.lock")) {
+        Ok(file) => file,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(io_error(error)),
+    };
+    match lock.try_lock_shared() {
+        Ok(()) => Ok(None),
+        Err(TryLockError::WouldBlock) => {
+            let mut file = match File::open(directory.join(OWNER)) {
+                Ok(file) => file,
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+                Err(error) => return Err(io_error(error)),
+            };
+            let mut pid = String::new();
+            file.read_to_string(&mut pid).map_err(io_error)?;
+            Ok(Some(pid.trim().parse().map_err(parameter)?))
         }
         Err(TryLockError::Error(error)) => Err(io_error(error)),
     }
@@ -94,6 +157,7 @@ fn publish(path: &Path, bytes: &[u8], durable: bool) -> Result<()> {
     if durable {
         file.sync_all().map_err(io_error)?;
     }
+    drop(file);
     fs::rename(staged, path).map_err(io_error)
 }
 
@@ -104,9 +168,23 @@ fn sync_directory(path: &Path) -> Result<()> {
 }
 
 fn sync_directory_contents(path: &Path) -> Result<()> {
-    File::open(path)
-        .and_then(|directory| directory.sync_all())
-        .map_err(io_error)
+    #[cfg(unix)]
+    {
+        File::open(path)
+            .and_then(|directory| directory.sync_all())
+            .map_err(io_error)
+    }
+    #[cfg(windows)]
+    {
+        let metadata = fs::metadata(path).map_err(io_error)?;
+        if !metadata.is_dir() {
+            return Err(io_error(std::io::Error::new(
+                std::io::ErrorKind::NotADirectory,
+                format!("路径不是目录：{}", path.display()),
+            )));
+        }
+        Ok(())
+    }
 }
 
 /// Confirm the new directories and every name that makes the store reachable.
@@ -402,7 +480,23 @@ const JOURNAL_VERSION: &[u8] = b"2\n";
 
 // consumed 是部署目录中位置固定的目录。进程全程持有的所有者锁位于其父目录。
 fn deployment_lock_file(directory: &Path) -> std::io::Result<File> {
-    File::open(directory.join("consumed"))
+    #[cfg(unix)]
+    {
+        File::open(directory.join("consumed"))
+    }
+    #[cfg(windows)]
+    {
+        let consumed = directory.join("consumed");
+        if !consumed.is_dir() {
+            return Err(std::io::Error::from(std::io::ErrorKind::NotFound));
+        }
+        fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(consumed.join(".deployment.lock"))
+    }
 }
 
 pub(crate) fn read_committed_sources(path: &Path) -> Result<Vec<u8>> {
@@ -783,9 +877,15 @@ impl Store {
                     // A readable file can come from a publication whose directory
                     // sync failed. Confirm both its contents and name once before
                     // making it eligible for the warm-cache fast path.
-                    File::open(&path)
-                        .and_then(|file| file.sync_all())
-                        .map_err(io_error)?;
+                    #[cfg(unix)]
+                    let synced = File::open(&path).and_then(|file| file.sync_all());
+                    #[cfg(windows)]
+                    let synced = fs::OpenOptions::new()
+                        .read(true)
+                        .write(true)
+                        .open(&path)
+                        .and_then(|file| file.sync_all());
+                    synced.map_err(io_error)?;
                     needs_sync = true;
                 }
                 // The cache lock keeps this batch private until directory sync.

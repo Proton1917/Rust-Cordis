@@ -190,9 +190,32 @@ async fn main() {
         let mut output = std::io::stdout().lock();
         match mode.as_str() {
             "exit" => return,
+            "sleep" => {
+                std::thread::sleep(Duration::from_secs(60));
+                return;
+            }
             "descendant" => {
-                let child = std::process::Command::new("/bin/sleep").arg("60").spawn().unwrap();
+                #[cfg(unix)]
+                let child = std::process::Command::new("/bin/sleep")
+                    .arg("60")
+                    .spawn()
+                    .unwrap();
+                #[cfg(windows)]
+                let child = std::process::Command::new(std::env::current_exe().unwrap())
+                    .arg("sleep")
+                    .spawn()
+                    .unwrap();
                 eprintln!("descendant:{}", child.id());
+                return;
+            }
+            "print" => {
+                output.write_all(b"cordis descriptor").unwrap();
+                output.flush().unwrap();
+                return;
+            }
+            "yes" => {
+                let chunk = [b'y'; 1024];
+                while output.write_all(&chunk).is_ok() {}
                 return;
             }
             "oversize" => output.write_all(&u32::MAX.to_be_bytes()).unwrap(),

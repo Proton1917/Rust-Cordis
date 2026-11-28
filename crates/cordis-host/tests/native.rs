@@ -33,7 +33,10 @@ fn build_driver(guard: &TestGuard) -> Result<Driver, String> {
         return Err(format!("原生样例构建失败：{status}"));
     }
     Ok(Driver {
-        executable: shared.join("debug/cordis-host-driver"),
+        executable: shared.join(format!(
+            "debug/cordis-host-driver{}",
+            std::env::consts::EXE_SUFFIX
+        )),
         target,
     })
 }

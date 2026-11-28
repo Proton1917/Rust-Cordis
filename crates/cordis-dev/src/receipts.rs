@@ -130,7 +130,7 @@ fn previous(path: &Path, staged: &Path, root: &Path) -> Result<Option<Verificati
 fn copy_version(root: &Path, source: &Path, plugin: &str) -> Result<PathBuf> {
     let (lock, sequence) = next_sequence(root, |name| {
         let (stem, extension) = name.rsplit_once('.')?;
-        if !matches!(extension, "dylib" | "so") {
+        if !matches!(extension, "dylib" | "so" | "dll") {
             return None;
         }
         stem.rsplit_once('-')?.1.parse().ok()

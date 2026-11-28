@@ -33,6 +33,19 @@ fn persistent_installation_uses_standard_service_directories() {
         ),
         Path::new("/config/systemd/user/demo.service")
     );
+    assert_eq!(
+        installation_path(
+            ServicePlatform::WindowsTask,
+            "com.example.demo",
+            0,
+            Path::new("C:/Users/service-owner/AppData/Local"),
+            None
+        ),
+        Path::new("C:/Users/service-owner/AppData/Local")
+            .join("Cordis")
+            .join("service")
+            .join("com.example.demo.xml")
+    );
 }
 
 #[test]
@@ -48,6 +61,7 @@ fn absent_service_uninstall_preserves_neighboring_configuration() {
     let path = directory.join("absent.plist");
     let error = Location {
         platform: ServicePlatform::Launchd,
+        name: "absent".into(),
         uid: 501,
         path: path.clone(),
     }

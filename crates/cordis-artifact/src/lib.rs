@@ -145,37 +145,62 @@ fn visit(
 mod tests {
     use super::*;
     use cordis_testkit::cleanup::TestGuard;
-    use std::os::unix::fs::symlink;
 
     #[test]
     fn internal_links_are_relocatable_and_directory_cycles_are_rejected() {
+        let link_file = |src: &Path, dst: &Path| -> io::Result<()> {
+            #[cfg(unix)]
+            {
+                std::os::unix::fs::symlink(src, dst)
+            }
+            #[cfg(windows)]
+            {
+                std::os::windows::fs::symlink_file(src, dst)
+            }
+        };
+        let link_dir = |src: &Path, dst: &Path| -> io::Result<()> {
+            #[cfg(unix)]
+            {
+                std::os::unix::fs::symlink(src, dst)
+            }
+            #[cfg(windows)]
+            {
+                std::os::windows::fs::symlink_dir(src, dst)
+            }
+        };
         let case = TestGuard::for_package(Path::new(env!("CARGO_MANIFEST_DIR")), "artifact-links");
         let root = case.directory("artifact-links");
         fs::create_dir_all(root.join("a")).unwrap();
         fs::create_dir(root.join("b")).unwrap();
         let root = root.canonicalize().unwrap();
         fs::write(root.join("b/file"), b"payload").unwrap();
-        symlink(root.join("b/file"), root.join("a/alias")).unwrap();
-        symlink("../b", root.join("a/dir")).unwrap();
+        link_file(&root.join("b/file"), &root.join("a/alias")).unwrap();
+        link_dir(&Path::new("..").join("b"), &root.join("a/dir")).unwrap();
         validate(&root, &BTreeSet::new(), &[]).unwrap();
         assert_eq!(
             relative_link(&root.join("a/alias"), &root).unwrap(),
-            Path::new("../b/file")
+            Path::new("..").join("b").join("file")
         );
-        symlink("../a", root.join("b/back")).unwrap();
+        link_dir(&Path::new("..").join("a"), &root.join("b/back")).unwrap();
         assert_eq!(
             validate(&root, &BTreeSet::new(), &[]).unwrap_err().kind(),
             io::ErrorKind::InvalidInput
         );
+        #[cfg(unix)]
         fs::remove_file(root.join("b/back")).unwrap();
-        symlink("../..", root.join("a/outside")).unwrap();
+        #[cfg(windows)]
+        fs::remove_dir(root.join("b/back")).unwrap();
+        link_dir(&Path::new("..").join(".."), &root.join("a/outside")).unwrap();
         assert_eq!(
             validate(&root, &BTreeSet::new(), &[]).unwrap_err().kind(),
             io::ErrorKind::InvalidInput
         );
+        #[cfg(unix)]
         fs::remove_file(root.join("a/outside")).unwrap();
-        symlink("loop-two", root.join("loop-one")).unwrap();
-        symlink("loop-one", root.join("loop-two")).unwrap();
+        #[cfg(windows)]
+        fs::remove_dir(root.join("a/outside")).unwrap();
+        link_file(Path::new("loop-two"), &root.join("loop-one")).unwrap();
+        link_file(Path::new("loop-one"), &root.join("loop-two")).unwrap();
         assert!(validate(&root, &BTreeSet::new(), &[]).is_err());
         case.success();
     }

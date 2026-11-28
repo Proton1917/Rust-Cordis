@@ -100,7 +100,7 @@ impl Acceptance {
             fs::copy(self.fixture.join(name), javascript.join(name)).unwrap();
         }
         self.execute(
-            Command::new("npm")
+            Command::new(if cfg!(windows) { "npm.cmd" } else { "npm" })
                 .args([
                     "ci",
                     "--ignore-scripts",
@@ -133,8 +133,7 @@ impl Acceptance {
     /// Python 与 Node 的生成 Client 通过成熟 CBOR 库调用各自提供方。
     fn scripts(&self) {
         self.execute(
-            Command::new("conda")
-                .args(["run", "-n", "base", "python"])
+            cordis_testkit::python::command()
                 .arg(self.fixture.join("check_python.py"))
                 .arg(&self.generated)
                 .arg(self.directory.join("python")),

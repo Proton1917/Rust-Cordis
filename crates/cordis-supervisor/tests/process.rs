@@ -75,14 +75,10 @@ fn plugin() -> FixtureLease<PathBuf> {
             "{}",
             String::from_utf8_lossy(&output.stderr)
         );
-        cordis_testkit::build::snapshot_artifacts(
-            guard,
-            "process-fixture",
-            "debug",
-            &["cordis-process-fixture"],
-        )
-        .unwrap()
-        .join("cordis-process-fixture")
+        let binary = format!("cordis-process-fixture{}", std::env::consts::EXE_SUFFIX);
+        cordis_testkit::build::snapshot_artifacts(guard, "process-fixture", "debug", &[&binary])
+            .unwrap()
+            .join(binary)
     })
 }
 
@@ -220,11 +216,7 @@ async fn malformed_frames_timeouts_and_flood_leave_other_processes_responsive() 
         );
     }
     let (killed, _) = launch("normal", PeerOptions::default()).await;
-    nix::sys::signal::kill(
-        nix::unistd::Pid::from_raw(killed.pid() as i32),
-        nix::sys::signal::Signal::SIGKILL,
-    )
-    .unwrap();
+    kill_pid(killed.pid());
     timeout(Duration::from_secs(3), killed.wait_exit())
         .await
         .unwrap()
@@ -329,9 +321,7 @@ async fn natural_exit_reaps_the_group_and_its_descendants() {
             .await
             .unwrap();
             timeout(Duration::from_secs(3), async {
-                while nix::sys::signal::kill(nix::unistd::Pid::from_raw(pid), None)
-                    != Err(nix::errno::Errno::ESRCH)
-                {
+                while !pid_exited(pid as u32) {
                     sleep(Duration::from_millis(5)).await;
                 }
             })
@@ -350,35 +340,77 @@ async fn natural_exit_reaps_the_group_and_its_descendants() {
     case.success();
 }
 
+fn kill_pid(pid: u32) {
+    #[cfg(unix)]
+    nix::sys::signal::kill(
+        nix::unistd::Pid::from_raw(pid as i32),
+        nix::sys::signal::Signal::SIGKILL,
+    )
+    .unwrap();
+    #[cfg(windows)]
+    {
+        let status = std::process::Command::new("taskkill")
+            .args(["/F", "/PID", &pid.to_string()])
+            .status()
+            .unwrap();
+        assert!(status.success(), "taskkill failed for pid {pid}");
+    }
+}
+
+fn pid_exited(pid: u32) -> bool {
+    #[cfg(unix)]
+    {
+        matches!(
+            nix::sys::signal::kill(nix::unistd::Pid::from_raw(pid as i32), None),
+            Err(nix::errno::Errno::ESRCH)
+        )
+    }
+    #[cfg(windows)]
+    {
+        let output = std::process::Command::new("tasklist")
+            .args(["/FI", &format!("PID eq {pid}"), "/NH"])
+            .output()
+            .unwrap();
+        let text = String::from_utf8_lossy(&output.stdout);
+        !text.contains(&pid.to_string())
+    }
+}
+
 // 探测命令读取完整输出，并在输出超额或超时时完成组清理后报告错误。
 #[tokio::test]
 async fn capture_reports_output_limits_and_deadlines() {
     let cwd = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let output = cordis_supervisor::run_capture(
-        &[
+    #[cfg(unix)]
+    let (print_cmd, yes_cmd, sleep_cmd) = (
+        vec![
             "/usr/bin/printf".into(),
             "%s".into(),
             "cordis descriptor".into(),
         ],
-        cwd,
-        Duration::from_secs(3),
-        64,
-    )
-    .await
-    .unwrap();
+        vec!["/usr/bin/yes".into()],
+        vec!["/bin/sleep".into(), "60".into()],
+    );
+    #[cfg(windows)]
+    let _fixture = plugin();
+    #[cfg(windows)]
+    let (print_cmd, yes_cmd, sleep_cmd) = {
+        let bin = _fixture.display().to_string();
+        (
+            vec![bin.clone(), "print".into()],
+            vec![bin.clone(), "yes".into()],
+            vec![bin, "sleep".into()],
+        )
+    };
+    let output = cordis_supervisor::run_capture(&print_cmd, cwd, Duration::from_secs(3), 64)
+        .await
+        .unwrap();
     assert_eq!(output, b"cordis descriptor");
-    let error =
-        cordis_supervisor::run_capture(&["/usr/bin/yes".into()], cwd, Duration::from_secs(3), 32)
-            .await
-            .unwrap_err();
+    let error = cordis_supervisor::run_capture(&yes_cmd, cwd, Duration::from_secs(3), 32)
+        .await
+        .unwrap_err();
     assert_eq!(error.code, 8, "{error}");
-    let error = cordis_supervisor::run_capture(
-        &["/bin/sleep".into(), "60".into()],
-        cwd,
-        Duration::from_millis(30),
-        32,
-    )
-    .await
-    .unwrap_err();
+    let error = cordis_supervisor::run_capture(&sleep_cmd, cwd, Duration::from_millis(30), 32)
+        .await
+        .unwrap_err();
     assert_eq!(error.code, 6);
 }

@@ -55,27 +55,67 @@ pub(super) fn check(root: &Path, warning: bool) -> Result<()> {
     }
 }
 
-/// ADR-0049：以构建环境的 HOME 和系统当前用户确定检索对象。
-fn patterns() -> Result<[Pattern; 2]> {
-    let home = env::var("HOME")?;
-    let username = Command::new("id").arg("-un").output()?;
-    if !username.status.success() {
-        return Err("读取当前用户名失败".into());
+/// ADR-0049：以构建环境的 HOME/USERPROFILE 和系统当前用户确定检索对象。
+fn patterns() -> Result<Vec<Pattern>> {
+    #[cfg(unix)]
+    {
+        let home = env::var("HOME")?;
+        let username = Command::new("id").arg("-un").output()?;
+        if !username.status.success() {
+            return Err("读取当前用户名失败".into());
+        }
+        let username = String::from_utf8(username.stdout)?.trim().to_owned();
+        if home.is_empty() || username.is_empty() {
+            return Err("路径隐私检查需要 HOME 与用户名".into());
+        }
+        Ok(vec![
+            Pattern {
+                label: "HOME",
+                bytes: home.into_bytes(),
+            },
+            Pattern {
+                label: "username",
+                bytes: username.into_bytes(),
+            },
+        ])
     }
-    let username = String::from_utf8(username.stdout)?.trim().to_owned();
-    if home.is_empty() || username.is_empty() {
-        return Err("路径隐私检查需要 HOME 与用户名".into());
-    }
-    Ok([
-        Pattern {
+    #[cfg(windows)]
+    {
+        let _ = Command::new("");
+        let home = env::var("USERPROFILE").or_else(|_| env::var("HOME"))?;
+        let username = env::var("USERNAME")?;
+        if home.is_empty() || username.is_empty() {
+            return Err("路径隐私检查需要 USERPROFILE 与 USERNAME".into());
+        }
+        let mut patterns = vec![Pattern {
             label: "HOME",
-            bytes: home.into_bytes(),
-        },
-        Pattern {
-            label: "username",
-            bytes: username.into_bytes(),
-        },
-    ])
+            bytes: home.as_bytes().to_vec(),
+        }];
+        let forward = home.replace('\\', "/");
+        if forward != home {
+            patterns.push(Pattern {
+                label: "HOME",
+                bytes: forward.into_bytes(),
+            });
+        }
+        // 短用户名（如 pc）会与 x86_64-pc-windows-msvc 等目标三元组重叠，按路径段检查；长用户名同时检查裸字面。
+        if username.len() >= 4 {
+            patterns.push(Pattern {
+                label: "username",
+                bytes: username.into_bytes(),
+            });
+        } else {
+            patterns.push(Pattern {
+                label: "username",
+                bytes: format!("\\{username}\\").into_bytes(),
+            });
+            patterns.push(Pattern {
+                label: "username",
+                bytes: format!("/{username}/").into_bytes(),
+            });
+        }
+        Ok(patterns)
+    }
 }
 
 fn collect(directory: &Path, files: &mut Vec<PathBuf>) -> Result<()> {
@@ -90,8 +130,8 @@ fn collect(directory: &Path, files: &mut Vec<PathBuf>) -> Result<()> {
                 path.extension().and_then(|extension| extension.to_str()),
                 Some("toml" | "json" | "plist")
             );
-            let mut prefix = Vec::with_capacity(16);
-            fs::File::open(&path)?.take(16).read_to_end(&mut prefix)?;
+            let mut prefix = Vec::with_capacity(64);
+            fs::File::open(&path)?.take(64).read_to_end(&mut prefix)?;
             if manifest
                 || matches!(
                     object::FileKind::parse(prefix.as_slice()),
@@ -100,7 +140,9 @@ fn collect(directory: &Path, files: &mut Vec<PathBuf>) -> Result<()> {
                         | object::FileKind::MachOFat32
                         | object::FileKind::MachOFat64
                         | object::FileKind::Elf32
-                        | object::FileKind::Elf64)
+                        | object::FileKind::Elf64
+                        | object::FileKind::Pe32
+                        | object::FileKind::Pe64)
                 )
             {
                 files.push(path);

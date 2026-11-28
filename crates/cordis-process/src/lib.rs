@@ -1,19 +1,15 @@
-#![forbid(unsafe_code)]
+#![cfg_attr(unix, forbid(unsafe_code))]
 //! CP-7、CP-10、ADR-0027/0029：持有子进程、组信号和回收的唯一执行路径。
 //! 插件连接与有界探测共享该路径；输出、退出状态和清理错误分别交给调用方。
 
 pub mod cache;
+mod platform;
 
 use cordis_up::{
     Value, WireError,
     rpc::{Connection, ConnectionOptions, Handler},
 };
-use nix::{
-    errno::Errno,
-    sys::signal::{Signal, killpg},
-    unistd::Pid,
-};
-use rustix::process::{WaitId, WaitIdOptions, waitid};
+use platform::ChildGuard;
 use std::{
     ops::Deref,
     path::Path,
@@ -26,8 +22,7 @@ use std::{
 };
 use tokio::{
     io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, BufReader},
-    process::{Child, ChildStderr, ChildStdout, Command},
-    signal::unix::{Signal as ChildSignals, SignalKind, signal},
+    process::{Child, ChildStderr, ChildStdout},
     sync::watch,
     time::timeout,
 };
@@ -88,16 +83,15 @@ impl Peer {
         if options.stderr_line_bytes == 0 {
             return Err(error(2, "进程命令与日志行容量需要有效取值"));
         }
-        let children = signal(SignalKind::child()).map_err(io_error)?;
-        let mut child = spawn_child(command, cwd, Stdio::piped())?;
-        let pid = child.id().expect("new child has PID");
+        let (mut child, mut guard) = platform::spawn(command, None, cwd, Stdio::piped())?;
+        let pid = guard.pid();
         let stdin = child.stdin.take().expect("piped stdin");
         let stdout = child.stdout.take().expect("piped stdout");
         let stderr = child.stderr.take().expect("piped stderr");
         let connection = match Connection::attach(id, stdout, stdin, options.rpc, handler) {
             Ok(connection) => connection,
             Err(problem) => {
-                terminate_and_reap(&mut child, pid).await?;
+                guard.terminate_and_reap(&mut child).await?;
                 return Err(problem);
             }
         };
@@ -113,9 +107,8 @@ impl Peer {
         tokio::spawn(
             Lifecycle {
                 id,
-                pid,
                 child,
-                children,
+                guard,
                 connection: connection.clone(),
                 stopping,
                 shutting_down,
@@ -176,9 +169,8 @@ impl Peer {
 /// CP-7：进程控制与协议I/O分离，Child只由该任务回收。
 struct Lifecycle {
     id: u64,
-    pid: u32,
     child: Child,
-    children: ChildSignals,
+    guard: ChildGuard,
     connection: Connection,
     stopping: watch::Receiver<bool>,
     shutting_down: Arc<AtomicBool>,
@@ -203,40 +195,24 @@ impl Lifecycle {
     /// CP-6、CP-10：显式停止与异常EOF触发组终止，有序退出等待子进程结束。
     async fn wait_and_reap(&mut self) -> Result<String> {
         loop {
-            if observe_exit(self.pid)? || *self.stopping.borrow() {
+            if self.guard.exited()? || *self.stopping.borrow() {
                 break;
             }
             tokio::select! {
                 _ = self.stopping.changed() => break,
-                received = self.children.recv() => {
-                    if received.is_none() { return Err(error(4, "子进程退出信号流已关闭")); }
+                result = self.guard.wait_signal(&mut self.child) => {
+                    result?;
                 }
                 _ = self.connection.closed(), if !self.shutting_down.load(Ordering::Acquire) => {
                     if !self.shutting_down.load(Ordering::Acquire) { break; }
                 }
             }
         }
-        terminate_and_reap(&mut self.child, self.pid)
+        self.guard
+            .terminate_and_reap(&mut self.child)
             .await
             .map(|status| format!("插件进程退出：{status}"))
     }
-}
-
-/// CP-7：创建独立进程组，返回Child与三条受管理的标准流。
-fn spawn_child(command: &[String], cwd: &Path, stdin: Stdio) -> Result<Child> {
-    let Some(program) = command.first() else {
-        return Err(error(2, "进程命令为空"));
-    };
-    Command::new(program)
-        .args(&command[1..])
-        .current_dir(cwd)
-        .stdin(stdin)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .kill_on_drop(true)
-        .process_group(0)
-        .spawn()
-        .map_err(io_error)
 }
 
 /// CP-3：诊断保留有界前缀，超长行持续排空至换行，读取错误记入日志。
@@ -284,35 +260,6 @@ async fn read_diagnostics(id: u64, stderr: ChildStderr, limit: usize, log: Log) 
     }
 }
 
-/// ADR-0027：只观察本进程拥有的Child，NOWAIT将PID保留至组信号结束。
-fn observe_exit(pid: u32) -> Result<bool> {
-    let pid = rustix::process::Pid::from_raw(pid as i32).expect("child PID is positive");
-    waitid(
-        WaitId::Pid(pid),
-        WaitIdOptions::EXITED | WaitIdOptions::NOWAIT | WaitIdOptions::NOHANG,
-    )
-    .map(|state| state.is_some())
-    .map_err(|problem| error(1, problem.to_string()))
-}
-
-/// CP-7、ADR-0027：调用方持有待回收Child；有效组权限错误交回调用方。
-async fn terminate_and_reap(child: &mut Child, pid: u32) -> Result<std::process::ExitStatus> {
-    let group = Pid::from_raw(pid as i32);
-    let signal_error = match killpg(group, Signal::SIGKILL) {
-        Ok(()) | Err(Errno::ESRCH) => None,
-        Err(Errno::EPERM) if observe_exit(pid)? => Some(Errno::EPERM),
-        Err(problem) => return Err(error(1, format!("终止插件进程组失败：{problem}"))),
-    };
-    let status = child.wait().await.map_err(io_error)?;
-    // ADR-0027：回收后只查询组是否已空，终止信号已在PID受保有期间发出。
-    if let Some(problem) = signal_error
-        && killpg(group, None) != Err(Errno::ESRCH)
-    {
-        return Err(error(1, format!("终止插件进程组失败：{problem}")));
-    }
-    Ok(status)
-}
-
 /// 有界描述符探测复用进程组所有权；stdout超限或截止时间到达时清理并回收整个组。
 pub async fn run_capture(
     command: &[String],
@@ -320,18 +267,21 @@ pub async fn run_capture(
     duration: Duration,
     max_bytes: usize,
 ) -> Result<Vec<u8>> {
-    let mut children = signal(SignalKind::child()).map_err(io_error)?;
-    let mut child = spawn_child(command, cwd, Stdio::null())?;
-    let pid = child.id().expect("new child has PID");
+    run_capture_with_env(command, None, cwd, duration, max_bytes).await
+}
+
+/// 与 `run_capture` 共用进程组所有权，并允许附加子进程环境变量。
+pub async fn run_capture_with_env(
+    command: &[String],
+    env: Option<&[(String, String)]>,
+    cwd: &Path,
+    duration: Duration,
+    max_bytes: usize,
+) -> Result<Vec<u8>> {
+    let (mut child, mut guard) = platform::spawn(command, env, cwd, Stdio::null())?;
     let mut stdout = child.stdout.take().expect("piped stdout");
     let mut stderr = child.stderr.take().expect("piped stderr");
-    let capture = capture_child(
-        &mut child,
-        &mut children,
-        &mut stdout,
-        &mut stderr,
-        max_bytes,
-    );
+    let capture = capture_child(&mut child, &mut guard, &mut stdout, &mut stderr, max_bytes);
     let result = match timeout(duration, capture).await {
         Ok(result) => result,
         Err(_) => Err(error(6, "描述符探测超过截止时间")),
@@ -347,7 +297,7 @@ pub async fn run_capture(
         )),
         Err(problem) => {
             if child.id().is_some() {
-                terminate_and_reap(&mut child, pid).await?;
+                guard.terminate_and_reap(&mut child).await?;
             }
             Err(problem)
         }
@@ -357,20 +307,16 @@ pub async fn run_capture(
 /// CP-7：保留标准流至组清理结束，避免输出超额时提前关闭管道改变退出状态。
 async fn capture_child(
     child: &mut Child,
-    children: &mut ChildSignals,
+    guard: &mut ChildGuard,
     stdout: &mut ChildStdout,
     stderr: &mut ChildStderr,
     max_bytes: usize,
 ) -> Result<(std::process::ExitStatus, Vec<u8>, Vec<u8>)> {
-    let pid = child.id().expect("child PID retained until wait");
     let lifetime = async {
-        while !observe_exit(pid)? {
-            children
-                .recv()
-                .await
-                .ok_or_else(|| error(4, "子进程退出信号流已关闭"))?;
+        while !guard.exited()? {
+            guard.wait_signal(child).await?;
         }
-        terminate_and_reap(child, pid).await
+        guard.terminate_and_reap(child).await
     };
     tokio::try_join!(
         lifetime,

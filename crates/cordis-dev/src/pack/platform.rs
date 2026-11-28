@@ -13,6 +13,7 @@ use std::{
 pub enum Platform {
     MacArm,
     LinuxX64,
+    WindowsX64,
 }
 
 impl Platform {
@@ -20,8 +21,9 @@ impl Platform {
         match value {
             "aarch64-apple-darwin" => Ok(Self::MacArm),
             "x86_64-unknown-linux-gnu" => Ok(Self::LinuxX64),
+            "x86_64-pc-windows-msvc" => Ok(Self::WindowsX64),
             _ => Err(format!(
-                "发布目标支持 aarch64-apple-darwin、x86_64-unknown-linux-gnu，收到 {value}"
+                "发布目标支持 aarch64-apple-darwin、x86_64-unknown-linux-gnu、x86_64-pc-windows-msvc，收到 {value}"
             )
             .into()),
         }
@@ -31,6 +33,7 @@ impl Platform {
         let matched = match self {
             Self::MacArm => cfg!(all(target_os = "macos", target_arch = "aarch64")),
             Self::LinuxX64 => cfg!(all(target_os = "linux", target_arch = "x86_64")),
+            Self::WindowsX64 => cfg!(all(target_os = "windows", target_arch = "x86_64")),
         };
         if matched {
             Ok(())
@@ -43,9 +46,24 @@ impl Platform {
         matches!(self, Self::MacArm)
     }
 
+    pub fn windows(self) -> bool {
+        matches!(self, Self::WindowsX64)
+    }
+
+    pub fn executable(self, name: &str) -> String {
+        if self.windows() && Path::new(name).extension().is_none() {
+            format!("{name}.exe")
+        } else {
+            name.to_owned()
+        }
+    }
+
     pub fn library(self, name: &str) -> String {
-        let extension = if self.macos() { "dylib" } else { "so" };
-        format!("lib{}.{}", name.replace('-', "_"), extension)
+        match self {
+            Self::MacArm => format!("lib{}.dylib", name.replace('-', "_")),
+            Self::LinuxX64 => format!("lib{}.so", name.replace('-', "_")),
+            Self::WindowsX64 => format!("{}.dll", name.replace('-', "_")),
+        }
     }
 
     /// AU-12：二进制格式和处理器架构与发布目标共同匹配。
@@ -55,6 +73,7 @@ impl Platform {
         let expected = match self {
             Self::MacArm => (BinaryFormat::MachO, Architecture::Aarch64),
             Self::LinuxX64 => (BinaryFormat::Elf, Architecture::X86_64),
+            Self::WindowsX64 => (BinaryFormat::Pe, Architecture::X86_64),
         };
         if (object.format(), object.architecture()) == expected {
             Ok(())

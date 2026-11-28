@@ -21,7 +21,6 @@ use futures_util::{FutureExt, future::Shared};
 use parking_lot::Mutex;
 use std::{path::PathBuf, sync::Arc, time::Duration};
 use tokio::{
-    signal::unix::{Signal, SignalKind, signal},
     sync::{Notify, mpsc, watch},
     time::{Instant, MissedTickBehavior},
 };
@@ -37,10 +36,7 @@ pub async fn run_with_contract(path: PathBuf, plan: Option<Plan>) -> Result<()> 
     let path = path.canonicalize().map_err(io_error)?;
     let (directory, input) = crate::deployment::load_with_state_dir(&path)?;
     let owner = crate::storage::claim(&directory)?;
-    let mut signals = Signals {
-        terminate: signal(SignalKind::terminate()).map_err(io_error)?,
-        interrupt: signal(SignalKind::interrupt()).map_err(io_error)?,
-    };
+    let mut signals = Signals::new()?;
     let lifetime = RuntimeRoot::new(owner);
     let root = lifetime.context();
     let result = async {
@@ -184,9 +180,57 @@ fn register_services(
     Ok(logs)
 }
 
+#[cfg(unix)]
 struct Signals {
-    terminate: Signal,
-    interrupt: Signal,
+    terminate: tokio::signal::unix::Signal,
+    interrupt: tokio::signal::unix::Signal,
+}
+
+#[cfg(unix)]
+impl Signals {
+    fn new() -> Result<Self> {
+        use tokio::signal::unix::{SignalKind, signal};
+        Ok(Self {
+            terminate: signal(SignalKind::terminate()).map_err(io_error)?,
+            interrupt: signal(SignalKind::interrupt()).map_err(io_error)?,
+        })
+    }
+
+    async fn recv(&mut self) -> &'static str {
+        tokio::select! {
+            _ = self.terminate.recv() => "终止信号",
+            _ = self.interrupt.recv() => "中断信号",
+        }
+    }
+}
+
+#[cfg(windows)]
+struct Signals {
+    ctrl_c: tokio::signal::windows::CtrlC,
+    ctrl_break: tokio::signal::windows::CtrlBreak,
+    ctrl_close: tokio::signal::windows::CtrlClose,
+    ctrl_shutdown: tokio::signal::windows::CtrlShutdown,
+}
+
+#[cfg(windows)]
+impl Signals {
+    fn new() -> Result<Self> {
+        Ok(Self {
+            ctrl_c: tokio::signal::windows::ctrl_c().map_err(io_error)?,
+            ctrl_break: tokio::signal::windows::ctrl_break().map_err(io_error)?,
+            ctrl_close: tokio::signal::windows::ctrl_close().map_err(io_error)?,
+            ctrl_shutdown: tokio::signal::windows::ctrl_shutdown().map_err(io_error)?,
+        })
+    }
+
+    async fn recv(&mut self) -> &'static str {
+        tokio::select! {
+            _ = self.ctrl_c.recv() => "中断信号",
+            _ = self.ctrl_break.recv() => "中断信号",
+            _ = self.ctrl_close.recv() => "终止信号",
+            _ = self.ctrl_shutdown.recv() => "终止信号",
+        }
+    }
 }
 
 /// DOC-15 CP-11：状态发布与管理调度独立进行，启动失败也执行完整退出步骤。
@@ -208,8 +252,7 @@ async fn serve(
     if let Some(session) = session {
         let result = tokio::select! {
             result = session.run(&mut controller, candidate) => result,
-            _ = signals.terminate.recv() => Err(WireError::new(7, "契约会话收到终止信号")),
-            _ = signals.interrupt.recv() => Err(WireError::new(7, "契约会话收到中断信号")),
+            reason = signals.recv() => Err(WireError::new(7, format!("契约会话收到{reason}"))),
             result = writer.completed() => result.and(Err(WireError::new(7, "契约会话状态发布任务已结束"))),
         };
         return finish(&mut controller, &mut requests, writer, result.map(|_| None)).await;
@@ -221,14 +264,7 @@ async fn serve(
                 controller.logs.emit(2, "runtime", "运行时已启动");
             }
             writer.refresh.notify_one();
-            dispatch_loop(
-                &mut controller,
-                &mut requests,
-                &mut writer,
-                &mut signals.terminate,
-                &mut signals.interrupt,
-            )
-            .await
+            dispatch_loop(&mut controller, &mut requests, &mut writer, signals).await
         }
         Err(problem) => Err(problem),
     };
@@ -240,8 +276,7 @@ async fn dispatch_loop(
     controller: &mut Controller,
     requests: &mut mpsc::Receiver<Request>,
     writer: &mut StatusWriter,
-    terminate: &mut Signal,
-    interrupt: &mut Signal,
+    signals: &mut Signals,
 ) -> Result<Option<Request>> {
     let interval_ms = controller.configuration.runtime.checkpoint_ms;
     let period = Duration::from_millis(interval_ms.max(1));
@@ -273,8 +308,7 @@ async fn dispatch_loop(
         }
         let work = tokio::select! {
             biased;
-            _ = terminate.recv() => return Ok(None),
-            _ = interrupt.recv() => return Ok(None),
+            _ = signals.recv() => return Ok(None),
             _ = admission.wait_for(|open| !*open) => return Ok(None),
             result = writer.completed() => return result.map(|_| None),
             request = requests.recv() => {
@@ -328,8 +362,7 @@ async fn dispatch_loop(
                 if finished.is_some() { return Ok(finished); }
                 continue;
             },
-            _ = terminate.recv() => {},
-            _ = interrupt.recv() => {},
+            _ = signals.recv() => {},
             _ = admission.wait_for(|open| !*open) => {},
         }
         // 先停止受理，再等待队列所有者结束已经开始的导出或部署。

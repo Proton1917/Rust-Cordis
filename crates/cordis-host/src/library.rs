@@ -168,8 +168,8 @@ impl LibraryStore {
             let extension = source
                 .extension()
                 .and_then(|extension| extension.to_str())
-                .filter(|extension| matches!(*extension, "dylib" | "so"))
-                .ok_or_else(|| Error::new(2, "原生库扩展名需要为 dylib 或 so"))?;
+                .filter(|extension| matches!(*extension, "dylib" | "so" | "dll"))
+                .ok_or_else(|| Error::new(2, "原生库扩展名需要为 dylib、so 或 dll"))?;
             let mut input = File::open(source).map_err(io_error)?;
             let (sequence, owned, mut output) = self.cache.reserve(extension).map_err(io_error)?;
             let staged = owned.path().to_owned();

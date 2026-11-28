@@ -77,6 +77,7 @@ fn overflow(depth: usize) {
     std::hint::black_box(frame);
 }
 
+#[cfg(unix)]
 fn inaccessible_memory() -> Result<()> {
     // SAFETY: 验收程序在独立宿主中映射无访问权限的页面，读取触发真实内存访问故障。
     let page = unsafe {
@@ -99,6 +100,16 @@ fn inaccessible_memory() -> Result<()> {
     // SAFETY: 页面由本函数映射；运行环境允许读取时回收该映射并报告失败。
     unsafe {
         nix::libc::munmap(page, 4096);
+    }
+    Err(Error::new(1019, "内存保护页读取意外成功"))
+}
+
+#[cfg(windows)]
+fn inaccessible_memory() -> Result<()> {
+    let invalid = std::hint::black_box(0x10usize as *const u8);
+    // SAFETY: 本场景明确在独立宿主中触发内存访问违例（STATUS_ACCESS_VIOLATION）以验证进程隔离。
+    unsafe {
+        std::ptr::read_volatile(invalid);
     }
     Err(Error::new(1019, "内存保护页读取意外成功"))
 }

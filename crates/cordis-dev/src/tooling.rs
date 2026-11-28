@@ -29,17 +29,22 @@ pub fn plugin_paths(project: &Path, config: &toml::Table, reference: &str) -> Re
 }
 
 pub fn executable(name: &str, directory: Option<&Path>) -> Result<PathBuf> {
+    let filename = if cfg!(windows) && Path::new(name).extension().is_none() {
+        format!("{name}{}", std::env::consts::EXE_SUFFIX)
+    } else {
+        name.to_owned()
+    };
     if let Some(directory) = directory {
-        return Ok(directory.join(name).canonicalize()?);
+        return Ok(directory.join(&filename).canonicalize()?);
     }
     let current = std::env::current_exe()?;
-    let sibling = current.parent().expect("可执行文件父目录").join(name);
+    let sibling = current.parent().expect("可执行文件父目录").join(&filename);
     if sibling.is_file() {
         return Ok(sibling);
     }
     if let Some(path) = std::env::var_os("PATH") {
         for directory in std::env::split_paths(&path) {
-            let candidate = directory.join(name);
+            let candidate = directory.join(&filename);
             if candidate.is_file() {
                 return Ok(candidate);
             }
@@ -51,6 +56,23 @@ pub fn executable(name: &str, directory: Option<&Path>) -> Result<PathBuf> {
 /// CP-4/CP-7：截止时间和输出上限交给既有进程组拥有者。
 pub async fn command(command: Vec<String>, project: &Path, timeout: Duration) -> Result<Vec<u8>> {
     Ok(cordis_process::run_capture(&command, project, timeout, Limits::DEFAULT.max_frame).await?)
+}
+
+/// 与 `command` 共用进程组所有权，显式传递子进程环境变量而不依赖外部 `env` 命令。
+pub async fn command_with_env(
+    command: Vec<String>,
+    env: &[(String, String)],
+    project: &Path,
+    timeout: Duration,
+) -> Result<Vec<u8>> {
+    Ok(cordis_process::run_capture_with_env(
+        &command,
+        Some(env),
+        project,
+        timeout,
+        Limits::DEFAULT.max_frame,
+    )
+    .await?)
 }
 
 /// Q0：宿主打开库并返回经过 ABI 握手的描述符。
