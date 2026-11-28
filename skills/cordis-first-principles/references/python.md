@@ -18,7 +18,11 @@ cordis run
 使用方组件：注入 `kv@1.0`，迁移自己的计数状态，在效应中归还客户端，运行后台协程。
 
 ```sh
+# 独立单文件（内嵌通用 WIT 编解码）：
 cordis idl gen interfaces/kv.wit --lang python --output plugins/visits/bindings.py
+
+# 运行目录已带同版 cordis_sdk 时（推荐，直接导入 cordis_sdk.wit，生成文件更精简）：
+cordis idl gen interfaces/kv.wit --lang python-sdk --output plugins/visits/bindings.py
 ```
 
 ```python

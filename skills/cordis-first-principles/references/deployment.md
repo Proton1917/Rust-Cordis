@@ -6,8 +6,8 @@
 
 | 平台 | 状态 |
 |---|---|
-| macOS（Apple Silicon） | 全部里程碑在这里开发和实测：构建、运行、替换、回滚、`service install`（launchd）、`cordis pack` 发布包 |
-| Linux | 代码路径存在（`.so` 插件、systemd 用户单元、ELF 发布检查），**没有实测过，也没有持续集成**。首次部署到 Linux 时按下文“首次上线检查”完整走一遍，遇到问题向 Rust-cordis 维护者报告 |
+| macOS（Apple Silicon） | 完整开发、实测与官方发布包验证：构建、运行、热替换、回滚、`service install`（launchd）、`cordis pack` 发布包 |
+| Linux | 核心、协议、多语言 SDK、形式化验证与一致性矩阵已在 Ubuntu CI 持续验证；`.so` 插件、systemd 用户单元与 ELF 发布包在目标机首次上线前仍需按“首次上线检查”完整走一遍 |
 | Windows | 不支持 |
 
 不要因为 macOS 上通过就默认 Linux 也通过。
@@ -53,15 +53,24 @@ cordis service install --name com.example.app \
 - 按故障域和信任边界划分原生分组。每增加一个独立分组就多一个宿主进程，跨组调用还需要 UP/1 编解码。共用宿主的原生插件仍各有动态库、部署声明及可能存在的安装和热替换副本。
 - 插件之间需要传递大块数据（文件、清单、历史记录）时，无论是否同组，都用 `cordis.byte-stream@1.0` 等流式接口分块传递，不要放进一次调用的参数或返回值。
 
-容量按进程累加：核心一个进程，每个原生分组一个 `cordis-host`，每个进程插件一个解释器进程。在 macOS arm64 上实测，一个只装一个插件的空闲 `cordis-host` 约占 3–5 MB 物理内存、8–14 个线程（宿主执行器、协议读写、阻塞线程池，以及插件库的 tokio 工作线程）。小内存机器上：
+容量按进程累加：核心一个进程，每个原生分组一个 `cordis-host`，每个进程插件一个解释器进程。在 macOS arm64（v0.3.0+）实测：空核心约 **2.1 MiB**，单个装有插件的空闲 `cordis-host` 约 **3.6–4.5 MiB**；3 个插件共享 1 个宿主总物理足迹约 **5.74 MiB / 26 线程**，拆成 3 个独立宿主会升至 **9.74 MiB / 41.5 线程**。
 
-1. 先在目标机器上 `cordis run`，用 `ps` 或 `top` 记录每个进程的常驻内存；
-2. 合并可信的原生插件分组，减少宿主进程数；
+如果观察到 `cordis-host` 内存或线程持续偏高，通常由以下四个因素叠加引起，按顺序排查和控制：
+
+1. **宿主过多：** 新工程使用 `format_version = 2`（省略 `group` 默认共享 `native` 组），把可信、稳定的原生插件合组，只给需要独立故障域的重型或实验插件单独分 `group`。
+2. **插件重复自带 Tokio：** 不调用第三方 Tokio 生态的原生插件一律在 `export_plugin!` 声明 `tokio = false`（并关闭 `cordis-sdk` 默认 `tokio` feature），避免每个 `.dylib` 各自拉起一套 Tokio 运行时。
+3. **大载荷顶高分配器水位：** 单次跨宿主大消息（如数 MiB 并发载荷）同时经历 `AbiBuf`、CBOR 值树与 UP/1 帧，会把系统 malloc arena 推到数十至上百 MiB 且不易立刻回落操作系统；大对象（文件、长清单、二进制产物）必须改走 `cordis.byte-stream@1.0` 或落盘传引用，RPC 只传小参数和小回执。
+4. **热替换累积退役 `.dylib` 映像：** `cordis-host` 默认 `unload = "never"`，热替换后的旧版动态库保留在地址空间直到宿主退出。小内存或高频热替换环境调低 `retired_image_limit`（例如 4–8），让监管器在退役映像达到阈值时自动平滑重启宿主，彻底归还旧映像和分配器高水位。
+
+小内存机器上线前：
+
+1. 先在目标机器上 `cordis run`，用 `ps` / `top` / `footprint` 记录稳态与压测后的常驻内存；
+2. 合并可信的原生插件分组，并核对无用 `tokio` 的插件已设为 `tokio = false`；
 3. Python 与 Node 进程插件按包启动解释器进程。同一业务能力的小职责优先在一个包内用模块或组件组织。发布包可为同语言插件共用解释器目录，各插件目录中的依赖按实际装配计入安装体积。
 
 ## 运行时参数
 
-`cordis.toml` 的 `[runtime]` 段，括号内为缺省值：
+`cordis.toml` 顶层推荐使用 `format_version = 2`（原生插件缺省归入共享 `native` 组）；`[runtime]` 段括号内为缺省值：
 
 | 参数 | 含义 | 影响 |
 |---|---|---|
@@ -69,6 +78,8 @@ cordis service install --name com.example.app \
 | `lifecycle_timeout_ms`（30000） | 一次 apply、一次效应清理、一次状态导出、一次替换等待各自的上限 | apply 里不做长时间等待；清理中只关闭和等待自己的资源；导出器只复制内存状态，大块数据放数据目录，状态里只存引用 |
 | `checkpoint_ms`（60000，0 表示关闭） | 定期检查点间隔 | 核心崩溃时最多丢失这段时间内的内存状态；有序退出总会写最终状态 |
 | `restart_max`（5）、`restart_backoff_ms`（500） | 原生分组崩溃后的重启次数与首次退避，退避逐次翻倍 | 进程插件在自己的清单中用 `restart = { max = 5, backoff_ms = 500 }` |
+| `unload`（`never`） | 原生库退役策略：`never` 保留映像至宿主退出，`when-unleased` 在租约归零后尝试 `dlclose` | 默认 `never` 最稳妥，配合 `retired_image_limit` 回收内存 |
+| `retired_image_limit`（20）、`retired_image_basis`（`retired`） | 触发原生宿主组平滑重启的退役库阈值与计量口径（`retired` 累计退役、`unclosed` 未关闭句柄、`mapped` 物理映射） | 高频热替换或小内存机器建议把阈值调低到 4–8，定期通过平滑重启释放旧库和内存水位 |
 | `require_verified`（false） | 只装载通过契约验证的库 | 生产环境建议开启，见[验证与部署](verification-deployment.md) |
 
 全局参数影响所有插件。不要为了一个慢方法调大 `invoke_timeout_ms`：它同时推迟了对所有卡死插件的发现。

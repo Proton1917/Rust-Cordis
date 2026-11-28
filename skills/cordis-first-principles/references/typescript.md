@@ -17,7 +17,11 @@ cordis run
 使用方组件：注入 `kv@1.0`，迁移自己的计数状态，在效应中归还客户端，运行后台任务。
 
 ```sh
+# 脚手架内嵌源码或网页模块（独立单文件，不依赖外部包名）：
 cordis idl gen interfaces/kv.wit --lang ts --output plugins/visits/src/bindings.ts
+
+# 通过 package.json 依赖同版 cordis-sdk 包时（推荐，共用内置 WIT 运行时，生成文件更精简）：
+cordis idl gen interfaces/kv.wit --lang ts-sdk --output plugins/visits/src/bindings.ts
 ```
 
 ```ts

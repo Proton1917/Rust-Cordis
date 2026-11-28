@@ -60,11 +60,21 @@ impl Component for Watcher {
 cordis_sdk::export_plugin!(
     name = "watcher",
     version = env!("CARGO_PKG_VERSION"),
-    components = [Watcher]
+    components = [Watcher],
+    tokio = false
 );
 ```
 
 提供方的完整写法（共享状态锁、冻结、导出、事件）见 `templates/provider.rs`。
+
+## 原生执行环境与 ABI 1.2
+
+1. **按需开启库级 Tokio，省内存和线程（ADR-0055）：** 每个 Rust 动态库（`cdylib`）静态链接独立一份依赖，默认 `tokio` feature 会在首次调用时为该库单独起一个单工作线程的 Tokio 运行时。
+   - **仅使用 `Context` 入口（`spawn`、`sleep`、`wait`、`effect`）和标准库/同步库的插件，一律在 `export_plugin!` 中写 `tokio = false`**（并在 `Cargo.toml` 为 `cordis-sdk` 设置 `default-features = false`），彻底消除每库一套冗余 Tokio 运行时和线程栈。
+   - **只有插件内部调用依赖 Tokio reactor 的第三方异步库（如 `reqwest`、`sqlx`、`tokio::net`）时，才保留默认的 `tokio = true`**。即便开启库级 Tokio，归属实例寿命的后台任务依然必须用 `context.spawn`，不要用全局 `tokio::spawn`。
+2. **同步等待交给宿主（ADR-0051）：** 异步方法直接 `.await`；同步服务方法里等待异步调用必须用 `context.wait(...)`（经 ABI 1.1 `block_in_place` 交还工作线程），严禁自行 `block_on`。长时间阻塞的 C 库或磁盘计算放进 `context.spawn_thread`。
+3. **ABI 1.2 类型化直调与自动降级（ADR-0056）：** `#[interface]` 生成的同宿主类型化方法表携带布局摘要（含异步方法返回 `Future` 的最终结果机器类型标记 `OBJECT_TYPED_ASYNC_RESULTS`）。两端用同版 SDK 且摘要匹配时直接走纳秒级类型化调用；与旧 SDK 混用或布局摘要不一致时，自动降级为按方法名 CBOR 分派，避免虚表错位崩溃。
+4. **保持 `panic = "unwind"`：** 原生插件发生 panic 时，宿主在 ABI 边界捕获并转为错误码 5 返回调用方；设置 `panic = "abort"` 会直接拉垮整组宿主进程。
 
 ## 组件与声明
 

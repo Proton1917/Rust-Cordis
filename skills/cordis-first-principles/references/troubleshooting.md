@@ -19,4 +19,7 @@
 | 替换后状态丢失或回滚 | 未声明状态模式，或继承时模式名、版本核对失败 | 核对 state 声明与 apply 中的继承检查 |
 | 插件反复重启后停在失败状态 | 进程崩溃，重启次数已耗尽 | 看日志修复原因，见[生产部署与运维](deployment.md)“崩溃与恢复” |
 | Python 插件 `ModuleNotFoundError` | 依赖没有装进插件的 `.dependencies` | 按 [Python 插件](python.md) 安装 |
+| 跨进程调用返回错误码 8（超出协议预算） | 单次参数或返回值超过 UP/1 限额（缺省 `max_frame` 16 MiB、`max_values` 262,144 个值节点或嵌套深度上限） | 推论 4：大清单、文件或二进制内容改用 `cordis.byte-stream@1.0`、分页或持久引用，RPC 只传小参数和小回执 |
+| `cordis-host` 内存或线程数持续偏高 | 多宿主未合组（格式 1）；不需要第三方 Tokio 的插件未写 `tokio = false`；大载荷经 RPC 顶高分配器水位；热替换累积退役 `.dylib` 未触达重启阈值 | 升级到 `format_version = 2` 共享 `native` 组；纯逻辑插件设置 `tokio = false`；大载荷改走流；调低 `retired_image_limit`（见[生产部署与运维](deployment.md#分组与容量)） |
+| 混用不同 SDK 版本编译的原生插件变慢 | ABI 1.2 检测到类型化方法表或异步结果布局摘要不匹配，自动降级为按方法名 CBOR 分派 | 属于防崩溃保护行为；用同一版 `cordis-sdk` 重新编译两端插件即可恢复类型化直调 |
 | `cordis pack` 报告私有路径 | 产物含本机 HOME 或用户名 | 推论 2，见[打包](packaging.md) |
