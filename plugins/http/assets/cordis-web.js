@@ -2745,10 +2745,12 @@ var Service = class _Service {
       (service) => service.interface === interfaceName
     );
     if (!descriptor) throw new CordisError(3, `\u63A5\u53E3\u63CF\u8FF0\u7F3A\u5E2D\uFF1A${interfaceName}`);
+    this.className = descriptor.class;
     this.methods = descriptor.methods.map((method) => method.name);
     if (scoped) this.methods.push("cordis.scope");
   }
   methods;
+  className;
   exported() {
     const provider = this.provider instanceof Remote ? this.provider.clone() : this.provider;
     return new _Service(provider, this.binding, this.interfaceName, this.scoped);
@@ -2771,10 +2773,7 @@ var Service = class _Service {
     const values = transport.incoming(args, payload);
     let provider = this.provider;
     if (provider instanceof Remote) {
-      const descriptor = this.binding.SCHEMA.services.find(
-        (service) => service.interface === this.interfaceName
-      );
-      const client = this.binding[`${descriptor.class}Client`];
+      const client = this.binding[`${this.className}Client`];
       provider = new client(provider);
     }
     return this.binding.dispatch(provider, transport, this.interfaceName, method, values);

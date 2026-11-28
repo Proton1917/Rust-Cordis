@@ -55,12 +55,16 @@ pub fn python(document: &Document, shared: bool) -> Result<String> {
     Ok(output)
 }
 
-pub fn typescript(document: &Document) -> Result<String> {
-    let mut output = String::from(include_str!("templates/runtime.ts"));
+pub fn typescript(document: &Document, shared: bool) -> Result<String> {
+    let mut output = String::from(if shared {
+        "// DOC-15 §7、ADR-0039：绑定以显式 Transport 管理调用与资源引用。\nimport { Tagged, Some, bindRuntime, type Option, type ResultValue, type Transport, type Schema } from \"cordis-sdk\";\nexport { Tagged, Some, type Option, type ResultValue, type Transport };\n"
+    } else {
+        include_str!("../../../sdks/typescript/cordis-sdk/src/wit.ts")
+    });
     writeln!(
         output,
         "\nexport const SCHEMA: Schema = {};\n",
-        serde_json::to_string_pretty(&schema::document(document))?
+        serde_json::to_string(&schema::document(document))?
     )?;
     let generator = Generator {
         document,
@@ -80,13 +84,14 @@ pub fn typescript(document: &Document) -> Result<String> {
         "\nconst CLIENTS: Record<string, new (transport: Transport) => unknown> = {{{}}};",
         generator
             .service_names()
-            .join(", ")
-            .split(", ")
-            .filter(|name| !name.is_empty())
+            .iter()
             .map(|name| format!("{name}: {name}Client"))
             .collect::<Vec<_>>()
             .join(", ")
     )?;
+    output.push_str(
+        "const _runtime = bindRuntime(SCHEMA, CLIENTS);\nexport const { encodeValue, decodeValue, dispatch } = _runtime;\nconst { invoke } = _runtime;\n",
+    );
     Ok(output)
 }
 
@@ -306,7 +311,7 @@ impl Generator<'_> {
             }
             writeln!(
                 output,
-                "}}\nexport class {class}Client {{\n    constructor(private readonly transport: Transport) {{}}"
+                "}}\nexport class {class}Client {{\n    private readonly transport: Transport;\n    constructor(transport: Transport) {{\n        this.transport = transport;\n    }}"
             )?;
         }
         for (index, method) in methods.iter().enumerate() {

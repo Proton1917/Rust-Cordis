@@ -68,6 +68,7 @@ export class Payload {
 
 export class Service {
     readonly methods: string[];
+    private readonly className: string;
     constructor(
         readonly provider: object,
         readonly binding: Binding,
@@ -78,6 +79,7 @@ export class Service {
             (service) => service.interface === interfaceName,
         );
         if (!descriptor) throw new CordisError(3, `接口描述缺席：${interfaceName}`);
+        this.className = descriptor.class;
         this.methods = descriptor.methods.map((method) => method.name);
         if (scoped) this.methods.push("cordis.scope");
     }
@@ -108,12 +110,9 @@ export class Service {
         const values = transport.incoming(args, payload) as unknown[];
         let provider = this.provider;
         if (provider instanceof Remote) {
-            const descriptor = this.binding.SCHEMA.services.find(
-                (service) => service.interface === this.interfaceName,
-            )!;
             const client = (
                 this.binding as unknown as Record<string, new (transport: Remote) => object>
-            )[`${descriptor.class}Client`];
+            )[`${this.className}Client`];
             provider = new client(provider);
         }
         return this.binding.dispatch(provider, transport, this.interfaceName, method, values);

@@ -30,7 +30,7 @@ def prepare(options):
         (ROOT / "plugins/kv-api/kv.wit", fixture / "src/bindings.ts"),
         (ROOT / "tests/typescript-sdk/resources.wit", fixture / "src/resources-binding.ts"),
     ]:
-        command([cli, "idl", "gen", "--lang", "ts", "--output", str(destination), str(source)], evidence / f"generate-{destination.stem}.log", environment)
+        command([cli, "idl", "gen", "--lang", "ts-sdk", "--output", str(destination), str(source)], evidence / f"generate-{destination.stem}.log", environment)
     for name, directory in [("sdk", ROOT / "sdks/typescript/cordis-sdk"), ("kv", ROOT / "plugins/kv-ts"), ("fixtures", fixture)]:
         command(["npm", "ci", "--ignore-scripts", "--no-audit", "--no-fund", "--cache", str(ROOT / "target/npm-cache"), "--prefix", str(directory)], evidence / f"{name}-install.log", environment)
         command(["npm", "run", "build", "--prefix", str(directory)], evidence / f"{name}-build.log", environment)

@@ -23,7 +23,10 @@ pub fn generate(document: &Document, language: &str) -> Result<String> {
         "rust" => rust::generate(document),
         "python" => script::python(document, false),
         "python-sdk" => script::python(document, true),
-        "ts" | "typescript" => script::typescript(document),
-        _ => Err(format!("绑定语言 {language} 需要为 rust、python、python-sdk 或 ts").into()),
+        "ts" | "typescript" => script::typescript(document, false),
+        "ts-sdk" | "typescript-sdk" => script::typescript(document, true),
+        _ => {
+            Err(format!("绑定语言 {language} 需要为 rust、python、python-sdk、ts 或 ts-sdk").into())
+        }
     }
 }

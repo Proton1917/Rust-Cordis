@@ -10,3 +10,14 @@ export { fromChunks, copyStream, type ByteStream } from "./streams.js";
 export { fromFile, streamToFile } from "./streams-node.js";
 export { registerRoute, pageAttributes } from "./http.js";
 export { caller, type Caller } from "./metadata.js";
+export {
+    Tagged,
+    Some,
+    bindRuntime,
+    type Option,
+    type ResultValue,
+    type Schema,
+    type Spec,
+    type ClientConstructors,
+    type BoundRuntime,
+} from "./wit.js";

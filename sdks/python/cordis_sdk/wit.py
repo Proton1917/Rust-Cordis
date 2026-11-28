@@ -42,10 +42,17 @@ class _Binding:
     schema: dict
     classes: dict
     clients: dict
+    services_by_interface: dict
+    methods_by_service: dict
 
 
 def bind_runtime(schema, classes, clients):
-    binding = _Binding(schema, classes, clients)
+    services_by_interface = {service["interface"]: service for service in schema["services"]}
+    methods_by_service = {
+        service["interface"]: {method["name"]: method for method in service["methods"]}
+        for service in schema["services"]
+    }
+    binding = _Binding(schema, classes, clients, services_by_interface, methods_by_service)
     return tuple(partial(function, binding) for function in (_encode, _decode, _invoke_method, _dispatch))
 
 
@@ -175,7 +182,7 @@ def _decode(binding, spec, value, transport, method=False):
 
 
 async def _invoke_method(binding, transport, interface, index, args):
-    service = next(service for service in binding.schema["services"] if service["interface"] == interface)
+    service = binding.services_by_interface[interface]
     method = service["methods"][index]
     values = [_encode(binding, param["type"], value, transport, True) for param, value in zip(method["params"], args)]
     result = await transport.invoke(interface, method["name"], values, method["async"])
@@ -184,8 +191,10 @@ async def _invoke_method(binding, transport, interface, index, args):
 
 async def _dispatch(binding, provider, transport, interface, name, args):
     """ADR-0039：提供方按声明异步属性执行，再编码统一成功值。"""
-    service = next(service for service in binding.schema["services"] if service["interface"] == interface)
-    method = next(method for method in service["methods"] if method["name"] == name)
+    methods = binding.methods_by_service.get(interface)
+    if methods is None or name not in methods:
+        raise StopIteration
+    method = methods[name]
     if len(args) != len(method["params"]):
         raise ValueError("方法参数数量错误")
     values = [_decode(binding, param["type"], value, transport, True) for param, value in zip(method["params"], args)]

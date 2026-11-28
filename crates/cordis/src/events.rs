@@ -468,9 +468,13 @@ impl Context {
         options: EventOptions,
         once: bool,
     ) -> Result<Effect> {
-        if !self.kernel.state.lock().fibers[self.scope.fiber].alive {
-            return Err(Error::inactive().at(std::panic::Location::caller()));
-        }
+        let has_interceptor = {
+            let state = self.kernel.state.lock();
+            if !state.fibers[self.scope.fiber].alive {
+                return Err(Error::inactive().at(std::panic::Location::caller()));
+            }
+            state.hooks.contains_key(&EventId::of::<InternalListener>())
+        };
         let request = ListenerRegistration {
             context: self.clone(),
             name,
@@ -479,7 +483,7 @@ impl Context {
             event,
             callback,
         };
-        if let Some(effect) = self.bail::<InternalListener>(&request) {
+        if has_interceptor && let Some(effect) = self.bail::<InternalListener>(&request) {
             return Ok(effect);
         }
         self.register_hook(request)
@@ -568,14 +572,12 @@ impl Context {
         args: impl FnOnce() -> AnyArc,
         filter: Option<&dyn Fn(&Context) -> bool>,
     ) -> Vec<Arc<Hook>> {
-        if !name.as_ref().starts_with("internal/") {
-            let observed = self
-                .kernel
-                .state
-                .lock()
-                .hooks
-                .contains_key(&EventId::of::<InternalDispatch>());
-            if observed {
+        let mut hooks = {
+            let state = self.kernel.state.lock();
+            if !name.as_ref().starts_with("internal/")
+                && state.hooks.contains_key(&EventId::of::<InternalDispatch>())
+            {
+                drop(state);
                 self.emit::<InternalDispatch>(&Dispatch {
                     mode,
                     name: name.into(),
@@ -584,16 +586,17 @@ impl Context {
                     args: args(),
                     event: event.clone(),
                 });
+                self.kernel
+                    .state
+                    .lock()
+                    .hooks
+                    .get(&event)
+                    .cloned()
+                    .unwrap_or_default()
+            } else {
+                state.hooks.get(&event).cloned().unwrap_or_default()
             }
-        }
-        let mut hooks = self
-            .kernel
-            .state
-            .lock()
-            .hooks
-            .get(&event)
-            .cloned()
-            .unwrap_or_default();
+        };
         if let Some(filter) = filter {
             hooks.retain(|hook| {
                 hook.options.global

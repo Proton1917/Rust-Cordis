@@ -26,7 +26,7 @@ await run("hello", [{
 
 ## 调用服务与持有资源
 
-`cordis idl gen --lang ts` 生成接口、数据类型和远程 Client。导入整个生成模块作为 binding，再通过 `await context.get("kv@1.0", binding, binding.KvClient)` 取得服务。提供方通过 `await context.provide("kv@1.0", provider, binding)` 登记。脚本提供方的结果可以是普通值或 Promise；传输始终按协议异步完成。
+`cordis idl gen --lang ts` 生成自包含的接口、数据类型、编解码运行时和远程 Client；工程依赖同版 `cordis-sdk` 时可用 `--lang ts-sdk` 共用 SDK 内置的 WIT 编解码运行时。导入整个生成模块作为 binding，再通过 `await context.get("kv@1.0", binding, binding.KvClient)` 取得服务。提供方通过 `await context.provide("kv@1.0", provider, binding)` 登记。脚本提供方的结果可以是普通值或 Promise；传输始终按协议异步完成。
 
 `close(client)` 归还客户端持有的服务份额。通过参数、结果和复合值转交服务时，SDK 创建独立出口引用，转交的代理具有各自的释放周期。回收后的 JavaScript 对象由 FinalizationRegistry 归还最后份额；显式 `close` 适用于需要确定释放时点的代码。
 

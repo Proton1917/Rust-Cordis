@@ -189,17 +189,14 @@ impl Controller {
             && target.overlay == self.overlay
             && target.instances.len() == self.mounted.len()
             && target.instances.iter().all(|(name, item)| {
-                self.mounted.get(name).is_some_and(|old| {
-                    old.settings == item.settings
-                        && old.package.reference == item.package.reference
-                        && Arc::ptr_eq(&old.scope, &item.scope)
-                }) && self.instance_fiber(name).is_ok_and(|fiber| {
-                    fiber.is_settled()
-                        && matches!(
-                            fiber.state(),
-                            cordis::FiberState::Active | cordis::FiberState::Pending
-                        )
-                })
+                self.mounted.get(name).is_some_and(|old| old.same_as(item))
+                    && self.instance_fiber(name).is_ok_and(|fiber| {
+                        fiber.is_settled()
+                            && matches!(
+                                fiber.state(),
+                                cordis::FiberState::Active | cordis::FiberState::Pending
+                            )
+                    })
             })
         {
             return Ok(());
@@ -218,11 +215,7 @@ impl Controller {
                 return Err(problem);
             }
             Err(web::PreparationFailure::RecoveryRequired(problem, pages)) => {
-                self.held_target = Some(PendingTarget {
-                    _target: target,
-                    _pages: pages,
-                });
-                return self.require_recovery(problem);
+                return self.hold_and_require_recovery(target, pages, problem);
             }
         };
         self.diagnostics.lock().candidate_forwarders = Some(Arc::new(
@@ -297,11 +290,7 @@ impl Controller {
                 Ok(())
             }
             Err(BatchFailure::RecoveryRequired(problem)) => {
-                self.held_target = Some(PendingTarget {
-                    _target: target,
-                    _pages: pages,
-                });
-                self.require_recovery(problem)
+                self.hold_and_require_recovery(target, pages, problem)
             }
             Err(failure) => {
                 let problem = match failure {
@@ -315,11 +304,11 @@ impl Controller {
                 };
                 self.diagnostics.lock().candidate_forwarders = None;
                 if let Err(recovery) = self.rollback_web_changes(&pages).await {
-                    self.held_target = Some(PendingTarget {
-                        _target: target,
-                        _pages: pages,
-                    });
-                    return self.require_recovery(web::recovery_error("批次", problem, recovery));
+                    return self.hold_and_require_recovery(
+                        target,
+                        pages,
+                        web::recovery_error("批次", problem, recovery),
+                    );
                 }
                 if let Err(cleanup) = release_mounts(target.instances).await {
                     return self.require_recovery(web::recovery_error(
@@ -377,11 +366,7 @@ impl Controller {
         for name in names {
             let old = self.mounted.get(name);
             let next = target.instances.get(name);
-            if old.zip(next).is_some_and(|(old, next)| {
-                old.settings == next.settings
-                    && old.package.reference == next.package.reference
-                    && Arc::ptr_eq(&old.scope, &next.scope)
-            }) {
+            if old.zip(next).is_some_and(|(old, next)| old.same_as(next)) {
                 continue;
             }
             let specification = next
@@ -706,9 +691,28 @@ impl Controller {
         }
         Ok(())
     }
+
+    fn hold_and_require_recovery(
+        &mut self,
+        target: TargetDeployment,
+        pages: Vec<web::WebChange>,
+        problem: WireError,
+    ) -> Result<()> {
+        self.held_target = Some(PendingTarget {
+            _target: target,
+            _pages: pages,
+        });
+        self.require_recovery(problem)
+    }
 }
 
 impl Mounted {
+    fn same_as(&self, other: &Self) -> bool {
+        self.settings == other.settings
+            && self.package.reference == other.package.reference
+            && Arc::ptr_eq(&self.scope, &other.scope)
+    }
+
     fn remount(&self, old: Option<&Self>) -> bool {
         old.is_none_or(|old| !Arc::ptr_eq(&old.scope, &self.scope))
     }
