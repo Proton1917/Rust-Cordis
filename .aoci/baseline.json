@@ -1,7 +1,7 @@
 {
   "version": 1,
   "created_at": "2026-11-19T12:29:42Z",
-  "updated_at": "2026-11-27T03:56:21Z",
+  "updated_at": "2026-11-28T03:34:09Z",
   "files": {
     ".gitattributes": {
       "role": "index",
@@ -11,9 +11,9 @@
     },
     ".github/workflows/conformance.yml": {
       "role": "index",
-      "sha256": "cbb90a7703ebe859d30bc2c09a4324c379b3595a963a0e76c3778ea22dc0fb5c",
-      "size": 4998,
-      "normalized_sha256": "cbb90a7703ebe859d30bc2c09a4324c379b3595a963a0e76c3778ea22dc0fb5c"
+      "sha256": "19c80d6aa87d320e157411eaee6f6b7e53c5ecf810216847dc0f857fb10a0911",
+      "size": 5872,
+      "normalized_sha256": "19c80d6aa87d320e157411eaee6f6b7e53c5ecf810216847dc0f857fb10a0911"
     },
     ".github/workflows/runtime-ownership.yml": {
       "role": "index",
@@ -65,9 +65,9 @@
     },
     "aoci.code.txt": {
       "role": "index",
-      "sha256": "34deb7b26eed77d8dff2ddc2bc281740e3cd8cf1219d19869fbab45262292871",
-      "size": 189412,
-      "normalized_sha256": "34deb7b26eed77d8dff2ddc2bc281740e3cd8cf1219d19869fbab45262292871"
+      "sha256": "f3210169c3c3281f5df0c8abb7f2b37446874c756469c1507786eb8ca28c60cb",
+      "size": 189780,
+      "normalized_sha256": "f3210169c3c3281f5df0c8abb7f2b37446874c756469c1507786eb8ca28c60cb"
     },
     "aoci.meta.txt": {
       "role": "index",
@@ -503,9 +503,9 @@
     },
     "crates/cordis-dev/src/pack/plugins.rs": {
       "role": "index",
-      "sha256": "65cc8cb87457394ffb0df348c5dab83b6bb8aa84007ead45631c01afab95d6fc",
-      "size": 16631,
-      "normalized_sha256": "65cc8cb87457394ffb0df348c5dab83b6bb8aa84007ead45631c01afab95d6fc"
+      "sha256": "3f8c105a394ac6b2bd2442c48e01c72c6076640175e12c3200b75796f8c52831",
+      "size": 16692,
+      "normalized_sha256": "3f8c105a394ac6b2bd2442c48e01c72c6076640175e12c3200b75796f8c52831"
     },
     "crates/cordis-dev/src/pack/plugins/verification.rs": {
       "role": "index",
@@ -659,9 +659,9 @@
     },
     "crates/cordis-dev/tests/python.rs": {
       "role": "observe",
-      "sha256": "7acbb12c33d073f344fa9f3ce785e10e2f63c4220a2c940f810ac3df06a99042",
-      "size": 5100,
-      "normalized_sha256": "7acbb12c33d073f344fa9f3ce785e10e2f63c4220a2c940f810ac3df06a99042"
+      "sha256": "79fa82789d00a09912824f4474cd303da8490dd4135fd37fff3599f509adeb0e",
+      "size": 5090,
+      "normalized_sha256": "79fa82789d00a09912824f4474cd303da8490dd4135fd37fff3599f509adeb0e"
     },
     "crates/cordis-dev/tests/scaffold.rs": {
       "role": "observe",
@@ -731,9 +731,9 @@
     },
     "crates/cordis-host/src/lease.rs": {
       "role": "index",
-      "sha256": "0f1b892a8901dd77fd56cc609501fe86e7c347bd9c8855d46c8cb9ac1299bdf5",
-      "size": 17686,
-      "normalized_sha256": "0f1b892a8901dd77fd56cc609501fe86e7c347bd9c8855d46c8cb9ac1299bdf5"
+      "sha256": "d9671883864e566a872c508e45df0eeb1e28a5b5e70c3058947a11a38189b66e",
+      "size": 17776,
+      "normalized_sha256": "d9671883864e566a872c508e45df0eeb1e28a5b5e70c3058947a11a38189b66e"
     },
     "crates/cordis-host/src/lib.rs": {
       "role": "index",
@@ -779,9 +779,9 @@
     },
     "crates/cordis-host/src/wire.rs": {
       "role": "index",
-      "sha256": "0d138d64c597ec35ab8f5682f7a7e33f8b0bc7cedd299df80de1e794fec73083",
-      "size": 6757,
-      "normalized_sha256": "0d138d64c597ec35ab8f5682f7a7e33f8b0bc7cedd299df80de1e794fec73083"
+      "sha256": "edd33e6b7d6b12f924269594a1b380ae385ef6733b3153bf19e2ed7afef40627",
+      "size": 7890,
+      "normalized_sha256": "edd33e6b7d6b12f924269594a1b380ae385ef6733b3153bf19e2ed7afef40627"
     },
     "crates/cordis-host/tests/driver/Cargo.lock": {
       "role": "observe",
@@ -995,9 +995,9 @@
     },
     "crates/cordis-routing/src/transfer.rs": {
       "role": "index",
-      "sha256": "945bcf8eb9c8f22cff40f2cb5334b609bfde9be120ba24f13718178586a3dc6f",
-      "size": 9940,
-      "normalized_sha256": "945bcf8eb9c8f22cff40f2cb5334b609bfde9be120ba24f13718178586a3dc6f"
+      "sha256": "89fd1171fa50995477d79b6fcfb60d0a04d660fc39d0549da36403aa089c8121",
+      "size": 10924,
+      "normalized_sha256": "89fd1171fa50995477d79b6fcfb60d0a04d660fc39d0549da36403aa089c8121"
     },
     "crates/cordis-runtime/Cargo.toml": {
       "role": "index",
@@ -1097,9 +1097,9 @@
     },
     "crates/cordis-runtime/src/control/batch.rs": {
       "role": "index",
-      "sha256": "a04f4367576d328b49ce56aa123e8c5e564674e2eb763352000b9dacb87ad76c",
-      "size": 28376,
-      "normalized_sha256": "a04f4367576d328b49ce56aa123e8c5e564674e2eb763352000b9dacb87ad76c"
+      "sha256": "3c47126471545ce52e621395844d521d7854e9624b832d2c9792cc069a4291b4",
+      "size": 28603,
+      "normalized_sha256": "3c47126471545ce52e621395844d521d7854e9624b832d2c9792cc069a4291b4"
     },
     "crates/cordis-runtime/src/control/contract.rs": {
       "role": "index",
@@ -1133,9 +1133,9 @@
     },
     "crates/cordis-runtime/src/deployment.rs": {
       "role": "index",
-      "sha256": "5b92e1bcfdfb0403dd04495d7021acd5aeee90e2674e9fad6ea211422114a7e3",
-      "size": 7160,
-      "normalized_sha256": "5b92e1bcfdfb0403dd04495d7021acd5aeee90e2674e9fad6ea211422114a7e3"
+      "sha256": "4b1a4f5ddc691612aa394a767983e154935cf6240a4237d3822b22cba80c5d09",
+      "size": 7211,
+      "normalized_sha256": "4b1a4f5ddc691612aa394a767983e154935cf6240a4237d3822b22cba80c5d09"
     },
     "crates/cordis-runtime/src/executor.rs": {
       "role": "index",
@@ -1181,9 +1181,9 @@
     },
     "crates/cordis-runtime/src/runtime.rs": {
       "role": "index",
-      "sha256": "70366aaf1d92f89e856cf41014f3ab4b045df3eff67e650e8274a2e5c95db893",
-      "size": 29631,
-      "normalized_sha256": "70366aaf1d92f89e856cf41014f3ab4b045df3eff67e650e8274a2e5c95db893"
+      "sha256": "955d91500ab7ec372650f035ebcb47ea2319f0a3fc337ac3d083412a6783c7aa",
+      "size": 29817,
+      "normalized_sha256": "955d91500ab7ec372650f035ebcb47ea2319f0a3fc337ac3d083412a6783c7aa"
     },
     "crates/cordis-runtime/src/runtime/owner.rs": {
       "role": "index",
@@ -1193,9 +1193,9 @@
     },
     "crates/cordis-runtime/src/status.rs": {
       "role": "index",
-      "sha256": "92e7880f796706d70f59e00356329c13e1f954f6f91981bc7f77ea28513048cd",
-      "size": 12631,
-      "normalized_sha256": "92e7880f796706d70f59e00356329c13e1f954f6f91981bc7f77ea28513048cd"
+      "sha256": "2615d6cf30b8b3298c472db71d0cb6e4e0d1dd452ad250069e74de99d9cf0d40",
+      "size": 12720,
+      "normalized_sha256": "2615d6cf30b8b3298c472db71d0cb6e4e0d1dd452ad250069e74de99d9cf0d40"
     },
     "crates/cordis-runtime/src/storage.rs": {
       "role": "index",
@@ -1517,9 +1517,9 @@
     },
     "crates/cordis-supervisor/src/manager/batch.rs": {
       "role": "index",
-      "sha256": "1ce23841e0095ff6a4440c6d366c6010af40e0c557aff7f210a1e732786c3a7a",
-      "size": 57664,
-      "normalized_sha256": "1ce23841e0095ff6a4440c6d366c6010af40e0c557aff7f210a1e732786c3a7a"
+      "sha256": "6f7b7910b8f55b6aaa2b62432b09ed259454d18367c7fccb59b06894c42570cd",
+      "size": 58134,
+      "normalized_sha256": "6f7b7910b8f55b6aaa2b62432b09ed259454d18367c7fccb59b06894c42570cd"
     },
     "crates/cordis-supervisor/src/manager/generation.rs": {
       "role": "index",
@@ -1583,9 +1583,9 @@
     },
     "crates/cordis-supervisor/src/manager/views.rs": {
       "role": "index",
-      "sha256": "987a1cef90c11a940c336bb3544b83e4015418d8df20f39c33c4bf65946e2324",
+      "sha256": "d166cdde3212a4d08acf575ed9e6c6bf3d7299d748575959e3aac33d37008f42",
       "size": 14409,
-      "normalized_sha256": "987a1cef90c11a940c336bb3544b83e4015418d8df20f39c33c4bf65946e2324"
+      "normalized_sha256": "d166cdde3212a4d08acf575ed9e6c6bf3d7299d748575959e3aac33d37008f42"
     },
     "crates/cordis-supervisor/tests/manager.rs": {
       "role": "observe",
@@ -1631,9 +1631,9 @@
     },
     "crates/cordis-testkit/src/python.rs": {
       "role": "index",
-      "sha256": "60f366cf4c373024fdcd03e6237c780a795bc12aa53c55d0c5a13206df8af469",
-      "size": 1265,
-      "normalized_sha256": "60f366cf4c373024fdcd03e6237c780a795bc12aa53c55d0c5a13206df8af469"
+      "sha256": "ecc2a4fe763d275e26009eb82da33389d34b97512704b9a5a9d44480b76cbf33",
+      "size": 1853,
+      "normalized_sha256": "ecc2a4fe763d275e26009eb82da33389d34b97512704b9a5a9d44480b76cbf33"
     },
     "crates/cordis-testkit/tests/cleanup.rs": {
       "role": "observe",
@@ -1697,9 +1697,9 @@
     },
     "crates/cordis-up/src/codec.rs": {
       "role": "index",
-      "sha256": "f1b2ff15b179486d39c7c3d2bbabded04d26671e45c92043abae1ed567a8df85",
-      "size": 23812,
-      "normalized_sha256": "f1b2ff15b179486d39c7c3d2bbabded04d26671e45c92043abae1ed567a8df85"
+      "sha256": "ba44cf6242b4f50dd4894972ece3d88f206e35843c9c7dc1100d45348389d958",
+      "size": 24767,
+      "normalized_sha256": "ba44cf6242b4f50dd4894972ece3d88f206e35843c9c7dc1100d45348389d958"
     },
     "crates/cordis-up/src/lib.rs": {
       "role": "index",
@@ -1721,9 +1721,9 @@
     },
     "crates/cordis-up/src/rpc.rs": {
       "role": "index",
-      "sha256": "1721976376f72a5b40902637467b9a54cdcb497b3d0bb11e5b9d41d7a12fe1ae",
-      "size": 43629,
-      "normalized_sha256": "1721976376f72a5b40902637467b9a54cdcb497b3d0bb11e5b9d41d7a12fe1ae"
+      "sha256": "37376c5b790e54161eb8aa99d05e5bd3fb00f7da295726c63580edede004967b",
+      "size": 44948,
+      "normalized_sha256": "37376c5b790e54161eb8aa99d05e5bd3fb00f7da295726c63580edede004967b"
     },
     "crates/cordis-up/src/rpc/buffer.rs": {
       "role": "index",
@@ -1877,15 +1877,15 @@
     },
     "crates/cordis/src/events.rs": {
       "role": "index",
-      "sha256": "6b1d06a1f81d16c31406b32f828f60b70bf127a1349e8e0b1531d6ace0a69cc6",
-      "size": 28421,
-      "normalized_sha256": "6b1d06a1f81d16c31406b32f828f60b70bf127a1349e8e0b1531d6ace0a69cc6"
+      "sha256": "fe06cec59c12a1f7f79bdd256309eaca5cd25a2dc557269d78f67978d217ba29",
+      "size": 29234,
+      "normalized_sha256": "fe06cec59c12a1f7f79bdd256309eaca5cd25a2dc557269d78f67978d217ba29"
     },
     "crates/cordis/src/fiber.rs": {
       "role": "index",
-      "sha256": "4b3bc9588b7bff4937b8f7fdf6460885b52fbe90f2be697a23f88beb3c44dd0a",
-      "size": 39436,
-      "normalized_sha256": "4b3bc9588b7bff4937b8f7fdf6460885b52fbe90f2be697a23f88beb3c44dd0a"
+      "sha256": "1994fe5fb10898fda328887e27b71d6b9b8fbd194a2f7f50296d8b346dfb2e42",
+      "size": 39447,
+      "normalized_sha256": "1994fe5fb10898fda328887e27b71d6b9b8fbd194a2f7f50296d8b346dfb2e42"
     },
     "crates/cordis/src/identity.rs": {
       "role": "index",
@@ -1895,9 +1895,9 @@
     },
     "crates/cordis/src/kernel.rs": {
       "role": "index",
-      "sha256": "9e7128e50b16d05e8033efeae459e5c32c680b04dd6ef92af97ed07e37836ff0",
-      "size": 4881,
-      "normalized_sha256": "9e7128e50b16d05e8033efeae459e5c32c680b04dd6ef92af97ed07e37836ff0"
+      "sha256": "d15b4461e7370dcba686af788eb43c43258c3b3162799c6addfdd0bfd0e2e51f",
+      "size": 6109,
+      "normalized_sha256": "d15b4461e7370dcba686af788eb43c43258c3b3162799c6addfdd0bfd0e2e51f"
     },
     "crates/cordis/src/lib.rs": {
       "role": "index",
@@ -1931,9 +1931,9 @@
     },
     "crates/cordis/src/reflect.rs": {
       "role": "index",
-      "sha256": "66b2408c69dbb07352e409e1d37f930452cc7ac5c27c6577a93019f7cfa08ab3",
-      "size": 40197,
-      "normalized_sha256": "66b2408c69dbb07352e409e1d37f930452cc7ac5c27c6577a93019f7cfa08ab3"
+      "sha256": "f9f2f566e6ee45ed9c9436af19cfc6b37940e28cbc15d46f7b9d1314a98c9de6",
+      "size": 40701,
+      "normalized_sha256": "f9f2f566e6ee45ed9c9436af19cfc6b37940e28cbc15d46f7b9d1314a98c9de6"
     },
     "crates/cordis/src/registry.rs": {
       "role": "index",
@@ -2009,9 +2009,9 @@
     },
     "crates/cordis/tests/event_hot_paths.rs": {
       "role": "observe",
-      "sha256": "4e48a64f7219c78578b27d06cbc5cfa537d0fa5f80335c219d8d2bff5806da86",
-      "size": 7221,
-      "normalized_sha256": "4e48a64f7219c78578b27d06cbc5cfa537d0fa5f80335c219d8d2bff5806da86"
+      "sha256": "a6d0443db60ea8babbd3a8f04f3328dd881faad6ac8ccda94abf93016c173346",
+      "size": 7318,
+      "normalized_sha256": "a6d0443db60ea8babbd3a8f04f3328dd881faad6ac8ccda94abf93016c173346"
     },
     "crates/cordis/tests/events.rs": {
       "role": "observe",
@@ -2063,9 +2063,9 @@
     },
     "crates/cordis/tests/plugin_principle.rs": {
       "role": "observe",
-      "sha256": "8b0c081c32b35164673d1a0d60b1488320963039a719e61fc17bec67f1d4d538",
-      "size": 12528,
-      "normalized_sha256": "8b0c081c32b35164673d1a0d60b1488320963039a719e61fc17bec67f1d4d538"
+      "sha256": "76b7555fcc3c232f1ceb2ff799c6139eaf9719a86cb1947cd78f91aabc4c5e23",
+      "size": 12600,
+      "normalized_sha256": "76b7555fcc3c232f1ceb2ff799c6139eaf9719a86cb1947cd78f91aabc4c5e23"
     },
     "crates/cordis/tests/reflect.rs": {
       "role": "observe",
@@ -3985,9 +3985,9 @@
     },
     "formal/check_kernel_refinement.py": {
       "role": "index",
-      "sha256": "c2a73a9dcdfe4bb04dd1ef5b44f399b49083fea7be96ce8f5a9463c74c675b4a",
-      "size": 20937,
-      "normalized_sha256": "c2a73a9dcdfe4bb04dd1ef5b44f399b49083fea7be96ce8f5a9463c74c675b4a"
+      "sha256": "5c41161c7399c4358729ddfa82609965dfed9dfd5c462d5096a762d20defb255",
+      "size": 20953,
+      "normalized_sha256": "5c41161c7399c4358729ddfa82609965dfed9dfd5c462d5096a762d20defb255"
     },
     "formal/check_upstream.py": {
       "role": "index",
@@ -3997,9 +3997,9 @@
     },
     "formal/check_wire_semantics.py": {
       "role": "index",
-      "sha256": "99b14f99f284415164418020bc48271d593544e5b2aabf2d8cbb9c4d5fbd5b4e",
-      "size": 20453,
-      "normalized_sha256": "99b14f99f284415164418020bc48271d593544e5b2aabf2d8cbb9c4d5fbd5b4e"
+      "sha256": "e6aacfffb219ca1b070395d78ded29fb14b486e0a6d47b792609e1d08e552fd2",
+      "size": 20449,
+      "normalized_sha256": "e6aacfffb219ca1b070395d78ded29fb14b486e0a6d47b792609e1d08e552fd2"
     },
     "formal/decision_probe.rs": {
       "role": "index",
@@ -4009,9 +4009,9 @@
     },
     "formal/kernel_refinement_probe.rs": {
       "role": "index",
-      "sha256": "fa338e0555fc7cc09750b314611afe8ea2df8b30097c2a4b1eb80b7347d03e6f",
-      "size": 30816,
-      "normalized_sha256": "fa338e0555fc7cc09750b314611afe8ea2df8b30097c2a4b1eb80b7347d03e6f"
+      "sha256": "727d0285c174f609d27a49301f8337aa95826ec599a6630a8f23b23f01491df1",
+      "size": 30955,
+      "normalized_sha256": "727d0285c174f609d27a49301f8337aa95826ec599a6630a8f23b23f01491df1"
     },
     "formal/lake-manifest.json": {
       "role": "index",
@@ -4291,9 +4291,9 @@
     },
     "plugins/http/assets/cordis-web.js": {
       "role": "index",
-      "sha256": "d8fe777724a599ca1c53c61301d3de6e639e795336ddfff61dce3376b96388f2",
-      "size": 130912,
-      "normalized_sha256": "d8fe777724a599ca1c53c61301d3de6e639e795336ddfff61dce3376b96388f2"
+      "sha256": "79a008b8732eeb1d2a63288ccc6b3c235303451341f6327ab8d38201a0d9e3f0",
+      "size": 130765,
+      "normalized_sha256": "79a008b8732eeb1d2a63288ccc6b3c235303451341f6327ab8d38201a0d9e3f0"
     },
     "plugins/http/assets/index.html": {
       "role": "index",
@@ -4639,9 +4639,9 @@
     },
     "sdks/python/cordis_sdk/budget.py": {
       "role": "index",
-      "sha256": "021e804656cfdb01e235bfa649d00073713bafde72ec361b13c9ead40f4888d7",
-      "size": 7118,
-      "normalized_sha256": "021e804656cfdb01e235bfa649d00073713bafde72ec361b13c9ead40f4888d7"
+      "sha256": "f4e5cc146b1f121a73e565563cb55b2cc832864749be729bccac5bf539832221",
+      "size": 13752,
+      "normalized_sha256": "f4e5cc146b1f121a73e565563cb55b2cc832864749be729bccac5bf539832221"
     },
     "sdks/python/cordis_sdk/context.py": {
       "role": "index",
@@ -4813,9 +4813,9 @@
     },
     "sdks/typescript/cordis-sdk/src/wire.ts": {
       "role": "index",
-      "sha256": "68722e79006371b0d76a66a4fc15a8ab7ce6f2f8903349fd2608eef727b9a2c1",
-      "size": 15309,
-      "normalized_sha256": "68722e79006371b0d76a66a4fc15a8ab7ce6f2f8903349fd2608eef727b9a2c1"
+      "sha256": "604a1beba902e707f75be0bd2a85dac9838e0804fc7f911bdf02e864a3c07b0c",
+      "size": 15354,
+      "normalized_sha256": "604a1beba902e707f75be0bd2a85dac9838e0804fc7f911bdf02e864a3c07b0c"
     },
     "sdks/typescript/cordis-sdk/tsconfig.json": {
       "role": "index",
@@ -5497,9 +5497,9 @@
     },
     "tests/python-sdk/test_budgets.py": {
       "role": "observe",
-      "sha256": "a741d08948b5ba4e78d46854033ea5523188683c723dac78873a829b5292b954",
-      "size": 3173,
-      "normalized_sha256": "a741d08948b5ba4e78d46854033ea5523188683c723dac78873a829b5292b954"
+      "sha256": "d9c9b9ffa6e1b0d0041a475fb9ad7e9d71766a24ce834e12a32eac13d8702639",
+      "size": 3929,
+      "normalized_sha256": "d9c9b9ffa6e1b0d0041a475fb9ad7e9d71766a24ce834e12a32eac13d8702639"
     },
     "tests/python-sdk/test_callback_admission.py": {
       "role": "observe",
