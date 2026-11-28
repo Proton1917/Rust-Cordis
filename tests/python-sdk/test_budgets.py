@@ -43,6 +43,18 @@ class BudgetsTest(unittest.TestCase):
             encode({"request": {"id": 1, "method": "probe", "params": graph}}, limits)
         self.assertEqual(rejected.exception.detail["limit"], "max_values")
 
+    def test_semantic_values_still_respect_budget_on_encode_and_decode(self):
+        from decimal import Decimal
+        limits = SimpleNamespace(max_depth=6, max_collection=64, max_values=64, max_frame=4096)
+        payload = {"request": {"id": 1, "method": "probe", "params": {"v": Decimal("12.34")}}}
+        encoded = encode(payload, limits)
+        self.assertEqual(decode(encoded, limits)["request"]["params"]["v"], Decimal("12.34"))
+        tight = SimpleNamespace(max_depth=4, max_collection=64, max_values=64, max_frame=4096)
+        with self.assertRaises(CordisError) as rejected:
+            encode(payload, tight)
+        self.assertEqual(rejected.exception.code, 8)
+        self.assertEqual(rejected.exception.detail["limit"], "max_depth")
+
 
 class ConnectionBudgetTest(unittest.IsolatedAsyncioTestCase):
     async def test_local_rejection_returns_offers(self):

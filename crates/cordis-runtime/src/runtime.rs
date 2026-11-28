@@ -37,8 +37,10 @@ pub async fn run_with_contract(path: PathBuf, plan: Option<Plan>) -> Result<()> 
     let path = path.canonicalize().map_err(io_error)?;
     let (directory, input) = crate::deployment::load_with_state_dir(&path)?;
     let owner = crate::storage::claim(&directory)?;
-    let mut terminate = signal(SignalKind::terminate()).map_err(io_error)?;
-    let mut interrupt = signal(SignalKind::interrupt()).map_err(io_error)?;
+    let mut signals = Signals {
+        terminate: signal(SignalKind::terminate()).map_err(io_error)?,
+        interrupt: signal(SignalKind::interrupt()).map_err(io_error)?,
+    };
     let lifetime = RuntimeRoot::new(owner);
     let root = lifetime.context();
     let result = async {
@@ -69,8 +71,7 @@ pub async fn run_with_contract(path: PathBuf, plan: Option<Plan>) -> Result<()> 
             controller,
             requests,
             view,
-            &mut terminate,
-            &mut interrupt,
+            &mut signals,
             session.as_ref(),
             candidate,
         )
@@ -183,14 +184,18 @@ fn register_services(
     Ok(logs)
 }
 
+struct Signals {
+    terminate: Signal,
+    interrupt: Signal,
+}
+
 /// DOC-15 CP-11：状态发布与管理调度独立进行，启动失败也执行完整退出步骤。
 async fn serve(
     owner: &Context,
     mut controller: Controller,
     mut requests: mpsc::Receiver<Request>,
     view: View,
-    terminate: &mut Signal,
-    interrupt: &mut Signal,
+    signals: &mut Signals,
     session: Option<&Session>,
     candidate: Option<Result<Configuration>>,
 ) -> Result<()> {
@@ -203,8 +208,8 @@ async fn serve(
     if let Some(session) = session {
         let result = tokio::select! {
             result = session.run(&mut controller, candidate) => result,
-            _ = terminate.recv() => Err(WireError::new(7, "契约会话收到终止信号")),
-            _ = interrupt.recv() => Err(WireError::new(7, "契约会话收到中断信号")),
+            _ = signals.terminate.recv() => Err(WireError::new(7, "契约会话收到终止信号")),
+            _ = signals.interrupt.recv() => Err(WireError::new(7, "契约会话收到中断信号")),
             result = writer.completed() => result.and(Err(WireError::new(7, "契约会话状态发布任务已结束"))),
         };
         return finish(&mut controller, &mut requests, writer, result.map(|_| None)).await;
@@ -220,8 +225,8 @@ async fn serve(
                 &mut controller,
                 &mut requests,
                 &mut writer,
-                terminate,
-                interrupt,
+                &mut signals.terminate,
+                &mut signals.interrupt,
             )
             .await
         }
@@ -264,7 +269,7 @@ async fn dispatch_loop(
     loop {
         enum Work {
             Checkpoint(String),
-            Manage(Request),
+            Manage(Box<Request>),
         }
         let work = tokio::select! {
             biased;
@@ -273,7 +278,7 @@ async fn dispatch_loop(
             _ = admission.wait_for(|open| !*open) => return Ok(None),
             result = writer.completed() => return result.map(|_| None),
             request = requests.recv() => {
-                Work::Manage(request.ok_or_else(|| WireError::new(7, "管理队列已结束"))?)
+                Work::Manage(Box::new(request.ok_or_else(|| WireError::new(7, "管理队列已结束"))?))
             }
             _ = async {
                 match source_retry {
@@ -311,7 +316,7 @@ async fn dispatch_loop(
                     None
                 }
                 Work::Manage(request) => {
-                    let finished = dispatch(controller, request).await;
+                    let finished = dispatch(controller, *request).await;
                     writer.refresh.notify_one();
                     finished
                 }
@@ -459,11 +464,13 @@ impl StatusWriter {
             .effect("runtime-status", |scope| {
                 let task = owner.effect_async("status-publisher", move |_| async move {
                     let mut previous = Vec::new();
+                    let mut scratch = Vec::new();
                     let mut interval = tokio::time::interval(STATUS_PERIOD);
                     interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
                     let final_result = loop {
                         let finishing = *stopped.borrow_and_update();
-                        let published = status::write(&path, &view, &mut previous).await;
+                        let published =
+                            status::write(&path, &view, &mut previous, &mut scratch).await;
                         if finishing {
                             break published;
                         }

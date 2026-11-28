@@ -368,11 +368,17 @@ impl Drop for RemoteLease {
 pub struct Payload {
     value: Value,
     wire_bytes: usize,
+    has_resource_tags: bool,
     objects: HashMap<u64, Arc<RemoteLease>>,
 }
 
 impl Payload {
-    fn received(peer: &Connection, value: Value, wire_bytes: usize) -> Result<Self> {
+    fn received(
+        peer: &Connection,
+        value: Value,
+        wire_bytes: usize,
+        has_resource_tags: bool,
+    ) -> Result<Self> {
         let mut objects = HashMap::new();
         for id in crate::payload_refs(&value).map_err(|problem| error(2, problem.to_string()))? {
             objects.insert(
@@ -386,6 +392,7 @@ impl Payload {
         Ok(Self {
             value,
             wire_bytes,
+            has_resource_tags,
             objects,
         })
     }
@@ -393,6 +400,11 @@ impl Payload {
     /// Original CBOR message body bytes, measured once at the connection reader.
     pub fn wire_bytes(&self) -> usize {
         self.wire_bytes
+    }
+
+    /// 解码该载荷时是否出现过 `OBJECT_TAG`（60000）标签；无标签时调用方可跳过值树资源扫描。
+    pub fn has_resource_tags(&self) -> bool {
+        self.has_resource_tags
     }
 
     pub fn value(&self) -> &Value {
@@ -964,6 +976,15 @@ async fn serve_notifications(
     }
 }
 
+#[derive(Clone, Copy)]
+struct FrameInfo {
+    wire_bytes: usize,
+    has_resource_tags: bool,
+}
+
+/// 读帧复用的常规缓冲上限，超过该尺寸的大帧解码后归还内存以控制稳态驻留。
+const RETAINED_READ_CAPACITY: usize = 64 * 1024;
+
 /// DOC-16 §2–§4：读取任务持续分派消息，通知中的远端调用由独立读取路径接收响应。
 async fn read_frames<R: AsyncRead + Unpin>(
     mut input: R,
@@ -973,12 +994,14 @@ async fn read_frames<R: AsyncRead + Unpin>(
     notifications: mpsc::Sender<Notification>,
     mut ended: Ended,
 ) {
-    while let Some((message, wire_bytes)) = read_frame(&mut input, &peer, &mut ended).await {
+    let mut buffer = Vec::new();
+    while let Some((message, frame)) = read_frame(&mut input, &peer, &mut ended, &mut buffer).await
+    {
         let Some(inner) = peer.upgrade() else { break };
         if !dispatch_message(
             Connection(inner),
             message,
-            wire_bytes,
+            frame,
             &handler,
             &permits,
             &notifications,
@@ -990,12 +1013,13 @@ async fn read_frames<R: AsyncRead + Unpin>(
     }
 }
 
-/// DOC-15 CP-2、CP-8：长度约束通过后分配消息体，完整输入交给受限CBOR解码器。
+/// DOC-15 CP-2、CP-8：长度约束通过后复用或分配消息体缓冲，完整输入交给受限CBOR解码器。
 async fn read_frame<R: AsyncRead + Unpin>(
     input: &mut R,
     peer: &Weak<Inner>,
     ended: &mut Ended,
-) -> Option<(Message, usize)> {
+    buffer: &mut Vec<u8>,
+) -> Option<(Message, FrameInfo)> {
     let mut length = [0; 4];
     let read = tokio::select! {
         _ = ended.changed() => return None,
@@ -1013,17 +1037,27 @@ async fn read_frame<R: AsyncRead + Unpin>(
     }
     let limits = inner.options.limits;
     drop(inner);
-    let mut bytes = vec![0; size];
+    buffer.resize(size, 0);
     let read = tokio::select! {
         _ = ended.changed() => return None,
-        read = input.read_exact(&mut bytes) => read,
+        read = input.read_exact(buffer) => read,
     };
     if let Err(problem) = read {
         fail(peer, problem.to_string());
         return None;
     }
-    match crate::decode(&bytes, &limits) {
-        Ok(message) => Some((message, size)),
+    let decoded = crate::codec::decode_with_tags(buffer, &limits);
+    if buffer.capacity() > RETAINED_READ_CAPACITY {
+        *buffer = Vec::new();
+    }
+    match decoded {
+        Ok((message, has_resource_tags)) => Some((
+            message,
+            FrameInfo {
+                wire_bytes: size,
+                has_resource_tags,
+            },
+        )),
         Err(problem) => {
             fail(peer, problem.to_string());
             None
@@ -1034,32 +1068,34 @@ async fn read_frame<R: AsyncRead + Unpin>(
 async fn dispatch_message(
     peer: Connection,
     message: Message,
-    wire_bytes: usize,
+    frame: FrameInfo,
     handler: &Arc<dyn Handler>,
     permits: &Arc<Semaphore>,
     notifications: &mpsc::Sender<Notification>,
 ) -> bool {
     match message {
-        Message::Response { id, result } => receive_response(&peer, id, result, wire_bytes),
+        Message::Response { id, result } => receive_response(&peer, id, result, frame),
         Message::Request { id, method, params } => {
-            receive_request(peer, id, method, params, wire_bytes, handler, permits).await
+            receive_request(peer, id, method, params, frame, handler, permits).await
         }
         Message::Notification { method, params } => {
-            receive_notification(peer, method, params, wire_bytes, handler, notifications).await
+            receive_notification(peer, method, params, frame, handler, notifications).await
         }
     }
 }
 
 /// DOC-16 §6、§10：响应资源先建立拥有关系，迟到响应沿载荷析构归还引用。
-fn receive_response(peer: &Connection, id: u64, result: Result<Value>, wire_bytes: usize) -> bool {
+fn receive_response(peer: &Connection, id: u64, result: Result<Value>, frame: FrameInfo) -> bool {
     let result = match result {
-        Ok(value) => match Payload::received(peer, value, wire_bytes) {
-            Ok(value) => Ok(value),
-            Err(problem) => {
-                peer.0.fail(problem.to_string());
-                return false;
+        Ok(value) => {
+            match Payload::received(peer, value, frame.wire_bytes, frame.has_resource_tags) {
+                Ok(value) => Ok(value),
+                Err(problem) => {
+                    peer.0.fail(problem.to_string());
+                    return false;
+                }
             }
-        },
+        }
         Err(problem) => Err(problem),
     };
     // Account for the wire response before waking its caller. A caller may
@@ -1084,11 +1120,11 @@ async fn receive_request(
     id: u64,
     method: String,
     params: Value,
-    wire_bytes: usize,
+    frame: FrameInfo,
     handler: &Arc<dyn Handler>,
     permits: &Arc<Semaphore>,
 ) -> bool {
-    let params = match Payload::received(&peer, params, wire_bytes) {
+    let params = match Payload::received(&peer, params, frame.wire_bytes, frame.has_resource_tags) {
         Ok(params) => params,
         Err(problem) => {
             peer.0.fail(problem.to_string());
@@ -1127,17 +1163,28 @@ async fn receive_request(
     let Ok(cancelled) = register_inbound(&peer, id, &method) else {
         return false;
     };
-    tokio::spawn(serve_request(
+    tokio::spawn(serve_request(InboundRequest {
         peer,
-        handler.clone(),
+        handler: handler.clone(),
         id,
         method,
         params,
-        permit,
+        _permit: permit,
         cancelled,
         deadline,
-    ));
+    }));
     true
+}
+
+struct InboundRequest {
+    peer: Connection,
+    handler: Arc<dyn Handler>,
+    id: u64,
+    method: String,
+    params: Payload,
+    _permit: tokio::sync::OwnedSemaphorePermit,
+    cancelled: Option<oneshot::Receiver<()>>,
+    deadline: Option<Instant>,
 }
 
 fn register_inbound(
@@ -1169,16 +1216,17 @@ fn register_inbound(
 }
 
 /// DOC-16 §10：invoke响应取消，apply与清理按各自生命周期结束。
-async fn serve_request(
-    peer: Connection,
-    handler: Arc<dyn Handler>,
-    id: u64,
-    method: String,
-    params: Payload,
-    _permit: tokio::sync::OwnedSemaphorePermit,
-    cancelled: Option<oneshot::Receiver<()>>,
-    deadline: Option<Instant>,
-) {
+async fn serve_request(request: InboundRequest) {
+    let InboundRequest {
+        peer,
+        handler,
+        id,
+        method,
+        params,
+        _permit,
+        cancelled,
+        deadline,
+    } = request;
     let label = call_label(&method, params.value());
     let hello = method == "hello";
     let call = async { handler.request(peer.clone(), method, params).await };
@@ -1212,14 +1260,14 @@ async fn receive_notification(
     peer: Connection,
     method: String,
     params: Value,
-    wire_bytes: usize,
+    frame: FrameInfo,
     handler: &Arc<dyn Handler>,
     notifications: &mpsc::Sender<Notification>,
 ) -> bool {
     if method == "cancel" {
         return cancel_request(&peer, &params);
     }
-    let params = match Payload::received(&peer, params, wire_bytes) {
+    let params = match Payload::received(&peer, params, frame.wire_bytes, frame.has_resource_tags) {
         Ok(params) => params,
         Err(problem) => {
             peer.0.fail(problem.to_string());

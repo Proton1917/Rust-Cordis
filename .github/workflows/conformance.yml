@@ -89,9 +89,12 @@ jobs:
         run: |
           npm ci --ignore-scripts --prefix sdks/typescript
           npm run build --workspace cordis-sdk --prefix sdks/typescript
-          node --test tests/typescript-sdk/terminal-ownership.mjs tests/typescript-sdk/queued-timeout.mjs
-          python3 -m pip install -r sdks/python/requirements.txt
-          PYTHONPATH=sdks/python python3 -m unittest discover -s tests/python-sdk -p 'test_cancellation.py' -v
+          node --test tests/typescript-sdk/terminal-ownership.mjs tests/typescript-sdk/queued-timeout.mjs tests/typescript-sdk/callback-admission.mjs tests/typescript-sdk/shared-budgets.mjs
+          PYTHONPATH=sdks/python python3 -m unittest tests/python-sdk/test_budgets.py tests/python-sdk/test_callback_admission.py tests/python-sdk/test_cancellation.py -v
+      - name: Check formatting and Clippy lints
+        run: |
+          cargo fmt --all -- --check
+          cargo clippy --locked --workspace --all-targets -- -D warnings
       - name: Check persistence and crash recovery
         run: |
           cargo test -p cordis-runtime --lib storage::tests::
@@ -112,3 +115,19 @@ jobs:
             target/conformance-report.json
             target/formal-semantics.json
           if-no-files-found: warn
+
+  macos:
+    runs-on: macos-15
+    timeout-minutes: 25
+    env:
+      CARGO_PROFILE_DEV_DEBUG: '0'
+      CARGO_PROFILE_TEST_DEBUG: '0'
+      CARGO_INCREMENTAL: '0'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Install pinned Rust
+        run: rustup toolchain install 1.96.0 --profile minimal --component clippy
+      - name: Verify macOS-specific runtime compatibility and desktop plugin build
+        run: |
+          cargo test --locked -p cordis-runtime --test watch_compat
+          cargo clippy --locked -p cordis-window -p cordis-dev --all-targets -- -D warnings

@@ -122,11 +122,15 @@ fn unintercepted_service_read_allocation_budget() {
     context.provide::<Number>(Arc::new(7)).unwrap();
     let (value, allocations) = count_allocations(|| context.get::<Number>().unwrap());
     assert_eq!(*value, 7);
-    // The service access may own its name; an empty event/middleware path adds
-    // no further allocation. A future allocation-free lookup also meets this budget.
-    assert!(
-        allocations <= 1,
-        "service read allocated {allocations} times"
+    assert_eq!(
+        allocations, 0,
+        "unintercepted service read allocated {allocations} times"
+    );
+    let (looked_up, lookup_allocations) = count_allocations(|| context.lookup::<Number>().unwrap());
+    assert_eq!(*looked_up, 7);
+    assert_eq!(
+        lookup_allocations, 0,
+        "service lookup allocated {lookup_allocations} times"
     );
     host.finish(context.fiber().dispose()).unwrap();
 }

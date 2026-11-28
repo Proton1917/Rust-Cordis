@@ -787,6 +787,33 @@ impl Context {
         .run(0)
     }
 
+    /// 内部事件瀑布在无中间件时延迟构造参数并跳过堆分配。
+    pub(crate) fn waterfall_internal<E: WaterfallEvent>(
+        &self,
+        args: impl FnOnce() -> E::Args,
+        inner: impl Fn() -> Result<E::Output> + Send + Sync + 'static,
+    ) -> Result<E::Output> {
+        debug_assert!(E::NAME.starts_with("internal/"));
+        let hooks = self
+            .kernel
+            .state
+            .lock()
+            .hooks
+            .get(&EventId::of::<E>())
+            .cloned()
+            .unwrap_or_default();
+        if hooks.is_empty() {
+            return inner();
+        }
+        Arc::new(WaterfallChain::<E> {
+            hooks,
+            kernel: self.kernel.clone(),
+            args: args(),
+            inner: Box::new(inner),
+        })
+        .run(0)
+    }
+
     /// 返回当前事件类型数量，供效应恢复快照使用。
     pub fn event_count(&self) -> usize {
         self.kernel.state.lock().hooks.len()

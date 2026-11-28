@@ -14,8 +14,10 @@ use parking_lot::Mutex;
 use slotmap::{SlotMap, new_key_type};
 use std::{
     any::TypeId,
+    borrow::Borrow,
     collections::{HashMap, HashSet, VecDeque},
     future::Future,
+    hash::{Hash, Hasher},
     panic::{AssertUnwindSafe, catch_unwind},
     pin::Pin,
     sync::Arc,
@@ -76,6 +78,60 @@ pub(crate) struct State {
     pub notification_candidates: usize,
     pub names: HashMap<Arc<str>, Option<TypeId>>,
     pub impl_counter: u64,
+}
+
+trait StoreKey {
+    fn key(&self) -> &str;
+    fn realm(&self) -> Realm;
+}
+
+impl StoreKey for (Arc<str>, Realm) {
+    fn key(&self) -> &str {
+        &self.0
+    }
+    fn realm(&self) -> Realm {
+        self.1
+    }
+}
+
+struct StoreKeyRef<'a>(&'a str, Realm);
+
+impl StoreKey for StoreKeyRef<'_> {
+    fn key(&self) -> &str {
+        self.0
+    }
+    fn realm(&self) -> Realm {
+        self.1
+    }
+}
+
+impl PartialEq for dyn StoreKey + '_ {
+    fn eq(&self, other: &Self) -> bool {
+        self.key() == other.key() && self.realm() == other.realm()
+    }
+}
+
+impl Eq for dyn StoreKey + '_ {}
+
+impl Hash for dyn StoreKey + '_ {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.key().hash(state);
+        self.realm().hash(state);
+    }
+}
+
+impl<'a> Borrow<dyn StoreKey + 'a> for (Arc<str>, Realm) {
+    fn borrow(&self) -> &(dyn StoreKey + 'a) {
+        self
+    }
+}
+
+impl State {
+    /// 按借用键名与隔离域查询实时服务绑定，避免热路径分配 `Arc<str>`。
+    pub(crate) fn lookup_store(&self, key: &str, realm: Realm) -> Option<ImplId> {
+        let lookup = StoreKeyRef(key, realm);
+        self.store.get(&lookup as &dyn StoreKey).copied()
+    }
 }
 
 pub(crate) struct SubmissionFailure {

@@ -39,6 +39,9 @@ export const DEFAULT_LIMITS: Limits = {
 };
 
 export class Connection {
+    readonly runtime: Runtime;
+    readonly input: Input;
+    readonly output: Output;
     readonly limits: Limits;
     readonly pending = new Map<Identifier, Pending>();
     readonly running = new Map<Identifier, { method: string; abort: AbortController }>();
@@ -57,11 +60,14 @@ export class Connection {
     private readonly deadlines = new WeakMap<AbortSignal, number>();
 
     constructor(
-        readonly runtime: Runtime,
-        readonly input: Input,
-        readonly output: Output,
+        runtime: Runtime,
+        input: Input,
+        output: Output,
         limits: Partial<Limits>,
     ) {
+        this.runtime = runtime;
+        this.input = input;
+        this.output = output;
         this.limits = { ...DEFAULT_LIMITS, ...limits };
         if (![this.limits.maxActiveCallbacks, this.limits.maxCallbackBytes]
             .every((value) => Number.isSafeInteger(value) && value > 0))
@@ -200,7 +206,7 @@ export class Connection {
         const view = new DataView(header.buffer);
         let headerBytes = 0;
         let length = 0;
-        let partial: Uint8Array | undefined;
+        let chunks: Uint8Array[] = [];
         let received = 0;
         try {
             for await (const chunk of this.input) {
@@ -221,21 +227,21 @@ export class Connection {
                     offset += count;
                     if (received || count < length) {
                         if (!count) continue;
-                        const needed = received + count;
-                        if (!partial || partial.length < needed) {
-                            const grown = new Uint8Array(Math.min(length, Math.max(needed, received * 2)));
-                            if (partial) grown.set(partial.subarray(0, received));
-                            partial = grown;
-                        }
-                        partial.set(bytes, received);
-                        received = needed;
+                        chunks.push(bytes);
+                        received += count;
                         if (received < length) continue;
-                        bytes = partial;
+                        const assembled = new Uint8Array(length);
+                        let position = 0;
+                        for (const part of chunks) {
+                            assembled.set(part, position);
+                            position += part.length;
+                        }
+                        bytes = assembled;
+                        chunks = [];
                     }
                     const message = this.decoder.decode(bytes);
                     checkMessage(message, this.limits);
                     headerBytes = received = 0;
-                    partial = undefined;
                     this.receive(message, length);
                 }
             }

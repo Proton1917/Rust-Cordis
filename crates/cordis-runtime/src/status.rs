@@ -353,12 +353,18 @@ fn component(component: &cordis_up::payload::Component) -> ComponentInfo {
 }
 
 /// DOC-15 CP-11：快照变化时原子发布，写入错误交由发布任务记录。
-pub async fn write(path: &Path, view: &View, previous: &mut Vec<u8>) -> Result<()> {
+pub async fn write(
+    path: &Path,
+    view: &View,
+    previous: &mut Vec<u8>,
+    scratch: &mut Vec<u8>,
+) -> Result<()> {
     view.sample_libraries().await?;
-    let bytes = serde_json::to_vec_pretty(&view.snapshot()?).map_err(parameter)?;
-    if *previous != bytes {
-        storage::write_snapshot(path, &bytes)?;
-        *previous = bytes;
+    scratch.clear();
+    serde_json::to_writer_pretty(&mut *scratch, &view.snapshot()?).map_err(parameter)?;
+    if *previous != *scratch {
+        storage::write_snapshot(path, scratch)?;
+        std::mem::swap(previous, scratch);
     }
     Ok(())
 }

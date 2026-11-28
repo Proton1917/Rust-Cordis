@@ -257,7 +257,7 @@ impl Context {
     /// 调用会同步派发 `InternalGet`，用户中间件在内核锁外执行。
     #[track_caller]
     pub fn get<K: ServiceKey>(&self) -> Result<Scoped<K>> {
-        let resolved = self.get_service(K::NAME.into())?;
+        let resolved = self.get_service_static(K::NAME)?;
         Scoped::from_binding(self, &resolved.value, || resolved.definition)
             .ok_or_else(|| Error::new("service interceptor returned a different value type"))
     }
@@ -270,25 +270,37 @@ impl Context {
     }
 
     #[track_caller]
+    fn get_service_static(&self, name: &'static str) -> Result<ServiceValue> {
+        let context = self.clone();
+        let location = Location::caller();
+        self.waterfall_internal::<InternalGet>(
+            || ServiceAccess {
+                context: self.clone(),
+                name: name.into(),
+            },
+            move || context.get_value(name).map_err(|error| error.at(location)),
+        )
+    }
+
+    #[track_caller]
     fn get_service(&self, name: Arc<str>) -> Result<ServiceValue> {
         let context = self.clone();
         let location = Location::caller();
-        self.waterfall::<InternalGet>(
-            ServiceAccess {
+        let access_name = name.clone();
+        self.waterfall_internal::<InternalGet>(
+            move || ServiceAccess {
                 context: self.clone(),
-                name: name.clone(),
+                name: access_name,
             },
             move || context.get_value(&name).map_err(|error| error.at(location)),
         )
     }
 
-    fn get_value(&self, key: &Arc<str>) -> Result<ServiceValue> {
+    fn get_value(&self, key: &str) -> Result<ServiceValue> {
         let state = self.kernel.state.lock();
         let located = if state.fibers[self.scope.fiber].parent_scope.is_none() {
             state
-                .store
-                .get(&(key.clone(), self.resolve_realm(key)))
-                .copied()
+                .lookup_store(key, self.resolve_realm(key))
                 .map(|id| (None, Some(id)))
         } else {
             locate(&state, &self.scope, key)
@@ -300,7 +312,7 @@ impl Context {
                     .inject
                     .entries
                     .iter()
-                    .any(|entry| entry.key == *key && !entry.required)
+                    .any(|entry| entry.key.as_ref() == key && !entry.required)
                 {
                     return Err(Error::new(format!(
                         "optional service \"{}\" is absent in committed view",
@@ -333,7 +345,7 @@ impl Context {
     /// 查询条件为实时绑定和提供方状态；依赖声明授权、已提交视图由 `get` 处理，
     /// 可用性谓词由生命周期依赖解析执行。
     pub fn lookup<K: ServiceKey>(&self) -> Option<Scoped<K>> {
-        self.lookup_binding(K::NAME.into(), |binding| {
+        self.lookup_binding(K::NAME, |binding| {
             Scoped::from_binding(self, &binding.value, || binding.definition(&self.kernel))
         })
         .flatten()
@@ -342,13 +354,14 @@ impl Context {
     /// K-2、S-SVC-3：按名称反射查询当前隔离域中活动提供方的类型擦除存储值。
     /// 返回的值沿用 lookup 的实时绑定语义，声明依赖的已提交视图由 get_named 读取。
     pub fn lookup_named(&self, name: impl Into<Arc<str>>) -> Option<AnyArc> {
-        self.lookup_binding(name.into(), |binding| binding.value.clone())
+        let name = name.into();
+        self.lookup_binding(&name, |binding| binding.value.clone())
     }
 
-    fn lookup_binding<T>(&self, key: Arc<str>, read: impl FnOnce(&ImplData) -> T) -> Option<T> {
-        let realm = self.resolve_realm(&key);
+    fn lookup_binding<T>(&self, key: &str, read: impl FnOnce(&ImplData) -> T) -> Option<T> {
+        let realm = self.resolve_realm(key);
         let state = self.kernel.state.lock();
-        let id = *state.store.get(&(key, realm))?;
+        let id = state.lookup_store(key, realm)?;
         let binding = &state.impls[id];
         binding.is_active(&state).then(|| read(binding))
     }
@@ -900,17 +913,18 @@ mod tests {
                 .to_string()
                 .contains("service identity exhausted")
         );
-        let state = root.kernel.state.lock();
-        assert_eq!(state.impl_counter, u64::MAX);
-        assert_eq!(state.impls.len(), before);
-        assert!(!state.names.contains_key("exhausted"));
-        assert!(
-            !state
-                .store
-                .keys()
-                .any(|(key, _)| key.as_ref() == "exhausted")
-        );
-        drop(state);
+        {
+            let state = root.kernel.state.lock();
+            assert_eq!(state.impl_counter, u64::MAX);
+            assert_eq!(state.impls.len(), before);
+            assert!(!state.names.contains_key("exhausted"));
+            assert!(
+                !state
+                    .store
+                    .keys()
+                    .any(|(key, _)| key.as_ref() == "exhausted")
+            );
+        }
         root.fiber().dispose().await.unwrap();
     }
 

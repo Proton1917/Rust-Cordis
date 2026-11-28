@@ -68,30 +68,65 @@ impl Bridge {
     /// DOC-16 资源协议：同一资源编号复用一次导入，ABI 缓冲区持有全部导入对象。
     pub async fn incoming(&self, payload: &Payload, mut value: Value) -> Result<Buf> {
         let mut encoded = CborEncoder::new(abi::environment());
-        let mut replacements: HashMap<u64, Value> = HashMap::new();
-        for (id, target) in resource_locations(&mut value)? {
-            let replacement = if let Some(value) = replacements.get(&id) {
-                value.clone()
-            } else {
+        if !payload.has_resource_tags() {
+            return encoded.finish(value);
+        }
+        let locations = resource_locations(&mut value)?;
+        if locations.is_empty() {
+            return encoded.finish(value);
+        }
+        let mut distinct = Vec::new();
+        let mut seen = HashMap::new();
+        for &(id, _) in &locations {
+            if let std::collections::hash_map::Entry::Vacant(entry) = seen.entry(id) {
+                entry.insert(());
                 let reference = payload.import(id).map_err(from_wire)?;
-                let metadata = reference
-                    .peer()
-                    .request(
-                        "object_info",
-                        cordis_abi::to_value(&payload::ObjectInfoRequest { object: id })?,
-                        self.timeout,
-                    )
-                    .await
-                    .map_err(from_wire)?;
-                let info: payload::ObjectInfo = cordis_abi::from_value(metadata.value())?;
-                let object = self.import(reference, info)?;
-                let value = encoded.export(object)?;
-                replacements.insert(id, value.clone());
-                value
-            };
-            *target = replacement;
+                distinct.push((id, reference));
+            }
+        }
+        let fetched = if distinct.len() == 1 {
+            let (id, reference) = distinct.pop().expect("single resource");
+            let info = self.fetch_object_info(&reference, id).await?;
+            vec![(id, reference, info)]
+        } else {
+            futures_util::future::try_join_all(distinct.into_iter().map(
+                |(id, reference)| async move {
+                    let info = self.fetch_object_info(&reference, id).await?;
+                    Ok::<_, Error>((id, reference, info))
+                },
+            ))
+            .await?
+        };
+        let mut replacements: HashMap<u64, Value> = HashMap::with_capacity(fetched.len());
+        for (id, reference, info) in fetched {
+            let object = self.import(reference, info)?;
+            let exported = encoded.export(object)?;
+            replacements.insert(id, exported);
+        }
+        for (id, target) in locations {
+            *target = replacements
+                .get(&id)
+                .expect("distinct resource imported")
+                .clone();
         }
         encoded.finish(value)
+    }
+
+    async fn fetch_object_info(
+        &self,
+        reference: &RemoteObject,
+        id: u64,
+    ) -> Result<payload::ObjectInfo> {
+        let metadata = reference
+            .peer()
+            .request(
+                "object_info",
+                cordis_abi::to_value(&payload::ObjectInfoRequest { object: id })?,
+                self.timeout,
+            )
+            .await
+            .map_err(from_wire)?;
+        cordis_abi::from_value(metadata.value())
     }
 
     /// DOC-15 §8：核心确认同组来源时复用本地对象，其余来源构造协议代理。

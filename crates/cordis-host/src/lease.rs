@@ -322,6 +322,9 @@ fn mapped_files() -> Option<std::collections::HashSet<MappingIdentity>> {
 #[cfg(target_os = "linux")]
 fn mapped_retired_images(retained: &[Arc<Lease>]) -> Option<u64> {
     let complete = COMPLETE_MAPPINGS.load(Ordering::Acquire);
+    if retired_mappings().lock().is_empty() {
+        return complete.then_some(0);
+    }
     let mapped = mapped_files()?;
     let active = retained
         .iter()

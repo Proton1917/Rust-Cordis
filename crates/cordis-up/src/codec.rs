@@ -91,29 +91,54 @@ pub enum CodecError {
 
 thread_local! {
     static DECODE_LIMITS: Cell<Limits> = const { Cell::new(Limits::DEFAULT) };
+    static DECODE_HAS_OBJECT_TAG: Cell<bool> = const { Cell::new(false) };
 }
 
 /// CP-8：错误返回和展开均恢复此前预算，隔离同线程的后续解码。
-struct DecodeScope(Limits);
+struct DecodeScope {
+    limits: Limits,
+    has_object_tag: bool,
+}
 impl DecodeScope {
     fn enter(limits: Limits) -> Self {
-        Self(DECODE_LIMITS.with(|current| current.replace(limits)))
+        Self {
+            limits: DECODE_LIMITS.with(|current| current.replace(limits)),
+            has_object_tag: DECODE_HAS_OBJECT_TAG.with(|seen| seen.replace(false)),
+        }
+    }
+    fn has_object_tag(&self) -> bool {
+        DECODE_HAS_OBJECT_TAG.with(Cell::get)
     }
 }
 impl Drop for DecodeScope {
     fn drop(&mut self) {
-        DECODE_LIMITS.with(|current| current.set(self.0));
+        DECODE_LIMITS.with(|current| current.set(self.limits));
+        DECODE_HAS_OBJECT_TAG.with(|seen| seen.set(self.has_object_tag));
     }
 }
 
 /// CP-2、CP-8：输入为一条完整CBOR消息体，帧头由传输层处理。
 pub fn decode(bytes: &[u8], limits: &Limits) -> Result<Message, CodecError> {
-    let message = read_limited(bytes, limits)?;
+    decode_with_tags(bytes, limits).map(|(message, _)| message)
+}
+
+pub(crate) fn decode_with_tags(
+    bytes: &[u8],
+    limits: &Limits,
+) -> Result<(Message, bool), CodecError> {
+    let (message, has_object_tag) = read_limited_with_tags(bytes, limits)?;
     envelope(&message)?;
-    Ok(message)
+    Ok((message, has_object_tag))
 }
 
 fn read_limited<T: de::DeserializeOwned>(bytes: &[u8], limits: &Limits) -> Result<T, CodecError> {
+    read_limited_with_tags(bytes, limits).map(|(value, _)| value)
+}
+
+fn read_limited_with_tags<T: de::DeserializeOwned>(
+    bytes: &[u8],
+    limits: &Limits,
+) -> Result<(T, bool), CodecError> {
     limits.validate()?;
     if bytes.len() > limits.max_frame {
         return Err(LimitExceeded::error(
@@ -122,14 +147,14 @@ fn read_limited<T: de::DeserializeOwned>(bytes: &[u8], limits: &Limits) -> Resul
             Some(bytes.len()),
         ));
     }
-    let _scope = DecodeScope::enter(*limits);
+    let scope = DecodeScope::enter(*limits);
     let mut reader = Cursor::new(bytes);
     let value = ciborium::de::from_reader_with_recursion_limit(&mut reader, limits.max_depth)
         .map_err(|error| CodecError::Cbor(error.to_string()))?;
     if reader.position() as usize != bytes.len() {
         return Err(CodecError::TrailingBytes);
     }
-    Ok(value)
+    Ok((value, scope.has_object_tag()))
 }
 
 /// 输出CBOR消息体，写入时执行帧长度限制。
@@ -530,6 +555,9 @@ impl<'de> Visitor<'de> for Tagged<'_> {
             })?
             .ok_or_else(|| de::Error::custom("missing tagged value"))?;
         resource_tag(tag, &value).map_err(de::Error::custom)?;
+        if tag == OBJECT_TAG {
+            DECODE_HAS_OBJECT_TAG.with(|seen| seen.set(true));
+        }
         Ok(Value::Tag(tag, Box::new(value)))
     }
 }

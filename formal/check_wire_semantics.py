@@ -248,7 +248,7 @@ const context = {Map,WeakMap,Uint8Array,DataView,AbortController,performance,set
     CordisError,fields:value=>value,identifier:value=>value,checkMessage:()=>{},setSizeLimits:()=>{},
     currentSignal:()=>activeSignal,supportsInvocationBudget:()=>true,
     Decoder:class {},Encoder:class {encode(){return new Uint8Array([1]);}}};
-vm.runInNewContext(stripTypeScriptTypes(source,{mode:'transform'})+'\nglobalThis.Subject = Connection;',context);
+vm.runInNewContext(stripTypeScriptTypes(source,{mode:'strip'})+'\nglobalThis.Subject = Connection;',context);
 async function scenario(kind){
     const payloads=[];let released=0,writes=0,firstCallback;
     const controller=new AbortController();activeSignal=controller.signal;

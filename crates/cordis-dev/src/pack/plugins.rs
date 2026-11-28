@@ -120,16 +120,19 @@ pub(super) fn assemble(
             assets(plan, &source.path, &root, &manifest, web_output)?;
             native.push(native_package(library, &root, manifest, source.instances)?);
         } else {
-            directory(
+            let context = AssemblyContext {
                 plan,
                 artifacts,
+                runtimes: runtime_root,
+                app_binaries,
+            };
+            directory(
+                &context,
                 &reference,
                 &source.path,
                 &root,
                 manifest,
                 web_output,
-                runtime_root,
-                app_binaries,
             )?;
         }
         mapping.insert(reference, target);
@@ -214,18 +217,23 @@ fn references(configuration: &mut Table, mapping: &BTreeMap<String, String>) {
     }
 }
 
+struct AssemblyContext<'a> {
+    plan: &'a Plan,
+    artifacts: &'a Artifacts,
+    runtimes: &'a BTreeMap<String, PathBuf>,
+    app_binaries: Option<&'a Path>,
+}
+
 /// DOC-15 §9：目录清单保留原元数据，原生库与进程命令按其插口分别发布。
 fn directory(
-    plan: &Plan,
-    artifacts: &Artifacts,
+    context: &AssemblyContext<'_>,
     reference: &str,
     source: &Path,
     destination: &Path,
     mut manifest: Table,
     web_output: Option<&PathBuf>,
-    runtimes: &BTreeMap<String, PathBuf>,
-    app_binaries: Option<&Path>,
 ) -> Result<()> {
+    let plan = context.plan;
     match string(&manifest, "socket")?.ok_or("插件清单需要 socket")? {
         "process" => {
             if manifest.get("protocol").and_then(Value::as_integer) != Some(1) {
@@ -245,16 +253,7 @@ fn directory(
             } else {
                 files::copy_tree(source, destination, &plan.secret_paths)?;
             }
-            process_command(
-                plan,
-                artifacts,
-                reference,
-                source,
-                destination,
-                &mut manifest,
-                runtimes,
-                app_binaries,
-            )?;
+            process_command(context, reference, source, destination, &mut manifest)?;
         }
         "web" => {
             if manifest.get("web").is_none() {
@@ -385,15 +384,18 @@ pub(super) fn runtimes(plan: &Plan, deployment: &Path) -> Result<BTreeMap<String
 }
 
 fn process_command(
-    plan: &Plan,
-    artifacts: &Artifacts,
+    context: &AssemblyContext<'_>,
     reference: &str,
     source: &Path,
     destination: &Path,
     manifest: &mut Table,
-    runtimes: &BTreeMap<String, PathBuf>,
-    app_binaries: Option<&Path>,
 ) -> Result<()> {
+    let AssemblyContext {
+        plan,
+        artifacts,
+        runtimes,
+        app_binaries,
+    } = *context;
     let command = manifest
         .get_mut("command")
         .and_then(Value::as_array_mut)

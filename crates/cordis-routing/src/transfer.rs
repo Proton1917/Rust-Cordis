@@ -31,6 +31,20 @@ impl<R: crate::RouteLifetime + Send + Sync + 'static> Router<R> {
         Ok((data, batch))
     }
 
+    /// 当 `data` 直接取自 `incoming` 且解码未见 `OBJECT_TAG` 时，跳过整棵值树的资源重写扫描。
+    fn transfer_incoming(
+        &self,
+        data: Value,
+        incoming: &Payload,
+        recipient: &Connection,
+        route: impl Fn(RemoteObject) -> Arc<R>,
+    ) -> Result<(Value, Batch<R>)> {
+        if !incoming.has_resource_tags() {
+            return Ok((data, self.batch(recipient.id())));
+        }
+        self.transfer(data, incoming, recipient, route)
+    }
+
     /// DOC-15 §6.1：纪元持有由调用方保证，路由器转交实际远程调用和结果。
     pub async fn invoke_remote(
         &self,
@@ -42,7 +56,7 @@ impl<R: crate::RouteLifetime + Send + Sync + 'static> Router<R> {
         response_route: impl Fn(RemoteObject) -> Arc<R>,
     ) -> Result<Outgoing> {
         let (args, batch) =
-            self.transfer(Value::Array(request.args), incoming, object.peer(), &route)?;
+            self.transfer_incoming(Value::Array(request.args), incoming, object.peer(), &route)?;
         let Value::Array(args) = args else {
             unreachable!("argument array preserved")
         };
@@ -59,7 +73,7 @@ impl<R: crate::RouteLifetime + Send + Sync + 'static> Router<R> {
             .await?;
         let response = payload::InvokeResult::from_value_owned(result.take_value())
             .map_err(|problem| error(2, problem.to_string()))?;
-        self.reply(response.value, &result, caller, response_route)
+        self.reply_incoming(response.value, &result, caller, response_route)
     }
 
     /// ADR-0017：内置函数在目录锁外执行，回复写出后再执行约定动作。
@@ -87,6 +101,22 @@ impl<R: crate::RouteLifetime + Send + Sync + 'static> Router<R> {
             Some(action) => outgoing.after_write(action),
             None => outgoing,
         })
+    }
+
+    fn reply_incoming(
+        &self,
+        data: Value,
+        incoming: &Payload,
+        recipient: &Connection,
+        route: impl Fn(RemoteObject) -> Arc<R>,
+    ) -> Result<Outgoing> {
+        let (value, batch) = self.transfer_incoming(data, incoming, recipient, route)?;
+        let outgoing = payload::InvokeResult {
+            value,
+            refs: batch.ids.clone(),
+        }
+        .into_value();
+        Ok(batch.outgoing(outgoing))
     }
 
     fn reply(

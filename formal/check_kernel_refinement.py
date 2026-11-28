@@ -317,7 +317,7 @@ def verify(args: argparse.Namespace) -> dict[str, object]:
             ("exhausted_notification_candidate_reused", "snapshot",
              "!state.impls[*id].notification_exhausted", "true"),
             ("optional_absence_classified_as_required", "get_value",
-             "entry.key == *key && !entry.required", "entry.key == *key && entry.required"),
+             "entry.key.as_ref() == key && !entry.required", "entry.key.as_ref() == key && entry.required"),
             ("typed_definition_origin_replaced", "typed_handle",
              "definition: definition(),", "definition: caller.clone(),"),
             ("identity_wraparound", "identity",

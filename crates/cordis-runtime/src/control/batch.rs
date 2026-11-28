@@ -19,6 +19,16 @@ pub(super) struct PendingTarget {
     _pages: Vec<web::WebChange>,
 }
 
+struct BatchExecution {
+    target: TargetDeployment,
+    sources: Vec<BatchReplacement>,
+    before: Vec<BatchInstance>,
+    desired: Vec<BatchInstance>,
+    pages: Vec<web::WebChange>,
+    reconfigure: bool,
+    durable: bool,
+}
+
 impl Controller {
     pub(super) async fn start_target(&mut self) -> Result<()> {
         let target = self
@@ -223,7 +233,7 @@ impl Controller {
                 .map(|(name, _)| name.clone())
                 .collect(),
         ));
-        self.execute_batch_target(
+        self.execute_batch_target(BatchExecution {
             target,
             sources,
             before,
@@ -231,21 +241,21 @@ impl Controller {
             pages,
             reconfigure,
             durable,
-        )
+        })
         .await
     }
 
     /// SW-5–SW-9：后端先稳定，再确认每个页面，持久化成功后发布新运行目录。
-    async fn execute_batch_target(
-        &mut self,
-        target: TargetDeployment,
-        sources: Vec<BatchReplacement>,
-        before: Vec<BatchInstance>,
-        desired: Vec<BatchInstance>,
-        pages: Vec<web::WebChange>,
-        reconfigure: bool,
-        durable: bool,
-    ) -> Result<()> {
+    async fn execute_batch_target(&mut self, execution: BatchExecution) -> Result<()> {
+        let BatchExecution {
+            target,
+            sources,
+            before,
+            desired,
+            pages,
+            reconfigure,
+            durable,
+        } = execution;
         use cordis_supervisor::manager::{BatchFailure, DeploymentDecision};
         let manager = self.manager.clone();
         let candidate = &target;

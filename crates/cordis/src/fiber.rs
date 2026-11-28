@@ -1050,10 +1050,11 @@ mod tests {
         let error = fiber.restart().await.unwrap_err();
         assert!(error.to_string().contains("fiber revision exhausted"));
         assert_eq!(fiber.epoch(), before);
-        let state = root.kernel.state.lock();
-        assert_eq!(state.fibers[fiber.id].revision, u64::MAX);
-        assert!(!state.fibers[fiber.id].queued);
-        drop(state);
+        {
+            let state = root.kernel.state.lock();
+            assert_eq!(state.fibers[fiber.id].revision, u64::MAX);
+            assert!(!state.fibers[fiber.id].queued);
+        }
         root.fiber().dispose().await.unwrap();
     }
 

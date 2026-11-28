@@ -13,55 +13,6 @@ pub(super) enum RealmKey {
     Instance(String),
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use cordis::{Clock, Spawn, Task};
-
-    struct Executor(std::time::Instant);
-    impl Spawn for Executor {
-        fn spawn(&self, task: Task) {
-            tokio::spawn(task);
-        }
-    }
-    impl Clock for Executor {
-        fn now(&self) -> Duration {
-            self.0.elapsed()
-        }
-        fn sleep(&self, duration: Duration) -> Task {
-            Box::pin(tokio::time::sleep(duration))
-        }
-    }
-
-    #[tokio::test]
-    async fn lifecycle_realms_are_private_and_released_with_the_last_view() {
-        let root = Context::new(Arc::new(Executor(std::time::Instant::now())));
-        let manager = Manager::new(root.clone(), ManagerOptions::default())
-            .await
-            .unwrap();
-        let context = manager.context();
-        for index in 0..512 {
-            let name = format!("page-{index}");
-            let first = manager.instance_lifecycle_view(&context, &name).unwrap();
-            let second = manager.instance_lifecycle_view(&context, &name).unwrap();
-            assert_eq!(
-                first.realm::<InstanceLifecycle>(),
-                second.realm::<InstanceLifecycle>()
-            );
-            let user = manager.realm_lease(&context, &name);
-            assert_ne!(first.realm::<InstanceLifecycle>(), user.realm);
-            assert_eq!(manager.0.realms.lock().len(), 2);
-            assert_eq!(manager.named_realms().len(), 1);
-            drop((first, user));
-            assert_eq!(manager.0.realms.lock().len(), 1);
-            drop(second);
-            assert!(manager.0.realms.lock().is_empty());
-        }
-        manager.shutdown().await.unwrap();
-        root.fiber().dispose().await.unwrap();
-    }
-}
-
 pub(super) struct RealmLease {
     name: RealmKey,
     realm: cordis::Realm,
@@ -393,5 +344,54 @@ impl Manager {
             .await?;
         child.settled().await.map_err(kernel_error)?;
         Ok(id)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use cordis::{Clock, Spawn, Task};
+
+    struct Executor(std::time::Instant);
+    impl Spawn for Executor {
+        fn spawn(&self, task: Task) {
+            tokio::spawn(task);
+        }
+    }
+    impl Clock for Executor {
+        fn now(&self) -> Duration {
+            self.0.elapsed()
+        }
+        fn sleep(&self, duration: Duration) -> Task {
+            Box::pin(tokio::time::sleep(duration))
+        }
+    }
+
+    #[tokio::test]
+    async fn lifecycle_realms_are_private_and_released_with_the_last_view() {
+        let root = Context::new(Arc::new(Executor(std::time::Instant::now())));
+        let manager = Manager::new(root.clone(), ManagerOptions::default())
+            .await
+            .unwrap();
+        let context = manager.context();
+        for index in 0..512 {
+            let name = format!("page-{index}");
+            let first = manager.instance_lifecycle_view(&context, &name).unwrap();
+            let second = manager.instance_lifecycle_view(&context, &name).unwrap();
+            assert_eq!(
+                first.realm::<InstanceLifecycle>(),
+                second.realm::<InstanceLifecycle>()
+            );
+            let user = manager.realm_lease(&context, &name);
+            assert_ne!(first.realm::<InstanceLifecycle>(), user.realm);
+            assert_eq!(manager.0.realms.lock().len(), 2);
+            assert_eq!(manager.named_realms().len(), 1);
+            drop((first, user));
+            assert_eq!(manager.0.realms.lock().len(), 1);
+            drop(second);
+            assert!(manager.0.realms.lock().is_empty());
+        }
+        manager.shutdown().await.unwrap();
+        root.fiber().dispose().await.unwrap();
     }
 }

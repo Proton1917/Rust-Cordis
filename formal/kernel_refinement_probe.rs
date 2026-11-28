@@ -230,6 +230,11 @@ struct State {
     effects: Arena<EffectData>,
     store: HashMap<(Arc<str>, Realm), ImplId>,
 }
+impl State {
+    fn lookup_store(&self, key: &str, realm: Realm) -> Option<ImplId> {
+        self.store.get(&(key.into(), realm)).copied()
+    }
+}
 struct Lock<T>(Mutex<T>);
 impl<T> Lock<T> {
     fn lock(&self) -> MutexGuard<'_, T> {
@@ -724,7 +729,7 @@ fn execute(family: &str, input: &[usize]) -> String {
                 if bit(mask, 2) {
                     kernel.state.lock().store.insert(("svc".into(), Realm(realm)), 0);
                 }
-                return match ctx.get_value(&"svc".into()) {
+                return match ctx.get_value("svc") {
                     Ok(value) => format!("ok:{},{}", *value.value, value.definition.scope.fiber),
                     Err(error) if error.0.starts_with("optional service") => "optional".into(),
                     Err(error) if error.0.starts_with("cannot get required") => "required".into(),

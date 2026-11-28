@@ -23,7 +23,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 */
-// ../../../pr04-node-terminal/sdks/typescript/node_modules/cbor-x/decode.js
+// node_modules/cbor-x/decode.js
 var decoder;
 try {
   decoder = new TextDecoder();
@@ -1088,7 +1088,7 @@ var FLOAT32_OPTIONS = {
   DECIMAL_FIT: 4
 };
 
-// ../../../pr04-node-terminal/sdks/typescript/node_modules/cbor-x/encode.js
+// node_modules/cbor-x/encode.js
 var textEncoder;
 try {
   textEncoder = new TextEncoder();
@@ -2391,19 +2391,9 @@ var DEFAULT_LIMITS = {
   maxCallbackBytes: 64 * 1024 * 1024
 };
 var Connection = class {
-  constructor(runtime, input, output, limits) {
-    this.runtime = runtime;
-    this.input = input;
-    this.output = output;
-    this.limits = { ...DEFAULT_LIMITS, ...limits };
-    if (![this.limits.maxActiveCallbacks, this.limits.maxCallbackBytes].every((value) => Number.isSafeInteger(value) && value > 0))
-      throw new CordisError(2, "\u56DE\u8C03\u989D\u5EA6\u9700\u8981\u6B63\u5B89\u5168\u6574\u6570");
-    setSizeLimits({
-      maxArraySize: this.limits.maxCollection + 1,
-      maxMapSize: this.limits.maxCollection + 1,
-      maxObjectSize: this.limits.maxCollection + 1
-    });
-  }
+  runtime;
+  input;
+  output;
   limits;
   pending = /* @__PURE__ */ new Map();
   running = /* @__PURE__ */ new Map();
@@ -2420,6 +2410,19 @@ var Connection = class {
   tail = Promise.resolve();
   peerBudget = false;
   deadlines = /* @__PURE__ */ new WeakMap();
+  constructor(runtime, input, output, limits) {
+    this.runtime = runtime;
+    this.input = input;
+    this.output = output;
+    this.limits = { ...DEFAULT_LIMITS, ...limits };
+    if (![this.limits.maxActiveCallbacks, this.limits.maxCallbackBytes].every((value) => Number.isSafeInteger(value) && value > 0))
+      throw new CordisError(2, "\u56DE\u8C03\u989D\u5EA6\u9700\u8981\u6B63\u5B89\u5168\u6574\u6570");
+    setSizeLimits({
+      maxArraySize: this.limits.maxCollection + 1,
+      maxMapSize: this.limits.maxCollection + 1,
+      maxObjectSize: this.limits.maxCollection + 1
+    });
+  }
   /** DOC-16 §6：队列容量和编码失败归还本轮出口，写入失败终止连接。 */
   async send(message, offers = [], beginWrite) {
     let committed = false;
@@ -2542,7 +2545,7 @@ var Connection = class {
     const view = new DataView(header.buffer);
     let headerBytes = 0;
     let length = 0;
-    let partial;
+    let chunks = [];
     let received = 0;
     try {
       for await (const chunk of this.input) {
@@ -2563,21 +2566,21 @@ var Connection = class {
           offset += count;
           if (received || count < length) {
             if (!count) continue;
-            const needed = received + count;
-            if (!partial || partial.length < needed) {
-              const grown = new Uint8Array(Math.min(length, Math.max(needed, received * 2)));
-              if (partial) grown.set(partial.subarray(0, received));
-              partial = grown;
-            }
-            partial.set(bytes, received);
-            received = needed;
+            chunks.push(bytes);
+            received += count;
             if (received < length) continue;
-            bytes = partial;
+            const assembled = new Uint8Array(length);
+            let position3 = 0;
+            for (const part of chunks) {
+              assembled.set(part, position3);
+              position3 += part.length;
+            }
+            bytes = assembled;
+            chunks = [];
           }
           const message = this.decoder.decode(bytes);
           checkMessage(message, this.limits);
           headerBytes = received = 0;
-          partial = void 0;
           this.receive(message, length);
         }
       }

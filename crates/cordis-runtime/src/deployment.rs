@@ -67,7 +67,10 @@ pub(crate) fn load_with_state_dir(path: &Path) -> Result<(PathBuf, Result<Config
             let location: StateLocation =
                 toml::from_str(config::text(&bytes)?).map_err(|_| problem.clone())?;
             let default = config::RuntimeSettings::default().state_dir;
-            let mut directory = location.runtime.state_dir.unwrap_or_else(|| default.clone());
+            let mut directory = location
+                .runtime
+                .state_dir
+                .unwrap_or_else(|| default.clone());
             if directory == default
                 && let Some(pack) = &location.pack
             {

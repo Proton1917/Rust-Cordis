@@ -113,11 +113,14 @@ fn extensions_replace_through_declared_dependencies_and_owned_effects() {
 
             assert_eq!(
                 root.registry().replace(&old, &next),
-                [main_provider.clone()]
+                std::slice::from_ref(&main_provider)
             );
             host.finish(main_provider.settled()).unwrap();
             host.finish(main.settled()).unwrap();
-            assert_eq!(root.registry().fibers(&old), [main_provider.clone()]);
+            assert_eq!(
+                root.registry().fibers(&old),
+                std::slice::from_ref(&main_provider)
+            );
             assert_eq!(sibling.epoch(), isolated_epoch);
             assert_eq!(isolated_provider.epoch(), isolated_provider_epoch);
             assert_eq!(

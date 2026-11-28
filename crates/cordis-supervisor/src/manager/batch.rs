@@ -24,6 +24,16 @@ pub struct BatchInstance {
     pub remount: bool,
 }
 
+struct DeploymentBatch<'a> {
+    replacements: Vec<BatchReplacement>,
+    before: Vec<BatchInstance>,
+    target: Vec<BatchInstance>,
+    states: HashMap<String, Option<payload::State>>,
+    permit_pending: bool,
+    source: TargetSource<'a>,
+    window: Option<CommitWindow>,
+}
+
 /// Immutable indexes over a prepared batch; references keep the original order
 /// and views in the source vectors while identity matching uses direct lookup.
 struct BatchIndex<'a> {
@@ -158,15 +168,15 @@ impl Manager {
         targets: Vec<BatchInstance>,
         states: States,
     ) -> Result<()> {
-        self.execute_deployment_batch(
-            sources,
-            vec![],
-            targets,
+        self.execute_deployment_batch(DeploymentBatch {
+            replacements: sources,
+            before: vec![],
+            target: targets,
             states,
-            true,
-            TargetSource::Restoration,
-            None,
-        )
+            permit_pending: true,
+            source: TargetSource::Restoration,
+            window: None,
+        })
         .await
         .map_err(BatchFailure::problem)?
         .cleanup
@@ -202,15 +212,15 @@ impl Manager {
     ) -> Result<()> {
         let members = self.batch_members(&specification.name)?;
         let committed = self
-            .execute_deployment_batch(
-                vec![BatchReplacement::Process(specification)],
-                members.clone(),
-                members,
-                HashMap::new(),
-                true,
-                TargetSource::Recovery(cohort),
-                None,
-            )
+            .execute_deployment_batch(DeploymentBatch {
+                replacements: vec![BatchReplacement::Process(specification)],
+                before: members.clone(),
+                target: members,
+                states: HashMap::new(),
+                permit_pending: true,
+                source: TargetSource::Recovery(cohort),
+                window: None,
+            })
             .await
             .map_err(BatchFailure::problem)?;
         if let Some(problem) = committed.cleanup {
@@ -244,15 +254,15 @@ impl Manager {
             _ => None,
         };
         let result = self
-            .execute_deployment_batch(
-                replacement.into_iter().collect(),
+            .execute_deployment_batch(DeploymentBatch {
+                replacements: replacement.into_iter().collect(),
                 before,
                 target,
-                HashMap::new(),
+                states: HashMap::new(),
                 permit_pending,
-                TargetSource::Handshake,
-                None,
-            )
+                source: TargetSource::Handshake,
+                window: None,
+            })
             .await;
         match result {
             Ok(batch) => batch.cleanup.map_or(Ok(()), |problem| {
@@ -364,15 +374,15 @@ impl Manager {
                 })
                 .collect();
             let mut result = manager
-                .execute_deployment_batch(
+                .execute_deployment_batch(DeploymentBatch {
                     replacements,
                     before,
                     target,
                     states,
                     permit_pending,
-                    TargetSource::Manifest,
+                    source: TargetSource::Manifest,
                     window,
-                )
+                })
                 .await;
             if let Err(BatchFailure::Rejected(problem) | BatchFailure::Restored { problem, .. }) =
                 &mut result
@@ -388,16 +398,16 @@ impl Manager {
     }
 
     /// SW-1–SW-5：候选和最终配置全部通过预检后才冻结旧实例。
-    async fn execute_deployment_batch(
-        &self,
-        replacements: Vec<BatchReplacement>,
-        before: Vec<BatchInstance>,
-        mut target: Vec<BatchInstance>,
-        states: HashMap<String, Option<payload::State>>,
-        permit_pending: bool,
-        source: TargetSource<'_>,
-        window: Option<CommitWindow>,
-    ) -> BatchCompletion {
+    async fn execute_deployment_batch(&self, batch: DeploymentBatch<'_>) -> BatchCompletion {
+        let DeploymentBatch {
+            replacements,
+            before,
+            mut target,
+            states,
+            permit_pending,
+            source,
+            window,
+        } = batch;
         let started = std::time::Instant::now();
         if let Err(problem) = self.running() {
             return Err(if self.0.recovery_batch.lock().is_some() {
